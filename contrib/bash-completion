@@ -1,0 +1,223 @@
+# Bob build tool
+# Copyright (C) 2016  TechniSat Digital GmbH
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Generate a completion reply for a list of given words. By default a space is
+# appended, though this might be changed.
+#
+# Arguments:
+# 1: List of possible completion words
+# 2: A prefix to be added to each possible completion word (optional)
+# 3: A suffix to be appended to each possible completion word (optional, default: ' ').
+__bob_complete_words()
+{
+   local c i=0 IFS=$' \t\n'
+   for c in $1 ; do
+      c="${2-}$c${3- }"
+      if [[ $c == "$cur"* ]]; then
+         COMPREPLY[i++]="$c"
+      fi
+   done
+}
+
+__bob_complete_path()
+{
+   local prefix result
+
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help $1"
+         ;;
+      *)
+         if [[ $cur == */* ]] ; then
+            prefix="${cur%/*}/"
+         else
+            prefix=""
+         fi
+         result="$($bob ls $prefix 2>/dev/null)"
+         __bob_complete_words "$result" "${prefix}" "/"
+         ;;
+   esac
+}
+
+__bob_clean()
+{
+   __bob_complete_words "-h --help --dry-run -v --verbose"
+}
+
+__bob_build()
+{
+   if [[ "$prev" = "--destination" ]] ; then
+      COMPREPLY=( $(compgen -o dirnames "$cur") )
+   else
+      __bob_complete_path "-f --force -n --no-deps -b --build-only -v --verbose"
+   fi
+}
+
+__bob_dev()
+{
+   __bob_build "$@"
+}
+
+__bob_ls()
+{
+   __bob_complete_path "-r --recursive"
+}
+
+__bob_jenkins_add()
+{
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help -r --root -p --prefix"
+         ;;
+      *)
+         if [[ "$prev" = "-r" ]] ; then
+            __bob_complete_path
+         fi
+         ;;
+   esac
+}
+
+__bob_jenkins_export()
+{
+   local c jenkins dir
+
+   while [[ $parse_pos -lt $COMP_CWORD ]] ; do
+      c="${COMP_WORDS[parse_pos]}"
+      : $((parse_pos++))
+      case "$c" in
+         -*) ;;
+         *)
+            if [[ -z $jenkins ]] ; then
+               jenkins="$c"
+            elif [[ -z $dir ]] ; then
+               dir="$c"
+            fi
+            ;;
+      esac
+   done
+
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help"
+         ;;
+      *)
+         if [[ -z $jenkins ]] ; then
+            __bob_complete_words "$($bob jenkins ls)"
+         elif [[ -z $dir ]] ; then
+            COMPREPLY=( $(compgen -o dirnames "$cur") )
+         fi
+         ;;
+   esac
+}
+
+__bob_jenkins_ls()
+{
+   __bob_complete_words "-h --help -v --verbose"
+}
+
+__bob_jenkins_prune()
+{
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help"
+         ;;
+      *)
+         __bob_complete_words "$($bob jenkins ls)"
+         ;;
+   esac
+}
+
+__bob_jenkins_push()
+{
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help -f --force --no-trigger"
+         ;;
+      *)
+         __bob_complete_words "$($bob jenkins ls)"
+         ;;
+   esac
+}
+
+__bob_jenkins_rm()
+{
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help -f --force"
+         ;;
+      *)
+         __bob_complete_words "$($bob jenkins ls)"
+         ;;
+   esac
+}
+
+__bob_jenkins_set_url()
+{
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help"
+         ;;
+      *)
+         __bob_complete_words "$($bob jenkins ls)"
+         ;;
+   esac
+}
+
+__bob_jenkins()
+{
+   __bob_subcommands "add export ls prune push rm set-url" "jenkins"
+}
+
+__bob_subcommands()
+{
+   local i c command completion_func
+
+   while [[ $parse_pos -lt $COMP_CWORD ]] ; do
+      c="${COMP_WORDS[parse_pos]}"
+      : $((parse_pos++))
+      case "$c" in
+         -*) ;;
+         *) command="$c" ; break ;;
+      esac
+   done
+
+   if [[ -z "$command" ]] ; then
+      case "$cur" in
+         -*)
+            __bob_complete_words "-h --help"
+            ;;
+         *)
+            __bob_complete_words "$1"
+            ;;
+      esac
+   else
+      local completion_func="__bob_${2-}${2+_}${command//-/_}"
+      declare -f $completion_func >/dev/null && $completion_func
+   fi
+}
+
+# Top level completion function.
+__bob()
+{
+   local parse_pos=1 bob="$1" cur="$2" prev="$3"
+   __bob_subcommands "build clean dev ls jenkins"
+}
+
+# noquote is quite new...
+complete -o noquote -o nospace -F __bob bob 2>/dev/null || \
+   complete -o nospace -F __bob bob
+# colon is no word break character
+COMP_WORDBREAKS=${COMP_WORDBREAKS//:/}

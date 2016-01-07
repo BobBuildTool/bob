@@ -1,0 +1,6 @@
+#!/bin/sh
+D="$(dirname "$(realpath "${0}")")"
+export PYTHONPATH="$D/pym:${PYTHONPATH}"
+exec python3 -c "import sys
+from bob.scrips import bob
+sys.exit(bob(\"$D\"))" "$@"
