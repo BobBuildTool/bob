@@ -979,10 +979,10 @@ class Recipe(object):
         tools = inputTools.derive()
 
         # traverse dependencies
-        depPackages = []
-        depResults = []
-        depTools = {}
-        depPublishes = {}
+        packages = []
+        results = []
+        depEnv = env.derive()
+        depTools = tools.derive()
         allDeps = Recipe.DependencyList(self.__deps)
         i = 0
         while i < len(allDeps):
@@ -996,7 +996,8 @@ class Recipe(object):
 
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
-                p = r.prepare(pathFormatter, env.derive(dep.envOverride), tools, stack).getPackageStep()
+                p = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
+                              depTools, stack).getPackageStep()
             except ParseError as e:
                 e.pushFrame(r.getName())
                 raise e
@@ -1007,22 +1008,18 @@ class Recipe(object):
                 providedDeps.reverse()
                 for d in providedDeps: allDeps.insert(i, d)
 
-            depPackages.append(p)
+            packages.append(p)
             if dep.useBuildResult:
-                depResults.append(p)
-            if dep.provideGlobal:
-                if dep.useTools: tools = tools.derive(p.getProvidedTools())
-                if dep.useEnv: env = env.derive(p.getProvidedEnv())
-            else:
-                if dep.useTools: depTools.update(p.getProvidedTools())
-                if dep.useEnv: depPublishes.update(p.getProvidedEnv())
-
-        # merge published stuff from dependencies
-        tools = tools.derive(depTools)
-        env = env.derive(depPublishes)
+                results.append(p)
+            if dep.useTools:
+                tools.update(p.getProvidedTools())
+                if dep.provideGlobal: depTools.update(p.getProvidedTools())
+            if dep.useEnv:
+                env.update(p.getProvidedEnv())
+                if dep.provideGlobal: depEnv.update(p.getProvidedEnv())
 
         # create package
-        p = Package(self.__packageName, stack, pathFormatter, self, depPackages,
+        p = Package(self.__packageName, stack, pathFormatter, self, packages,
             sorted([t.step for t in tools.prune(self.__toolDepPackage).values()], key=lambda s: s.getDigest()))
 
         # optional checkout step
@@ -1035,7 +1032,7 @@ class Recipe(object):
         # optional build step
         if self.__build:
             buildStep = p.setBuildStep(self.__build, env.prune(self.__varDepBuild),
-                tools.prune(self.__toolDepBuild), [srcStep] + depResults)
+                tools.prune(self.__toolDepBuild), [srcStep] + results)
         else:
             buildStep = p.getBuildStep() # return invalid step
 
@@ -1065,7 +1062,7 @@ class Recipe(object):
         for dep in self.__deps:
             if dep.recipe not in self.__provideDeps: continue
             provideDeps.append(dep)
-            [subDep] = [ p for p in depPackages if p.getPackage().getName() == dep.recipe ]
+            [subDep] = [ p for p in packages if p.getPackage().getName() == dep.recipe ]
             for d in subDep.getProvidedDeps(): provideDeps.append(d)
         packageStep.setProvidedDeps(provideDeps)
 
