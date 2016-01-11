@@ -421,6 +421,13 @@ class ConcreteTool:
 
 class BaseStep(object):
     def __init__(self, package, pathFormatter, label, env={}, tools={}, args=[]):
+    """Represents the smalles unit of execution of a package.
+
+    A step is what gets actually executed when building packages.
+
+    Steps can be compared and sorted. This is done based on the digest of
+    the step. See getDigest() for details how the hash is calculated.
+    """
         self.__package = package
         self.__pathFormatter = pathFormatter
         self.__label = label
@@ -431,6 +438,27 @@ class BaseStep(object):
         self.__providedTools = {}
         self.__providedDeps = []
         self.__digest = None
+
+    def __hash__(self):
+        return int.from_bytes(self.getDigest()[0:8], sys.byteorder)
+
+    def __lt__(self, other):
+        return self.getDigest() < other.getDigest()
+
+    def __le__(self, other):
+        return self.getDigest() <= other.getDigest()
+
+    def __eq__(self, other):
+        return self.getDigest() == other.getDigest()
+
+    def __ne__(self, other):
+        return self.getDigest() != other.getDigest()
+
+    def __gt__(self, other):
+        return self.getDigest() > other.getDigest()
+
+    def __ge__(self, other):
+        return self.getDigest() >= other.getDigest()
 
     def isValid(self):
         return self.getScript() is not None
@@ -697,9 +725,21 @@ class Package(object):
         return self.__recipe
 
     def getDirectDepSteps(self):
+        """Return list to the package steps of the direct dependencies.
+
+        Direct dependencies are the ones that are named explicitly in the
+        ``depends`` section of the recipe. The order of the items is
+        preserved from the recipe.
+        """
         return self.__directDepSteps
 
     def getIndictectDepSteps(self):
+        """Return list of indirect dependencies of the package.
+
+        Indirect dependencies are the package steps of tools or the sandbox
+        that were forwarded or inheried from other recipes. They are not
+        directly named in the recipe.
+        """
         return self.__indirectDepSteps
 
     def getAllDepSteps(self):
