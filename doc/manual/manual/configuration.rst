@@ -285,14 +285,16 @@ supported:
 |             |                 |   of the recipe.                                    |
 |             |                 | * ``result``: build result of the recipe.           |
 |             |                 | * ``tools``: declared build tools of the recipe.    |
+|             |                 | * ``sandbox``:  declared sandbox of the recipe.     |
 |             |                 |                                                     |
 |             |                 | Default: Use the result and dependencies            |
 |             |                 | (``[deps, result]``).                               |
 +-------------+-----------------+-----------------------------------------------------+
-| forward     | Boolean         | If true, the imported environment and tools will    |
-|             |                 | be forwarded to the dependencies following this     |
-|             |                 | one. Otherwise these variables and tools will       |
-|             |                 | only be accessible in the current recipe.           |
+| forward     | Boolean         | If true, the imported environment, tools and        |
+|             |                 | sandbox will be forwarded to the dependencies       |
+|             |                 | following this one. Otherwise these variables,      |
+|             |                 | tools and/or sandbox will only be accessible in the |
+|             |                 | current recipe.                                     |
 |             |                 |                                                     |
 |             |                 | Default: False.                                     |
 +-------------+-----------------+-----------------------------------------------------+
@@ -436,6 +438,41 @@ must be declared explicitly by a ``use: [environment]`` attribute in the
 dependency section of the upstream recipe. Only then are the provided variables
 merged into the upstream recipes environment.
 
+provideSandbox
+~~~~~~~~~~~~~~
+
+Type: Sandbox-Dictionary
+
+The ``provideSandbox`` keyword offers the current recipe as sandbox for the
+upstream recipe. Any consuming upstream recipe (via ``use: [sandbox]``) will
+be built in a sandbox where the root file system is the result of the current
+recipe. The initial ``$PATH`` is defined with the required ``paths`` keyword
+that should hold a list of paths. This will completely replace ``$PATH`` of
+the host for consuming recipes.
+
+Optionally there can be a ``mount`` keyword. With ``mount`` it is possible to
+specify additional paths of the host that are mounted read only in the sandbox.
+The paths are specified as a list of either strings or lists of two elements.
+Use a simple string when host and sandbox path are the same. To specify
+distinct paths use a list with two entries where the host path is the first
+element and the second element is the path in the sandbox.  Variable
+substitution is possible for these paths. Example::
+
+    provideSandbox:
+        paths: ["/bin", "/usr/bin"]
+        mount:
+            - "/etc/resolv.conf"
+            - "$HOME/.ssh"
+            - ["/", "/mnt/host"]
+
+The example can use ``$HOME`` because it is whitelisted by default. Otherwise
+any used variable must be defined somewhere or explicitly whitelisted.
+
+.. note::
+    The mount paths are considered invariants of the build. That is changing the
+    mounts will neither automatically cause a rebuild of the sandbox (and affected
+    packages) nor will binary artifacts be re-fetched.
+
 root
 ~~~~
 
@@ -467,53 +504,6 @@ according to `Semantic Versioning`_. Therefore it is usually only needed to
 specify the major and minor version.
 
 .. _Semantic Versioning: http://semver.org/
-
-dev
-~~~
-
-Type: Dictionary
-
-Under the ``dev`` key there is the configuration that is specific to the
-develop build mode. Currently there is only one key that is known under
-``dev``: ``globalPaths``. This attribute expects a list of strings that are
-taken as initial values for ``$PATH``::
-
-   dev:
-      globalPaths: ["/usr/local/bin", "/bin", "/usr/bin", "/usr/sbin"]
-
-If left unspecified ``$PATH`` defaults to
-``"/usr/local/bin:/bin:/usr/bin:/usr/sbin"``
-
-build
-~~~~~
-
-Type: Dictionary
-
-There are two configuration keys under ``build`` that specify the behaviour in
-release build mode: ``globalPaths`` and ``sandbox``. Both are optional.
-
-The ``globalPaths`` attribute expects a list of strings that are
-taken as initial values for ``$PATH``. If left unspecified ``$PATH`` defaults to
-``"/usr/local/bin:/bin:/usr/bin:/usr/sbin"``
-
-The ``sandbox`` attribute specifies the sandbox root file system that is used
-in release build mode. The image is downloaded from the URL given by the
-``url`` key and is compared with the checksum specified by the ``digestSHA1``
-key. With ``mount`` it is possible to specify additional paths of the host that
-are mounted read only in the sandbox. The paths are specified as a dictionary
-where the host path is the key and the value is the path in the sandbox.
-Variable substitution is possible for these paths. Example::
-
-   build:
-       globalPaths: ["/bin", "/usr/bin"]
-       sandbox:
-           url: http:///.../rootfs.tar.xz
-           digestSHA1: "988a36c67d0f84aacbc4747bf2528ad82a841422"
-           mount:
-               "/etc/resolv.conf" : "/etc/resolv.conf"
-               "$HOME/.ssh" : "$HOME/.ssh"
-               "$HOME/.subversion" : "$HOME/.subversion"
-
 
 default.yaml
 ------------
