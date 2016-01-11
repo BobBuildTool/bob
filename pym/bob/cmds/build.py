@@ -21,7 +21,7 @@ from ..utils import asHexStr, colorize, hashDirectory, hashFile, removePath, emp
 from datetime import datetime
 from glob import glob
 from pipes import quote
-from tempfile import TemporaryDirectory, TemporaryFile
+from tempfile import TemporaryFile
 import argparse
 import datetime
 import os
@@ -253,20 +253,14 @@ esac
 """
 
     @staticmethod
-    def releaseNameFormatter(sandbox, persistent=True):
+    def releaseNameFormatter(persistent=True):
 
         def fmt(step, mode):
-            if not sandbox or (mode == 'workspace'):
-                return os.path.join(
-                    BobState().getByNameDirectory(
-                        os.path.join("work", step.getPackage().getPath(),
-                                     step.getLabel()),
-                        asHexStr(step.getDigest()),
-                        persistent),
-                    "workspace")
-            else:
-                assert mode == 'exec'
-                return os.path.join(asHexStr(step.getDigest()), "workspace")
+            return BobState().getByNameDirectory(
+                os.path.join("work", step.getPackage().getPath(),
+                             step.getLabel()),
+                asHexStr(step.getDigest()),
+                persistent)
 
         return fmt
 
@@ -284,12 +278,29 @@ esac
                 res = os.path.join(baseDir, str(num))
                 dirs[baseDir] = num
                 dirs[digest] = res
-            return os.path.join(res, "workspace")
+            return res
+
+        return fmt
+
+    @staticmethod
+    def makeRunnable(wrapFmt):
+        baseDir = os.getcwd()
+
+        def fmt(step, mode):
+            if mode == 'workspace':
+                ret = wrapFmt(step, mode)
+            else:
+                assert mode == 'exec'
+                if step.getSandbox() is None:
+                    ret = os.path.join(baseDir, wrapFmt(step, mode))
+                else:
+                    ret = os.path.join("/bob", asHexStr(step.getDigest()))
+            return os.path.join(ret, "workspace")
 
         return fmt
 
     def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
-                 envWhiteList, globalPaths, sandbox, bobRoot, cleanBuild):
+                 envWhiteList, bobRoot, cleanBuild):
         self.__recipes = recipes
         self.__wasRun = {}
         self.__verbose = max(-2, min(2, verbose))
@@ -298,18 +309,10 @@ esac
         self.__buildOnly = buildOnly
         self.__preserveEnv = preserveEnv
         self.__envWhiteList = envWhiteList
-        self.__globalPaths = globalPaths
-        self.__execBaseDir = os.getcwd()
         self.__currentPackage = None
         self.__archive = DummyArchive()
         self.__doUpload = False
         self.__downloadDepth = 0xffff
-        self.__workspaceBaseDir = os.getcwd()
-        self.__sandbox = sandbox
-        if sandbox:
-            self.__execBaseDir = "/bob"
-        else:
-            self.__execBaseDir = self.__workspaceBaseDir
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
 
@@ -351,12 +354,12 @@ esac
 
         # construct environment
         stepEnv = step.getEnv().copy()
-        stepEnv["PATH"] = ":".join(
-            [ os.path.join(self.__execBaseDir, p) for p in step.getPaths() ]
-            + self.__globalPaths)
-        stepEnv["LD_LIBRARY_PATH"] = ":".join(
-            [ os.path.join(self.__execBaseDir, p) for p in step.getLibraryPaths() ])
-        stepEnv["BOB_CWD"] = os.path.join(self.__execBaseDir, step.getExecPath())
+        if step.getSandbox() is None:
+            stepEnv["PATH"] = ":".join(step.getPaths() + [os.environ["PATH"]])
+        else:
+            stepEnv["PATH"] = ":".join(step.getPaths() + step.getSandbox().getPaths())
+        stepEnv["LD_LIBRARY_PATH"] = ":".join(step.getLibraryPaths())
+        stepEnv["BOB_CWD"] = step.getExecPath()
 
         # filter runtime environment
         if self.__preserveEnv:
@@ -369,36 +372,31 @@ esac
         # sandbox
         sandbox = []
         sandboxSetup = ""
-        if self.__sandbox:
+        if step.getSandbox() is not None:
             sandboxSetup = "\"$(mktemp -d)\""
             sandbox.append(quote(os.path.join(self.__bobRoot,
                                               "bin", "namespace-sandbox")))
             sandbox.extend(["-S", "\"$_sandbox\""])
-            sandbox.extend(["-W", quote(os.path.join(self.__execBaseDir,
-                                                     step.getExecPath()))])
+            sandbox.extend(["-W", quote(step.getExecPath())])
             sandbox.extend(["-H", "bob"])
             sandbox.extend(["-d", "/tmp"])
-            for f in os.listdir("work/_sandbox"):
-                sandbox.extend([
-                    "-M", os.path.join(self.__workspaceBaseDir, "work",
-                                       "_sandbox", f),
-                    "-m", "/"+f ])
-            for (hostPath, sndbxPath) in self.__recipes.buildSandbox()['mount'].items():
+            sandboxRootFs = os.path.abspath(
+                step.getSandbox().getStep().getWorkspacePath())
+            for f in os.listdir(sandboxRootFs):
+                sandbox.extend(["-M", os.path.join(sandboxRootFs, f), "-m", "/"+f])
+            for (hostPath, sndbxPath) in step.getSandbox().getMounts():
                 sandbox.extend(["-M", hostPath ])
-                if hostPath != sndbxPath:
-                    sandbox.extend(["-m", sndbxPath])
+                if hostPath != sndbxPath: sandbox.extend(["-m", sndbxPath])
             sandbox.extend([
-                "-M", quote(os.path.normpath(os.path.join(
-                    self.__workspaceBaseDir, step.getWorkspacePath(), ".."))),
+                "-M", quote(os.path.abspath(os.path.join(
+                    step.getWorkspacePath(), ".."))),
                 "-w", quote(os.path.normpath(os.path.join(
-                    self.__execBaseDir, step.getExecPath(), ".."))) ])
+                    step.getExecPath(), ".."))) ])
             for s in step.getAllDepSteps():
                 if not s.isValid(): continue
                 sandbox.extend([
-                    "-M", quote(os.path.join(self.__workspaceBaseDir,
-                                             s.getWorkspacePath())),
-                    "-m", quote(os.path.join(self.__execBaseDir,
-                                             s.getExecPath())) ])
+                    "-M", quote(os.path.abspath(s.getWorkspacePath())),
+                    "-m", quote(s.getExecPath()) ])
             sandbox.append("--")
 
         # write scripts
@@ -413,7 +411,7 @@ esac
                         '${'+key+'+'+key+'="$'+key+'"}'
                         for key in self.__envWhiteList ])),
                     ARGS=" ".join([
-                        quote(os.path.join(self.__execBaseDir, a.getExecPath()))
+                        quote(a.getExecPath())
                         for a in step.getArguments() ]),
                     SANDBOX_CMD=" ".join(sandbox),
                     SANDBOX_SETUP=sandboxSetup
@@ -427,10 +425,11 @@ esac
             print("", file=f)
             print("# Special args:", file=f)
             print("declare -A BOB_DEP_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(a.getPackage().getName()), quote(os.path.join(self.__execBaseDir, a.getExecPath())))
+                [ "[{}]={}".format(quote(a.getPackage().getName()),
+                                   quote(a.getExecPath()))
                     for a in step.getAllDepSteps() ] ))), file=f)
             print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(t), quote(os.path.join(self.__execBaseDir, p)))
+                [ "[{}]={}".format(quote(t), quote(p))
                     for (t,p) in step.getTools().items()] ))), file=f)
             print("# Environment:", file=f)
             for (k,v) in sorted(stepEnv.items()):
@@ -671,44 +670,6 @@ def touch(packages):
         p.getBuildStep().getWorkspacePath()
         p.getPackageStep().getWorkspacePath()
 
-def setupSandbox(recipes):
-    cfg = recipes.buildSandbox()
-    if (cfg['url'] is None) or (cfg['digestSHA1'] == b''):
-        print("Sandbox not configured. Building in regular mode...")
-        return False
-    if cfg['digestSHA1'] == BobState().getSandboxState():
-        if os.path.isdir("work/_sandbox"):
-            return True
-        BobState().setSandboxState() # deleted -> reset state
-
-    try:
-        print(">>", colorize("<sandbox>", "32;1"))
-        print(colorize("   DOWNLOAD  {}".format(cfg['url']), "32"))
-        (localFilename, headers) = urllib.request.urlretrieve(cfg['url'])
-
-        # verify image
-        if hashFile(localFilename) != cfg['digestSHA1']:
-            raise BuildError("Downloaded sandbox image does not match checksum!")
-
-        # extract sandbox
-        print(colorize("   EXTRACT   {}".format(asHexStr(cfg['digestSHA1'])), "32"))
-        if os.path.exists("work/_sandbox"):
-            removePath("work/_sandbox")
-        os.makedirs("work/_sandbox")
-        with tarfile.open(localFilename, errorlevel=1) as tf:
-            tf.extractall("work/_sandbox")
-
-    except urllib.error.URLError as e:
-        raise BuildError("Error downloading sandbox image: " + str(e.reason))
-    except OSError as e:
-        raise BuildError("Error: " + str(e))
-    finally:
-        urllib.request.urlcleanup()
-
-    BobState().setSandboxState(cfg['digestSHA1'])
-
-    return True
-
 
 def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
     parser.add_argument('packages', metavar='PACKAGE', type=str, nargs='+',
@@ -735,6 +696,11 @@ def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
         help="Upload to binary archive")
     parser.add_argument('--download', metavar="MODE", default="no" if develop else "yes",
         help="Download from binary archive (yes, no, deps)", choices=['yes', 'no', 'deps'])
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', default=not develop,
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -751,27 +717,22 @@ def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
     envWhiteList |= set(args.white_list)
 
     cleanBuild = not develop
-    if develop:
-        sandboxEnabled = False
-    else:
-        sandboxEnabled = setupSandbox(recipes)
 
     if develop:
         nameFormatter = LocalBuilder.developNameFormatter()
-        globalPaths = recipes.devGlobalPaths()
     else:
-        nameFormatter = LocalBuilder.releaseNameFormatter(sandboxEnabled)
-        globalPaths = recipes.buildGlobalPaths()
-    rootPackages = recipes.generatePackages(nameFormatter, defines)
+        nameFormatter = LocalBuilder.releaseNameFormatter()
+    nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
+    rootPackages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if develop:
         touch(sorted(rootPackages.values(), key=lambda p: p.getName()))
 
     if (len(args.packages) > 1) and args.destination:
         raise BuildError("Destination may only be specified when building a single package")
 
-    builder = LocalBuilder(recipes, args.verbose - args.quiet, args.force, args.no_deps,
-        args.build_only, args.preserve_env, envWhiteList, globalPaths, sandboxEnabled,
-        bobRoot, cleanBuild)
+    builder = LocalBuilder(recipes, args.verbose - args.quiet, args.force,
+                           args.no_deps, args.build_only, args.preserve_env,
+                           envWhiteList, bobRoot, cleanBuild)
 
     archiveSpec = recipes.archiveSpec()
     archiveBackend = archiveSpec.get("backend", "none")
@@ -825,15 +786,16 @@ def doClean(recipes, argv, bobRoot):
         help="Print what is done")
     args = parser.parse_args(argv)
 
-    # collect all used paths
-    rootPackages = recipes.generatePackages(LocalBuilder.releaseNameFormatter(False, False)).values()
+    # collect all used paths (with and without sandboxing)
     usedPaths = set()
+    rootPackages = recipes.generatePackages(
+        LocalBuilder.releaseNameFormatter(False), sandboxEnabled=True).values()
     for root in rootPackages:
         usedPaths |= collectPaths(root)
-
-    # chop off the trailing "/workspace" part
-    # FIXME: this looks too brittle
-    usedPaths = set([ p[:-10] for p in usedPaths ])
+    rootPackages = recipes.generatePackages(
+        LocalBuilder.releaseNameFormatter(False), sandboxEnabled=False).values()
+    for root in rootPackages:
+        usedPaths |= collectPaths(root)
 
     # get all known existing paths
     allPaths = BobState().getAllNameDirectores()

@@ -36,11 +36,10 @@ def escapeJobName(name):
     return regexJobName.sub('_', name)
 
 class JenkinsJob:
-    def __init__(self, name, prefix, root, globalPaths):
+    def __init__(self, name, prefix, root):
         self.__name = name
         self.__prefix = prefix
         self.__isRoot = root
-        self.__globalPaths = globalPaths
         self.__checkoutSteps = {}
         self.__buildSteps = {}
         self.__packageSteps = {}
@@ -87,8 +86,7 @@ class JenkinsJob:
         env = { key: quote(value) for (key, value) in d.getEnv().items() }
         env.update({
             "PATH": ":".join(
-                [ "$WORKSPACE/"+quote(d) for d in d.getPaths() ]
-                + self.__globalPaths),
+                [ "$WORKSPACE/"+quote(d) for d in d.getPaths() ] + ["$PATH"]),
             "LD_LIBRARY_PATH": ":".join(
                 [ "$WORKSPACE/"+quote(p) for p in d.getLibraryPaths() ]),
             "BOB_CWD": "$WORKSPACE/" + quote(d.getExecPath()),
@@ -311,9 +309,7 @@ def _genJenkinsJobs(p, jobs, prefix):
     if name in jobs:
         jj = jobs[name]
     else:
-        jj = JenkinsJob(
-            name, prefix, p.getRecipe().isRoot(),
-            p.getRecipe().getRecipeSet().buildGlobalPaths())
+        jj = JenkinsJob(name, prefix, p.getRecipe().isRoot())
         jobs[name] = jj
 
     checkout = p.getCheckoutStep()

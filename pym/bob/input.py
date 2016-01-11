@@ -27,6 +27,7 @@ import hashlib
 import os, os.path
 import pickle
 import re
+import sys
 import xml.etree.ElementTree
 import yaml
 
@@ -419,8 +420,55 @@ class ConcreteTool:
         self.path = path
         self.libs = libs
 
+class Sandbox:
+    def __init__(self, step, env, spec):
+        self.step = step
+        self.paths = spec['paths']
+        self.mounts = []
+        for mount in spec.get('mount', []):
+            m = (mount, mount) if isinstance(mount, str) else mount
+            try:
+                self.mounts.append(
+                    (Template(m[0]).substitute(env),
+                     Template(m[1]).substitute(env)))
+            except KeyError as e:
+                raise ParseError("Error substituting {} in provideSandbox: {}".format(mount, str(e)))
+            except ValueError as e:
+                raise ParseError("Error substituting {} in provideSandbox: {}".format(mount, str(e)))
+
+    def getStep(self):
+        return self.step
+
+    def getPaths(self):
+        return self.paths
+
+    def getMounts(self):
+        return self.mounts
+
+    def getDigest(self):
+        """Return digest of the sandbox.
+
+        Mounts are considered invariants and do not contribute to the digest.
+        """
+        h = hashlib.md5()
+        h.update(self.step.getDigest())
+        for p in self.paths: h.update(p.encode('utf8'))
+        return h.digest()
+
+    def getBuildId(self):
+        """Return build id of the sandbox.
+
+        See getDigest()
+        """
+        bid = self.step.getBuildId()
+        if bid is None: return None
+
+        h = hashlib.md5()
+        h.update(bid)
+        for p in self.paths: h.update(p.encode('utf8'))
+        return h.digest()
+
 class BaseStep(object):
-    def __init__(self, package, pathFormatter, label, env={}, tools={}, args=[]):
     """Represents the smalles unit of execution of a package.
 
     A step is what gets actually executed when building packages.
@@ -428,8 +476,11 @@ class BaseStep(object):
     Steps can be compared and sorted. This is done based on the digest of
     the step. See getDigest() for details how the hash is calculated.
     """
+    def __init__(self, package, pathFormatter, sandbox, label, env={},
+                 tools={}, args=[]):
         self.__package = package
         self.__pathFormatter = pathFormatter
+        self.__sandbox = sandbox
         self.__label = label
         self.__tools = tools
         self.__env = env
@@ -437,6 +488,7 @@ class BaseStep(object):
         self.__providedEnv = {}
         self.__providedTools = {}
         self.__providedDeps = []
+        self.__providedSandbox = None
         self.__digest = None
 
     def __hash__(self):
@@ -478,6 +530,8 @@ class BaseStep(object):
     def getDigest(self):
         if self.__digest is None:
             h = hashlib.md5()
+            if self.__sandbox:
+                h.update(self.__sandbox.getDigest())
             script = self.getDigestScript()
             if script:
                 h.update(script.encode("utf8"))
@@ -497,6 +551,10 @@ class BaseStep(object):
             return None
 
         h = hashlib.md5()
+        if self.__sandbox:
+            bid = self.__sandbox.getBuildId()
+            if bid is None: return None
+            h.update(bid)
         script = self.getDigestScript()
         if script:
             h.update(script.encode("utf8"))
@@ -512,6 +570,9 @@ class BaseStep(object):
             if bid is None: return None
             h.update(bid)
         return h.digest()
+
+    def getSandbox(self):
+        return self.__sandbox
 
     def getLabel(self):
         return self.__label
@@ -572,8 +633,8 @@ class BaseStep(object):
         return self.__args
 
     def getAllDepSteps(self):
-        return self.__args + sorted([ d.step for d in self.__tools.values() ],
-            key=lambda s: s.getDigest())
+        return self.__args + sorted([ d.step for d in self.__tools.values() ]) + (
+            [self.__sandbox.getStep()] if self.__sandbox else [])
 
     def getEnv(self):
         return self.__env
@@ -599,8 +660,15 @@ class BaseStep(object):
     def getProvidedDeps(self):
         return self.__providedDeps
 
+    def setProvidedSandbox(self, sandbox):
+        self.__providedSandbox = sandbox
+
+    def getProvidedSandbox(self):
+        return self.__providedSandbox
+
 class CheckoutStep(BaseStep):
-    def __init__(self, package, pathFormatter, checkout=None, fullEnv={}, env={}, tools={}, deterministic=False):
+    def __init__(self, package, pathFormatter, sandbox=None, checkout=None,
+                 fullEnv={}, env={}, tools={}, deterministic=False):
         if checkout:
             self.__script = checkout[0] if checkout[0] is not None else ""
             self.__scmList = [ copy.deepcopy(scm) for scm in checkout[1] if scm.enabled(env) ]
@@ -616,7 +684,7 @@ class CheckoutStep(BaseStep):
             self.__scmList = []
             self.__deterministic = True
 
-        super().__init__(package, pathFormatter, "src", env, tools)
+        super().__init__(package, pathFormatter, sandbox, "src", env, tools)
 
     def isCheckoutStep(self):
         return True
@@ -665,9 +733,10 @@ class CheckoutStep(BaseStep):
         return self.__deterministic and all([ s.isDeterministic() for s in self.__scmList ])
 
 class RegularStep(BaseStep):
-    def __init__(self, package, pathFormatter, label, script=None, env={}, tools={}, args=[]):
+    def __init__(self, package, pathFormatter, sandbox, label, script=None,
+                 env={}, tools={}, args=[]):
         self.__script = script
-        super().__init__(package, pathFormatter, label, env, tools, args)
+        super().__init__(package, pathFormatter, sandbox, label, env, tools, args)
 
     def getScript(self):
         return self.__script
@@ -684,30 +753,38 @@ class RegularStep(BaseStep):
         return True
 
 class BuildStep(RegularStep):
-    def __init__(self, package, pathFormatter, script=None, env={}, tools={}, args=[]):
+    def __init__(self, package, pathFormatter, sandbox=None, script=None, env={},
+                 tools={}, args=[]):
         self.__script = script
-        super().__init__(package, pathFormatter, "build", script, env, tools, args)
+        super().__init__(package, pathFormatter, sandbox, "build", script, env,
+                         tools, args)
 
     def isBuildStep(self):
         return True
 
 class PackageStep(RegularStep):
-    def __init__(self, package, pathFormatter, script=None, env={}, tools={}, args=[]):
+    def __init__(self, package, pathFormatter, sandbox=None, script=None, env={},
+                 tools={}, args=[]):
         self.__script = script
-        super().__init__(package, pathFormatter, "dist", script, env, tools, args)
+        super().__init__(package, pathFormatter, sandbox, "dist", script, env,
+                         tools, args)
 
     def isPackageStep(self):
         return True
 
 
 class Package(object):
-    def __init__(self, name, stack, pathFormatter, recipe, directDepSteps, indirectDepSteps):
+    def __init__(self, name, stack, pathFormatter, recipe, sandbox,
+                 directDepSteps, indirectDepSteps):
         self.__name = name
         self.__stack = stack
         self.__pathFormatter = pathFormatter
         self.__recipe = recipe
+        self.__sandbox = sandbox
         self.__directDepSteps = directDepSteps[:]
-        self.__indirectDepSteps = indirectDepSteps[:]
+        tmp = set(indirectDepSteps)
+        if sandbox is not None: tmp.add(sandbox.getStep())
+        self.__indirectDepSteps = sorted(tmp)
         self.__checkoutStep = CheckoutStep(self, pathFormatter)
         self.__buildStep = BuildStep(self, pathFormatter)
         self.__packageStep = PackageStep(self, pathFormatter)
@@ -723,6 +800,9 @@ class Package(object):
 
     def getRecipe(self):
         return self.__recipe
+
+    def getSandboxState(self):
+        return self.__sandbox
 
     def getDirectDepSteps(self):
         """Return list to the package steps of the direct dependencies.
@@ -743,24 +823,28 @@ class Package(object):
         return self.__indirectDepSteps
 
     def getAllDepSteps(self):
-        return self.__directDepSteps + self.__indirectDepSteps
+        return sorted(set(self.__directDepSteps) + set(self.__indirectDepSteps))
 
     def setCheckoutStep(self, script, fullEnv, env, tools, deterministic):
-        self.__checkoutStep = CheckoutStep(self, self.__pathFormatter, script, fullEnv, env, tools, deterministic)
+        self.__checkoutStep = CheckoutStep(
+            self, self.__pathFormatter, self.__sandbox, script, fullEnv, env,
+            tools, deterministic)
         return self.__checkoutStep
 
     def getCheckoutStep(self):
         return self.__checkoutStep
 
     def setBuildStep(self, script, env, tools, args):
-        self.__buildStep = BuildStep(self, self.__pathFormatter, script, env, tools, args)
+        self.__buildStep = BuildStep(
+            self, self.__pathFormatter, self.__sandbox, script, env, tools, args)
         return self.__buildStep
 
     def getBuildStep(self):
         return self.__buildStep
 
     def setPackageStep(self, script, env, tools, args):
-        self.__packageStep = PackageStep(self, self.__pathFormatter, script, env, tools, args)
+        self.__packageStep = PackageStep(
+            self, self.__pathFormatter, self.__sandbox, script, env, tools, args)
         return self.__packageStep
 
     def getPackageStep(self):
@@ -840,6 +924,7 @@ class Recipe(object):
                 self.useTools = False
                 self.useBuildResult = True
                 self.useDeps = True
+                self.useSandbox = False
                 self.condition = None
             else:
                 self.recipe = dep["name"]
@@ -850,6 +935,7 @@ class Recipe(object):
                 self.useTools = "tools" in useClause
                 self.useBuildResult = "result" in useClause
                 self.useDeps = "deps" in useClause
+                self.useSandbox = "sandbox" in useClause
                 self.condition = dep.get("if", None)
 
         def isCompatible(self, other):
@@ -857,7 +943,7 @@ class Recipe(object):
             return ((self.envOverride == other.envOverride) and (self.provideGlobal == other.provideGlobal)
                     and (self.useEnv == other.useEnv) and (self.useTools == other.useTools)
                     and (self.useBuildResult == other.useBuildResult) and (self.useDeps == other.useDeps)
-                    and (self.condition == other.condition))
+                    and (self.useSandbox == other.useSandbox) and (self.condition == other.condition))
 
     class DependencyList(list):
         def __verify(self, item):
@@ -910,6 +996,7 @@ class Recipe(object):
             for (name, spec) in recipe.get("provideTools", {}).items() }
         self.__provideVars = recipe.get("provideVars", {})
         self.__provideDeps = set(recipe.get("provideDeps", []))
+        self.__provideSandbox = recipe.get("provideSandbox")
         self.__varSelf = recipe.get("environment", {})
         self.__varDepCheckout = set(recipe.get("checkoutVars", []))
         self.__varDepBuild = set(recipe.get("buildVars", []))
@@ -1011,7 +1098,8 @@ class Recipe(object):
     def isRoot(self):
         return self.__root
 
-    def prepare(self, pathFormatter, inputEnv, inputTools=Env(), inputStack=[]):
+    def prepare(self, pathFormatter, inputEnv, sandboxEnabled, sandbox=None,
+                inputTools=Env(), inputStack=[]):
         stack = inputStack + [self.__packageName]
 
         # make copies because we will modify them
@@ -1023,6 +1111,7 @@ class Recipe(object):
         results = []
         depEnv = env.derive()
         depTools = tools.derive()
+        depSandbox = sandbox
         allDeps = Recipe.DependencyList(self.__deps)
         i = 0
         while i < len(allDeps):
@@ -1037,7 +1126,8 @@ class Recipe(object):
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
                 p = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
-                              depTools, stack).getPackageStep()
+                              sandboxEnabled, depSandbox, depTools,
+                              stack).getPackageStep()
             except ParseError as e:
                 e.pushFrame(r.getName())
                 raise e
@@ -1057,10 +1147,13 @@ class Recipe(object):
             if dep.useEnv:
                 env.update(p.getProvidedEnv())
                 if dep.provideGlobal: depEnv.update(p.getProvidedEnv())
+            if dep.useSandbox and sandboxEnabled:
+                sandbox = p.getProvidedSandbox()
+                if dep.provideGlobal: depSandbox = p.getProvidedSandbox()
 
         # create package
-        p = Package(self.__packageName, stack, pathFormatter, self, packages,
-            sorted([t.step for t in tools.prune(self.__toolDepPackage).values()], key=lambda s: s.getDigest()))
+        p = Package(self.__packageName, stack, pathFormatter, self, sandbox, packages,
+                    [ t.step for t  in tools.prune(self.__toolDepPackage).values()  ])
 
         # optional checkout step
         if self.__checkout != (None, []):
@@ -1106,6 +1199,11 @@ class Recipe(object):
             for d in subDep.getProvidedDeps(): provideDeps.append(d)
         packageStep.setProvidedDeps(provideDeps)
 
+        # provide Sandbox
+        if self.__provideSandbox:
+            packageStep.setProvidedSandbox(Sandbox(packageStep, env,
+                                                   self.__provideSandbox))
+
         return p
 
 
@@ -1116,9 +1214,6 @@ class RecipeSet:
         self.__recipes = {}
         self.__classes = {}
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
-        self.__devGlobalPaths = ["/usr/local/bin", "/bin", "/usr/bin", "/usr/sbin"]
-        self.__buildGlobalPaths = self.__devGlobalPaths
-        self.__buildSandbox = { 'url' : None, 'digestSHA1' : None, 'mount' : {} }
         self.__archive = { "backend" : "none" }
 
     def __addRecipe(self, recipe):
@@ -1131,16 +1226,6 @@ class RecipeSet:
 
     def envWhiteList(self):
         return set(self.__whiteList)
-
-    def devGlobalPaths(self):
-        return self.__devGlobalPaths
-
-    def buildGlobalPaths(self):
-        return self.__buildGlobalPaths
-
-    def buildSandbox(self):
-        """Returns tuple of sandbox url and SHA1-sum of archive."""
-        return self.__buildSandbox
 
     def archiveSpec(self):
         return self.__archive
@@ -1158,22 +1243,6 @@ class RecipeSet:
         minVer = config.get("bobMinimumVersion", "0.1")
         if compareVersion(BOB_VERSION, minVer) < 0:
             raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
-
-        dev = config.get("dev", {})
-        if "globalPaths" in dev: self.__devGlobalPaths = dev["globalPaths"]
-
-        build = config.get("build", {})
-        if "globalPaths" in build: self.__buildGlobalPaths = build["globalPaths"]
-        if "sandbox" in build:
-            sandbox = build["sandbox"]
-            self.__buildSandbox = {
-                'url' : sandbox.get('url'),
-                'digestSHA1' : bytes.fromhex(sandbox.get('digestSHA1', "")),
-                'mount' : {
-                    Template(hostPath).substitute(os.environ) : Template(sndbxPath).substitute(os.environ)
-                    for (hostPath, sndbxPath) in sandbox.get('mount').items()
-                }
-            }
 
         if os.path.exists("default.yaml"):
             try:
@@ -1217,7 +1286,7 @@ class RecipeSet:
             self.__classes[name] = r
             return r
 
-    def generatePackages(self, nameFormatter, envOverrides={}):
+    def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         result = {}
         env = Env(os.environ).prune(self.__whiteList)
         env.update(self.__defaultEnv)
@@ -1226,7 +1295,8 @@ class RecipeSet:
             BobState().setAsynchronous()
             for root in self.__rootRecipes:
                 try:
-                    result[root.getName()] = root.prepare(nameFormatter, env)
+                    result[root.getName()] = root.prepare(nameFormatter, env,
+                                                          sandboxEnabled)
                 except ParseError as e:
                     e.pushFrame(root.getName())
                     raise e
