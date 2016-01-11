@@ -24,7 +24,7 @@ from pipes import quote
 from string import Template
 import copy
 import hashlib
-import os.path
+import os, os.path
 import pickle
 import re
 import xml.etree.ElementTree
@@ -1219,7 +1219,9 @@ class RecipeSet:
 
     def generatePackages(self, nameFormatter, envOverrides={}):
         result = {}
-        env = Env(self.__defaultEnv).derive(envOverrides)
+        env = Env(os.environ).prune(self.__whiteList)
+        env.update(self.__defaultEnv)
+        env.update(envOverrides)
         try:
             BobState().setAsynchronous()
             for root in self.__rootRecipes:
