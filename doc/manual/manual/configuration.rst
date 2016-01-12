@@ -46,6 +46,120 @@ The packages in this directory will be named
 You can also see that there are other files (initramfs/...) that are included
 by recipes but are otherwise ignored by Bob.
 
+Principle operation
+-------------------
+
+All packages are built by traversing the recipe tree starting from one or more
+root recipes. These are recipes that have the ``root`` attribute set to
+``True``. There must be at least one root recipe in a project. The tree of
+recipes is traversed depth first. While following the dependencies Bob keeps a
+local state that consists of the following information:
+
+* Environment: Bob always keeps the full set of variables but only a subset is
+  visible when executing the scripts. Initially only the variables defined in
+  ``default.yaml`` in the ``environment`` section and whitelisted variables
+  named by ``whitelist`` are available. Environment variables can be set at
+  various points that are described below in more detail.
+* Tools: initially there are no tools. They are defined by ``provideTools`` and
+  must be explicitly imported by upstream recipes by listing ``tools`` in the
+  ``use`` attribute. Like environment variables the tools are kept as key value
+  pairs where the key is a string and the value is the executable and library
+  paths that are imported when using a tool.
+* Sandbox: the root file system and paths that are used to build the package.
+  Unless a sandbox is consumed by listing ``sandbox`` in the ``use`` attribute
+  of a dependency the normal host executables are used. Sandboxed builds are
+  described in a separate section below.
+
+All of this information is carried as local state when traversing the
+dependency tree. Each recipe gets a local copy that is propagated downstream.
+Any updates to upstream recipes must be done by explicitly offering the
+information with one of the ``provide*`` keywords and the upstream recipe must
+consume it by adding the relevant item to the ``use`` attribute of the
+dependency.
+
+Step execution
+~~~~~~~~~~~~~~
+
+The actual work when building a package is done in the following three steps.
+They are Bash scripts that are executed with (and only with) the declared
+environment and tools.
+
+Checkout
+    The checkout step is there to fetch the source code or any external input
+    of the package. Despite the script defined by ``checkoutScript`` Bob
+    supports a number of source code management systems natively. They can be
+    listed in ``checkoutSCM`` and are fetched/updated before the
+    ``checkoutScript`` is run.
+
+Build
+    This is the step where most of the work should be done to build the
+    package. The ``buildScript`` receives the result of the checkout step as
+    argument ``$1`` and any further dependency whose result is consumed is
+    passed in order starting with ``$2``. If no checkout step was provided
+    ``$1`` will point to some invalid path.
+
+Package
+    Typically the build step will produce a lot of intermediate files (e.g.
+    object files). The package step has the responsibility to distill a clean
+    result of the package. The ``packageScript`` will receive a single argument
+    with the patch to the build step.
+
+Each step of a recipe is executed separately and always in the above order. The
+scripts working directory is already where the result is expected. The scripts
+should make no assumption about the absolute path or the relative path to other
+steps. Only the working directory might be modified.
+
+Environment handling
+~~~~~~~~~~~~~~~~~~~~
+
+The available set of environment variables starts only with the ones named
+explicitly by ``whitelist`` in ``config.yaml``. The next step is to set all
+variables listed in ``environment`` to their configured value. The user might
+additionally override or set certain variables from the command line. The
+so calculated set of variables is the starting point for each root recipe.
+
+The next steps are repeated for each recipe as the dependency tree is traversed.
+A copy of the environment is inherited from the upstream recipe.
+
+1. Any variable defined in ``environment`` is set to the given value.
+2. Make a copy of the local environment that is subsequently passed to each
+   dependency (named "forwarded environment" thereafter).
+3. For each dependency do the following:
+
+   a. Make a dedicated copy of the environment for the dependency.
+   b. Set variables given in the ``environment`` attribute of the dependency
+      in this copy.
+   c. Descent to the dependency recipe with the that environment.
+   d. Merge all variables of the ``provideVars`` section of the dependency
+      into the local environment if ``environment`` is listed in the ``use``
+      attribute of the dependency.
+   e. If the ``forward`` attribute of the dependency is ``True`` then any
+      merged variable of the previous step is updated in the forwarded
+      environment too.
+
+A subset of the resulting local environment can be passed to the three
+execution steps. The available variables to the scripts are defined by
+{checkout,build,package}Vars. A variable that is consumed in one step is also
+set in the following. This means a variable consumed through checkoutVars is
+also set during the build and package steps. Likewise, a variable consumed by
+buildVars is set in the package step too. The rationale is that all three steps
+form a small pipeline. If a step depends on a certain variable then the result
+of the following step is already indirectly dependent on this variable. Thus it
+can be set during the following step anyway.
+
+A recipe might optionally offer some variables to the upstream recipe with a
+``provideVars`` section. The values of these variables might use variable
+substitution where the substituted values are coming from the local
+environment. The upstream recipe must explicitly consume these provided
+variables by add ``environment`` to the ``use`` attribute of the dependency.
+
+Tool handling
+~~~~~~~~~~~~~
+
+Sandbox operation
+~~~~~~~~~~~~~~~~~
+
+
 Recipe and class keywords
 -------------------------
 
