@@ -55,20 +55,26 @@ root recipes. These are recipes that have the ``root`` attribute set to
 recipes is traversed depth first. While following the dependencies Bob keeps a
 local state that consists of the following information:
 
-* Environment: Bob always keeps the full set of variables but only a subset is
-  visible when executing the scripts. Initially only the variables defined in
-  ``default.yaml`` in the ``environment`` section and whitelisted variables
-  named by ``whitelist`` are available. Environment variables can be set at
-  various points that are described below in more detail.
-* Tools: initially there are no tools. They are defined by ``provideTools`` and
-  must be explicitly imported by upstream recipes by listing ``tools`` in the
-  ``use`` attribute. Like environment variables the tools are kept as key value
-  pairs where the key is a string and the value is the executable and library
-  paths that are imported when using a tool.
-* Sandbox: the root file system and paths that are used to build the package.
-  Unless a sandbox is consumed by listing ``sandbox`` in the ``use`` attribute
-  of a dependency the normal host executables are used. Sandboxed builds are
-  described in a separate section below.
+Environment
+    Bob always keeps the full set of variables but only a subset is visible
+    when executing the scripts. Initially only the variables defined in
+    ``default.yaml`` in the ``environment`` section and whitelisted variables
+    named by ``whitelist`` are available. Environment variables can be set at
+    various points that are described below in more detail.
+
+Tools
+    Tools are aliases for paths to executables. Initially there are no tools.
+    They are defined by ``provideTools`` and must be explicitly imported by
+    upstream recipes by listing ``tools`` in the ``use`` attribute. Like
+    environment variables the tools are kept as key value pairs where the key
+    is a string and the value is the executable and library paths that are
+    imported when using a tool.
+
+Sandbox
+    This defines the root file system and paths that are used to build the
+    package.  Unless a sandbox is consumed by listing ``sandbox`` in the
+    ``use`` attribute of a dependency the normal host executables are used.
+    Sandboxed builds are described in a separate section below.
 
 All of this information is carried as local state when traversing the
 dependency tree. Each recipe gets a local copy that is propagated downstream.
@@ -151,14 +157,73 @@ A recipe might optionally offer some variables to the upstream recipe with a
 ``provideVars`` section. The values of these variables might use variable
 substitution where the substituted values are coming from the local
 environment. The upstream recipe must explicitly consume these provided
-variables by add ``environment`` to the ``use`` attribute of the dependency.
+variables by adding ``environment`` to the ``use`` attribute of the dependency.
 
 Tool handling
 ~~~~~~~~~~~~~
 
+Tools are handled very similar to environment variables when being passed in
+the recipe dependency tree. Tools are aliases for a package together with a
+relative path to the executable(s) and optionally some library paths for shared
+libraries. Another recipe using a tool gets the path to the executable(s) added
+to its ``$PATH``.
+
+Starting at the root recipe there are no tools. The next steps are repeated
+for each recipe as the dependency tree is traversed. A copy of the tool
+aliases is inherited from the upstream recipe.
+
+#. Make a copy of the local tool aliases that is subsequently passed to each
+   dependency (named "forwarded tools" thereafter).
+#. For each dependency do the following:
+
+   a. Descent to the dependency recipe with the forwarded tools
+   b. Merge all tools of the ``provideTools`` section of the dependency into
+      the local tools if ``tools`` is listed in the ``use`` attribute of the
+      dependency.
+   c. If the ``forward`` attribute of the dependency is ``True`` then any
+      merged tools of the previous step is updated in the forwarded tools too.
+
+While the full set of tools is carried through the dependency tree only a
+specified subset of these tools is available when executing the steps of a
+recipe.  The available tools are defined by {checkout,build,package}Tools. A
+tool that is consumed in one step is also set in the following. This means a
+tool consumed through checkoutTools is also available during the build and
+package steps. Likewise, a tool consumed by buildTools is available in the
+package step too.
+
+To define one or more tools a recipe must include a ``provideTools`` section
+that defines the relative execution path and library paths of one or more tool
+aliases. These aliases may be picked up by the upstream recipe by having
+``tools`` in the ``use`` attribute of the dependency.
+
 Sandbox operation
 ~~~~~~~~~~~~~~~~~
 
+Unless a sandbox is configured for a recipe the steps are executed directly on
+the host. Bob adds any consumed tools to the front of ``$PATH`` and controls
+the available environment variables. Apart from this the build result is pretty
+much dependent on the installed applications of the host.
+
+By utilizing `user namespaces`_ on Linux Bob is able to execute the package
+steps in a tightly controlled and reproducible environment. This is key to
+enable binary reproducible builds. The sandbox image itself is also represented
+by a recipe in the project.
+
+.. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
+
+Initially no sandbox is defined. A downstream recipe might offer its built
+package as sandbox through ``provideSandbox``. The upstream recipe must define
+``sandbox`` in the ``use`` attribute of this dependency to pick it up as
+sandbox. This sandbox is effective only for the current recipe. If ``forward``
+is additionally set to ``True`` the following dependencies will inherit this
+sandbox for their execution.
+
+Inside the sandbox the result of the consumed or inherited sandbox image is
+used as root file system. Only direct inputs of the executed step are visible.
+Everything except the working directory and ``/tmp`` is mounted read only to
+restrict side effects. The sandbox image must provide everything to execute the
+steps (including bash). The only component used from the host is the Linux
+kernel and indirectly Python because Bob is written in this language.
 
 Recipe and class keywords
 -------------------------
