@@ -97,7 +97,7 @@ class DirHasher:
     ])
 
     class FileIndex:
-        CACHE_ENTRY_FMT  = '=QQLLLQ20sH'
+        CACHE_ENTRY_FMT  = '=QQLqLQ20sH'
         CACHE_ENTRY_SIZE = struct.calcsize(CACHE_ENTRY_FMT)
 
         class Stat:
