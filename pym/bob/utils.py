@@ -97,6 +97,7 @@ class DirHasher:
     ])
 
     class FileIndex:
+        SIGNATURE        = b'BOB1'
         CACHE_ENTRY_FMT  = '=QQLqLQ20sH'
         CACHE_ENTRY_SIZE = struct.calcsize(CACHE_ENTRY_FMT)
 
@@ -121,7 +122,12 @@ class DirHasher:
             self.__outFile = None
             if os.path.exists(self.__cachePath):
                 self.__inFile = open(self.__cachePath, "rb")
-                self.__mismatch = False
+                if self.__inFile.read(4) == DirHasher.FileIndex.SIGNATURE:
+                    self.__mismatch = False
+                else:
+                    self.__inFile.close()
+                    self.__inFile = None
+                    self.__mismatch = True
             else:
                 self.__inFile = None
                 self.__mismatch = True
@@ -154,6 +160,8 @@ class DirHasher:
                     self.__inFile.seek(0)
                     self.__outFile.write(self.__inFile.read(self.__inPosOld))
                     self.__inFile.seek(pos)
+                else:
+                    self.__outFile.write(DirHasher.FileIndex.SIGNATURE)
             self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, float2ns(st.st_ctime),
                 float2ns(st.st_mtime), st.st_dev, st.st_ino, st.st_mode, st.st_size,
                 digest, len(name)))
