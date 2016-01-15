@@ -823,7 +823,7 @@ class Package(object):
         return self.__indirectDepSteps
 
     def getAllDepSteps(self):
-        return sorted(set(self.__directDepSteps) + set(self.__indirectDepSteps))
+        return sorted(set(self.__directDepSteps) | set(self.__indirectDepSteps))
 
     def setCheckoutStep(self, script, fullEnv, env, tools, deterministic):
         self.__checkoutStep = CheckoutStep(
