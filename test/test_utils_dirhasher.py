@@ -38,6 +38,12 @@ class TestHashFile(TestCase):
             "da39a3ee5e6b4b0d3255bfef95601890afd80709")
 
 class TestHashDir(TestCase):
+    def setUp(self):
+        self.umask = os.umask(0o022)
+
+    def tearDown(self):
+        os.umask(self.umask)
+
     def testDirAndFile(self):
         """Test hashing a directory with one file.
 
