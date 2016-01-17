@@ -6,6 +6,7 @@ for complex embedded projects and thus focuses on reproducible builds while
 still being nice to developers in agile environments.
 
 ![Doc Badge](https://readthedocs.org/projects/bob-build-tool/badge/?version=latest)
+[![Build Status](https://travis-ci.org/BobBuildTool/bob.svg?branch=master)](https://travis-ci.org/BobBuildTool/bob)
 
 Getting started
 ===============
