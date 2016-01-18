@@ -7,6 +7,7 @@ still being nice to developers in agile environments.
 
 ![Doc Badge](https://readthedocs.org/projects/bob-build-tool/badge/?version=latest)
 [![Build Status](https://travis-ci.org/BobBuildTool/bob.svg?branch=master)](https://travis-ci.org/BobBuildTool/bob)
+[![codecov.io](https://codecov.io/github/BobBuildTool/bob/coverage.svg?branch=master)](https://codecov.io/github/BobBuildTool/bob?branch=master)
 
 Getting started
 ===============
