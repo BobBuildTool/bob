@@ -1138,7 +1138,6 @@ class Recipe(object):
                 providedDeps.reverse()
                 for d in providedDeps: allDeps.insert(i, d)
 
-            packages.append(p)
             if dep.useBuildResult:
                 results.append(p)
             if dep.useTools:
@@ -1150,6 +1149,8 @@ class Recipe(object):
             if dep.useSandbox and sandboxEnabled:
                 sandbox = p.getProvidedSandbox()
                 if dep.provideGlobal: depSandbox = p.getProvidedSandbox()
+            if dep.useBuildResult or dep.useTools or (dep.useSandbox and sandboxEnabled):
+                packages.append(p)
 
         # create package
         p = Package(self.__packageName, stack, pathFormatter, self, sandbox, packages,
