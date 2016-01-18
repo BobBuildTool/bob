@@ -6,8 +6,11 @@ python:
 
 install:
     - pip install PyYAML
+    - pip install codecov
 
 script:
     - make
     - ./test/run-tests.sh
 
+after_success:
+    - codecov
