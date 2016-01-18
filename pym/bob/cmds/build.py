@@ -38,6 +38,10 @@ import urllib.request, urllib.error
 #    ==  1: package name, package steps, stderr, stdout
 #    ==  2: package name, package steps, stderr, stdout, set -x
 
+def hashWorkspace(step):
+    return hashDirectory(step.getWorkspacePath(),
+        os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
+
 class DummyArchive:
     def uploadPackage(self, buildId, path):
         pass
@@ -553,9 +557,7 @@ esac
 
             # We always have to rehash the directory as the user might have
             # changed the source code manually.
-            BobState().setResultHash(prettySrcPath, hashDirectory(
-                checkoutStep.getWorkspacePath(),
-                os.path.join(checkoutStep.getWorkspacePath(), "..", "cache.bin") ))
+            BobState().setResultHash(prettySrcPath, hashWorkspace(checkoutStep))
             self._setAlreadyRun(checkoutDigest, prettySrcPath)
 
     def _cookBuildStep(self, buildStep, done, depth):
@@ -587,11 +589,19 @@ esac
                 for i in buildStep.getArguments() if i.isValid() ]
             if (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
                 self._info("   BUILD     skipped (unchanged input for {})".format(prettyBuildPath))
+                # We always rehash the directory in development mode as the
+                # user might have compiled the package manually.
+                if not self.__cleanBuild:
+                    BobState().setResultHash(prettyBuildPath, hashWorkspace(buildStep))
             else:
                 print(colorize("   BUILD     {}".format(prettyBuildPath), "32"))
                 if self.__cleanBuild: emptyDirectory(prettyBuildPath)
                 self._runShell(buildStep, "build")
-                BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
+                # Use timestamp in release mode and only hash in development mode
+                BobState().setResultHash(prettyBuildPath,
+                                         datetime.datetime.utcnow()
+                                             if self.__cleanBuild
+                                             else hashWorkspace(buildStep))
                 BobState().setInputHashes(prettyBuildPath, buildInputHashes)
             self._setAlreadyRun(buildDigest, prettyBuildPath)
 
@@ -654,9 +664,7 @@ esac
 
             # Rehash directory if content was changed
             if packageExecuted:
-                BobState().setResultHash(prettyPackagePath, hashDirectory(
-                    packageStep.getWorkspacePath(),
-                    os.path.join(packageStep.getWorkspacePath(), "..", "cache.bin") ))
+                BobState().setResultHash(prettyPackagePath, hashWorkspace(packageStep))
                 BobState().setInputHashes(prettyPackagePath, packageInputHashes)
             self._setAlreadyRun(packageDigest, prettyPackagePath)
 
