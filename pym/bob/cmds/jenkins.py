@@ -72,7 +72,6 @@ class JenkinsJob:
 
     def dumpStep(self, d):
         cmds = []
-        cmds.append("if [ -z \"$1\" ] ; then exec /bin/bash -ex \"$0\" redo ; fi")
         cmds.append("mkdir -p {}".format(d.getExecPath()))
         cmds.append("cd {}".format(d.getExecPath()))
         cmds.append("")
