@@ -1019,8 +1019,8 @@ class Recipe(object):
             raise ParseError("checkoutSCM must be a dict or a list")
         checkoutSCMs = [ Scm(s) for s in scms ]
         self.__checkout = (checkoutScript, checkoutSCMs)
-        self.__build =  incHelper.resolve(recipe.get("buildScript", ""))
-        self.__package =    incHelper.resolve(recipe.get("packageScript", ""))
+        self.__build = incHelper.resolve(recipe.get("buildScript"))
+        self.__package = incHelper.resolve(recipe.get("packageScript"))
 
         # Consider checkout deterministic by default if no checkout script is
         # involved.
@@ -1053,11 +1053,7 @@ class Recipe(object):
             (checkoutScript, checkoutSCMs) = self.__checkout
             self.__checkoutDeterministic = self.__checkoutDeterministic and cls.__checkoutDeterministic
             # merge scripts
-            if cls.__checkout[0] is not None:
-                if checkoutScript is None:
-                    checkoutScript = cls.__checkout[0]
-                else:
-                    checkoutScript = joinScripts([cls.__checkout[0], checkoutScript])
+            checkoutScript = joinScripts([cls.__checkout[0], checkoutScript])
             # merge SCMs
             scms = cls.__checkout[1][:]
             scms.extend(checkoutSCMs)

@@ -33,7 +33,11 @@ def colorize(string, color):
         return string
 
 def joinScripts(scripts):
-    return "\ncd \"${BOB_CWD}\"\n".join(scripts)
+    scripts = [ s for s in scripts if ((s is not None) and (s != "")) ]
+    if scripts != []:
+        return "\ncd \"${BOB_CWD}\"\n".join(scripts)
+    else:
+        return None
 
 def removePath(path):
     if os.path.exists(path):
