@@ -36,8 +36,9 @@ def escapeJobName(name):
     return regexJobName.sub('_', name)
 
 class JenkinsJob:
-    def __init__(self, name, prefix, root):
+    def __init__(self, name, displayName, prefix, root):
         self.__name = name
+        self.__displayName = displayName
         self.__prefix = prefix
         self.__isRoot = root
         self.__checkoutSteps = {}
@@ -132,6 +133,9 @@ class JenkinsJob:
             root = xml.etree.ElementTree.Element("project")
             xml.etree.ElementTree.SubElement(root, "actions")
             xml.etree.ElementTree.SubElement(root, "description").text = ""
+            if self.__name != self.__displayName:
+                xml.etree.ElementTree.SubElement(
+                    root, "displayName").text = self.__displayName
             xml.etree.ElementTree.SubElement(root, "keepDependencies").text = "false"
             xml.etree.ElementTree.SubElement(root, "properties")
             if (nodes != ''):
@@ -304,11 +308,12 @@ class JenkinsJob:
 
 
 def _genJenkinsJobs(p, jobs, prefix):
-    name = escapeJobName(prefix + p.getRecipe().getBaseName())
+    displayName = prefix + p.getRecipe().getBaseName()
+    name = escapeJobName(displayName)
     if name in jobs:
         jj = jobs[name]
     else:
-        jj = JenkinsJob(name, prefix, p.getRecipe().isRoot())
+        jj = JenkinsJob(name, displayName, prefix, p.getRecipe().isRoot())
         jobs[name] = jj
 
     checkout = p.getCheckoutStep()
