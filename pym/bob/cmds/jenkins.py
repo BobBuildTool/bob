@@ -73,6 +73,7 @@ class JenkinsJob:
 
     def dumpStep(self, d):
         cmds = []
+        cmds.append("#!/bin/bash -ex")
         cmds.append("mkdir -p {}".format(d.getExecPath()))
         cmds.append("cd {}".format(d.getExecPath()))
         cmds.append("")
@@ -163,6 +164,7 @@ class JenkinsJob:
             xml.etree.ElementTree.SubElement(root, "buildWrappers")
 
         prepareCmds = []
+        prepareCmds.append("#!/bin/bash -ex")
         prepareCmds.append("# delete unused files and directories from workspace")
         prepareCmds.append("pruneUnused()")
         prepareCmds.append("{")
