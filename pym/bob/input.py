@@ -490,6 +490,7 @@ class BaseStep(object):
         self.__providedDeps = []
         self.__providedSandbox = None
         self.__digest = None
+        self.__shared = False
 
     def __hash__(self):
         return int.from_bytes(self.getDigest()[0:8], sys.byteorder)
@@ -665,6 +666,12 @@ class BaseStep(object):
 
     def getProvidedSandbox(self):
         return self.__providedSandbox
+
+    def setShared(self, shared):
+        self.__shared = shared
+
+    def isShared(self):
+        return self.__shared
 
 class CheckoutStep(BaseStep):
     def __init__(self, package, pathFormatter, sandbox=None, checkout=None,
@@ -1008,6 +1015,7 @@ class Recipe(object):
         self.__toolDepBuild |= self.__toolDepCheckout
         self.__toolDepPackage = set(recipe.get("packageTools", []))
         self.__toolDepPackage |= self.__toolDepBuild
+        self.__shared = recipe.get("shared", False)
 
         incHelper = IncludeHelper(baseDir, packageName)
 
@@ -1200,6 +1208,11 @@ class Recipe(object):
         if self.__provideSandbox:
             packageStep.setProvidedSandbox(Sandbox(packageStep, env,
                                                    self.__provideSandbox))
+
+        if self.__shared:
+            if packageStep.getBuildId() is None:
+                raise ParseError("Shared packages must be deterministic!")
+            packageStep.setShared(True)
 
         return p
 
