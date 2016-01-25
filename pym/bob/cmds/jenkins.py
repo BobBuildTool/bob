@@ -27,6 +27,7 @@ import http.client
 import os.path
 import re
 import sys
+import textwrap
 import urllib.parse
 import xml.etree.ElementTree
 
@@ -107,6 +108,17 @@ class JenkinsJob:
         cmds.append("# BEGIN BUILD SCRIPT")
         cmds.append(d.getJenkinsScript())
         cmds.append("# END BUILD SCRIPT")
+        if d.isShared():
+            bid = asHexStr(d.getBuildId())
+            cmds.append("")
+            cmds.append(textwrap.dedent("""\
+            # install shared package atomically
+            if [ ! -d ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
+                T=$(mktemp -d -p ${{SLAVE_HOME:-$JENKINS_HOME}})
+                rsync -a $WORKSPACE/{EXEC_PATH}/ $T
+                mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
+                mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
+            fi""".format(EXEC_PATH=d.getExecPath(), BID1=bid[0:2], BID2=bid[2:])))
         return "\n".join(cmds)
 
     @staticmethod
@@ -214,10 +226,42 @@ class JenkinsJob:
 
             # copy deps into workspace
             for d in deps:
-                cp = xml.etree.ElementTree.SubElement(
-                    builders, "hudson.plugins.copyartifact.CopyArtifact", attrib={
-                        "plugin" : "copyartifact@1.32.1"
-                    })
+                if d.isShared():
+                    bid = asHexStr(d.getBuildId())
+                    guard = xml.etree.ElementTree.SubElement(
+                        builders, "org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder", attrib={
+                            "plugin" : "conditional-buildstep@1.3.3",
+                        })
+                    notCond = xml.etree.ElementTree.SubElement(
+                        guard, "condition", attrib={
+                            "class" : "org.jenkins_ci.plugins.run_condition.logic.Not",
+                            "plugin" : "run-condition@1.0",
+                        })
+                    fileCond = xml.etree.ElementTree.SubElement(
+                        notCond, "condition", attrib={
+                            "class" : "org.jenkins_ci.plugins.run_condition.core.FileExistsCondition"
+                        })
+                    xml.etree.ElementTree.SubElement(
+                        fileCond, "file").text = "bob/"+bid[0:2]+"/"+bid[2:]
+                    xml.etree.ElementTree.SubElement(
+                        fileCond, "baseDir", attrib={
+                            "class" : "org.jenkins_ci.plugins.run_condition.common.BaseDirectory$JenkinsHome"
+                        })
+                    cp = xml.etree.ElementTree.SubElement(
+                        guard, "buildStep", attrib={
+                            "class" : "hudson.plugins.copyartifact.CopyArtifact",
+                            "plugin" : "copyartifact@1.32.1",
+                        })
+                    xml.etree.ElementTree.SubElement(
+                        guard, "runner", attrib={
+                            "class" : "org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail",
+                            "plugin" : "run-condition@1.0",
+                        })
+                else:
+                    cp = xml.etree.ElementTree.SubElement(
+                        builders, "hudson.plugins.copyartifact.CopyArtifact", attrib={
+                            "plugin" : "copyartifact@1.32.1"
+                        })
                 xml.etree.ElementTree.SubElement(
                     cp, "project").text = self.__getJobName(d.getPackage())
                 xml.etree.ElementTree.SubElement(
@@ -236,9 +280,24 @@ class JenkinsJob:
             # extract deps
             prepareCmds.append("\n# extract deps")
             for d in deps:
-                prepareCmds.append("mkdir -p " + d.getExecPath())
-                prepareCmds.append("tar zxf {} -C {}".format(
-                    JenkinsJob.__tgzName(d), d.getExecPath()))
+                if d.isShared():
+                    bid = asHexStr(d.getBuildId())
+                    prepareCmds.append(textwrap.dedent("""\
+                        if [ ! -d ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
+                            T=$(mktemp -d -p ${{SLAVE_HOME:-$JENKINS_HOME}})
+                            tar xf {TGZ} -C $T
+                            mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
+                            mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
+                        fi
+                        mkdir -p {EXEC_DIR}
+                        ln -sfT ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} {EXEC_PATH}
+                        """.format(BID1=bid[0:2], BID2=bid[2:], TGZ=JenkinsJob.__tgzName(d),
+                                   EXEC_DIR=os.path.dirname(d.getExecPath()),
+                                   EXEC_PATH=d.getExecPath())))
+                else:
+                    prepareCmds.append("mkdir -p " + d.getExecPath())
+                    prepareCmds.append("tar zxf {} -C {}".format(
+                        JenkinsJob.__tgzName(d), d.getExecPath()))
 
         prepare = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
         xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
@@ -285,6 +344,7 @@ class JenkinsJob:
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
                 self.dumpStep(d),
+                "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
                 "tar zcfv {} -C {} .".format(JenkinsJob.__tgzName(d), d.getExecPath())
             ])
