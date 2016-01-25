@@ -661,6 +661,22 @@ Recipe attribute which defaults to False. If set to True the recipe is declared
 a root recipe and becomes a top level package. There must be at least one root
 package in a project.
 
+shared
+~~~~~~
+
+Type: Boolean
+
+Marking a recipe as shared implies that the result may be shared between
+different projects or workspaces. Only completely deterministic packages may be
+marked as such. Typically large static packages (such as toolchains) are
+enabled as shared packages. By reusing the result the hard disk usage can be
+sometimes reduced drastically.
+
+The exact behaviour depends on the build backend. Currently the setting has no
+influence on local builds. On Jenkins the result will be copied to a separate
+directory in the Jenkins installation and will be used from there. This reduces
+the job workspace size considerably at the expense of having artifacts outside
+of Jenkins's regular control.
 
 config.yaml
 -----------
