@@ -678,6 +678,12 @@ def doJenkinsPush(recipes, argv):
                             .format(name, response.status, response.reason),
                         file=sys.stderr)
                     response.read()
+
+                    if response.status == 404:
+                        # Job was deleted
+                        existingJobs.remove(name)
+                        BobState().delJenkinsJob(args.name, name)
+
                 else:
                     origXML = response.read()
 
