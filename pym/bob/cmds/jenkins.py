@@ -209,6 +209,7 @@ class JenkinsJob:
         whiteList.extend([ d.getExecPath() for d in self.__checkoutSteps.values() ])
         whiteList.extend([ d.getExecPath() for d in self.__buildSteps.values() ])
         prepareCmds.append("pruneUnused " + " ".join(sorted(whiteList)))
+        prepareCmds.append("set -x")
 
         deps = sorted(self.__deps.values(), key=lambda d: d.getExecPath())
         if deps:
