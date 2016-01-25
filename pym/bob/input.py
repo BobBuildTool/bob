@@ -17,7 +17,7 @@
 from . import BOB_VERSION
 from .errors import ParseError, BuildError
 from .state import BobState
-from .utils import joinScripts, compareVersion
+from .utils import colorize, joinScripts, compareVersion
 from base64 import b64encode
 from glob import glob
 from pipes import quote
@@ -1006,9 +1006,18 @@ class Recipe(object):
         self.__provideSandbox = recipe.get("provideSandbox")
         self.__varSelf = recipe.get("environment", {})
         self.__varDepCheckout = set(recipe.get("checkoutVars", []))
+        if "checkoutConsume" in recipe:
+            print(colorize("WARNING: {}: usage of checkoutConsume is deprecated. Use checkoutVars instead.".format(baseName), "33"))
+            self.__varDepCheckout |= set(recipe["checkoutConsume"])
         self.__varDepBuild = set(recipe.get("buildVars", []))
+        if "buildConsume" in recipe:
+            print(colorize("WARNING: {}: usage of buildConsume is deprecated. Use buildVars instead.".format(baseName), "33"))
+            self.__varDepBuild |= set(recipe["buildConsume"])
         self.__varDepBuild |= self.__varDepCheckout
         self.__varDepPackage = set(recipe.get("packageVars", []))
+        if "packageConsume" in recipe:
+            print(colorize("WARNING: {}: usage of packageConsume is deprecated. Use packageVars instead.".format(baseName), "33"))
+            self.__varDepPackage |= set(recipe["packageConsume"])
         self.__varDepPackage |= self.__varDepBuild
         self.__toolDepCheckout = set(recipe.get("checkoutTools", []))
         self.__toolDepBuild = set(recipe.get("buildTools", []))
