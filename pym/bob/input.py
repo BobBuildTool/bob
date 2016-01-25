@@ -400,8 +400,12 @@ def Scm(spec):
 
 class AbstractTool:
     def __init__(self, spec):
-        self.path = spec['path']
-        self.libs = spec.get('libs', [])
+        if isinstance(spec, str):
+            self.path = spec
+            self.libs = []
+        else:
+            self.path = spec['path']
+            self.libs = spec.get('libs', [])
 
     def prepare(self, step, env):
         """Create concrete tool for given step."""

@@ -578,7 +578,7 @@ result in the same package being used.
 provideTools
 ~~~~~~~~~~~~
 
-Type: Dictionary (String -> Tool-Dictionary)
+Type: Dictionary (String -> Path | Tool-Dictionary)
 
 The ``provideTools`` keyword defines an arbitrary number of build tools that
 may be used by other steps during the build process. In essence the definition
@@ -596,6 +596,11 @@ must be a list of paths to needed shared libraries. Any path that is specified
 must be relative. If the recipe makes use of existing host binaries and wants
 to provide them as tool you should create symlinks to the host paths.
 
+If no library paths are present the declaration may be abbreviated by giving
+the relative path directly::
+
+   provideTools:
+      host-toolchain: bin
 
 provideVars
 ~~~~~~~~~~~
