@@ -428,10 +428,14 @@ esac
             print("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do rm -f \"$i\" ; done' EXIT", file=f)
             print("", file=f)
             print("# Special args:", file=f)
-            print("declare -A BOB_DEP_PATHS=( {} )".format(" ".join(sorted(
+            print("declare -A BOB_ALL_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(a.getPackage().getName()),
                                    quote(a.getExecPath()))
                     for a in step.getAllDepSteps() ] ))), file=f)
+            print("declare -A BOB_DEP_PATHS=( {} )".format(" ".join(sorted(
+                [ "[{}]={}".format(quote(a.getPackage().getName()),
+                                   quote(a.getExecPath()))
+                    for a in step.getArguments() ] ))), file=f)
             print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(t), quote(p))
                     for (t,p) in step.getTools().items()] ))), file=f)

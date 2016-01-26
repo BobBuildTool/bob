@@ -272,11 +272,12 @@ completely empty.
 Additionally the following variables are populated automatically:
 
 * ``BOB_CWD``: The working directory of the current script.
-* ``BOB_DEP_PATHS``: An associative array that holds the paths to the results
+* ``BOB_ALL_PATHS``: An associative array that holds the paths to the results
   of all dependencies indexed by the package name. This includes indirect
-  dependencies through consumed tools too. This array comes in handy if you want
-  to refer to a dependency by name (e.g. ``${BOB_DEP_PATHS[libfoo-dev]}``)
-  instead of the position (e.g. ``$2``).
+  dependencies such as consumed tools or the sandbox too.
+* ``BOB_DEP_PATHS``: An associative array of all direct dependencies. This
+  array comes in handy if you want to refer to a dependency by name (e.g.
+  ``${BOB_DEP_PATHS[libfoo-dev]}``) instead of the position (e.g. ``$2``).
 * ``BOB_TOOL_PATHS``: An associative array that holds the execution paths to
   consumed tools indexed by the package name. All these paths are in ``$PATH``.
 

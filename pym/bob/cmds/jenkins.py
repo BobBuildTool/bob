@@ -78,10 +78,14 @@ class JenkinsJob:
         cmds.append("mkdir -p {}".format(d.getExecPath()))
         cmds.append("cd {}".format(d.getExecPath()))
         cmds.append("")
-        cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
+        cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
             [ "    [{}]={}".format(quote(a.getPackage().getName()),
                                    "$WORKSPACE/"+quote(a.getExecPath()))
                 for a in d.getAllDepSteps() ] ))))
+        cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
+            [ "    [{}]={}".format(quote(a.getPackage().getName()),
+                                   "$WORKSPACE/"+quote(a.getExecPath()))
+                for a in d.getArguments() ] ))))
         cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
             [ "    [{}]=$WORKSPACE/{}".format(quote(t), quote(p))
                 for (t,p) in d.getTools().items()] ))))
