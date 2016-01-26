@@ -259,12 +259,18 @@ fi
         })
         xml.etree.ElementTree.SubElement(scm, "configVersion").text = "2"
 
-        url = xml.etree.ElementTree.SubElement(
-            xml.etree.ElementTree.SubElement(
+        userconfigs =  xml.etree.ElementTree.SubElement(
                 xml.etree.ElementTree.SubElement(scm, "userRemoteConfigs"),
-                "hudson.plugins.git.UserRemoteConfig"),
+                "hudson.plugins.git.UserRemoteConfig")
+
+        url = xml.etree.ElementTree.SubElement(userconfigs,
             "url")
         url.text = self.__url
+
+        if "JENKINS_GIT_CREDENTIALS_ID" in os.environ:
+            credentialsId = xml.etree.ElementTree.SubElement(userconfigs,
+                         "credentialsId")
+            credentialsId.text = os.environ["JENKINS_GIT_CREDENTIALS_ID"]
 
         branch = xml.etree.ElementTree.SubElement(
             xml.etree.ElementTree.SubElement(

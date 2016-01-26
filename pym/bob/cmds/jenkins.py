@@ -17,6 +17,7 @@
 from ..errors import ParseError, BuildError
 from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
+from ..tty import colorize
 from ..utils import asHexStr
 from pipes import quote
 import argparse
@@ -26,6 +27,7 @@ import hashlib
 import http.client
 import os.path
 import re
+import ssl
 import sys
 import textwrap
 import urllib.parse
@@ -720,6 +722,20 @@ def doJenkinsLs(recipes, argv):
         if args.verbose >= 2:
             print(" Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
 
+def getConnection(config):
+    if config["url"]["scheme"] == 'http':
+        connection = http.client.HTTPConnection(config["url"]["server"],
+                                                config["url"].get("port"))
+    elif config["url"]["scheme"] == 'https':
+        ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        print(colorize("WARNING: using HTTPS without certificate check.", "33"))
+        connection = http.client.HTTPSConnection(config["url"]["server"],
+                                                config["url"].get("port"), context=ctx)
+    else:
+        raise BuildError("Unsupported Jenkins URL scheme: '{}'".format(
+            config["url"]["scheme"]))
+    return connection
+
 def doJenkinsPrune(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins prune")
     parser.add_argument("name", help="Prune jobs from Jenkins server")
@@ -733,12 +749,7 @@ def doJenkinsPrune(recipes, argv):
     existingJobs = BobState().getJenkinsAllJobs(args.name)
 
     # connect to server
-    if config["url"]["scheme"] == 'http':
-        connection = http.client.HTTPConnection(config["url"]["server"],
-                                                config["url"].get("port"))
-    else:
-        raise BuildError("Unsupported Jenkins URL scheme: '{}'".format(
-            config["url"]["scheme"]))
+    connection = getConnection(config)
     urlPath = config["url"]["path"]
 
     # construct headers
@@ -807,12 +818,7 @@ def doJenkinsPush(recipes, argv):
     buildOrder = genJenkinsBuildOrder(jobs)
 
     # connect to server
-    if config["url"]["scheme"] == 'http':
-        connection = http.client.HTTPConnection(config["url"]["server"],
-                                                config["url"].get("port"))
-    else:
-        raise BuildError("Unsupported Jenkins URL scheme: '{}'".format(
-            config["url"]["scheme"]))
+    connection = getConnection(config)
     urlPath = config["url"]["path"]
 
     # construct headers
