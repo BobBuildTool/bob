@@ -394,7 +394,8 @@ svn `Svn`_ repository            | ``url``: URL of SVN module
                                  | ``revision``: Optional revision number (optional)
 url While not a real SCM it      | ``url``: File that should be downloaded
     allows to download (and      | ``digestSHA1``: Expected SHA1 digest of the file (optional)
-    extract) files/archives.     | ``extract``: Extract directive (optional, default: auto)
+    extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
+                                 | ``extract``: Extract directive (optional, default: auto)
 === ============================ =========================================
 
 .. _Git: http://git-scm.com/
@@ -412,13 +413,14 @@ attribute too.
 The Svn SCM, like git, requires the ``url`` attribute too. If you specify a
 numeric ``revision`` Bob considers the SCM as deterministic.
 
-The ``url`` SCM naturally needs an ``url`` attribute. If a SHA1 digest is given
-with ``digestSHA1`` the downloaded file will be checked for a matching hash
-sum. This also makes the URL deterministic for Bob. Otherwise the URL will be
-checked in each build for updates. Based on the file name ending Bob will try
-to extract the downloaded file. You may prevent this by setting the ``extract``
-attribute to ``no`` or ``False``. If the heuristic fails the extraction tool
-may be specified as ``tar``, ``gzip``, ``xz``, ``7z`` or ``zip`` directly.
+The ``url`` SCM naturally needs an ``url`` attribute. If a SHA digest is given
+with ``digestSHA1`` and/or ``digestSHA256`` the downloaded file will be checked
+for a matching hash sum. This also makes the URL deterministic for Bob.
+Otherwise the URL will be checked in each build for updates. Based on the file
+name ending Bob will try to extract the downloaded file. You may prevent this
+by setting the ``extract`` attribute to ``no`` or ``False``. If the heuristic
+fails the extraction tool may be specified as ``tar``, ``gzip``, ``xz``, ``7z``
+or ``zip`` directly.
 
 
 depends

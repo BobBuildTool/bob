@@ -306,6 +306,7 @@ class UrlScm(BaseScm):
         super().__init__(spec)
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
+        self.__digestSha256 = spec.get("digestSHA256")
         self.__dir = spec.get("dir", ".")
         self.__extract = spec.get("extract", "auto")
 
@@ -318,6 +319,11 @@ class UrlScm(BaseScm):
             # validate digest
             if re.fullmatch("[0-9a-f]{40}", self.__digestSha1) is None:
                 raise ParseError("Invalid SHA1 digest: " + str(self.__digestSha1))
+        if self.__digestSha256:
+            self.__digestSha256 = Template(self.__digestSha256).substitute(env).lower()
+            # validate digest
+            if re.fullmatch("[0-9a-f]{64}", self.__digestSha256) is None:
+                raise ParseError("Invalid SHA256 digest: " + str(self.__digestSha256))
         if self.__dir:
             self.__dir = Template(self.__dir).substitute(env)
         if isinstance(self.__extract, str):
@@ -342,6 +348,8 @@ fi
 
         if self.__digestSha1:
             ret += "echo {DIGEST} {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=fn)
+        if self.__digestSha256:
+            ret += "echo {DIGEST} {FILE} | sha256sum -c\n".format(DIGEST=self.__digestSha256, FILE=fn)
 
         extractor = None
         if self.__extract in ["yes", "auto", True]:
@@ -372,7 +380,9 @@ fi
         The format is "digest dir" if a SHA1 checksum was specified. Otherwise it
         is "url dir".
         """
-        return (self.__digestSha1 if self.__digestSha1 else self.__url) + " " + self.__dir
+        return ( self.__digestSha256 if self.__digestSha256
+                 else (self.__digestSha1 if self.__digestSha1 else self.__url)
+                    ) + " " + self.__dir
 
     def merge(self, other):
         return False
@@ -381,7 +391,7 @@ fi
         return { self.__dir : _hashString(self.asDigestScript()) }
 
     def isDeterministic(self):
-        return self.__digestSha1 is not None
+        return (self.__digestSha1 is not None) or (self.__digestSha256 is not None)
 
     def hasJenkinsPlugin(self):
         return False
