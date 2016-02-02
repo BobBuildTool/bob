@@ -1097,6 +1097,10 @@ class Recipe(object):
             self.__inherited.add(cls.getName())
             self.__inherited |= cls.__inherited
 
+        # the package step must always be valid
+        if self.__package is None:
+            self.__package = ""
+
         # check provided dependencies
         availDeps = [ d.recipe for d in self.__deps ]
         for d in self.__provideDeps:
