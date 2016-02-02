@@ -240,7 +240,7 @@ case "${{1:-run}}" in
         if [[ $_keep_env = 1 ]] ; then
             exec /usr/bin/env {ENV} "$0" "${{_args[@]}}" __shell
         else
-            exec /usr/bin/env -i {WHITELIST} "$0" "${{_args[@]}}" __shell
+            exec /usr/bin/env -i {WHITELIST} {ENV} "$0" "${{_args[@]}}" __shell
         fi
         ;;
     __shell)
