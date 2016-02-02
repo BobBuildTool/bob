@@ -126,9 +126,12 @@ class DirHasher:
             self.__outFile = None
             if os.path.exists(self.__cachePath):
                 self.__inFile = open(self.__cachePath, "rb")
-                if self.__inFile.read(4) == DirHasher.FileIndex.SIGNATURE:
+                sig = self.__inFile.read(4)
+                if sig == DirHasher.FileIndex.SIGNATURE:
                     self.__mismatch = False
+                    self.__inPos = self.__inPosOld = 4
                 else:
+                    print("Wrong signature at", self.__cachePath, ":", sig)
                     self.__inFile.close()
                     self.__inFile = None
                     self.__mismatch = True

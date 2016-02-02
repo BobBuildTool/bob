@@ -97,9 +97,15 @@ class TestHashDir(TestCase):
                     f.write(b'abc')
                 sum1 = hashDirectory(tmp, index.name)
 
+                with open(index.name, "rb") as f:
+                    assert f.read(4) == b'BOB1'
+
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'qwer')
                 sum2 = hashDirectory(tmp, index.name)
+
+                with open(index.name, "rb") as f:
+                    assert f.read(4) == b'BOB1'
 
                 assert sum1 != sum2
 
@@ -127,4 +133,7 @@ class TestHashDir(TestCase):
 
                 with patch('os.lstat', mock_lstat):
                     hashDirectory(tmp, index.name)
+
+                with open(index.name, "rb") as f:
+                    assert f.read(4) == b'BOB1'
 
