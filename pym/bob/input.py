@@ -1134,7 +1134,15 @@ class Recipe(object):
         stack = inputStack + [self.__packageName]
 
         # make copies because we will modify them
-        env = inputEnv.derive(self.__varSelf)
+        varSelf = {}
+        for (key, value) in self.__varSelf.items():
+            try:
+                 varSelf[key] = Template(value).substitute(inputEnv)
+            except KeyError as e:
+                raise ParseError("Error substituting {} in environment: {}".format(key, str(e)))
+            except ValueError as e:
+                raise ParseError("Error substituting {} in environment: {}".format(key, str(e)))
+        env = inputEnv.derive(varSelf)
         tools = inputTools.derive()
 
         # traverse dependencies
