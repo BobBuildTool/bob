@@ -35,6 +35,7 @@ class _BobState():
         self.__synchronous = True
         self.__dirty = False
         self.__dirStates = {}
+        self.__buildState = {}
         if os.path.exists(self.__path):
             with open(self.__path, 'rb') as f:
                 state = pickle.load(f)
@@ -47,6 +48,7 @@ class _BobState():
             self.__inputs = state["inputs"]
             self.__jenkins = state.get("jenkins", {})
             self.__dirStates = state.get("dirStates", {})
+            self.__buildState = state.get("buildState", {})
 
     def __save(self):
         if self.__synchronous:
@@ -57,6 +59,7 @@ class _BobState():
                 "inputs" : self.__inputs,
                 "jenkins" : self.__jenkins,
                 "dirStates" : self.__dirStates,
+                "buildState" : self.__buildState,
             }
             tmpFile = self.__path+".new"
             with open(tmpFile, "wb") as f:
@@ -179,6 +182,13 @@ class _BobState():
     def setJenkinsJobConfig(self, jenkins, job, jobConfig):
         self.__jenkins[jenkins]['jobs'][job] = copy.deepcopy(jobConfig)
         self.__save()
+
+    def setBuildState(self, digest2Dir):
+        self.__buildState = copy.deepcopy(digest2Dir)
+        self.__save()
+
+    def getBuildState(self):
+        return copy.deepcopy(self.__buildState)
 
 def BobState():
     if _BobState.instance is None:

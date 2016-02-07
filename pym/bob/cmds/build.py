@@ -38,6 +38,25 @@ import urllib.request, urllib.error
 #    ==  1: package name, package steps, stderr, stdout
 #    ==  2: package name, package steps, stderr, stdout, set -x
 
+class Bijection(dict):
+    """Bijective dict that silently removes offending mappings"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__rev = {}
+        for (key, val) in self.copy().items():
+            if val in self.__rev: del self[self.__rev[val]]
+            self.__rev[val] = key
+
+    def __setitem__(self, key, val):
+        if val in self.__rev: del self[self.__rev[val]]
+        self.__rev[val] = key
+        super().__setitem__(key, val)
+
+    def __delitem__(self, key):
+        del self.__rev[self[key]]
+        super().__delitem__(key)
+
 def hashWorkspace(step):
     return hashDirectory(step.getWorkspacePath(),
         os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
@@ -306,7 +325,7 @@ esac
     def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
                  envWhiteList, bobRoot, cleanBuild):
         self.__recipes = recipes
-        self.__wasRun = {}
+        self.__wasRun= Bijection()
         self.__verbose = max(-2, min(2, verbose))
         self.__force = force
         self.__skipDeps = skipDeps
@@ -335,14 +354,31 @@ esac
     def setUploadMode(self, mode):
         self.__doUpload = mode
 
-    def _wasAlreadyRun(self, unique):
-        return unique in self.__wasRun
+    def saveBuildState(self):
+        # save as plain dict
+        BobState().setBuildState(dict(self.__wasRun))
 
-    def _getAlreadyRun(self, unique):
-        return self.__wasRun[unique]
+    def loadBuildState(self):
+        self.__wasRun = Bijection(BobState().getBuildState())
 
-    def _setAlreadyRun(self, unique, data):
-        self.__wasRun[unique] = data
+    def _wasAlreadyRun(self, step):
+        digest = step.getDigest()
+        if digest in self.__wasRun:
+            path = self.__wasRun[digest]
+            # invalidate invalid cached entries
+            if path != step.getWorkspacePath():
+                del self.__wasRun[digest]
+                return False
+            else:
+                return True
+        else:
+            return False
+
+    def _getAlreadyRun(self, step):
+        return self.__wasRun[step.getDigest()]
+
+    def _setAlreadyRun(self, step):
+        self.__wasRun[step.getDigest()] = step.getWorkspacePath()
 
     def _constructDir(self, step, label):
         created = False
@@ -460,9 +496,11 @@ esac
         try:
             if proc.wait() != 0:
                 raise BuildError("Build script {} returned with {}"
-                                    .format(absRunFile, proc.returncode))
+                                    .format(absRunFile, proc.returncode),
+                                 help="You may resume at this point with '--resume' after fixing the error.")
         except KeyboardInterrupt:
-            raise BuildError("User aborted while running {}".format(absRunFile))
+            raise BuildError("User aborted while running {}".format(absRunFile),
+                             help = "Run again with '--resume' to skip already built packages.")
 
     def _info(self, *args, **kwargs):
         if self.__verbose >= -1:
@@ -514,8 +552,8 @@ esac
 
     def _cookCheckoutStep(self, checkoutStep, done, depth):
         checkoutDigest = checkoutStep.getDigest()
-        if self._wasAlreadyRun(checkoutDigest):
-            prettySrcPath = self._getAlreadyRun(checkoutDigest)
+        if self._wasAlreadyRun(checkoutStep):
+            prettySrcPath = self._getAlreadyRun(checkoutStep)
             self._info("   CHECKOUT  skipped (reuse {})".format(prettySrcPath))
         else:
             # depth first
@@ -562,12 +600,12 @@ esac
             # We always have to rehash the directory as the user might have
             # changed the source code manually.
             BobState().setResultHash(prettySrcPath, hashWorkspace(checkoutStep))
-            self._setAlreadyRun(checkoutDigest, prettySrcPath)
+            self._setAlreadyRun(checkoutStep)
 
     def _cookBuildStep(self, buildStep, done, depth):
         buildDigest = buildStep.getDigest()
-        if self._wasAlreadyRun(buildDigest):
-            prettyBuildPath = self._getAlreadyRun(buildDigest)
+        if self._wasAlreadyRun(buildStep):
+            prettyBuildPath = self._getAlreadyRun(buildStep)
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
         else:
             # depth first
@@ -607,12 +645,12 @@ esac
                                              if self.__cleanBuild
                                              else hashWorkspace(buildStep))
                 BobState().setInputHashes(prettyBuildPath, buildInputHashes)
-            self._setAlreadyRun(buildDigest, prettyBuildPath)
+            self._setAlreadyRun(buildStep)
 
     def _cookPackageStep(self, packageStep, done, depth):
         packageDigest = packageStep.getDigest()
-        if self._wasAlreadyRun(packageDigest):
-            prettyPackagePath = self._getAlreadyRun(packageDigest)
+        if self._wasAlreadyRun(packageStep):
+            prettyPackagePath = self._getAlreadyRun(packageStep)
             self._info("   PACKAGE   skipped (reuse {})".format(prettyPackagePath))
         else:
             # get directory into shape
@@ -670,7 +708,7 @@ esac
             if packageExecuted:
                 BobState().setResultHash(prettyPackagePath, hashWorkspace(packageStep))
                 BobState().setInputHashes(prettyPackagePath, packageInputHashes)
-            self._setAlreadyRun(packageDigest, prettyPackagePath)
+            self._setAlreadyRun(packageStep)
 
         return prettyPackagePath
 
@@ -694,6 +732,8 @@ def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
         help="Don't build dependencies")
     parser.add_argument('-b', '--build-only', default=False, action='store_true',
         help="Don't checkout, just build and package")
+    parser.add_argument('--resume', default=False, action='store_true',
+        help="Resume build where it was previously interrupted")
     parser.add_argument('-q', '--quiet', default=0, action='count',
         help="Decrease verbosity (may be specified multiple times)")
     parser.add_argument('-v', '--verbose', default=0, action='count',
@@ -756,11 +796,15 @@ def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
         raise BuildError("Invalid archive backend: "+archiveBackend)
     builder.setUploadMode(args.upload)
     builder.setDownloadMode(args.download)
+    if args.resume: builder.loadBuildState()
 
-    for p in args.packages:
-        package = walkPackagePath(rootPackages, p)
-        prettyResultPath = builder.cook([package.getPackageStep()], package)
-        print("Build result is in", prettyResultPath)
+    try:
+        for p in args.packages:
+            package = walkPackagePath(rootPackages, p)
+            prettyResultPath = builder.cook([package.getPackageStep()], package)
+            print("Build result is in", prettyResultPath)
+    finally:
+        builder.saveBuildState()
 
     # copy build result if requested
     if args.destination:
