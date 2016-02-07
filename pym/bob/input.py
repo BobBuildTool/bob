@@ -25,7 +25,6 @@ from string import Template
 import copy
 import hashlib
 import os, os.path
-import pickle
 import re
 import sys
 import xml.etree.ElementTree
@@ -565,7 +564,8 @@ class BaseStep(object):
                 h.update(tool.step.getDigest())
                 h.update(tool.path.encode("utf8"))
                 for l in tool.libs: h.update(l.encode('utf8'))
-            h.update(pickle.dumps(sorted(self.__env.items())))
+            for (key, val) in sorted(self.__env.items()):
+                h.update((key+"="+val).encode('utf8'))
             for arg in self.__args:
                 h.update(arg.getDigest())
             self.__digest = h.digest()
@@ -590,7 +590,8 @@ class BaseStep(object):
             h.update(bid)
             h.update(tool.path.encode("utf8"))
             for l in tool.libs: h.update(l.encode('utf8'))
-        h.update(pickle.dumps(sorted(self.__env.items())))
+        for (key, val) in sorted(self.__env.items()):
+            h.update((key+"="+val).encode('utf8'))
         for arg in self.__args:
             bid = arg.getBuildId()
             if bid is None: return None
