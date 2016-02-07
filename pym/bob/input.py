@@ -335,11 +335,11 @@ class UrlScm(BaseScm):
                 raise ParseError("Invalid SHA256 digest: " + str(self.__digestSha256))
         if self.__dir:
             self.__dir = Template(self.__dir).substitute(env)
+        self.__fn = self.__url.split("/")[-1]
         if isinstance(self.__extract, str):
             self.__extract = Template(self.__extract).substitute(env)
 
     def asScript(self):
-        fn = quote(self.__url.split("/")[-1])
         ret = """
 mkdir -p {DIR}
 cd {DIR}
@@ -354,21 +354,21 @@ else
         mv $F {FILE}
     )
 fi
-""".format(DIR=quote(self.__dir), URL=quote(self.__url), FILE=quote(fn))
+""".format(DIR=quote(self.__dir), URL=quote(self.__url), FILE=quote(self.__fn))
 
         if self.__digestSha1:
-            ret += "echo {DIGEST} {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=fn)
+            ret += "echo {DIGEST} {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
         if self.__digestSha256:
-            ret += "echo {DIGEST} {FILE} | sha256sum -c\n".format(DIGEST=self.__digestSha256, FILE=fn)
+            ret += "echo {DIGEST} {FILE} | sha256sum -c\n".format(DIGEST=self.__digestSha256, FILE=self.__fn)
 
         extractor = None
         if self.__extract in ["yes", "auto", True]:
             for (ext, tool) in UrlScm.EXTENSIONS:
-                if fn.endswith(ext):
+                if self.__fn.endswith(ext):
                     extractor = UrlScm.EXTRACTORS[tool]
                     break
             if not extractor and self.__extract != "auto":
-                raise ParseError("Don't know how to extract '"+fn+"' automatically.")
+                raise ParseError("Don't know how to extract '"+self.__fn+"' automatically.")
         elif self.__extract in UrlScm.EXTRACTORS:
             extractor = UrlScm.EXTRACTORS[tool]
         elif self.__extract not in ["no", False]:
@@ -380,7 +380,7 @@ if [ {FILE} -nt .{FILE}.extracted ] ; then
     {TOOL} {FILE}
     touch .{FILE}.extracted
 fi
-""".format(FILE=quote(fn), TOOL=extractor)
+""".format(FILE=quote(self.__fn), TOOL=extractor)
 
         return ret
 
@@ -392,13 +392,14 @@ fi
         """
         return ( self.__digestSha256 if self.__digestSha256
                  else (self.__digestSha1 if self.__digestSha1 else self.__url)
-                    ) + " " + self.__dir
+                    ) + " " + os.path.join(self.__dir, self.__fn)
 
     def merge(self, other):
         return False
 
     def getDirectories(self):
-        return { self.__dir : _hashString(self.asDigestScript()) }
+        fn = os.path.join(self.__dir, self.__fn)
+        return { fn : _hashString(self.asDigestScript()) }
 
     def isDeterministic(self):
         return (self.__digestSha1 is not None) or (self.__digestSha256 is not None)
