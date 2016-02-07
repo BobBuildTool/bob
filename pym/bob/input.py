@@ -349,6 +349,7 @@ else
     (
         F=$(mktemp)
         trap 'rm -f $F' EXIT
+        set -e
         curl -sSgL -o $F {URL}
         mv $F {FILE}
     )
