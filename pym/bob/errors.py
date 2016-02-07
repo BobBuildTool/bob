@@ -17,14 +17,17 @@
 from .utils import colorize
 
 class BobError(Exception):
-    def __init__(self, slogan):
-        self.slogan = colorize(slogan, "31")
+    def __init__(self, kind, slogan, help=""):
+        self.slogan = colorize(kind+" error: ", "31;1") + colorize(slogan, "31")
         self.stack = []
+        self.help = help
 
     def __str__(self):
         ret = self.slogan
         if self.stack:
             ret = ret + "\nProcessing stack: " + "/".join(self.stack)
+        if self.help:
+            ret = ret + "\n" + self.help
         return ret
 
     def pushFrame(self, frame):
@@ -32,8 +35,10 @@ class BobError(Exception):
             self.stack.insert(0, frame)
 
 class ParseError(BobError):
-    pass
+    def __init__(self, slogan, help=""):
+        BobError.__init__(self, "Parse", slogan, help)
 
 class BuildError(BobError):
-    pass
+    def __init__(self, slogan, help=""):
+        BobError.__init__(self, "Build", slogan, help)
 

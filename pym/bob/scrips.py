@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from . import BOB_VERSION
-from .errors import BuildError, ParseError
+from .errors import BobError
 from .utils import asHexStr, colorize, Unbuffered, hashDirectory
 import argparse
 import sys
@@ -88,11 +88,8 @@ def bob(bobRoot):
         else:
             doHelp(False, sys.stderr)
 
-    except ParseError as pe:
-        print(colorize("Parse error:", "31;1"), str(pe))
-        ret = 1
-    except BuildError as be:
-        print(colorize("Build error:", "31;1"), str(be))
+    except BobError as e:
+        print(e)
         ret = 1
     except KeyboardInterrupt:
         ret = 2
