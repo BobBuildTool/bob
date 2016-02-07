@@ -36,6 +36,15 @@ def _hashString(string):
     h.update(string.encode("utf8"))
     return h.digest()
 
+def overlappingPaths(p1, p2):
+    p1 = os.path.normcase(os.path.normpath(p1)).split(os.sep)
+    if p1 == ["."]: p1 = []
+    p2 = os.path.normcase(os.path.normpath(p2)).split(os.sep)
+    if p2 == ["."]: p2 = []
+    for i in range(min(len(p1), len(p2))):
+        if p1[i] != p2[i]: return False
+    return True
+
 class Env(dict):
     def derive(self, overrides = {}):
         ret = Env(self)
@@ -700,6 +709,18 @@ class CheckoutStep(BaseStep):
             except ValueError as e:
                 raise ParseError("Error substituting variable in checkoutSCM: {}".format(str(e)))
             self.__deterministic = deterministic
+
+            # Validate that SCM paths do not overlap
+            knownPaths = []
+            for s in self.__scmList:
+                for p in s.getDirectories().keys():
+                    if os.path.isabs(p):
+                        raise ParseError("SCM paths must be relative! Offending path: " + p)
+                    for known in knownPaths:
+                        if overlappingPaths(known, p):
+                            raise ParseError("SCM paths '{}' and '{}' overlap."
+                                                .format(known, p))
+                    knownPaths.append(p)
         else:
             self.__script = None
             self.__scmList = []
