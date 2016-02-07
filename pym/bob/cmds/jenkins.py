@@ -106,6 +106,7 @@ class JenkinsJob:
 
         cmds.append("set -o errtrace")
         cmds.append("set -o nounset")
+        cmds.append("set -o pipefail")
         cmds.append("trap 'RET=$? ; echo \"Step failed on line ${LINENO}: Exit status ${RET}; Command: ${BASH_COMMAND}\" >&2 ; exit $RET' ERR")
         cmds.append("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do rm -f \"$i\" ; done' EXIT")
         cmds.append("")

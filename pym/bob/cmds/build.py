@@ -467,6 +467,7 @@ esac
         with open(scriptFile, "w") as f:
             print("set -o errtrace", file=f)
             print("set -o nounset", file=f)
+            print("set -o pipefail", file=f)
             print("trap 'RET=$? ; echo \"\x1b[31;1mStep failed on line ${LINENO}: Exit status ${RET}; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m\" >&2 ; exit $RET' ERR", file=f)
             print("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do rm -f \"$i\" ; done' EXIT", file=f)
             print("", file=f)
