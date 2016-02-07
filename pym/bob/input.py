@@ -344,12 +344,12 @@ class UrlScm(BaseScm):
 mkdir -p {DIR}
 cd {DIR}
 if [ -e {FILE} ] ; then
-    curl -sSg -o {FILE} -z {FILE} {URL}
+    curl -sSgL -o {FILE} -z {FILE} {URL}
 else
     (
         F=$(mktemp)
         trap 'rm -f $F' EXIT
-        curl -sSg -o $F {URL}
+        curl -sSgL -o $F {URL}
         mv $F {FILE}
     )
 fi
