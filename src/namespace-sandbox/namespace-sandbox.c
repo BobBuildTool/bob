@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
+#include <mntent.h>
 #include <pwd.h>
 #include <sched.h>
 #include <signal.h>
@@ -484,6 +485,41 @@ static int CreateTarget(const char *path, bool is_directory) {
   return 0;
 }
 
+static unsigned long GetMountFlags(const char *path)
+{
+  unsigned long ret = 0;
+
+  FILE *mtab = setmntent("/proc/self/mounts", "r");
+  if (mtab == NULL) {
+    DIE("Cannot open /proc/self/mounts\n");
+  }
+
+  struct mntent *entry = NULL;
+  while ((entry = getmntent(mtab)) != NULL) {
+    if (strcmp(entry->mnt_dir, path) == 0) {
+      break;
+    }
+  }
+
+  if (entry != NULL) {
+    if (hasmntopt(entry, "nodev")) {
+      ret |= MS_NODEV;
+    }
+    if (hasmntopt(entry, "nosuid")) {
+      ret |= MS_NOSUID;
+    }
+    if (hasmntopt(entry, "noexec")) {
+      ret |= MS_NOEXEC;
+    }
+    PRINT_DEBUG("inferred mount options for %s: %lu\n", path, ret);
+  } else {
+    PRINT_DEBUG("could not find mount path: %s\n", path);
+  }
+
+  endmntent(mtab);
+  return ret;
+}
+
 static void SetupDirectories(struct Options *opt) {
   // Mount the sandbox and go there.
   CHECK_CALL(mount(opt->sandbox_root, opt->sandbox_root, NULL,
@@ -559,10 +595,16 @@ static void SetupDirectories(struct Options *opt) {
     CHECK_CALL(CreateTarget(full_sandbox_path, S_ISDIR(sb.st_mode)));
     CHECK_CALL(mount(opt->mount_sources[i], full_sandbox_path, NULL,
                      MS_REC | MS_BIND, NULL));
-	if (!opt->mount_rw[i]) {
-      CHECK_CALL(mount(opt->mount_sources[i], full_sandbox_path, NULL,
-                       MS_REC | MS_BIND | MS_REMOUNT | MS_RDONLY, NULL));
-	}
+    if (!opt->mount_rw[i]) {
+      unsigned long mnt_flags = GetMountFlags(full_sandbox_path);
+      int ret = mount(opt->mount_sources[i], full_sandbox_path, NULL,
+                      mnt_flags | MS_REC | MS_BIND | MS_REMOUNT | MS_RDONLY,
+                      NULL);
+      if (ret == -1) {
+        fprintf(stderr, "warning: remounting %s read only failed: %s\n",
+                full_sandbox_path, strerror(errno));
+      }
+    }
   }
 }
 
