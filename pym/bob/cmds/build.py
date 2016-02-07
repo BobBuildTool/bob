@@ -432,11 +432,18 @@ esac
                     step.getWorkspacePath(), ".."))),
                 "-w", quote(os.path.normpath(os.path.join(
                     step.getExecPath(), ".."))) ])
-            for s in step.getAllDepSteps():
-                if not s.isValid(): continue
-                sandbox.extend([
+            addDep = lambda s: (sandbox.extend([
                     "-M", quote(os.path.abspath(s.getWorkspacePath())),
-                    "-m", quote(s.getExecPath()) ])
+                    "-m", quote(s.getExecPath()) ]) if s.isValid() else None)
+            for s in step.getAllDepSteps(): addDep(s)
+            # special handling to mount all previous steps of current package
+            s = step
+            while s.isValid():
+                if len(s.getArguments()) > 0:
+                    s = s.getArguments()[0]
+                    addDep(s)
+                else:
+                    break
             sandbox.append("--")
 
         # write scripts
