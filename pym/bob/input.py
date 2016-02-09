@@ -26,6 +26,7 @@ import copy
 import hashlib
 import os, os.path
 import re
+import struct
 import sys
 import xml.etree.ElementTree
 import yaml
@@ -559,13 +560,22 @@ class BaseStep(object):
                 h.update(self.__sandbox.getDigest())
             script = self.getDigestScript()
             if script:
+                h.update(struct.pack("<I", len(script)))
                 h.update(script.encode("utf8"))
+            else:
+                h.update(b'\x00\x00\x00\x00')
+            h.update(struct.pack("<I", len(self.__tools)))
             for tool in sorted(self.__tools.values(), key=lambda t: (t.step.getDigest(), t.path, t.libs)):
                 h.update(tool.step.getDigest())
+                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
                 h.update(tool.path.encode("utf8"))
-                for l in tool.libs: h.update(l.encode('utf8'))
+                for l in tool.libs:
+                    h.update(struct.pack("<I", len(l)))
+                    h.update(l.encode('utf8'))
+            h.update(struct.pack("<I", len(self.__env)))
             for (key, val) in sorted(self.__env.items()):
-                h.update((key+"="+val).encode('utf8'))
+                h.update(struct.pack("<II", len(key), len(val)))
+                h.update((key+val).encode('utf8'))
             for arg in self.__args:
                 h.update(arg.getDigest())
             self.__digest = h.digest()
@@ -583,15 +593,24 @@ class BaseStep(object):
             h.update(bid)
         script = self.getDigestScript()
         if script:
+            h.update(struct.pack("<I", len(script)))
             h.update(script.encode("utf8"))
+        else:
+            h.update(b'\x00\x00\x00\x00')
+        h.update(struct.pack("<I", len(self.__tools)))
         for tool in sorted(self.__tools.values(), key=lambda t: (t.step.getDigest(), t.path, t.libs)):
             bid = tool.step.getBuildId()
             if bid is None: return None
             h.update(bid)
+            h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
             h.update(tool.path.encode("utf8"))
-            for l in tool.libs: h.update(l.encode('utf8'))
+            for l in tool.libs:
+                h.update(struct.pack("<I", len(l)))
+                h.update(l.encode('utf8'))
+        h.update(struct.pack("<I", len(self.__env)))
         for (key, val) in sorted(self.__env.items()):
-            h.update((key+"="+val).encode('utf8'))
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
         for arg in self.__args:
             bid = arg.getBuildId()
             if bid is None: return None
