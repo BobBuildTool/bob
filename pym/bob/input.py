@@ -836,9 +836,6 @@ class Package(object):
     def getRecipe(self):
         return self.__recipe
 
-    def getSandboxState(self):
-        return self.__sandbox
-
     def getDirectDepSteps(self):
         """Return list to the package steps of the direct dependencies.
 
