@@ -1298,6 +1298,7 @@ class RecipeSet:
         self.__classes = {}
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
+        self.__hooks = {}
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -1306,6 +1307,43 @@ class RecipeSet:
         self.__recipes[name] = recipe
         if recipe.isRoot():
             self.__rootRecipes.append(recipe)
+
+    def __loadPlugins(self, plugins):
+        for p in plugins:
+            name = os.path.join("plugins", p+".py")
+            if not os.path.exists(name):
+                raise ParseError("Plugin '"+name+"' not found!")
+            self.__loadPlugin(name)
+
+    def __loadPlugin(self, name):
+        try:
+            with open(name) as f:
+                code = compile(f.read(), name, 'exec')
+                g = { }
+                exec(code, g)
+        except SyntaxError as e:
+            import traceback
+            raise ParseError("Error loading plugin "+name+": "+str(e),
+                             help=traceback.format_exc())
+        except Exception as e:
+            raise ParseError("Error loading plugin "+name+": "+str(e))
+
+        if 'manifest' not in g:
+            raise ParseError("Plugin '"+name+"' did not define 'manifest'!")
+        manifest = g['manifest']
+        if manifest.get('apiVersion', "0") != "0.1":
+            raise ParseError("Plugin '"+name+"': incompatible apiVersion!")
+
+        hooks = manifest.get('hooks', {})
+        if not isinstance(hooks, dict):
+            raise ParseError("Plugin '"+name+"': 'hooks' has wrong type!")
+        self.__hooks.update(hooks)
+
+    def defineHook(self, name, value):
+        self.__hooks[name] = value
+
+    def getHook(self, name):
+        return self.__hooks[name]
 
     def envWhiteList(self):
         return set(self.__whiteList)
@@ -1318,6 +1356,7 @@ class RecipeSet:
             try:
                 with open("config.yaml", "r") as f:
                     config = yaml.load(f.read())
+                if config is None: config = {}
             except Exception as e:
                 raise ParseError("Error while parsing config.yaml: {}".format(str(e)))
         else:
@@ -1326,6 +1365,8 @@ class RecipeSet:
         minVer = config.get("bobMinimumVersion", "0.1")
         if compareVersion(BOB_VERSION, minVer) < 0:
             raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
+
+        self.__loadPlugins(config.get("plugins", []))
 
         if os.path.exists("default.yaml"):
             try:
