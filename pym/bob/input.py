@@ -1137,10 +1137,20 @@ class Recipe(object):
     def getRecipeSet(self):
         return self.__recipeSet
 
-    def getName(self):
+    def getPackageName(self):
+        """Get the name of the package that is drived from this recipe.
+
+        Usually the package name is the same as the recipe name. But in case of
+        a ``multiPackage`` the package name has an additional suffix.
+        """
         return self.__packageName
 
-    def getBaseName(self):
+    def getName(self):
+        """Get plain recipe name.
+
+        In case of a ``multiPackage`` multiple packages may be derived from the
+        same recipe. This method returns the plain recipe name.
+        """
         return self.__baseName
 
     def isRoot(self):
@@ -1185,7 +1195,7 @@ class Recipe(object):
                               sandboxEnabled, depSandbox, depTools,
                               stack).getPackageStep()
             except ParseError as e:
-                e.pushFrame(r.getName())
+                e.pushFrame(r.getPackageName())
                 raise e
 
             if dep.useDeps:
@@ -1279,7 +1289,7 @@ class RecipeSet:
         self.__archive = { "backend" : "none" }
 
     def __addRecipe(self, recipe):
-        name = recipe.getName()
+        name = recipe.getPackageName()
         if name in self.__recipes:
             raise ParseError("Package "+name+" already defined")
         self.__recipes[name] = recipe
@@ -1357,10 +1367,10 @@ class RecipeSet:
             BobState().setAsynchronous()
             for root in self.__rootRecipes:
                 try:
-                    result[root.getName()] = root.prepare(nameFormatter, env,
-                                                          sandboxEnabled)
+                    result[root.getPackageName()] = root.prepare(nameFormatter, env,
+                                                                 sandboxEnabled)
                 except ParseError as e:
-                    e.pushFrame(root.getName())
+                    e.pushFrame(root.getPackageName())
                     raise e
         finally:
             BobState().setSynchronous()

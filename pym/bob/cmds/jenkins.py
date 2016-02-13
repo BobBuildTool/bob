@@ -109,7 +109,7 @@ class JenkinsJob:
         self.__deps = {}
 
     def __getJobName(self, p):
-        return escapeJobName(self.__prefix + p.getRecipe().getBaseName())
+        return escapeJobName(self.__prefix + p.getRecipe().getName())
 
     def getName(self):
         return self.__name
@@ -497,7 +497,7 @@ class JenkinsJob:
 
 
 def _genJenkinsJobs(p, jobs, prefix, archiveBackend):
-    displayName = prefix + p.getRecipe().getBaseName()
+    displayName = prefix + p.getRecipe().getName()
     name = escapeJobName(displayName)
     if name in jobs:
         jj = jobs[name]
@@ -519,7 +519,7 @@ def _genJenkinsJobs(p, jobs, prefix, archiveBackend):
         _genJenkinsJobs(d.getPackage(), jobs, prefix, archiveBackend)
 
 def checkRecipeCycles(p, stack=[]):
-    name = p.getRecipe().getBaseName()
+    name = p.getRecipe().getName()
     if name in stack:
         ParseError("Job cycle found in '{}': {}".format(name, stack))
     else:
