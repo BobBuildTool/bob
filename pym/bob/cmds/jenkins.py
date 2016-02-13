@@ -531,7 +531,8 @@ def jenkinsNameFormatter(jenkins):
 
     def workspaceDir(step):
         return BobState().getJenkinsByNameDirectory(
-            jenkins, step.getPackage().getPath()+"/"+step.getLabel(),
+            jenkins,
+            step.getPackage().getName().replace('::', "/") + "/" + step.getLabel(),
             step.getVariantId())
 
     def fmt(step, mode):

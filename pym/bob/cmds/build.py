@@ -281,7 +281,7 @@ esac
 
         def fmt(step, mode):
             return BobState().getByNameDirectory(
-                os.path.join("work", step.getPackage().getPath(),
+                os.path.join("work", step.getPackage().getName().replace('::', os.sep),
                              step.getLabel()),
                 asHexStr(step.getVariantId()),
                 persistent)
@@ -293,7 +293,7 @@ esac
 
         def fmt(step, mode):
             baseDir = os.path.join("dev", step.getLabel(),
-                                   step.getPackage().getPath())
+                                   step.getPackage().getName().replace('::', os.sep))
             digest = step.getVariantId()
             if digest in dirs:
                 res = dirs[digest]

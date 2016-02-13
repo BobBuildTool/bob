@@ -830,9 +830,6 @@ class Package(object):
     def getName(self):
         return self.__name
 
-    def getPath(self):
-         return self.getName().replace( '::', os.sep )
-
     def getStack(self):
         return self.__stack
 
