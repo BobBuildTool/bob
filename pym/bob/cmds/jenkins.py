@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ..errors import ParseError, BuildError
-from ..input import walkPackagePath
+from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
 from ..utils import asHexStr
 from pipes import quote
@@ -1024,7 +1024,7 @@ availableJenkinsCmds = {
     "set-options" : (doJenkinsSetOptions, "NAME [--{add,del}-root <package>] ...")
 }
 
-def doJenkins(recipes, argv, bobRoot):
+def doJenkins(argv, bobRoot):
     subHelp = "\n             ... ".join(sorted(
         [ "{} {}".format(c, d[1]) for (c, d) in availableJenkinsCmds.items() ]))
     parser = argparse.ArgumentParser(prog="bob jenkins",
@@ -1037,6 +1037,9 @@ def doJenkins(recipes, argv, bobRoot):
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for subcommand")
     args = parser.parse_args(argv)
+
+    recipes = RecipeSet()
+    recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:
         availableJenkinsCmds[args.subcommand][0](recipes, args.args)

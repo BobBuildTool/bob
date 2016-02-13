@@ -74,10 +74,7 @@ def bob(bobRoot):
             verb = sys.argv[1]
             argv = sys.argv[2:]
             if verb in availableCommands:
-                from .input import RecipeSet
-                recipes = RecipeSet()
-                recipes.parse()
-                availableCommands[verb][0](recipes, argv, bobRoot)
+                availableCommands[verb][0](argv, bobRoot)
             elif (verb == '-h') or (verb == '--help'):
                 doHelp(True, sys.stdout)
             elif (verb == '--version'):
