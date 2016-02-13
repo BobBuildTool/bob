@@ -19,6 +19,7 @@ from .errors import ParseError, BuildError
 from .state import BobState
 from .tty import colorize
 from .utils import joinScripts, compareVersion
+from abc import ABCMeta, abstractmethod
 from base64 import b64encode
 from glob import glob
 from pipes import quote
@@ -475,7 +476,7 @@ class Sandbox:
     def isEnabled(self):
         return self.enabled
 
-class BaseStep(object):
+class Step(metaclass=ABCMeta):
     """Represents the smalles unit of execution of a package.
 
     A step is what gets actually executed when building packages.
@@ -518,6 +519,22 @@ class BaseStep(object):
 
     def __ge__(self, other):
         return self.getVariantId() >= other.getVariantId()
+
+    @abstractmethod
+    def getScript(self):
+        pass
+
+    @abstractmethod
+    def getJenkinsScript(self):
+        pass
+
+    @abstractmethod
+    def getDigestScript(self):
+        pass
+
+    @abstractmethod
+    def isDeterministic(self):
+        pass
 
     def isValid(self):
         return self.getScript() is not None
@@ -692,7 +709,7 @@ class BaseStep(object):
     def isShared(self):
         return self.__shared
 
-class CheckoutStep(BaseStep):
+class CheckoutStep(Step):
     def __init__(self, package, pathFormatter, sandbox=None, checkout=None,
                  fullEnv={}, env={}, tools={}, deterministic=False):
         if checkout:
@@ -770,7 +787,7 @@ class CheckoutStep(BaseStep):
         """
         return self.__deterministic and all([ s.isDeterministic() for s in self.__scmList ])
 
-class RegularStep(BaseStep):
+class RegularStep(Step):
     def __init__(self, package, pathFormatter, sandbox, label, script=None,
                  env={}, tools={}, args=[]):
         self.__script = script
