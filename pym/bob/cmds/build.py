@@ -435,7 +435,8 @@ esac
             addDep = lambda s: (sandbox.extend([
                     "-M", quote(os.path.abspath(s.getWorkspacePath())),
                     "-m", quote(s.getExecPath()) ]) if s.isValid() else None)
-            for s in step.getAllDepSteps(): addDep(s)
+            for s in step.getAllDepSteps():
+                if s != step.getSandbox().getStep(): addDep(s)
             # special handling to mount all previous steps of current package
             s = step
             while s.isValid():
