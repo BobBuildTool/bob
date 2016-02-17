@@ -520,7 +520,7 @@ static unsigned long GetMountFlags(const char *path)
   return ret;
 }
 
-static void SetupDirectories(struct Options *opt) {
+static void SetupDirectories(struct Options *opt, uid_t uid) {
   // Mount the sandbox and go there.
   CHECK_CALL(mount(opt->sandbox_root, opt->sandbox_root, NULL,
                    MS_BIND | MS_NOSUID, NULL));
@@ -532,34 +532,9 @@ static void SetupDirectories(struct Options *opt) {
   CHECK_CALL(mkdir("proc", 0755));
   CHECK_CALL(mount("/proc", "proc", NULL, MS_REC | MS_BIND, NULL));
 
-  // Make sure the home directory exists, too.
-  char *homedir_from_env = getenv("HOME");
-  if (homedir_from_env != NULL) {
-    if (homedir_from_env[0] != '/') {
-      DIE(
-          "Home directory specified in $HOME must be an absolute path, but is "
-          "%s",
-          homedir_from_env);
-    }
-    opt->create_dirs[opt->num_create_dirs++] = homedir_from_env;
-  }
-
-  char *homedir = getpwuid(getuid())->pw_dir;
-  if (homedir != NULL &&
-      (homedir_from_env == NULL || strcmp(homedir_from_env, homedir) != 0)) {
-    if (homedir[0] != '/') {
-      DIE("Home directory of user nobody must be an absolute path, but is %s",
-          homedir);
-    }
-    opt->create_dirs[opt->num_create_dirs++] = homedir;
-  }
-
   // Create needed directories.
   for (int i = 0; i < opt->num_create_dirs; i++) {
-    if (global_debug) {
-      PRINT_DEBUG("createdir: %s\n", opt->create_dirs[i]);
-    }
-
+    PRINT_DEBUG("createdir: %s\n", opt->create_dirs[i]);
     CHECK_CALL(CreateTarget(opt->create_dirs[i] + 1, true));
   }
 
@@ -605,6 +580,37 @@ static void SetupDirectories(struct Options *opt) {
                 full_sandbox_path, strerror(errno));
       }
     }
+  }
+
+  // Make sure the home directory exists, too. First try to get path from passwd
+  // of sandbox. If this fails fall back to $HOME.
+  char *homedir = NULL;
+  FILE *passwd = fopen("etc/passwd", "r");
+  if (passwd != NULL) {
+    struct passwd *entry;
+    do {
+      entry = fgetpwent(passwd);
+    } while (entry != NULL && entry->pw_uid != uid);
+    fclose(passwd);
+
+    if (entry == NULL) {
+      DIE("User not found in /etc/passwd of sandbox\n");
+    }
+    homedir = entry->pw_dir;
+  } else {
+    PRINT_DEBUG("/etc/passwd not found/readable in sandbox! Falling back to $HOME\n");
+    homedir = getenv("HOME");
+  }
+
+  if (homedir != NULL) {
+    if (homedir[0] != '/') {
+      DIE("Home directory must be an absolute path, but is %s\n", homedir);
+    }
+    PRINT_DEBUG("createdir: %s\n", homedir);
+    CHECK_CALL(CreateTarget(homedir + 1, true));
+
+    // Set $HOME to same path.
+    CHECK_CALL(setenv("HOME", homedir, 1));
   }
 }
 
@@ -745,9 +751,7 @@ int main(int argc, char *const argv[]) {
   opt.mount_targets = calloc(argc, sizeof(char *));
   opt.mount_rw = calloc(argc, sizeof(bool));
   opt.mount_map_sizes = argc;
-
-  // Reserve two extra slots for homedir_from_env and homedir.
-  opt.create_dirs = calloc(argc + 2, sizeof(char *));
+  opt.create_dirs = calloc(argc, sizeof(char *));
 
   ParseCommandLine(argc, argv, &opt);
   if (opt.args == NULL) {
@@ -779,10 +783,11 @@ int main(int argc, char *const argv[]) {
   // outside environment.
   CHECK_CALL(mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL));
 
-  SetupDirectories(&opt);
   if (opt.fake_root) {
+    SetupDirectories(&opt, 0);
     SetupUserNamespace(uid, gid, 0, 0);
   } else {
+    SetupDirectories(&opt, kNobodyUid);
     SetupUserNamespace(uid, gid, kNobodyUid, kNobodyGid);
   }
   if (opt.host_name) {
