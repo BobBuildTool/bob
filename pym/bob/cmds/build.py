@@ -334,12 +334,14 @@ esac
         self.__envWhiteList = envWhiteList
         self.__currentPackage = None
         self.__archive = DummyArchive()
+        self.__doDownload = False
         self.__doUpload = False
         self.__downloadDepth = 0xffff
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
 
     def setArchiveHandler(self, archive):
+        self.__doDownload = True
         self.__archive = archive
 
     def setDownloadMode(self, mode):
@@ -677,19 +679,33 @@ esac
             if packageDigest != oldPackageDigest:
                 BobState().setDirectoryState(prettyPackagePath, packageDigest)
 
-            # can we just download the result?
+            # Can we just download the result? If we download a package the
+            # Build-Id is stored as input hash. In this case we have to make
+            # sure that the Build-Id is still the same. If the input hash is
+            # not a bytes object we have apparently not downloaded the result.
+            # Dont' mess with it and fall back to regular build machinery.
             packageDone = False
             packageExecuted = False
-            packageBuildId = packageStep.getBuildId()
+            packageBuildId = self._getBuildId(packageStep, done, depth) \
+                if (self.__doDownload or self.__doUpload) else None
             if packageBuildId and (depth >= self.__downloadDepth):
-                # Fully deterministic package. Should we try to download it or do
-                # we already have a result?
+                oldInputHashes = BobState().getInputHashes(prettyPackagePath)
+                # prune directory if we previously downloaded something different
+                if isinstance(oldInputHashes, bytes) and (oldInputHashes != packageBuildId):
+                    print(colorize("   PRUNE     {} (build-id changed)".format(prettyPackagePath), "33"))
+                    emptyDirectory(prettyPackagePath)
+                    BobState().delInputHashes(prettyPackagePath)
+                    BobState().delResultHash(prettyPackagePath)
+
+                # Try to download the package if the directory is currently
+                # empty. If the directory holds a result and was downloaded it
+                # we're done.
                 if BobState().getResultHash(prettyPackagePath) is None:
                     if self.__archive.downloadPackage(packageBuildId, prettyPackagePath):
-                        BobState().delInputHashes(prettyPackagePath) # no local input involved
+                        BobState().setInputHashes(prettyPackagePath, packageBuildId)
                         packageDone = True
                         packageExecuted = True
-                else:
+                elif isinstance(oldInputHashes, bytes):
                     self._info("   PACKAGE   skipped (deterministic output in {})".format(prettyPackagePath))
                     packageDone = True
 
@@ -720,6 +736,18 @@ esac
             self._setAlreadyRun(packageStep)
 
         return prettyPackagePath
+
+    def _getBuildId(self, step, done, depth):
+        if step.isCheckoutStep():
+            bid = step.getBuildId()
+            if bid is None:
+                # do checkout
+                self.cook([step], step.getPackage(), done, depth)
+                # return directory hash
+                bid = BobState().getResultHash(step.getWorkspacePath())
+            return bid
+        else:
+            return step.getDigest(lambda s: self._getBuildId(s, done, depth+1))
 
 
 def touch(packages):
