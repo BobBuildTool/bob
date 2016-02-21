@@ -57,7 +57,7 @@ class TestCheckoutStep(TestCase):
             {"a" : "asdf", "q": "qwer" }, { "a" : "asdf" })
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             {"a" : "asdf", "q": "qwer" }, { "a" : "asdf" })
-        assert s1.getDigest() == s2.getDigest()
+        assert s1.getVariantId() == s2.getVariantId()
 
     def testDigestScriptChange(self):
         """Script does influnce the digest"""
@@ -65,7 +65,7 @@ class TestCheckoutStep(TestCase):
             {"a" : "asdf", "q": "qwer" }, { "a" : "asdf" })
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("evil", []),
             {"a" : "asdf", "q": "qwer" }, { "a" : "asdf" })
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
     def testDigestFullEnv(self):
         """Full env does not change digest. It is only used for SCMs."""
@@ -73,7 +73,7 @@ class TestCheckoutStep(TestCase):
             {"a" : "asdf", "q": "qwer" }, { "a" : "asdf" })
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             { }, { "a" : "asdf" })
-        assert s1.getDigest() == s2.getDigest()
+        assert s1.getVariantId() == s2.getVariantId()
 
     def testDigestEnv(self):
         """Env changes digest"""
@@ -83,17 +83,17 @@ class TestCheckoutStep(TestCase):
         # different value
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             env={ "a" : "qwer" })
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
         # added entry
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             env={ "a" : "asdf", "b" : "qwer" })
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
         # removed entry
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             env={ })
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
     def testDigestEnvRotation(self):
         """Rotating characters between key-value pairs must be detected"""
@@ -101,13 +101,13 @@ class TestCheckoutStep(TestCase):
             env={ "a" : "bc", "cd" : "e" })
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             env={ "a" : "bcc", "d" : "e" })
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
         s1 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             env={ "a" : "bb", "c" : "dd", "e" : "ff" })
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             env={ "a" : "bbc=dd", "e" : "ff" })
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
     def testDigestEmpyEnv(self):
         """Adding empty entry must be detected"""
@@ -115,13 +115,13 @@ class TestCheckoutStep(TestCase):
             env={ "a" : "b" })
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             env={ "a" : "b", "" : "" })
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
     def testDigestTools(self):
         """Tools must influence digest"""
         t1 = Empty()
         t1.step = Empty()
-        t1.step.getDigest = Mock(return_value=b'0123456789abcdef')
+        t1.step.getVariantId = Mock(return_value=b'0123456789abcdef')
         t1.path = "p1"
         t1.libs = []
 
@@ -131,34 +131,34 @@ class TestCheckoutStep(TestCase):
         # tool name has no influence
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             tools={"zz" : t1})
-        assert s1.getDigest() == s2.getDigest()
+        assert s1.getVariantId() == s2.getVariantId()
 
         # step digest change
         t2 = Empty()
         t2.step = Empty()
-        t2.step.getDigest = Mock(return_value=b'0123456789000000')
+        t2.step.getVariantId = Mock(return_value=b'0123456789000000')
         t2.path = "p1"
         t2.libs = []
 
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             tools={"a" : t2})
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
         # path change
-        t2.step.getDigest = Mock(return_value=b'0123456789abcdef')
+        t2.step.getVariantId = Mock(return_value=b'0123456789abcdef')
         t2.path = "foo"
         t2.libs = []
 
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             tools={"a" : t2})
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 
         # libs change
-        t2.step.getDigest = Mock(return_value=b'0123456789abcdef')
+        t2.step.getVariantId = Mock(return_value=b'0123456789abcdef')
         t2.path = "p1"
         t2.libs = ["asdf"]
 
         s2 = CheckoutStep(nullPkg, nullFmt, None, ("script", []),
             tools={"a" : t2})
-        assert s1.getDigest() != s2.getDigest()
+        assert s1.getVariantId() != s2.getVariantId()
 

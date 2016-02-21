@@ -282,7 +282,7 @@ esac
             return BobState().getByNameDirectory(
                 os.path.join("work", step.getPackage().getPath(),
                              step.getLabel()),
-                asHexStr(step.getDigest()),
+                asHexStr(step.getVariantId()),
                 persistent)
 
         return fmt
@@ -293,7 +293,7 @@ esac
         def fmt(step, mode):
             baseDir = os.path.join("dev", step.getLabel(),
                                    step.getPackage().getPath())
-            digest = step.getDigest()
+            digest = step.getVariantId()
             if digest in dirs:
                 res = dirs[digest]
             else:
@@ -317,7 +317,7 @@ esac
                 if step.getSandbox() is None:
                     ret = os.path.join(baseDir, wrapFmt(step, mode))
                 else:
-                    ret = os.path.join("/bob", asHexStr(step.getDigest()))
+                    ret = os.path.join("/bob", asHexStr(step.getVariantId()))
             return os.path.join(ret, "workspace")
 
         return fmt
@@ -362,7 +362,7 @@ esac
         self.__wasRun = Bijection(BobState().getBuildState())
 
     def _wasAlreadyRun(self, step):
-        digest = step.getDigest()
+        digest = step.getVariantId()
         if digest in self.__wasRun:
             path = self.__wasRun[digest]
             # invalidate invalid cached entries
@@ -375,10 +375,10 @@ esac
             return False
 
     def _getAlreadyRun(self, step):
-        return self.__wasRun[step.getDigest()]
+        return self.__wasRun[step.getVariantId()]
 
     def _setAlreadyRun(self, step):
-        self.__wasRun[step.getDigest()] = step.getWorkspacePath()
+        self.__wasRun[step.getVariantId()] = step.getWorkspacePath()
 
     def _constructDir(self, step, label):
         created = False
@@ -560,7 +560,7 @@ esac
         return ret
 
     def _cookCheckoutStep(self, checkoutStep, done, depth):
-        checkoutDigest = checkoutStep.getDigest()
+        checkoutDigest = checkoutStep.getVariantId()
         if self._wasAlreadyRun(checkoutStep):
             prettySrcPath = self._getAlreadyRun(checkoutStep)
             self._info("   CHECKOUT  skipped (reuse {})".format(prettySrcPath))
@@ -612,7 +612,7 @@ esac
             self._setAlreadyRun(checkoutStep)
 
     def _cookBuildStep(self, buildStep, done, depth):
-        buildDigest = buildStep.getDigest()
+        buildDigest = buildStep.getVariantId()
         if self._wasAlreadyRun(buildStep):
             prettyBuildPath = self._getAlreadyRun(buildStep)
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
@@ -657,7 +657,7 @@ esac
             self._setAlreadyRun(buildStep)
 
     def _cookPackageStep(self, packageStep, done, depth):
-        packageDigest = packageStep.getDigest()
+        packageDigest = packageStep.getVariantId()
         if self._wasAlreadyRun(packageStep):
             prettyPackagePath = self._getAlreadyRun(packageStep)
             self._info("   PACKAGE   skipped (reuse {})".format(prettyPackagePath))

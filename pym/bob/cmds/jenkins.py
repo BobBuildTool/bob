@@ -55,16 +55,16 @@ class JenkinsJob:
 
     def addDependencies(self, deps):
         for dep in deps:
-            self.__deps[dep.getDigest()] = dep
+            self.__deps[dep.getVariantId()] = dep
 
     def addCheckoutStep(self, step):
-        self.__checkoutSteps[step.getDigest()] = step
+        self.__checkoutSteps[step.getVariantId()] = step
 
     def addBuildStep(self, step):
-        self.__buildSteps[step.getDigest()] = step
+        self.__buildSteps[step.getVariantId()] = step
 
     def addPackageStep(self, step):
-        self.__packageSteps[step.getDigest()] = step
+        self.__packageSteps[step.getVariantId()] = step
 
     def getDependentJobs(self):
         deps = set()
@@ -413,7 +413,7 @@ def genJenkinsJobs(recipes, jenkins):
     rootPackages = recipes.generatePackages(
         lambda step, mode: BobState().getJenkinsByNameDirectory(
             jenkins, step.getPackage().getPath()+"/"+step.getLabel(),
-            step.getDigest()),
+            step.getVariantId()),
         config.get('defines', {}))
 
     for root in [ walkPackagePath(rootPackages, r) for r in config["roots"] ]:

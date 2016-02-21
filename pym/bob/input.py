@@ -470,26 +470,16 @@ class Sandbox:
     def getMounts(self):
         return self.mounts
 
-    def getDigest(self):
+    def getDigest(self, calculate):
         """Return digest of the sandbox.
 
-        Mounts are considered invariants and do not contribute to the digest.
+        See BaseStep.getDigest()
         """
-        h = hashlib.md5()
-        h.update(self.step.getDigest())
-        for p in self.paths: h.update(p.encode('utf8'))
-        return h.digest()
-
-    def getBuildId(self):
-        """Return build id of the sandbox.
-
-        See getDigest()
-        """
-        bid = self.step.getBuildId()
-        if bid is None: return None
+        stepDigest = calculate(self.step)
+        if stepDigest is None: return None
 
         h = hashlib.md5()
-        h.update(bid)
+        h.update(stepDigest)
         for p in self.paths: h.update(p.encode('utf8'))
         return h.digest()
 
@@ -498,8 +488,8 @@ class BaseStep(object):
 
     A step is what gets actually executed when building packages.
 
-    Steps can be compared and sorted. This is done based on the digest of
-    the step. See getDigest() for details how the hash is calculated.
+    Steps can be compared and sorted. This is done based on the Variant-Id of
+    the step. See getVariantId() for details how the hash is calculated.
     """
     def __init__(self, package, pathFormatter, sandbox, label, env={},
                  tools={}, args=[]):
@@ -514,29 +504,28 @@ class BaseStep(object):
         self.__providedTools = {}
         self.__providedDeps = []
         self.__providedSandbox = None
-        self.__digest = None
         self.__shared = False
 
     def __hash__(self):
-        return int.from_bytes(self.getDigest()[0:8], sys.byteorder)
+        return int.from_bytes(self.getVariantId()[0:8], sys.byteorder)
 
     def __lt__(self, other):
-        return self.getDigest() < other.getDigest()
+        return self.getVariantId() < other.getVariantId()
 
     def __le__(self, other):
-        return self.getDigest() <= other.getDigest()
+        return self.getVariantId() <= other.getVariantId()
 
     def __eq__(self, other):
-        return self.getDigest() == other.getDigest()
+        return self.getVariantId() == other.getVariantId()
 
     def __ne__(self, other):
-        return self.getDigest() != other.getDigest()
+        return self.getVariantId() != other.getVariantId()
 
     def __gt__(self, other):
-        return self.getDigest() > other.getDigest()
+        return self.getVariantId() > other.getVariantId()
 
     def __ge__(self, other):
-        return self.getDigest() >= other.getDigest()
+        return self.getVariantId() >= other.getVariantId()
 
     def isValid(self):
         return self.getScript() is not None
@@ -553,44 +542,12 @@ class BaseStep(object):
     def getPackage(self):
         return self.__package
 
-    def getDigest(self):
-        if self.__digest is None:
-            h = hashlib.md5()
-            if self.__sandbox:
-                h.update(self.__sandbox.getDigest())
-            script = self.getDigestScript()
-            if script:
-                h.update(struct.pack("<I", len(script)))
-                h.update(script.encode("utf8"))
-            else:
-                h.update(b'\x00\x00\x00\x00')
-            h.update(struct.pack("<I", len(self.__tools)))
-            for tool in sorted(self.__tools.values(), key=lambda t: (t.step.getDigest(), t.path, t.libs)):
-                h.update(tool.step.getDigest())
-                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
-                h.update(tool.path.encode("utf8"))
-                for l in tool.libs:
-                    h.update(struct.pack("<I", len(l)))
-                    h.update(l.encode('utf8'))
-            h.update(struct.pack("<I", len(self.__env)))
-            for (key, val) in sorted(self.__env.items()):
-                h.update(struct.pack("<II", len(key), len(val)))
-                h.update((key+val).encode('utf8'))
-            for arg in self.__args:
-                h.update(arg.getDigest())
-            self.__digest = h.digest()
-
-        return self.__digest
-
-    def getBuildId(self):
-        if not self.isDeterministic():
-            return None
-
+    def getDigest(self, calculate):
         h = hashlib.md5()
         if self.__sandbox:
-            bid = self.__sandbox.getBuildId()
-            if bid is None: return None
-            h.update(bid)
+            d = self.__sandbox.getDigest(calculate)
+            if d is None: return None
+            h.update(d)
         script = self.getDigestScript()
         if script:
             h.update(struct.pack("<I", len(script)))
@@ -598,10 +555,10 @@ class BaseStep(object):
         else:
             h.update(b'\x00\x00\x00\x00')
         h.update(struct.pack("<I", len(self.__tools)))
-        for tool in sorted(self.__tools.values(), key=lambda t: (t.step.getDigest(), t.path, t.libs)):
-            bid = tool.step.getBuildId()
-            if bid is None: return None
-            h.update(bid)
+        for tool in sorted(self.__tools.values(), key=lambda t: (t.step.getVariantId(), t.path, t.libs)):
+            d = calculate(tool.step)
+            if d is None: return None
+            h.update(d)
             h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
             h.update(tool.path.encode("utf8"))
             for l in tool.libs:
@@ -612,10 +569,25 @@ class BaseStep(object):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
         for arg in self.__args:
-            bid = arg.getBuildId()
-            if bid is None: return None
-            h.update(bid)
+            d = calculate(arg)
+            if d is None: return None
+            h.update(d)
         return h.digest()
+
+    def getVariantId(self):
+        try:
+            ret = self.__variantId
+        except AttributeError:
+            ret = self.__variantId = self.getDigest(lambda step: step.getVariantId())
+        return ret
+
+    def getBuildId(self):
+        try:
+            ret = self.__buildId
+        except AttributeError:
+            ret = self.__buildId = self.getDigest(lambda step: step.getBuildId()) \
+                                    if self.isDeterministic() else None
+        return ret
 
     def getSandbox(self):
         return self.__sandbox
