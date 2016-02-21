@@ -686,8 +686,12 @@ esac
             # Dont' mess with it and fall back to regular build machinery.
             packageDone = False
             packageExecuted = False
-            packageBuildId = self._getBuildId(packageStep, done, depth) \
-                if (self.__doDownload or self.__doUpload) else None
+            if packageStep.doesProvideTools() and (packageStep.getSandbox() is None):
+                # Exclude packages that provide host tools when not building in a sandbox
+                packageBuildId = None
+            else:
+                packageBuildId = self._getBuildId(packageStep, done, depth) \
+                    if (self.__doDownload or self.__doUpload) else None
             if packageBuildId and (depth >= self.__downloadDepth):
                 oldInputHashes = BobState().getInputHashes(prettyPackagePath)
                 # prune directory if we previously downloaded something different
