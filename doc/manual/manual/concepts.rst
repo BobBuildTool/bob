@@ -70,12 +70,12 @@ enables Bob to determine exactly when a package has to be built from scratch
 (e.g. the build script changed) or if Bob has to build several packages from
 the same recipe due to varying input parameters.
 
-Technically the Package-Id is the Step-Id of the package step. The Step-Id of each step (checkout, build and package) is calculated as
-follows:
+Technically the Package-Id is the Variant-Id of the package step. The Variant-Id of
+each step (checkout, build and package) is calculated as follows:
 
 .. math::
 
-   Id_{step}(step) = H_{md5}(script_{utf8} || \lbrace Id_{step}(t) || RelPath_{utf8}(t) || LibPaths_{utf8}(t) : t \in tools \rbrace || env|| \lbrace Id_{step}(i) : i \in input \rbrace )
+   Id_{variant}(step) = H_{md5}(script_{utf8} || \lbrace Id_{variant}(t) || RelPath_{utf8}(t) || LibPaths_{utf8}(t) : t \in tools \rbrace || env|| \lbrace Id_{variant}(i) : i \in input \rbrace )
 
 where
 
@@ -96,7 +96,7 @@ and all Build-Ids of the recipe dependencies:
     Id_{build}(step) =
     \begin{cases}
         H_{md5}(script_{utf8} || \lbrace Id_{build}(t) || RelPath_{utf8}(t) || LibPaths_{utf8}(t) : t \in tools \rbrace || env || \lbrace Id_{build}(i) : i \in input \rbrace ) \\
-        \varnothing
+        H_{sha1}(src)
     \end{cases}
 
 where
@@ -107,11 +107,14 @@ where
 * *input* is the list of all results that are passed to the step (i.e. previous step, dependencies).
 
 The special property of the Build-Id is that it represents the expected result.
-The Build-Id of a step is only defined if the step and any of its dependencies
-is deterministic. To keep the Build-Id stable in the long run the scripts of
-SCMs in the checkout step are replaced by a symbolic representation. In the
-future the Build-Id might also be defined for indeterministic checkouts by
-hashing the result of the checkout step.
+Actually there are two Build-Ids: a static and a dynamic one. The static
+Build-Id of a step is only defined if the step and any of its dependencies is
+deterministic. For indeterministic checkouts the dynamic Build-Id is defined
+as the hash of the result of the checkout step. Compared to the Package- and
+static Build-Id the dynamic Build-Id is not computable in advance but requires
+to execute certain checkout steps. To keep the Build-Id stable in the long run
+the scripts of SCMs in the checkout step are replaced by a symbolic
+representation.
 
 Variant management
 ------------------
