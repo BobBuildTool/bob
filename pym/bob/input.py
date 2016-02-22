@@ -446,8 +446,9 @@ class ConcreteTool:
         self.libs = libs
 
 class Sandbox:
-    def __init__(self, step, env, spec):
+    def __init__(self, step, env, enabled, spec):
         self.step = step
+        self.enabled = enabled
         self.paths = spec['paths']
         self.mounts = []
         for mount in spec.get('mount', []):
@@ -469,6 +470,9 @@ class Sandbox:
 
     def getMounts(self):
         return self.mounts
+
+    def isEnabled(self):
+        return self.enabled
 
     def getDigest(self, calculate):
         """Return digest of the sandbox.
@@ -542,9 +546,9 @@ class BaseStep(object):
     def getPackage(self):
         return self.__package
 
-    def getDigest(self, calculate):
+    def getDigest(self, calculate, forceSandbox=False):
         h = hashlib.md5()
-        if self.__sandbox:
+        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
             d = self.__sandbox.getDigest(calculate)
             if d is None: return None
             h.update(d)
@@ -585,12 +589,15 @@ class BaseStep(object):
         try:
             ret = self.__buildId
         except AttributeError:
-            ret = self.__buildId = self.getDigest(lambda step: step.getBuildId()) \
+            ret = self.__buildId = self.getDigest(lambda step: step.getBuildId(), True) \
                                     if self.isDeterministic() else None
         return ret
 
     def getSandbox(self):
-        return self.__sandbox
+        if self.__sandbox and self.__sandbox.isEnabled():
+            return self.__sandbox
+        else:
+            return None
 
     def getLabel(self):
         return self.__label
@@ -652,7 +659,7 @@ class BaseStep(object):
 
     def getAllDepSteps(self):
         return self.__args + sorted([ d.step for d in self.__tools.values() ]) + (
-            [self.__sandbox.getStep()] if self.__sandbox else [])
+            [self.__sandbox.getStep()] if (self.__sandbox and self.__sandbox.isEnabled()) else [])
 
     def getEnv(self):
         return self.__env
@@ -1200,7 +1207,7 @@ class Recipe(object):
             if dep.useEnv:
                 env.update(p.getProvidedEnv())
                 if dep.provideGlobal: depEnv.update(p.getProvidedEnv())
-            if dep.useSandbox and sandboxEnabled:
+            if dep.useSandbox:
                 sandbox = p.getProvidedSandbox()
                 if dep.provideGlobal: depSandbox = p.getProvidedSandbox()
             if dep.useBuildResult or dep.useTools or (dep.useSandbox and sandboxEnabled):
@@ -1256,7 +1263,7 @@ class Recipe(object):
 
         # provide Sandbox
         if self.__provideSandbox:
-            packageStep.setProvidedSandbox(Sandbox(packageStep, env,
+            packageStep.setProvidedSandbox(Sandbox(packageStep, env, sandboxEnabled,
                                                    self.__provideSandbox))
 
         if self.__shared:
