@@ -826,7 +826,7 @@ class Package(object):
         self.__sandbox = sandbox
         self.__directDepSteps = directDepSteps[:]
         tmp = set(indirectDepSteps)
-        if sandbox is not None: tmp.add(sandbox.getStep())
+        if sandbox and sandbox.isEnabled(): tmp.add(sandbox.getStep())
         self.__indirectDepSteps = sorted(tmp)
         self.__checkoutStep = CheckoutStep(self, pathFormatter)
         self.__buildStep = BuildStep(self, pathFormatter)
