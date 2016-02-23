@@ -842,7 +842,6 @@ def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
     try:
         for p in args.packages:
             package = walkPackagePath(rootPackages, p)
-            print(package.getPackageStep().getBuildId())
             prettyResultPath = builder.cook([package.getPackageStep()], package)
             print("Build result is in", prettyResultPath)
     finally:
