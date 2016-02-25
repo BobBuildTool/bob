@@ -880,6 +880,63 @@ def doJenkinsSetUrl(recipes, argv):
     }
     BobState().setJenkinsConfig(args.name, config)
 
+def doJenkinsSetOptions(recipes, argv):
+    parser = argparse.ArgumentParser(prog="bob jenkins set-options")
+    parser.add_argument("name", help="Jenkins server alias")
+    parser.add_argument("-n", "--nodes", help="Set label for Jenkins Slave")
+    parser.add_argument("-p", "--prefix", help="Set prefix for jobs")
+    parser.add_argument("--add-root", default=[], action='append',
+                        help="Add new root package")
+    parser.add_argument("--del-root", default=[], action='append',
+                        help="Remove existing root package")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+                        help="Override default environment variable")
+    parser.add_argument('-U', default=[], action='append', dest="undefines",
+                        help="Undefine environment variable override")
+    parser.add_argument('--upload', action='store_true',
+        help="Enable binary archive upload")
+    parser.add_argument('--no-upload', action='store_false', dest='upload',
+        help="Disable binary archive upload")
+    args = parser.parse_args(argv)
+
+    defines = {}
+    for define in args.defines:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+
+    if args.name not in BobState().getAllJenkins():
+        print("Jenkins '{}' not known.".format(args.name), file=sys.stderr)
+        sys.exit(1)
+    config = BobState().getJenkinsConfig(args.name)
+
+    if args.nodes is not None:
+        config["nodes"] = args.nodes
+    if args.prefix is not None:
+        config["prefix"] = args.prefix
+    if args.add_root:
+        config["roots"].extend(args.add_root)
+    for r in args.del_root:
+        try:
+            config["roots"].remove(r)
+        except ValueError:
+            print("Cannot remove root '{}': not found".format(r), file=sys.stderr)
+    if args.upload is not None:
+        config["upload"] = args.upload
+    if defines:
+        config["defines"].update(defines)
+    for d in args.undefines:
+        try:
+            del config["defines"][d]
+        except KeyError:
+            print("Cannot undefine '{}': not defined".format(d), file=sys.stderr)
+
+    BobState().setJenkinsConfig(args.name, config)
+
 availableJenkinsCmds = {
     "add"        : (doJenkinsAdd, "[-p <prefix>] [-r <package>] NAME URL"),
     "export"  : (doJenkinsExport, "NAME DIR"),
@@ -889,6 +946,7 @@ availableJenkinsCmds = {
     "push"   : (doJenkinsPush, "NAME"),
     "rm"         : (doJenkinsRm, "[-f] NAME"),
     "set-url" : (doJenkinsSetUrl, "NAME URL"),
+    "set-options" : (doJenkinsSetOptions, "NAME [--{add,del}-root <package>] ...")
 }
 
 def doJenkins(recipes, argv, bobRoot):

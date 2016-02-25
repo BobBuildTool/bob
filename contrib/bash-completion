@@ -176,9 +176,25 @@ __bob_jenkins_set_url()
    esac
 }
 
+__bob_jenkins_set_options()
+{
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help -n --nodes -p --prefix --add-root --del-root -D -U --upload --no-upload"
+         ;;
+      *)
+         if [[ "$prev" = "--add-root" ]] ; then
+            __bob_complete_path
+         else
+            __bob_complete_words "$($bob jenkins ls)"
+         fi
+         ;;
+   esac
+}
+
 __bob_jenkins()
 {
-   __bob_subcommands "add export ls prune push rm set-url" "jenkins"
+   __bob_subcommands "add export ls prune push rm set-url set-options" "jenkins"
 }
 
 __bob_subcommands()
