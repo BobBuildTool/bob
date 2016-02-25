@@ -1,5 +1,6 @@
 #!/bin/sh
-export PYTHONPATH="$(realpath ${0%/*})/pym:${PYTHONPATH}"
+D="$(dirname "$(realpath "${0}")")"
+export PYTHONPATH="$D/pym:${PYTHONPATH}"
 exec python3 -c "import sys
 from bob.scrips import hashTree
 sys.argv[0] = '${0##*/}'
