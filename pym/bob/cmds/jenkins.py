@@ -36,12 +36,73 @@ regexJobName = re.compile(r'[^a-zA-Z0-9-_]', re.DOTALL)
 def escapeJobName(name):
     return regexJobName.sub('_', name)
 
+
+class DummyArchive:
+    """Archive that does nothing"""
+    def upload(self, step):
+        return ""
+
+class SimpleHttpArchive:
+    """HTTP archive uploader"""
+
+    def __init__(self, spec):
+        self.__url = spec["url"]
+
+    def upload(self, step):
+        # only upload tools if built in sandbox
+        if step.doesProvideTools() and (step.getSandbox() is None):
+            return ""
+
+        # upload with curl if file does not exist yet on server
+        return "\n" + textwrap.dedent("""\
+            # upload artifact
+            cd $WORKSPACE
+            BOB_UPLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
+            if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
+                curl -sSg -T {RESULT} "$BOB_UPLOAD_URL"
+            fi""".format(URL=self.__url, BUILDID=quote(JenkinsJob._buildIdName(step)),
+                         RESULT=quote(JenkinsJob._tgzName(step))))
+
+
+class SpecHasher:
+    """Track digest calculation and output as spec for bob-hash-engine"""
+
+    def __init__(self):
+        self.lines = ["{md5"]
+
+    def update(self, data):
+        if isinstance(data, bytes):
+            self.lines.append("=" + asHexStr(data))
+        else:
+            bid = data.getBuildId()
+            if bid is None:
+                self.lines.append("<" + JenkinsJob._buildIdName(data))
+            else:
+                self.lines.append("=" + asHexStr(bid))
+
+    def digest(self):
+        return "\n".join(self.lines + ["}"])
+
+
+def getBuildIdSpec(step):
+    """Return bob-hash-engine spec to calculate build-id of step"""
+    if step.isCheckoutStep():
+        bid = step.getBuildId()
+        if bid is None:
+            return "#" + step.getWorkspacePath()
+        else:
+            return "=" + asHexStr(bid)
+    else:
+        return step.getDigest(lambda s: s, True, SpecHasher)
+
+
 class JenkinsJob:
-    def __init__(self, name, displayName, prefix, root):
+    def __init__(self, name, displayName, prefix, root, archiveBackend):
         self.__name = name
         self.__displayName = displayName
         self.__prefix = prefix
         self.__isRoot = root
+        self.__archive = archiveBackend
         self.__checkoutSteps = {}
         self.__buildSteps = {}
         self.__packageSteps = {}
@@ -124,11 +185,22 @@ class JenkinsJob:
                 mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
                 mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
             fi""".format(EXEC_PATH=d.getExecPath(), BID1=bid[0:2], BID2=bid[2:])))
+        cmds.append("")
+        cmds.append("# create build-id")
+        cmds.append("cd $WORKSPACE")
+        cmds.append("bob-hash-engine --state .state -o {} <<'EOF'".format(JenkinsJob._buildIdName(d)))
+        cmds.append(getBuildIdSpec(d))
+        cmds.append("EOF")
+
         return "\n".join(cmds)
 
     @staticmethod
-    def __tgzName(d):
+    def _tgzName(d):
         return d.getExecPath().replace('/', '_') + ".tgz"
+
+    @staticmethod
+    def _buildIdName(d):
+        return d.getExecPath().replace('/', '_') + ".buildid"
 
     def dumpXML(self, orig=None, nodes=""):
         if orig:
@@ -182,6 +254,8 @@ class JenkinsJob:
 
         prepareCmds = []
         prepareCmds.append("#!/bin/bash -ex")
+        prepareCmds.append("mkdir -p .state")
+        prepareCmds.append("")
         prepareCmds.append("# delete unused files and directories from workspace")
         prepareCmds.append("pruneUnused()")
         prepareCmds.append("{")
@@ -210,7 +284,8 @@ class JenkinsJob:
         prepareCmds.append("}")
         prepareCmds.append("")
         whiteList = []
-        whiteList.extend([ JenkinsJob.__tgzName(d) for d in self.__deps.values()])
+        whiteList.extend([ JenkinsJob._tgzName(d) for d in self.__deps.values()])
+        whiteList.extend([ JenkinsJob._buildIdName(d) for d in self.__deps.values()])
         whiteList.extend([ d.getExecPath() for d in self.__checkoutSteps.values() ])
         whiteList.extend([ d.getExecPath() for d in self.__buildSteps.values() ])
         prepareCmds.append("pruneUnused " + " ".join(sorted(whiteList)))
@@ -271,7 +346,7 @@ class JenkinsJob:
                 xml.etree.ElementTree.SubElement(
                     cp, "project").text = self.__getJobName(d.getPackage())
                 xml.etree.ElementTree.SubElement(
-                    cp, "filter").text = JenkinsJob.__tgzName(d)
+                    cp, "filter").text = JenkinsJob._tgzName(d)+","+JenkinsJob._buildIdName(d)
                 xml.etree.ElementTree.SubElement(
                     cp, "target").text = ""
                 xml.etree.ElementTree.SubElement(
@@ -297,13 +372,13 @@ class JenkinsJob:
                         fi
                         mkdir -p {EXEC_DIR}
                         ln -sfT ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} {EXEC_PATH}
-                        """.format(BID1=bid[0:2], BID2=bid[2:], TGZ=JenkinsJob.__tgzName(d),
+                        """.format(BID1=bid[0:2], BID2=bid[2:], TGZ=JenkinsJob._tgzName(d),
                                    EXEC_DIR=os.path.dirname(d.getExecPath()),
                                    EXEC_PATH=d.getExecPath())))
                 else:
                     prepareCmds.append("mkdir -p " + d.getExecPath())
                     prepareCmds.append("tar zxf {} -C {}".format(
-                        JenkinsJob.__tgzName(d), d.getExecPath()))
+                        JenkinsJob._tgzName(d), d.getExecPath()))
 
         prepare = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
         xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
@@ -352,9 +427,11 @@ class JenkinsJob:
                 self.dumpStep(d),
                 "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
-                "tar zcfv {} -C {} .".format(JenkinsJob.__tgzName(d), d.getExecPath())
+                "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getExecPath()),
+                self.__archive.upload(d)
             ])
-            publish.append(JenkinsJob.__tgzName(d))
+            publish.append(JenkinsJob._tgzName(d))
+            publish.append(JenkinsJob._buildIdName(d))
 
         xml.etree.ElementTree.SubElement(
             archiver, "artifacts").text = ",".join(publish)
@@ -375,13 +452,13 @@ class JenkinsJob:
                 done.add(key)
 
 
-def _genJenkinsJobs(p, jobs, prefix):
+def _genJenkinsJobs(p, jobs, prefix, archiveBackend):
     displayName = prefix + p.getRecipe().getBaseName()
     name = escapeJobName(displayName)
     if name in jobs:
         jj = jobs[name]
     else:
-        jj = JenkinsJob(name, displayName, prefix, p.getRecipe().isRoot())
+        jj = JenkinsJob(name, displayName, prefix, p.getRecipe().isRoot(), archiveBackend)
         jobs[name] = jj
 
     checkout = p.getCheckoutStep()
@@ -395,7 +472,7 @@ def _genJenkinsJobs(p, jobs, prefix):
     allDeps = p.getAllDepSteps()
     jj.addDependencies(allDeps)
     for d in allDeps:
-        _genJenkinsJobs(d.getPackage(), jobs, prefix)
+        _genJenkinsJobs(d.getPackage(), jobs, prefix, archiveBackend)
 
 def checkRecipeCycles(p, stack=[]):
     name = p.getRecipe().getBaseName()
@@ -410,6 +487,14 @@ def genJenkinsJobs(recipes, jenkins):
     jobs = {}
     config = BobState().getJenkinsConfig(jenkins)
     prefix = config["prefix"]
+    archiveHandler = DummyArchive()
+    if config.get("upload", False):
+        archiveSpec = recipes.archiveSpec()
+        archiveBackend = archiveSpec.get("backend", "none")
+        if archiveBackend == "http":
+            archiveHandler = SimpleHttpArchive(archiveSpec)
+        elif archiveBackend != "none":
+            print("Ignoring unsupported archive backend:", archiveBackend)
     rootPackages = recipes.generatePackages(
         lambda step, mode: BobState().getJenkinsByNameDirectory(
             jenkins, step.getPackage().getPath()+"/"+step.getLabel(),
@@ -418,7 +503,7 @@ def genJenkinsJobs(recipes, jenkins):
 
     for root in [ walkPackagePath(rootPackages, r) for r in config["roots"] ]:
         checkRecipeCycles(root)
-        _genJenkinsJobs(root, jobs, prefix)
+        _genJenkinsJobs(root, jobs, prefix, archiveHandler)
 
     return jobs
 
@@ -452,6 +537,8 @@ def doJenkinsAdd(recipes, argv):
                         help="Root package (may be specified multiple times)")
     parser.add_argument('-D', default=[], action='append', dest="defines",
                         help="Override default environment variable")
+    parser.add_argument('--upload', default=False, action='store_true',
+        help="Upload to binary archive")
     parser.add_argument("name", help="Symbolic name for server")
     parser.add_argument("url", help="Server URL")
     args = parser.parse_args(argv)
@@ -491,7 +578,8 @@ def doJenkinsAdd(recipes, argv):
         "roots" : roots,
         "prefix" : args.prefix,
         "nodes" : args.nodes,
-        "defines" : defines
+        "defines" : defines,
+        "upload" : args.upload,
     }
     BobState().addJenkins(args.name, config)
 
@@ -557,6 +645,8 @@ def doJenkinsLs(recipes, argv):
                 print(" Nodes:", cfg['nodes'])
             if cfg.get('defines'):
                 print(" Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
+            if recipes.archiveSpec().get("backend", "none") != "none":
+                print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
             print(" Roots:", ", ".join(cfg['roots']))
         if args.verbose >= 2:
             print(" Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
