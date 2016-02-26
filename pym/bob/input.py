@@ -26,6 +26,7 @@ from pipes import quote
 from string import Template
 import copy
 import hashlib
+import fnmatch
 import os, os.path
 import re
 import shelve
@@ -1655,13 +1656,14 @@ class RecipeSet:
         if not os.path.isdir("recipes"):
             raise ParseError("No recipes directory found.")
 
-        for path in ( glob( 'recipes/*.yaml' ) + glob( 'recipes/**/*.yaml' ) ):
-            try:
-                for r in Recipe.loadFromFile(self, path, self.__properties, False):
-                    self.__addRecipe(r)
-            except ParseError as e:
-                e.pushFrame(path)
-                raise
+        for root, dirnames, filenames in os.walk('recipes'):
+            for path in fnmatch.filter(filenames, "*.yaml"):
+                try:
+                    for r in Recipe.loadFromFile(self,  os.path.join(root, path), self.__properties, False):
+                        self.__addRecipe(r)
+                except ParseError as e:
+                    e.pushFrame(path)
+                    raise
 
     def getRecipe(self, packageName):
         if packageName not in self.__recipes:
