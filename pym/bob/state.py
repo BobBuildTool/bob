@@ -66,7 +66,7 @@ class _BobState():
                 pickle.dump(state, f)
                 f.flush()
                 os.fsync(f.fileno())
-            os.rename(tmpFile, self.__path)
+            os.replace(tmpFile, self.__path)
             self.__dirty = False
         else:
             self.__dirty = True
