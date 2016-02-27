@@ -33,6 +33,7 @@ pym:
 install: all
 	mkdir -p $(DESTDIR)/bin $(DESTDIR)/lib/bob/bin
 	cp bin/namespace-sandbox $(DESTDIR)/lib/bob/bin
+	cp bin/namespace-sandbox $(DESTDIR)/bin/bob-namespace-sandbox
 	cp -r bob bob-hash-engine bob-hash-tree contrib pym $(DESTDIR)/lib/bob
 	ln -sf ../lib/bob/bob $(DESTDIR)/bin
 	ln -sf ../lib/bob/bob-hash-engine $(DESTDIR)/bin
