@@ -141,28 +141,26 @@ class JenkinsJob:
         cmds.append("")
         cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
             [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                   "$WORKSPACE/"+quote(a.getExecPath()))
+                                   a.getExecPath())
                 for a in d.getAllDepSteps() ] ))))
         cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
             [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                   "$WORKSPACE/"+quote(a.getExecPath()))
+                                   a.getExecPath())
                 for a in d.getArguments() ] ))))
         cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
-            [ "    [{}]=$WORKSPACE/{}".format(quote(t), quote(p))
+            [ "    [{}]={}".format(quote(t), p)
                 for (t,p) in d.getTools().items()] ))))
         env = { key: quote(value) for (key, value) in d.getEnv().items() }
         env.update({
-            "PATH": ":".join(
-                [ "$WORKSPACE/"+quote(d) for d in d.getPaths() ] + ["$PATH"]),
-            "LD_LIBRARY_PATH": ":".join(
-                [ "$WORKSPACE/"+quote(p) for p in d.getLibraryPaths() ]),
-            "BOB_CWD": "$WORKSPACE/" + quote(d.getExecPath()),
+            "PATH": ":".join(d.getPaths() + ["$PATH"]),
+            "LD_LIBRARY_PATH": ":".join(d.getLibraryPaths()),
+            "BOB_CWD": d.getExecPath(),
         })
         for (k,v) in sorted(env.items()):
             cmds.append("export {}={}".format(k, v))
 
         cmds.append("set -- {}".format(" ".join(
-            [ "$WORKSPACE/"+quote(a.getExecPath()) for a in d.getArguments() ])))
+            [ a.getExecPath() for a in d.getArguments() ])))
         cmds.append("")
 
         cmds.append("set -o errtrace")
@@ -483,6 +481,25 @@ def checkRecipeCycles(p, stack=[]):
         for d in p.getAllDepSteps():
             checkRecipeCycles(d.getPackage(), stack)
 
+def jenkinsNameFormatter(jenkins):
+
+    def workspaceDir(step):
+        return BobState().getJenkinsByNameDirectory(
+            jenkins, step.getPackage().getPath()+"/"+step.getLabel(),
+            step.getVariantId())
+
+    def fmt(step, mode):
+        if mode == 'workspace':
+            return workspaceDir(step)
+        else:
+            assert mode == 'exec'
+            if step.getSandbox() is None:
+                return os.path.join("$WORKSPACE", quote(workspaceDir(step)))
+            else:
+                return os.path.join("/bob", asHexStr(step.getVariantId()))
+
+    return fmt
+
 def genJenkinsJobs(recipes, jenkins):
     jobs = {}
     config = BobState().getJenkinsConfig(jenkins)
@@ -496,9 +513,7 @@ def genJenkinsJobs(recipes, jenkins):
         elif archiveBackend != "none":
             print("Ignoring unsupported archive backend:", archiveBackend)
     rootPackages = recipes.generatePackages(
-        lambda step, mode: BobState().getJenkinsByNameDirectory(
-            jenkins, step.getPackage().getPath()+"/"+step.getLabel(),
-            step.getVariantId()),
+        jenkinsNameFormatter(jenkins),
         config.get('defines', {}))
 
     for root in [ walkPackagePath(rootPackages, r) for r in config["roots"] ]:
