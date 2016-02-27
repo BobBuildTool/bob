@@ -137,8 +137,47 @@ class JenkinsJob:
         cmds = []
         cmds.append("#!/bin/bash -ex")
         cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
-        cmds.append("cd {}".format(d.getWorkspacePath()))
-        cmds.append("")
+
+        if d.getSandbox() is not None:
+            sandbox = []
+            sandbox.extend(["-S", "\"$_sandbox\""])
+            sandbox.extend(["-W", quote(d.getExecPath())])
+            sandbox.extend(["-H", "bob"])
+            sandbox.extend(["-d", "/tmp"])
+            sandbox.append("\"${_image[@]}\"")
+            for (hostPath, sndbxPath) in d.getSandbox().getMounts():
+                sandbox.extend(["-M", hostPath ])
+                if hostPath != sndbxPath: sandbox.extend(["-m", sndbxPath])
+            sandbox.extend([
+                "-M", "$WORKSPACE/"+d.getWorkspacePath(),
+                "-w", d.getExecPath() ])
+            addDep = lambda s: (sandbox.extend([
+                    "-M", "$WORKSPACE/"+s.getWorkspacePath(),
+                    "-m", s.getExecPath() ]) if s.isValid() else None)
+            for s in d.getAllDepSteps():
+                if s != d.getSandbox().getStep(): addDep(s)
+            # special handling to mount all previous steps of current package
+            s = d
+            while s.isValid():
+                if len(s.getArguments()) > 0:
+                    s = s.getArguments()[0]
+                    addDep(s)
+                else:
+                    break
+            sandbox.append("--")
+
+            cmds.append("_sandbox=$(mktemp -d)")
+            cmds.append("trap 'rm -rf $_sandbox' EXIT")
+            cmds.append("_image=( )")
+            cmds.append("for i in {}/* ; do".format(d.getSandbox().getStep().getWorkspacePath()))
+            cmds.append("    _image+=(-M) ; _image+=($PWD/$i) ; _image+=(-m) ; _image+=(/${i##*/})")
+            cmds.append("done")
+            cmds.append("")
+            cmds.append("cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'")
+        else:
+            cmds.append("cd {}".format(d.getWorkspacePath()))
+            cmds.append("")
+
         cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
             [ "    [{}]={}".format(quote(a.getPackage().getName()),
                                    a.getExecPath())
@@ -172,6 +211,12 @@ class JenkinsJob:
         cmds.append("# BEGIN BUILD SCRIPT")
         cmds.append(d.getJenkinsScript())
         cmds.append("# END BUILD SCRIPT")
+
+        if d.getSandbox() is not None:
+            cmds.append("BOB_JENKINS_SANDBOXED_SCRIPT")
+            cmds.append("bob-namespace-sandbox {} /bin/bash -x -- /.script".format(" ".join(sandbox)))
+            cmds.append("")
+
         if d.isShared():
             bid = asHexStr(d.getBuildId())
             cmds.append("")
@@ -514,7 +559,8 @@ def genJenkinsJobs(recipes, jenkins):
             print("Ignoring unsupported archive backend:", archiveBackend)
     rootPackages = recipes.generatePackages(
         jenkinsNameFormatter(jenkins),
-        config.get('defines', {}))
+        config.get('defines', {}),
+        config.get('sandbox', False))
 
     for root in [ walkPackagePath(rootPackages, r) for r in config["roots"] ]:
         checkRecipeCycles(root)
@@ -554,6 +600,8 @@ def doJenkinsAdd(recipes, argv):
                         help="Override default environment variable")
     parser.add_argument('--upload', default=False, action='store_true',
         help="Upload to binary archive")
+    parser.add_argument('--no-sandbox', action='store_false', dest='sandbox', default=True,
+        help="Disable sandboxing")
     parser.add_argument("name", help="Symbolic name for server")
     parser.add_argument("url", help="Server URL")
     args = parser.parse_args(argv)
@@ -595,6 +643,7 @@ def doJenkinsAdd(recipes, argv):
         "nodes" : args.nodes,
         "defines" : defines,
         "upload" : args.upload,
+        "sandbox" : args.sandbox,
     }
     BobState().addJenkins(args.name, config)
 
@@ -662,6 +711,7 @@ def doJenkinsLs(recipes, argv):
                 print(" Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
             if recipes.archiveSpec().get("backend", "none") != "none":
                 print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
+            print(" Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
             print(" Roots:", ", ".join(cfg['roots']))
         if args.verbose >= 2:
             print(" Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
@@ -908,10 +958,16 @@ def doJenkinsSetOptions(recipes, argv):
                         help="Override default environment variable")
     parser.add_argument('-U', default=[], action='append', dest="undefines",
                         help="Undefine environment variable override")
-    parser.add_argument('--upload', action='store_true',
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--upload', action='store_true',
         help="Enable binary archive upload")
-    parser.add_argument('--no-upload', action='store_false', dest='upload',
+    group.add_argument('--no-upload', action='store_false', dest='upload',
         help="Disable binary archive upload")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true',
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -942,6 +998,8 @@ def doJenkinsSetOptions(recipes, argv):
             print("Cannot remove root '{}': not found".format(r), file=sys.stderr)
     if args.upload is not None:
         config["upload"] = args.upload
+    if args.sandbox is not None:
+        config["sandbox"] = args.sandbox
     if defines:
         config["defines"].update(defines)
     for d in args.undefines:
