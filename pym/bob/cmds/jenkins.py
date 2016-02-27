@@ -136,8 +136,8 @@ class JenkinsJob:
     def dumpStep(self, d):
         cmds = []
         cmds.append("#!/bin/bash -ex")
-        cmds.append("mkdir -p {}".format(d.getExecPath()))
-        cmds.append("cd {}".format(d.getExecPath()))
+        cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
+        cmds.append("cd {}".format(d.getWorkspacePath()))
         cmds.append("")
         cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
             [ "    [{}]={}".format(quote(a.getPackage().getName()),
@@ -181,10 +181,10 @@ class JenkinsJob:
             # install shared package atomically
             if [ ! -d ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
                 T=$(mktemp -d -p ${{SLAVE_HOME:-$JENKINS_HOME}})
-                rsync -a $WORKSPACE/{EXEC_PATH}/ $T
+                rsync -a $WORKSPACE/{WSP_PATH}/ $T
                 mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
                 mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
-            fi""".format(EXEC_PATH=d.getExecPath(), BID1=bid[0:2], BID2=bid[2:])))
+            fi""".format(WSP_PATH=d.getWorkspacePath(), BID1=bid[0:2], BID2=bid[2:])))
         cmds.append("")
         cmds.append("# create build-id")
         cmds.append("cd $WORKSPACE")
@@ -196,11 +196,11 @@ class JenkinsJob:
 
     @staticmethod
     def _tgzName(d):
-        return d.getExecPath().replace('/', '_') + ".tgz"
+        return d.getWorkspacePath().replace('/', '_') + ".tgz"
 
     @staticmethod
     def _buildIdName(d):
-        return d.getExecPath().replace('/', '_') + ".buildid"
+        return d.getWorkspacePath().replace('/', '_') + ".buildid"
 
     def dumpXML(self, orig=None, nodes=""):
         if orig:
@@ -286,12 +286,12 @@ class JenkinsJob:
         whiteList = []
         whiteList.extend([ JenkinsJob._tgzName(d) for d in self.__deps.values()])
         whiteList.extend([ JenkinsJob._buildIdName(d) for d in self.__deps.values()])
-        whiteList.extend([ d.getExecPath() for d in self.__checkoutSteps.values() ])
-        whiteList.extend([ d.getExecPath() for d in self.__buildSteps.values() ])
+        whiteList.extend([ d.getWorkspacePath() for d in self.__checkoutSteps.values() ])
+        whiteList.extend([ d.getWorkspacePath() for d in self.__buildSteps.values() ])
         prepareCmds.append("pruneUnused " + " ".join(sorted(whiteList)))
         prepareCmds.append("set -x")
 
-        deps = sorted(self.__deps.values(), key=lambda d: d.getExecPath())
+        deps = sorted(self.__deps.values())
         if deps:
             revBuild = xml.etree.ElementTree.SubElement(
                 triggers, "jenkins.triggers.ReverseBuildTrigger")
@@ -370,15 +370,15 @@ class JenkinsJob:
                             mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
                             mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
                         fi
-                        mkdir -p {EXEC_DIR}
-                        ln -sfT ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} {EXEC_PATH}
+                        mkdir -p {WSP_DIR}
+                        ln -sfT ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} {WSP_PATH}
                         """.format(BID1=bid[0:2], BID2=bid[2:], TGZ=JenkinsJob._tgzName(d),
-                                   EXEC_DIR=os.path.dirname(d.getExecPath()),
-                                   EXEC_PATH=d.getExecPath())))
+                                   WSP_DIR=os.path.dirname(d.getWorkspacePath()),
+                                   WSP_PATH=d.getWorkspacePath())))
                 else:
-                    prepareCmds.append("mkdir -p " + d.getExecPath())
+                    prepareCmds.append("mkdir -p " + d.getWorkspacePath())
                     prepareCmds.append("tar zxf {} -C {}".format(
-                        JenkinsJob._tgzName(d), d.getExecPath()))
+                        JenkinsJob._tgzName(d), d.getWorkspacePath()))
 
         prepare = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
         xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
@@ -386,7 +386,7 @@ class JenkinsJob:
 
         # checkout steps
         checkoutSCMs = []
-        for d in sorted(self.__checkoutSteps.values(), key=lambda s: s.getExecPath()):
+        for d in sorted(self.__checkoutSteps.values()):
             if d.getJenkinsScript():
                 checkout = xml.etree.ElementTree.SubElement(
                     builders, "hudson.tasks.Shell")
@@ -412,7 +412,7 @@ class JenkinsJob:
                 root, "scm", attrib={"class" : "hudson.scm.NullSCM"})
 
         # build steps
-        for d in sorted(self.__buildSteps.values(), key=lambda s: s.getExecPath()):
+        for d in sorted(self.__buildSteps.values()):
             build = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
@@ -420,14 +420,14 @@ class JenkinsJob:
 
         # package steps
         publish = []
-        for d in sorted(self.__packageSteps.values(), key=lambda s: s.getExecPath()):
+        for d in sorted(self.__packageSteps.values()):
             package = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
                 self.dumpStep(d),
                 "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
-                "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getExecPath()),
+                "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getWorkspacePath()),
                 self.__archive.upload(d)
             ])
             publish.append(JenkinsJob._tgzName(d))
