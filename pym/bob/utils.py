@@ -213,6 +213,10 @@ class DirHasher:
             digest = self.__hashDir(prefix, entry)
         elif stat.S_ISLNK(s.st_mode):
             digest = self.__index.check(prefix, entry, s, DirHasher.__hashLink)
+        elif stat.S_ISBLK(s.st_mode) or stat.S_ISCHR(s.st_mode):
+            digest = struct.pack("<L", s.st_rdev)
+        elif stat.S_ISFIFO(s.st_mode):
+            digest = b''
         else:
             raise Exception("Unsopported file: "+repr(s))
 
