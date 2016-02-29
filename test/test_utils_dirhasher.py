@@ -137,3 +137,59 @@ class TestHashDir(TestCase):
                 with open(index.name, "rb") as f:
                     assert f.read(4) == b'BOB1'
 
+    def testBlockDev(self):
+        """Test that index handles block devices"""
+
+        s = MagicMock()
+        s.st_mode=25008
+        s.st_ino=8325
+        s.st_dev=6
+        s.st_nlink=1
+        s.st_uid=0
+        s.st_gid=6
+        s.st_rdev=2048
+        s.st_size=0
+        s.st_atime=1453317243
+        s.st_mtime=1451854748
+        s.st_ctime=1451854748
+        mock_lstat = MagicMock()
+        mock_lstat.return_value = s
+
+        with NamedTemporaryFile() as index:
+            with TemporaryDirectory() as tmp:
+                with open(os.path.join(tmp, "sda"), 'wb') as f:
+                    pass
+
+                with patch('os.lstat', mock_lstat):
+                    h = hashDirectory(tmp, index.name)
+
+        assert h == b'\xe8\x8e\xad\x9bv\xcbt\xc4\xcd\xa7x\xdb\xde\x96\xab@\x18\xb1\xdcX'
+
+    def testChrDev(self):
+        """Test that index handles character devices"""
+
+        s = MagicMock()
+        s.st_mode=8630
+        s.st_ino=8325
+        s.st_dev=6
+        s.st_nlink=1
+        s.st_uid=0
+        s.st_gid=6
+        s.st_rdev=1280
+        s.st_size=0
+        s.st_atime=1453317243
+        s.st_mtime=1451854748
+        s.st_ctime=1451854748
+        mock_lstat = MagicMock()
+        mock_lstat.return_value = s
+
+        with NamedTemporaryFile() as index:
+            with TemporaryDirectory() as tmp:
+                with open(os.path.join(tmp, "tty"), 'wb') as f:
+                    pass
+
+                with patch('os.lstat', mock_lstat):
+                    h = hashDirectory(tmp, index.name)
+
+        assert h == b"\x9b\x98~\xa5\xd5\xc4\x1e\xe29'\x8d\x1e\xe1\x12\xdd\xf4\xa51\xf5d"
+
