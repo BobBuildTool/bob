@@ -14,9 +14,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
+import os, stat
 
-from bob.utils import joinScripts
+from bob.utils import joinScripts, removePath, emptyDirectory
+from bob.errors import BuildError
 
 class TestJoinScripts(TestCase):
 
@@ -37,4 +40,69 @@ class TestJoinScripts(TestCase):
         assert joinScripts([None, "asdf"]) == "asdf"
 
         assert joinScripts([None, None]) == None
+
+class TestRemove(TestCase):
+
+    def testFile(self):
+        with TemporaryDirectory() as tmp:
+            fn = os.path.join(tmp, "file")
+            with open(fn, "w") as f:
+                f.write("data")
+            removePath(fn)
+            assert not os.path.exists(fn)
+
+    def testDir(self):
+        with TemporaryDirectory() as tmp:
+            d = os.path.join(tmp, "dir")
+            os.mkdir(d)
+            with open(os.path.join(d, "file"), "w") as f:
+                f.write("data")
+
+            removePath(d)
+            assert not os.path.exists(d)
+
+    def testPermission(self):
+        with TemporaryDirectory() as tmp:
+            d = os.path.join(tmp, "dir")
+            os.mkdir(d)
+            with open(os.path.join(d, "file"), "w") as f:
+                f.write("data")
+
+            os.chmod(d, stat.S_IRUSR | stat.S_IXUSR)
+            self.assertRaises(BuildError, removePath, tmp)
+            os.chmod(d, stat.S_IRWXU)
+
+class TestEmpty(TestCase):
+
+    def testFile(self):
+        with TemporaryDirectory() as tmp:
+            fn = os.path.join(tmp, "file")
+            with open(fn, "w") as f:
+                f.write("data")
+
+            emptyDirectory(tmp)
+            assert os.path.exists(tmp)
+            assert not os.path.exists(fn)
+
+    def testDir(self):
+        with TemporaryDirectory() as tmp:
+            d = os.path.join(tmp, "dir")
+            os.mkdir(d)
+            with open(os.path.join(d, "file"), "w") as f:
+                f.write("data")
+
+            emptyDirectory(tmp)
+            assert os.path.exists(tmp)
+            assert not os.path.exists(d)
+
+    def testPermission(self):
+        with TemporaryDirectory() as tmp:
+            d = os.path.join(tmp, "dir")
+            os.mkdir(d)
+            with open(os.path.join(d, "file"), "w") as f:
+                f.write("data")
+
+            os.chmod(d, stat.S_IRUSR | stat.S_IXUSR)
+            self.assertRaises(BuildError, emptyDirectory, tmp)
+            os.chmod(d, stat.S_IRWXU)
 
