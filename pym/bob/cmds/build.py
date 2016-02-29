@@ -788,7 +788,7 @@ def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
         help="Preserve whole environment")
     parser.add_argument('--upload', default=False, action='store_true',
         help="Upload to binary archive")
-    parser.add_argument('--download', metavar="MODE", default="no" if develop else "yes",
+    parser.add_argument('--download', metavar="MODE", default="deps" if develop else "yes",
         help="Download from binary archive (yes, no, deps)", choices=['yes', 'no', 'deps'])
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=not develop,

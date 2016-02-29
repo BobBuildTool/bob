@@ -116,4 +116,59 @@ def hashTree():
 
     digest = hashDirectory(args.dir, args.state)
     print(asHexStr(digest))
+    return 0
+
+def hashEngine():
+    parser = argparse.ArgumentParser(description="Create hash based on spec.")
+    parser.add_argument('-o', dest="output", metavar="OUTPUT", default="-", help="Output file (default: stdout)")
+    parser.add_argument('--state', help="State cache directory")
+    parser.add_argument('spec', nargs='?', default="-", help="Spec input (default: stdin)")
+    args = parser.parse_args()
+
+    if args.spec == "-":
+        inFile = sys.stdin
+    else:
+        inFile = open(args.spec, "r")
+
+    l = inFile.readline().strip()
+    try:
+        res = __process(l, inFile, args.state)
+        if args.output == "-":
+            sys.stdout.buffer.write(res)
+        else:
+            with open(args.output, "wb") as f:
+                f.write(res)
+    except OSError as e:
+        print("IO error:", str(e), file=sys.stderr)
+        return 1
+
+    return 0
+
+def __process(l, inFile, stateDir):
+    if l.startswith("="):
+        return bytes.fromhex(l[1:])
+    elif l.startswith("<"):
+        with open(l[1:], "rb") as f:
+            return f.read()
+    elif l.startswith("{"):
+        import hashlib
+        return __processBlock(hashlib.new(l[1:]), inFile, stateDir)
+    elif l.startswith("#"):
+        import os.path
+        if stateDir:
+            stateFile = os.path.join(stateDir, l[1:].replace(os.sep, "_"))
+        else:
+            stateFile = None
+        return hashDirectory(l[1:], stateFile)
+    else:
+        print("Malformed spec:", l, file=sys.stderr)
+        sys.exit(1)
+
+def __processBlock(h, inFile, stateDir):
+    while True:
+        l = inFile.readline().strip()
+        if l.startswith("}"):
+            return h.digest()
+        else:
+            h.update(__process(l, inFile, stateDir))
 

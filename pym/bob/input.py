@@ -475,19 +475,6 @@ class Sandbox:
     def isEnabled(self):
         return self.enabled
 
-    def getDigest(self, calculate):
-        """Return digest of the sandbox.
-
-        See BaseStep.getDigest()
-        """
-        stepDigest = calculate(self.step)
-        if stepDigest is None: return None
-
-        h = hashlib.md5()
-        h.update(stepDigest)
-        for p in self.paths: h.update(p.encode('utf8'))
-        return h.digest()
-
 class BaseStep(object):
     """Represents the smalles unit of execution of a package.
 
@@ -547,12 +534,18 @@ class BaseStep(object):
     def getPackage(self):
         return self.__package
 
-    def getDigest(self, calculate, forceSandbox=False):
-        h = hashlib.md5()
+    def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.md5):
+        h = hasher()
         if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
-            d = self.__sandbox.getDigest(calculate)
+            d = calculate(self.__sandbox.getStep())
             if d is None: return None
             h.update(d)
+            h.update(struct.pack("<I", len(self.__sandbox.getPaths())))
+            for p in self.__sandbox.getPaths():
+                h.update(struct.pack("<I", len(p)))
+                h.update(p.encode('utf8'))
+        else:
+            h.update(b'\x00' * 20)
         script = self.getDigestScript()
         if script:
             h.update(struct.pack("<I", len(script)))
@@ -573,6 +566,7 @@ class BaseStep(object):
         for (key, val) in sorted(self.__env.items()):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
+        h.update(struct.pack("<I", len(self.__args)))
         for arg in self.__args:
             d = calculate(arg)
             if d is None: return None

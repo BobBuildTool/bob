@@ -36,12 +36,73 @@ regexJobName = re.compile(r'[^a-zA-Z0-9-_]', re.DOTALL)
 def escapeJobName(name):
     return regexJobName.sub('_', name)
 
+
+class DummyArchive:
+    """Archive that does nothing"""
+    def upload(self, step):
+        return ""
+
+class SimpleHttpArchive:
+    """HTTP archive uploader"""
+
+    def __init__(self, spec):
+        self.__url = spec["url"]
+
+    def upload(self, step):
+        # only upload tools if built in sandbox
+        if step.doesProvideTools() and (step.getSandbox() is None):
+            return ""
+
+        # upload with curl if file does not exist yet on server
+        return "\n" + textwrap.dedent("""\
+            # upload artifact
+            cd $WORKSPACE
+            BOB_UPLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
+            if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
+                curl -sSg -T {RESULT} "$BOB_UPLOAD_URL"
+            fi""".format(URL=self.__url, BUILDID=quote(JenkinsJob._buildIdName(step)),
+                         RESULT=quote(JenkinsJob._tgzName(step))))
+
+
+class SpecHasher:
+    """Track digest calculation and output as spec for bob-hash-engine"""
+
+    def __init__(self):
+        self.lines = ["{md5"]
+
+    def update(self, data):
+        if isinstance(data, bytes):
+            self.lines.append("=" + asHexStr(data))
+        else:
+            bid = data.getBuildId()
+            if bid is None:
+                self.lines.append("<" + JenkinsJob._buildIdName(data))
+            else:
+                self.lines.append("=" + asHexStr(bid))
+
+    def digest(self):
+        return "\n".join(self.lines + ["}"])
+
+
+def getBuildIdSpec(step):
+    """Return bob-hash-engine spec to calculate build-id of step"""
+    if step.isCheckoutStep():
+        bid = step.getBuildId()
+        if bid is None:
+            return "#" + step.getWorkspacePath()
+        else:
+            return "=" + asHexStr(bid)
+    else:
+        return step.getDigest(lambda s: s, True, SpecHasher)
+
+
 class JenkinsJob:
-    def __init__(self, name, displayName, prefix, root):
+    def __init__(self, name, displayName, prefix, root, archiveBackend):
         self.__name = name
         self.__displayName = displayName
         self.__prefix = prefix
         self.__isRoot = root
+        self.__archive = archiveBackend
         self.__checkoutSteps = {}
         self.__buildSteps = {}
         self.__packageSteps = {}
@@ -75,33 +136,70 @@ class JenkinsJob:
     def dumpStep(self, d):
         cmds = []
         cmds.append("#!/bin/bash -ex")
-        cmds.append("mkdir -p {}".format(d.getExecPath()))
-        cmds.append("cd {}".format(d.getExecPath()))
-        cmds.append("")
+        cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
+
+        if d.getSandbox() is not None:
+            sandbox = []
+            sandbox.extend(["-S", "\"$_sandbox\""])
+            sandbox.extend(["-W", quote(d.getExecPath())])
+            sandbox.extend(["-H", "bob"])
+            sandbox.extend(["-d", "/tmp"])
+            sandbox.append("\"${_image[@]}\"")
+            for (hostPath, sndbxPath) in d.getSandbox().getMounts():
+                sandbox.extend(["-M", hostPath ])
+                if hostPath != sndbxPath: sandbox.extend(["-m", sndbxPath])
+            sandbox.extend([
+                "-M", "$WORKSPACE/"+d.getWorkspacePath(),
+                "-w", d.getExecPath() ])
+            addDep = lambda s: (sandbox.extend([
+                    "-M", "$WORKSPACE/"+s.getWorkspacePath(),
+                    "-m", s.getExecPath() ]) if s.isValid() else None)
+            for s in d.getAllDepSteps():
+                if s != d.getSandbox().getStep(): addDep(s)
+            # special handling to mount all previous steps of current package
+            s = d
+            while s.isValid():
+                if len(s.getArguments()) > 0:
+                    s = s.getArguments()[0]
+                    addDep(s)
+                else:
+                    break
+            sandbox.append("--")
+
+            cmds.append("_sandbox=$(mktemp -d)")
+            cmds.append("trap 'rm -rf $_sandbox' EXIT")
+            cmds.append("_image=( )")
+            cmds.append("for i in {}/* ; do".format(d.getSandbox().getStep().getWorkspacePath()))
+            cmds.append("    _image+=(-M) ; _image+=($PWD/$i) ; _image+=(-m) ; _image+=(/${i##*/})")
+            cmds.append("done")
+            cmds.append("")
+            cmds.append("cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'")
+        else:
+            cmds.append("cd {}".format(d.getWorkspacePath()))
+            cmds.append("")
+
         cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
             [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                   "$WORKSPACE/"+quote(a.getExecPath()))
+                                   a.getExecPath())
                 for a in d.getAllDepSteps() ] ))))
         cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
             [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                   "$WORKSPACE/"+quote(a.getExecPath()))
+                                   a.getExecPath())
                 for a in d.getArguments() ] ))))
         cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
-            [ "    [{}]=$WORKSPACE/{}".format(quote(t), quote(p))
+            [ "    [{}]={}".format(quote(t), p)
                 for (t,p) in d.getTools().items()] ))))
         env = { key: quote(value) for (key, value) in d.getEnv().items() }
         env.update({
-            "PATH": ":".join(
-                [ "$WORKSPACE/"+quote(d) for d in d.getPaths() ] + ["$PATH"]),
-            "LD_LIBRARY_PATH": ":".join(
-                [ "$WORKSPACE/"+quote(p) for p in d.getLibraryPaths() ]),
-            "BOB_CWD": "$WORKSPACE/" + quote(d.getExecPath()),
+            "PATH": ":".join(d.getPaths() + ["$PATH"]),
+            "LD_LIBRARY_PATH": ":".join(d.getLibraryPaths()),
+            "BOB_CWD": d.getExecPath(),
         })
         for (k,v) in sorted(env.items()):
             cmds.append("export {}={}".format(k, v))
 
         cmds.append("set -- {}".format(" ".join(
-            [ "$WORKSPACE/"+quote(a.getExecPath()) for a in d.getArguments() ])))
+            [ a.getExecPath() for a in d.getArguments() ])))
         cmds.append("")
 
         cmds.append("set -o errtrace")
@@ -113,6 +211,12 @@ class JenkinsJob:
         cmds.append("# BEGIN BUILD SCRIPT")
         cmds.append(d.getJenkinsScript())
         cmds.append("# END BUILD SCRIPT")
+
+        if d.getSandbox() is not None:
+            cmds.append("BOB_JENKINS_SANDBOXED_SCRIPT")
+            cmds.append("bob-namespace-sandbox {} /bin/bash -x -- /.script".format(" ".join(sandbox)))
+            cmds.append("")
+
         if d.isShared():
             bid = asHexStr(d.getBuildId())
             cmds.append("")
@@ -120,15 +224,26 @@ class JenkinsJob:
             # install shared package atomically
             if [ ! -d ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
                 T=$(mktemp -d -p ${{SLAVE_HOME:-$JENKINS_HOME}})
-                rsync -a $WORKSPACE/{EXEC_PATH}/ $T
+                rsync -a $WORKSPACE/{WSP_PATH}/ $T
                 mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
                 mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
-            fi""".format(EXEC_PATH=d.getExecPath(), BID1=bid[0:2], BID2=bid[2:])))
+            fi""".format(WSP_PATH=d.getWorkspacePath(), BID1=bid[0:2], BID2=bid[2:])))
+        cmds.append("")
+        cmds.append("# create build-id")
+        cmds.append("cd $WORKSPACE")
+        cmds.append("bob-hash-engine --state .state -o {} <<'EOF'".format(JenkinsJob._buildIdName(d)))
+        cmds.append(getBuildIdSpec(d))
+        cmds.append("EOF")
+
         return "\n".join(cmds)
 
     @staticmethod
-    def __tgzName(d):
-        return d.getExecPath().replace('/', '_') + ".tgz"
+    def _tgzName(d):
+        return d.getWorkspacePath().replace('/', '_') + ".tgz"
+
+    @staticmethod
+    def _buildIdName(d):
+        return d.getWorkspacePath().replace('/', '_') + ".buildid"
 
     def dumpXML(self, orig=None, nodes=""):
         if orig:
@@ -182,6 +297,8 @@ class JenkinsJob:
 
         prepareCmds = []
         prepareCmds.append("#!/bin/bash -ex")
+        prepareCmds.append("mkdir -p .state")
+        prepareCmds.append("")
         prepareCmds.append("# delete unused files and directories from workspace")
         prepareCmds.append("pruneUnused()")
         prepareCmds.append("{")
@@ -210,13 +327,14 @@ class JenkinsJob:
         prepareCmds.append("}")
         prepareCmds.append("")
         whiteList = []
-        whiteList.extend([ JenkinsJob.__tgzName(d) for d in self.__deps.values()])
-        whiteList.extend([ d.getExecPath() for d in self.__checkoutSteps.values() ])
-        whiteList.extend([ d.getExecPath() for d in self.__buildSteps.values() ])
+        whiteList.extend([ JenkinsJob._tgzName(d) for d in self.__deps.values()])
+        whiteList.extend([ JenkinsJob._buildIdName(d) for d in self.__deps.values()])
+        whiteList.extend([ d.getWorkspacePath() for d in self.__checkoutSteps.values() ])
+        whiteList.extend([ d.getWorkspacePath() for d in self.__buildSteps.values() ])
         prepareCmds.append("pruneUnused " + " ".join(sorted(whiteList)))
         prepareCmds.append("set -x")
 
-        deps = sorted(self.__deps.values(), key=lambda d: d.getExecPath())
+        deps = sorted(self.__deps.values())
         if deps:
             revBuild = xml.etree.ElementTree.SubElement(
                 triggers, "jenkins.triggers.ReverseBuildTrigger")
@@ -271,7 +389,7 @@ class JenkinsJob:
                 xml.etree.ElementTree.SubElement(
                     cp, "project").text = self.__getJobName(d.getPackage())
                 xml.etree.ElementTree.SubElement(
-                    cp, "filter").text = JenkinsJob.__tgzName(d)
+                    cp, "filter").text = JenkinsJob._tgzName(d)+","+JenkinsJob._buildIdName(d)
                 xml.etree.ElementTree.SubElement(
                     cp, "target").text = ""
                 xml.etree.ElementTree.SubElement(
@@ -295,15 +413,15 @@ class JenkinsJob:
                             mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
                             mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
                         fi
-                        mkdir -p {EXEC_DIR}
-                        ln -sfT ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} {EXEC_PATH}
-                        """.format(BID1=bid[0:2], BID2=bid[2:], TGZ=JenkinsJob.__tgzName(d),
-                                   EXEC_DIR=os.path.dirname(d.getExecPath()),
-                                   EXEC_PATH=d.getExecPath())))
+                        mkdir -p {WSP_DIR}
+                        ln -sfT ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} {WSP_PATH}
+                        """.format(BID1=bid[0:2], BID2=bid[2:], TGZ=JenkinsJob._tgzName(d),
+                                   WSP_DIR=os.path.dirname(d.getWorkspacePath()),
+                                   WSP_PATH=d.getWorkspacePath())))
                 else:
-                    prepareCmds.append("mkdir -p " + d.getExecPath())
+                    prepareCmds.append("mkdir -p " + d.getWorkspacePath())
                     prepareCmds.append("tar zxf {} -C {}".format(
-                        JenkinsJob.__tgzName(d), d.getExecPath()))
+                        JenkinsJob._tgzName(d), d.getWorkspacePath()))
 
         prepare = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
         xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
@@ -311,7 +429,7 @@ class JenkinsJob:
 
         # checkout steps
         checkoutSCMs = []
-        for d in sorted(self.__checkoutSteps.values(), key=lambda s: s.getExecPath()):
+        for d in sorted(self.__checkoutSteps.values()):
             if d.getJenkinsScript():
                 checkout = xml.etree.ElementTree.SubElement(
                     builders, "hudson.tasks.Shell")
@@ -337,7 +455,7 @@ class JenkinsJob:
                 root, "scm", attrib={"class" : "hudson.scm.NullSCM"})
 
         # build steps
-        for d in sorted(self.__buildSteps.values(), key=lambda s: s.getExecPath()):
+        for d in sorted(self.__buildSteps.values()):
             build = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
@@ -345,16 +463,18 @@ class JenkinsJob:
 
         # package steps
         publish = []
-        for d in sorted(self.__packageSteps.values(), key=lambda s: s.getExecPath()):
+        for d in sorted(self.__packageSteps.values()):
             package = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
                 self.dumpStep(d),
                 "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
-                "tar zcfv {} -C {} .".format(JenkinsJob.__tgzName(d), d.getExecPath())
+                "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getWorkspacePath()),
+                self.__archive.upload(d)
             ])
-            publish.append(JenkinsJob.__tgzName(d))
+            publish.append(JenkinsJob._tgzName(d))
+            publish.append(JenkinsJob._buildIdName(d))
 
         xml.etree.ElementTree.SubElement(
             archiver, "artifacts").text = ",".join(publish)
@@ -375,13 +495,13 @@ class JenkinsJob:
                 done.add(key)
 
 
-def _genJenkinsJobs(p, jobs, prefix):
+def _genJenkinsJobs(p, jobs, prefix, archiveBackend):
     displayName = prefix + p.getRecipe().getBaseName()
     name = escapeJobName(displayName)
     if name in jobs:
         jj = jobs[name]
     else:
-        jj = JenkinsJob(name, displayName, prefix, p.getRecipe().isRoot())
+        jj = JenkinsJob(name, displayName, prefix, p.getRecipe().isRoot(), archiveBackend)
         jobs[name] = jj
 
     checkout = p.getCheckoutStep()
@@ -395,7 +515,7 @@ def _genJenkinsJobs(p, jobs, prefix):
     allDeps = p.getAllDepSteps()
     jj.addDependencies(allDeps)
     for d in allDeps:
-        _genJenkinsJobs(d.getPackage(), jobs, prefix)
+        _genJenkinsJobs(d.getPackage(), jobs, prefix, archiveBackend)
 
 def checkRecipeCycles(p, stack=[]):
     name = p.getRecipe().getBaseName()
@@ -406,19 +526,45 @@ def checkRecipeCycles(p, stack=[]):
         for d in p.getAllDepSteps():
             checkRecipeCycles(d.getPackage(), stack)
 
+def jenkinsNameFormatter(jenkins):
+
+    def workspaceDir(step):
+        return BobState().getJenkinsByNameDirectory(
+            jenkins, step.getPackage().getPath()+"/"+step.getLabel(),
+            step.getVariantId())
+
+    def fmt(step, mode):
+        if mode == 'workspace':
+            return workspaceDir(step)
+        else:
+            assert mode == 'exec'
+            if step.getSandbox() is None:
+                return os.path.join("$WORKSPACE", quote(workspaceDir(step)))
+            else:
+                return os.path.join("/bob", asHexStr(step.getVariantId()))
+
+    return fmt
+
 def genJenkinsJobs(recipes, jenkins):
     jobs = {}
     config = BobState().getJenkinsConfig(jenkins)
     prefix = config["prefix"]
+    archiveHandler = DummyArchive()
+    if config.get("upload", False):
+        archiveSpec = recipes.archiveSpec()
+        archiveBackend = archiveSpec.get("backend", "none")
+        if archiveBackend == "http":
+            archiveHandler = SimpleHttpArchive(archiveSpec)
+        elif archiveBackend != "none":
+            print("Ignoring unsupported archive backend:", archiveBackend)
     rootPackages = recipes.generatePackages(
-        lambda step, mode: BobState().getJenkinsByNameDirectory(
-            jenkins, step.getPackage().getPath()+"/"+step.getLabel(),
-            step.getVariantId()),
-        config.get('defines', {}))
+        jenkinsNameFormatter(jenkins),
+        config.get('defines', {}),
+        config.get('sandbox', False))
 
     for root in [ walkPackagePath(rootPackages, r) for r in config["roots"] ]:
         checkRecipeCycles(root)
-        _genJenkinsJobs(root, jobs, prefix)
+        _genJenkinsJobs(root, jobs, prefix, archiveHandler)
 
     return jobs
 
@@ -452,6 +598,10 @@ def doJenkinsAdd(recipes, argv):
                         help="Root package (may be specified multiple times)")
     parser.add_argument('-D', default=[], action='append', dest="defines",
                         help="Override default environment variable")
+    parser.add_argument('--upload', default=False, action='store_true',
+        help="Upload to binary archive")
+    parser.add_argument('--no-sandbox', action='store_false', dest='sandbox', default=True,
+        help="Disable sandboxing")
     parser.add_argument("name", help="Symbolic name for server")
     parser.add_argument("url", help="Server URL")
     args = parser.parse_args(argv)
@@ -491,7 +641,9 @@ def doJenkinsAdd(recipes, argv):
         "roots" : roots,
         "prefix" : args.prefix,
         "nodes" : args.nodes,
-        "defines" : defines
+        "defines" : defines,
+        "upload" : args.upload,
+        "sandbox" : args.sandbox,
     }
     BobState().addJenkins(args.name, config)
 
@@ -557,6 +709,9 @@ def doJenkinsLs(recipes, argv):
                 print(" Nodes:", cfg['nodes'])
             if cfg.get('defines'):
                 print(" Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
+            if recipes.archiveSpec().get("backend", "none") != "none":
+                print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
+            print(" Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
             print(" Roots:", ", ".join(cfg['roots']))
         if args.verbose >= 2:
             print(" Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
@@ -790,6 +945,71 @@ def doJenkinsSetUrl(recipes, argv):
     }
     BobState().setJenkinsConfig(args.name, config)
 
+def doJenkinsSetOptions(recipes, argv):
+    parser = argparse.ArgumentParser(prog="bob jenkins set-options")
+    parser.add_argument("name", help="Jenkins server alias")
+    parser.add_argument("-n", "--nodes", help="Set label for Jenkins Slave")
+    parser.add_argument("-p", "--prefix", help="Set prefix for jobs")
+    parser.add_argument("--add-root", default=[], action='append',
+                        help="Add new root package")
+    parser.add_argument("--del-root", default=[], action='append',
+                        help="Remove existing root package")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+                        help="Override default environment variable")
+    parser.add_argument('-U', default=[], action='append', dest="undefines",
+                        help="Undefine environment variable override")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--upload', action='store_true',
+        help="Enable binary archive upload")
+    group.add_argument('--no-upload', action='store_false', dest='upload',
+        help="Disable binary archive upload")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true',
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
+    args = parser.parse_args(argv)
+
+    defines = {}
+    for define in args.defines:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+
+    if args.name not in BobState().getAllJenkins():
+        print("Jenkins '{}' not known.".format(args.name), file=sys.stderr)
+        sys.exit(1)
+    config = BobState().getJenkinsConfig(args.name)
+
+    if args.nodes is not None:
+        config["nodes"] = args.nodes
+    if args.prefix is not None:
+        config["prefix"] = args.prefix
+    if args.add_root:
+        config["roots"].extend(args.add_root)
+    for r in args.del_root:
+        try:
+            config["roots"].remove(r)
+        except ValueError:
+            print("Cannot remove root '{}': not found".format(r), file=sys.stderr)
+    if args.upload is not None:
+        config["upload"] = args.upload
+    if args.sandbox is not None:
+        config["sandbox"] = args.sandbox
+    if defines:
+        config["defines"].update(defines)
+    for d in args.undefines:
+        try:
+            del config["defines"][d]
+        except KeyError:
+            print("Cannot undefine '{}': not defined".format(d), file=sys.stderr)
+
+    BobState().setJenkinsConfig(args.name, config)
+
 availableJenkinsCmds = {
     "add"        : (doJenkinsAdd, "[-p <prefix>] [-r <package>] NAME URL"),
     "export"  : (doJenkinsExport, "NAME DIR"),
@@ -799,6 +1019,7 @@ availableJenkinsCmds = {
     "push"   : (doJenkinsPush, "NAME"),
     "rm"         : (doJenkinsRm, "[-f] NAME"),
     "set-url" : (doJenkinsSetUrl, "NAME URL"),
+    "set-options" : (doJenkinsSetOptions, "NAME [--{add,del}-root <package>] ...")
 }
 
 def doJenkins(recipes, argv, bobRoot):
