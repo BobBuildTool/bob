@@ -17,7 +17,8 @@
 from . import BOB_VERSION
 from .errors import ParseError, BuildError
 from .state import BobState
-from .utils import colorize, joinScripts, compareVersion
+from .tty import colorize
+from .utils import joinScripts, compareVersion
 from base64 import b64encode
 from glob import glob
 from pipes import quote

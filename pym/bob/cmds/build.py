@@ -17,7 +17,8 @@
 from ..errors import BuildError
 from ..input import walkPackagePath
 from ..state import BobState
-from ..utils import asHexStr, colorize, hashDirectory, hashFile, removePath, emptyDirectory
+from ..tty import colorize
+from ..utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirectory
 from datetime import datetime
 from glob import glob
 from pipes import quote

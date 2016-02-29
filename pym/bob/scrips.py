@@ -16,7 +16,8 @@
 
 from . import BOB_VERSION
 from .errors import BobError
-from .utils import asHexStr, colorize, Unbuffered, hashDirectory
+from .tty import colorize, Unbuffered
+from .utils import asHexStr, hashDirectory
 import argparse
 import sys
 import traceback

@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from .errors import BuildError
 from binascii import hexlify
 from tempfile import NamedTemporaryFile
 import hashlib
@@ -26,12 +27,6 @@ import sys
 def asHexStr(binary):
     return hexlify(binary).decode("ascii")
 
-def colorize(string, color):
-    if __onTTY:
-        return "\x1b[" + color + "m" + string + "\x1b[0m"
-    else:
-        return string
-
 def joinScripts(scripts):
     scripts = [ s for s in scripts if ((s is not None) and (s != "")) ]
     if scripts != []:
@@ -40,24 +35,21 @@ def joinScripts(scripts):
         return None
 
 def removePath(path):
-    if os.path.exists(path):
-        if os.path.isdir(path) and not os.path.islink(path):
-            shutil.rmtree(path)
-        else:
-            os.unlink(path)
+    try:
+        if os.path.exists(path):
+            if os.path.isdir(path) and not os.path.islink(path):
+                shutil.rmtree(path)
+            else:
+                os.unlink(path)
+    except OSError as e:
+        raise BuildError("Error removing '"+path+"': " + str(e))
 
 def emptyDirectory(path):
-    if os.path.exists(path):
-        for f in os.listdir(path): removePath(os.path.join(path, f))
-
-class Unbuffered(object):
-    def __init__(self, stream):
-        self.stream = stream
-    def write(self, data):
-        self.stream.write(data)
-        self.stream.flush()
-    def __getattr__(self, attr):
-        return getattr(self.stream, attr)
+    try:
+        if os.path.exists(path):
+            for f in os.listdir(path): removePath(os.path.join(path, f))
+    except OSError as e:
+        raise BuildError("Error cleaning '"+path+"': " + str(e))
 
 def compareVersion(left, right):
      def cmp(l, r):
@@ -262,10 +254,4 @@ class DirHasher:
 
 def hashDirectory(path, index=None):
     return DirHasher(index).hashDirectory(path)
-
-# module initialization
-
-__onTTY = False
-if sys.stdout.isatty() and sys.stderr.isatty():
-    __onTTY = True
 
