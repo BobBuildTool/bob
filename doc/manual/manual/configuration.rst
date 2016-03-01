@@ -708,6 +708,17 @@ specify the major and minor version.
 
 .. _Semantic Versioning: http://semver.org/
 
+.. _configuration-config-plugins:
+
+plugins
+~~~~~~~
+
+Type: List of strings
+
+Plugins are loaded in the same order as listed here. For each name in this
+section there must be a .py-file in the ``plugins`` directory next to the
+recipes. For a detailed description of plugins see :ref:`extending-plugins`.
+
 default.yaml
 ------------
 
