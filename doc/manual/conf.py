@@ -19,7 +19,7 @@ import os
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-#sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('../../pym'))
 
 # -- General configuration ------------------------------------------------
 
@@ -29,7 +29,7 @@ import os
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.pngmath']
+extensions = ['sphinx.ext.pngmath', 'sphinx.ext.autodoc']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -52,11 +52,10 @@ copyright = '2015, TechniSat Digital GmbH'
 # built documents.
 #
 # The short X.Y version.
-__g = { }
-with open("../../pym/bob/__init__.py") as __f:
-    __code = compile(__f.read(), "../../pym/bob/__init__.py", 'exec')
-    exec(__code, __g)
-version = __g['BOB_VERSION']
+
+from bob import BOB_VERSION
+
+version = BOB_VERSION
 # The full version, including alpha/beta/rc tags.
 release = version
 
