@@ -136,86 +136,87 @@ class JenkinsJob:
     def dumpStep(self, d):
         cmds = []
         cmds.append("#!/bin/bash -ex")
-        cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
 
-        if d.getSandbox() is not None:
-            sandbox = []
-            sandbox.extend(["-S", "\"$_sandbox\""])
-            sandbox.extend(["-W", quote(d.getExecPath())])
-            sandbox.extend(["-H", "bob"])
-            sandbox.extend(["-d", "/tmp"])
-            sandbox.append("\"${_image[@]}\"")
-            for (hostPath, sndbxPath) in d.getSandbox().getMounts():
-                sandbox.extend(["-M", hostPath ])
-                if hostPath != sndbxPath: sandbox.extend(["-m", sndbxPath])
-            sandbox.extend([
-                "-M", "$WORKSPACE/"+d.getWorkspacePath(),
-                "-w", d.getExecPath() ])
-            addDep = lambda s: (sandbox.extend([
-                    "-M", "$WORKSPACE/"+s.getWorkspacePath(),
-                    "-m", s.getExecPath() ]) if s.isValid() else None)
-            for s in d.getAllDepSteps():
-                if s != d.getSandbox().getStep(): addDep(s)
-            # special handling to mount all previous steps of current package
-            s = d
-            while s.isValid():
-                if len(s.getArguments()) > 0:
-                    s = s.getArguments()[0]
-                    addDep(s)
-                else:
-                    break
-            sandbox.append("--")
+        if d.getJenkinsScript():
+            cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
+            if d.getSandbox() is not None:
+                sandbox = []
+                sandbox.extend(["-S", "\"$_sandbox\""])
+                sandbox.extend(["-W", quote(d.getExecPath())])
+                sandbox.extend(["-H", "bob"])
+                sandbox.extend(["-d", "/tmp"])
+                sandbox.append("\"${_image[@]}\"")
+                for (hostPath, sndbxPath) in d.getSandbox().getMounts():
+                    sandbox.extend(["-M", hostPath ])
+                    if hostPath != sndbxPath: sandbox.extend(["-m", sndbxPath])
+                sandbox.extend([
+                    "-M", "$WORKSPACE/"+d.getWorkspacePath(),
+                    "-w", d.getExecPath() ])
+                addDep = lambda s: (sandbox.extend([
+                        "-M", "$WORKSPACE/"+s.getWorkspacePath(),
+                        "-m", s.getExecPath() ]) if s.isValid() else None)
+                for s in d.getAllDepSteps():
+                    if s != d.getSandbox().getStep(): addDep(s)
+                # special handling to mount all previous steps of current package
+                s = d
+                while s.isValid():
+                    if len(s.getArguments()) > 0:
+                        s = s.getArguments()[0]
+                        addDep(s)
+                    else:
+                        break
+                sandbox.append("--")
 
-            cmds.append("_sandbox=$(mktemp -d)")
-            cmds.append("trap 'rm -rf $_sandbox' EXIT")
-            cmds.append("_image=( )")
-            cmds.append("for i in {}/* ; do".format(d.getSandbox().getStep().getWorkspacePath()))
-            cmds.append("    _image+=(-M) ; _image+=($PWD/$i) ; _image+=(-m) ; _image+=(/${i##*/})")
-            cmds.append("done")
+                cmds.append("_sandbox=$(mktemp -d)")
+                cmds.append("trap 'rm -rf $_sandbox' EXIT")
+                cmds.append("_image=( )")
+                cmds.append("for i in {}/* ; do".format(d.getSandbox().getStep().getWorkspacePath()))
+                cmds.append("    _image+=(-M) ; _image+=($PWD/$i) ; _image+=(-m) ; _image+=(/${i##*/})")
+                cmds.append("done")
+                cmds.append("")
+                cmds.append("cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'")
+            else:
+                cmds.append("cd {}".format(d.getWorkspacePath()))
+                cmds.append("")
+
+            cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
+                [ "    [{}]={}".format(quote(a.getPackage().getName()),
+                                       a.getExecPath())
+                    for a in d.getAllDepSteps() ] ))))
+            cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
+                [ "    [{}]={}".format(quote(a.getPackage().getName()),
+                                       a.getExecPath())
+                    for a in d.getArguments() ] ))))
+            cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
+                [ "    [{}]={}".format(quote(t), p)
+                    for (t,p) in d.getTools().items()] ))))
+            env = { key: quote(value) for (key, value) in d.getEnv().items() }
+            env.update({
+                "PATH": ":".join(d.getPaths() + ["$PATH"]),
+                "LD_LIBRARY_PATH": ":".join(d.getLibraryPaths()),
+                "BOB_CWD": d.getExecPath(),
+            })
+            for (k,v) in sorted(env.items()):
+                cmds.append("export {}={}".format(k, v))
+
+            cmds.append("set -- {}".format(" ".join(
+                [ a.getExecPath() for a in d.getArguments() ])))
             cmds.append("")
-            cmds.append("cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'")
-        else:
-            cmds.append("cd {}".format(d.getWorkspacePath()))
+
+            cmds.append("set -o errtrace")
+            cmds.append("set -o nounset")
+            cmds.append("set -o pipefail")
+            cmds.append("trap 'RET=$? ; echo \"Step failed on line ${LINENO}: Exit status ${RET}; Command: ${BASH_COMMAND}\" >&2 ; exit $RET' ERR")
+            cmds.append("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do rm -f \"$i\" ; done' EXIT")
             cmds.append("")
+            cmds.append("# BEGIN BUILD SCRIPT")
+            cmds.append(d.getJenkinsScript())
+            cmds.append("# END BUILD SCRIPT")
 
-        cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
-            [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                   a.getExecPath())
-                for a in d.getAllDepSteps() ] ))))
-        cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
-            [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                   a.getExecPath())
-                for a in d.getArguments() ] ))))
-        cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
-            [ "    [{}]={}".format(quote(t), p)
-                for (t,p) in d.getTools().items()] ))))
-        env = { key: quote(value) for (key, value) in d.getEnv().items() }
-        env.update({
-            "PATH": ":".join(d.getPaths() + ["$PATH"]),
-            "LD_LIBRARY_PATH": ":".join(d.getLibraryPaths()),
-            "BOB_CWD": d.getExecPath(),
-        })
-        for (k,v) in sorted(env.items()):
-            cmds.append("export {}={}".format(k, v))
-
-        cmds.append("set -- {}".format(" ".join(
-            [ a.getExecPath() for a in d.getArguments() ])))
-        cmds.append("")
-
-        cmds.append("set -o errtrace")
-        cmds.append("set -o nounset")
-        cmds.append("set -o pipefail")
-        cmds.append("trap 'RET=$? ; echo \"Step failed on line ${LINENO}: Exit status ${RET}; Command: ${BASH_COMMAND}\" >&2 ; exit $RET' ERR")
-        cmds.append("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do rm -f \"$i\" ; done' EXIT")
-        cmds.append("")
-        cmds.append("# BEGIN BUILD SCRIPT")
-        cmds.append(d.getJenkinsScript())
-        cmds.append("# END BUILD SCRIPT")
-
-        if d.getSandbox() is not None:
-            cmds.append("BOB_JENKINS_SANDBOXED_SCRIPT")
-            cmds.append("bob-namespace-sandbox {} /bin/bash -x -- /.script".format(" ".join(sandbox)))
-            cmds.append("")
+            if d.getSandbox() is not None:
+                cmds.append("BOB_JENKINS_SANDBOXED_SCRIPT")
+                cmds.append("bob-namespace-sandbox {} /bin/bash -x -- /.script".format(" ".join(sandbox)))
+                cmds.append("")
 
         if d.isShared():
             bid = asHexStr(d.getBuildId())
@@ -430,11 +431,10 @@ class JenkinsJob:
         # checkout steps
         checkoutSCMs = []
         for d in sorted(self.__checkoutSteps.values()):
-            if d.getJenkinsScript():
-                checkout = xml.etree.ElementTree.SubElement(
-                    builders, "hudson.tasks.Shell")
-                xml.etree.ElementTree.SubElement(
-                    checkout, "command").text = self.dumpStep(d)
+            checkout = xml.etree.ElementTree.SubElement(
+                builders, "hudson.tasks.Shell")
+            xml.etree.ElementTree.SubElement(
+                checkout, "command").text = self.dumpStep(d)
             checkoutSCMs.extend(d.getJenkinsXml())
 
         if len(checkoutSCMs) > 1:
