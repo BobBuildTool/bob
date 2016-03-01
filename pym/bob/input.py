@@ -59,6 +59,115 @@ class Env(dict):
             if key in allowed: ret[key] = value
         return ret
 
+    def substitute(self, value, prop):
+        try:
+            return Template(value).substitute(self)
+        except KeyError as e:
+            raise ParseError("Error substituting {} in {}: {}".format(key, prop, str(e)))
+        except ValueError as e:
+            raise ParseError("Error substituting {} in {}: {}".format(key, prop, str(e)))
+
+
+class PluginProperty:
+    """Base class for plugin property handlers.
+
+    A plugin should sub-class this class to parse custom properties in a
+    recipe. For each recipe an object of that class is created then. The
+    default constructor just stores the *present* and *value* parameters as
+    attributes in the object.
+
+    :param bool present: True if property is present in recipe
+    :param value: Unmodified value of property from recipe or None if not present.
+    """
+
+    def __init__(self, present, value):
+        self.present = present
+        self.value = value
+
+    def inherit(self, cls):
+        """Inherit from a class.
+
+        The default implementation will use the value from the class if the
+        property was not present. Otherwise the class value will be ignored.
+        """
+        if not self.present:
+            self.present = cls.present
+            self.value = cls.value
+
+    def isPresent(self):
+        """Return True if the property was present in the recipe."""
+        return self.present
+
+    def getValue(self):
+        """Get (parsed) value of the property."""
+        return self.value
+
+
+class PluginState:
+    """Base class for plugin state trackers.
+
+    State trackers are used by plugins to compute the value of one or more
+    properties as the dependency tree of all recipes is traversed.
+    """
+
+    def copy(self):
+        """Return a copy of the object.
+
+        The default implementation uses copy.deepcopy() which should usually be
+        enough. If the plugin uses a sophisticated state tracker, especially
+        when holding references to created packages, it might be usefull to
+        provide a specialized implementation.
+        """
+        return copy.deepcopy(self)
+
+    def onEnter(self, env, tools, properties):
+        """Begin creation of a package.
+
+        The state tracker is about to witness the creation of a package. The passed
+        environment, tools and (custom) properties are in their initial state that
+        was inherited from the parent recipe.
+
+        :param env: Complete environment
+        :type env: Mapping[str, str]
+        :param tools: All upstream declared or inherited tools
+        :type tools: Mapping[str, :class:`bob.input.Tool`]
+        :param properties: All custom properties
+        :type properties: Mapping[str, :class:`bob.input.PluginProperty`]
+        """
+        pass
+
+    def onUse(self, downstream):
+        """Use provided state of downstream package.
+
+        This method is called if the user added the name of the state tracker
+        to the ``use`` clause in the recipe. A state tracker supporting this
+        notion should somehow pick up and merge the state of the downstream
+        package.
+
+        The default implementation does nothing.
+
+        :param bob.input.PluginState downstream: State of downstream package
+        """
+        pass
+
+    def onFinish(self, env, tools, properties, package):
+        """Finish creation of a package.
+
+        The package was computed and the result is available as parameter
+        *package*. The passed *env*, *tools*, and *properties* have their final
+        state after all downstream dependencies have been resolved.
+
+        :param env: Complete environment
+        :type env: Mapping[str, str]
+        :param tools: All upstream declared or inherited tools
+        :type tools: Mapping[str, :class:`bob.input.Tool`]
+        :param properties: All custom properties
+        :type properties: Mapping[str, :class:`bob.input.PluginProperty`]
+        :param bob.input.Package packages: The created package
+        """
+        pass
+
+
 class BaseScm:
     def __init__(self, spec):
         self.__condition = spec.get("if", None)
@@ -621,7 +730,7 @@ class Step(metaclass=ABCMeta):
         from the workspace path if the build is performed in a sandbox.
         """
         if self.isValid():
-            return self.__pathFormatter(self, 'exec')
+            return self.__pathFormatter(self, 'exec', self.__package._getStates())
         else:
             return "/invalid/exec/path/of/{}".format(self.__package.getName())
 
@@ -633,7 +742,7 @@ class Step(metaclass=ABCMeta):
         script but the one from getExecPath() instead.
         """
         if self.isValid():
-            return self.__pathFormatter(self, 'workspace')
+            return self.__pathFormatter(self, 'workspace', self.__package._getStates())
         else:
             return "/invalid/workspace/path/of/{}".format(self.__package.getName())
 
@@ -830,7 +939,7 @@ class PackageStep(RegularStep):
 
 class Package(object):
     def __init__(self, name, stack, pathFormatter, recipe, sandbox,
-                 directDepSteps, indirectDepSteps):
+                 directDepSteps, indirectDepSteps, states):
         self.__name = name
         self.__stack = stack
         self.__pathFormatter = pathFormatter
@@ -840,6 +949,7 @@ class Package(object):
         tmp = set(indirectDepSteps)
         if sandbox and sandbox.isEnabled(): tmp.add(sandbox.getStep())
         self.__indirectDepSteps = sorted(tmp)
+        self.__states = states
         self.__checkoutStep = CheckoutStep(self, pathFormatter)
         self.__buildStep = BuildStep(self, pathFormatter)
         self.__packageStep = PackageStep(self, pathFormatter)
@@ -898,6 +1008,9 @@ class Package(object):
 
     def getPackageStep(self):
         return self.__packageStep
+
+    def _getStates(self):
+        return self.__states
 
 
 # FIXME: implement this on our own without the Template class. How to do proper
@@ -967,25 +1080,19 @@ class Recipe(object):
         def __init__(self, dep):
             if isinstance(dep, str):
                 self.recipe = dep
-                self.envOverride = {}
-                self.provideGlobal = False
-                self.useEnv = False
-                self.useTools = False
-                self.useBuildResult = True
-                self.useDeps = True
-                self.useSandbox = False
-                self.condition = None
+                dep = {}
             else:
                 self.recipe = dep["name"]
-                self.envOverride = dep.get("environment", {}).copy()
-                self.provideGlobal = dep.get("forward", False)
-                useClause = dep.get("use", ["result", "deps"])
-                self.useEnv = "environment" in useClause
-                self.useTools = "tools" in useClause
-                self.useBuildResult = "result" in useClause
-                self.useDeps = "deps" in useClause
-                self.useSandbox = "sandbox" in useClause
-                self.condition = dep.get("if", None)
+
+            self.envOverride = dep.get("environment", {}).copy()
+            self.provideGlobal = dep.get("forward", False)
+            self.use = dep.get("use", ["result", "deps"])
+            self.useEnv = "environment" in self.use
+            self.useTools = "tools" in self.use
+            self.useBuildResult = "result" in self.use
+            self.useDeps = "deps" in self.use
+            self.useSandbox = "sandbox" in self.use
+            self.condition = dep.get("if", None)
 
         def isCompatible(self, other):
             if self.recipe != other.recipe: return True
@@ -1012,7 +1119,7 @@ class Recipe(object):
                 list.insert(self, i, item)
 
     @staticmethod
-    def loadFromFile(recipeSet, fileName, isClass):
+    def loadFromFile(recipeSet, fileName, properties, isClass):
         try:
             with open(fileName, "r") as f:
                 recipe = yaml.load(f.read())
@@ -1028,14 +1135,14 @@ class Recipe(object):
             if isClass:
                 raise ParseError("Classes may not use 'multiPackage'")
 
-            anonBaseClass = Recipe(recipeSet, recipe, baseDir, baseName, baseName)
+            anonBaseClass = Recipe(recipeSet, recipe, baseDir, baseName, baseName, properties)
             return [
-                Recipe(recipeSet, subSpec, baseDir, baseName+"-"+subName, baseName, anonBaseClass)
+                Recipe(recipeSet, subSpec, baseDir, baseName+"-"+subName, baseName, properties, anonBaseClass)
                 for (subName, subSpec) in recipe["multiPackage"].items() ]
         else:
-            return [ Recipe(recipeSet, recipe, baseDir, baseName, baseName) ]
+            return [ Recipe(recipeSet, recipe, baseDir, baseName, baseName, properties) ]
 
-    def __init__(self, recipeSet, recipe, baseDir, packageName, baseName, anonBaseClass=None):
+    def __init__(self, recipeSet, recipe, baseDir, packageName, baseName, properties, anonBaseClass=None):
         self.__recipeSet = recipeSet
         self.__deps = [ Recipe.Dependency(d) for d in recipe.get("depends", []) ]
         self.__packageName = packageName
@@ -1067,6 +1174,10 @@ class Recipe(object):
         self.__toolDepPackage = set(recipe.get("packageTools", []))
         self.__toolDepPackage |= self.__toolDepBuild
         self.__shared = recipe.get("shared", False)
+        self.__properties = {
+            n : p(n in recipe, recipe.get(n))
+            for (n, p) in properties.items()
+        }
 
         incHelper = IncludeHelper(baseDir, packageName)
 
@@ -1121,6 +1232,8 @@ class Recipe(object):
             self.__checkout = (checkoutScript, checkoutSCMs)
             self.__build = joinScripts([cls.__build, self.__build])
             self.__package = joinScripts([cls.__package, self.__package])
+            for (n, p) in self.__properties.items():
+                p.inherit(cls.__properties[n])
 
             self.__inherited.add(cls.getName())
             self.__inherited |= cls.__inherited
@@ -1167,7 +1280,7 @@ class Recipe(object):
     def isRoot(self):
         return self.__root
 
-    def prepare(self, pathFormatter, inputEnv, sandboxEnabled, sandbox=None,
+    def prepare(self, pathFormatter, inputEnv, sandboxEnabled, states, sandbox=None,
                 inputTools=Env(), inputStack=[]):
         stack = inputStack + [self.__packageName]
 
@@ -1182,6 +1295,10 @@ class Recipe(object):
                 raise ParseError("Error substituting {} in environment: {}".format(key, str(e)))
         env = inputEnv.derive(varSelf)
         tools = inputTools.derive()
+        states = { n : s.copy() for (n,s) in states.items() }
+
+        # update plugin states
+        for s in states.values(): s.onEnter(env, tools, self.__properties)
 
         # traverse dependencies
         packages = []
@@ -1189,6 +1306,7 @@ class Recipe(object):
         depEnv = env.derive()
         depTools = tools.derive()
         depSandbox = sandbox
+        depStates = { n : s.copy() for (n,s) in states.items() }
         allDeps = Recipe.DependencyList(self.__deps)
         i = 0
         while i < len(allDeps):
@@ -1203,7 +1321,7 @@ class Recipe(object):
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
                 p = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
-                              sandboxEnabled, depSandbox, depTools,
+                              sandboxEnabled, depStates, depSandbox, depTools,
                               stack).getPackageStep()
             except ParseError as e:
                 e.pushFrame(r.getPackageName())
@@ -1215,6 +1333,10 @@ class Recipe(object):
                 providedDeps.reverse()
                 for d in providedDeps: allDeps.insert(i, d)
 
+            for (n, s) in states.items():
+                if n in dep.use:
+                    s.onUse(p.getPackage()._getStates()[n])
+                    if dep.provideGlobal: depStates[n].onUse(p.getPackage()._getStates()[n])
             if dep.useBuildResult:
                 results.append(p)
             if dep.useTools:
@@ -1231,7 +1353,8 @@ class Recipe(object):
 
         # create package
         p = Package(self.__packageName, stack, pathFormatter, self, sandbox, packages,
-                    [ t.step for t  in tools.prune(self.__toolDepPackage).values()  ])
+                    [ t.step for t  in tools.prune(self.__toolDepPackage).values()  ],
+                    states)
 
         # optional checkout step
         if self.__checkout != (None, []):
@@ -1282,6 +1405,9 @@ class Recipe(object):
             packageStep.setProvidedSandbox(Sandbox(packageStep, env, sandboxEnabled,
                                                    self.__provideSandbox))
 
+        # update plugin states
+        for s in states.values(): s.onFinish(env, tools, self.__properties, p)
+
         if self.__shared:
             if packageStep.getBuildId() is None:
                 raise ParseError("Shared packages must be deterministic!")
@@ -1299,6 +1425,8 @@ class RecipeSet:
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
         self.__hooks = {}
+        self.__properties = {}
+        self.__states = {}
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -1338,6 +1466,32 @@ class RecipeSet:
         if not isinstance(hooks, dict):
             raise ParseError("Plugin '"+name+"': 'hooks' has wrong type!")
         self.__hooks.update(hooks)
+
+        properties = manifest.get('properties', {})
+        if not isinstance(properties, dict):
+            raise ParseError("Plugin '"+name+"': 'properties' has wrong type!")
+        for (i,j) in properties.items():
+            if not isinstance(i, str):
+                raise ParseError("Plugin '"+name+"': property name must be a string!")
+            if not issubclass(j, PluginProperty):
+                raise ParseError("Plugin '"+name+"': property '" +i+"' has wrong type!")
+            if i in self.__properties:
+                raise ParseError("Plugin '"+name+"': property '" +i+"' already defined by other plugin!")
+        self.__properties.update(properties)
+
+        states = manifest.get('state', {})
+        if not isinstance(states, dict):
+            raise ParseError("Plugin '"+name+"': 'states' has wrong type!")
+        for (i,j) in states.items():
+            if not isinstance(i, str):
+                raise ParseError("Plugin '"+name+"': state tracker name must be a string!")
+            if i in ["environment", "tools", "result", "deps", "sandbox"]:
+                raise ParseError("Plugin '"+name+"': state tracker has reserved name!")
+            if not issubclass(j, PluginState):
+                raise ParseError("Plugin '"+name+"': state tracker '" +i+"' has wrong type!")
+            if i in self.__states:
+                raise ParseError("Plugin '"+name+"': state tracker '" +i+"' already defined by other plugin!")
+        self.__states.update(states)
 
     def defineHook(self, name, value):
         self.__hooks[name] = value
@@ -1386,7 +1540,7 @@ class RecipeSet:
 
         for path in ( glob( 'recipes/*.yaml' ) + glob( 'recipes/**/*.yaml' ) ):
             try:
-                for r in Recipe.loadFromFile(self, path, False):
+                for r in Recipe.loadFromFile(self, path, self.__properties, False):
                     self.__addRecipe(r)
             except ParseError as e:
                 e.pushFrame(path)
@@ -1403,7 +1557,7 @@ class RecipeSet:
         else:
             fileName = os.path.join("classes", name+".yaml")
             try:
-                [r] = Recipe.loadFromFile(self, fileName, True)
+                [r] = Recipe.loadFromFile(self, fileName, self.__properties, True)
             except ParseError as e:
                 e.pushFrame(fileName)
                 raise
@@ -1415,12 +1569,14 @@ class RecipeSet:
         env = Env(os.environ).prune(self.__whiteList)
         env.update(self.__defaultEnv)
         env.update(envOverrides)
+        states = { n:s() for (n,s) in self.__states.items() }
         try:
             BobState().setAsynchronous()
             for root in self.__rootRecipes:
                 try:
                     result[root.getPackageName()] = root.prepare(nameFormatter, env,
-                                                                 sandboxEnabled)
+                                                                 sandboxEnabled,
+                                                                 states)
                 except ParseError as e:
                     e.pushFrame(root.getPackageName())
                     raise e
