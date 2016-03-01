@@ -277,23 +277,32 @@ esac
 """
 
     @staticmethod
-    def releaseNameFormatter(persistent=True):
+    def releaseNameFormatter(step, props):
+        return os.path.join("work", step.getPackage().getName().replace('::', os.sep),
+                            step.getLabel())
 
-        def fmt(step, mode):
+    @staticmethod
+    def releaseNamePersister(wrapFmt, persistent=True):
+
+        def fmt(step, props):
             return BobState().getByNameDirectory(
-                os.path.join("work", step.getPackage().getName().replace('::', os.sep),
-                             step.getLabel()),
+                wrapFmt(step, props),
                 asHexStr(step.getVariantId()),
                 persistent)
 
         return fmt
 
     @staticmethod
-    def developNameFormatter(dirs = {}):
+    def developNameFormatter(step, props):
+        return os.path.join("dev", step.getLabel(),
+                            step.getPackage().getName().replace('::', os.sep))
 
-        def fmt(step, mode):
-            baseDir = os.path.join("dev", step.getLabel(),
-                                   step.getPackage().getName().replace('::', os.sep))
+    @staticmethod
+    def developNamePersister(wrapFmt):
+        dirs = {}
+
+        def fmt(step, props):
+            baseDir = wrapFmt(step, props)
             digest = step.getVariantId()
             if digest in dirs:
                 res = dirs[digest]
@@ -310,13 +319,13 @@ esac
     def makeRunnable(wrapFmt):
         baseDir = os.getcwd()
 
-        def fmt(step, mode):
+        def fmt(step, mode, props):
             if mode == 'workspace':
-                ret = wrapFmt(step, mode)
+                ret = wrapFmt(step, props)
             else:
                 assert mode == 'exec'
                 if step.getSandbox() is None:
-                    ret = os.path.join(baseDir, wrapFmt(step, mode))
+                    ret = os.path.join(baseDir, wrapFmt(step, props))
                 else:
                     ret = os.path.join("/bob", asHexStr(step.getVariantId()))
             return os.path.join(ret, "workspace")
@@ -808,6 +817,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             parser.error("Malformed define: "+define)
 
     recipes = RecipeSet()
+    recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
+    recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
     recipes.parse()
 
     envWhiteList = recipes.envWhiteList()
@@ -816,9 +827,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     cleanBuild = not develop
 
     if develop:
-        nameFormatter = LocalBuilder.developNameFormatter()
+        nameFormatter = recipes.getHook('developNameFormatter')
+        nameFormatter = LocalBuilder.developNamePersister(nameFormatter)
     else:
-        nameFormatter = LocalBuilder.releaseNameFormatter()
+        nameFormatter = recipes.getHook('releaseNameFormatter')
+        nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
     rootPackages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if develop:
@@ -888,16 +901,20 @@ def doClean(argv, bobRoot):
     args = parser.parse_args(argv)
 
     recipes = RecipeSet()
+    recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
     recipes.parse()
+
+    nameFormatter = recipes.getHook('releaseNameFormatter')
+    nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter, False)
 
     # collect all used paths (with and without sandboxing)
     usedPaths = set()
-    rootPackages = recipes.generatePackages(
-        LocalBuilder.releaseNameFormatter(False), sandboxEnabled=True).values()
+    rootPackages = recipes.generatePackages(nameFormatter,
+                                            sandboxEnabled=True).values()
     for root in rootPackages:
         usedPaths |= collectPaths(root)
-    rootPackages = recipes.generatePackages(
-        LocalBuilder.releaseNameFormatter(False), sandboxEnabled=False).values()
+    rootPackages = recipes.generatePackages(nameFormatter,
+                                            sandboxEnabled=False).values()
     for root in rootPackages:
         usedPaths |= collectPaths(root)
 

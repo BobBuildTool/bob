@@ -527,21 +527,22 @@ def checkRecipeCycles(p, stack=[]):
         for d in p.getAllDepSteps():
             checkRecipeCycles(d.getPackage(), stack)
 
-def jenkinsNameFormatter(jenkins):
+def jenkinsNameFormatter(step, props):
+    return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
 
-    def workspaceDir(step):
+def jenkinsNamePersister(jenkins, wrapFmt):
+
+    def persist(step, props):
         return BobState().getJenkinsByNameDirectory(
-            jenkins,
-            step.getPackage().getName().replace('::', "/") + "/" + step.getLabel(),
-            step.getVariantId())
+            jenkins, wrapFmt(step, props), step.getVariantId())
 
-    def fmt(step, mode):
+    def fmt(step, mode, props):
         if mode == 'workspace':
-            return workspaceDir(step)
+            return persist(step, props)
         else:
             assert mode == 'exec'
             if step.getSandbox() is None:
-                return os.path.join("$WORKSPACE", quote(workspaceDir(step)))
+                return os.path.join("$WORKSPACE", quote(persist(step, props)))
             else:
                 return os.path.join("/bob", asHexStr(step.getVariantId()))
 
@@ -559,8 +560,9 @@ def genJenkinsJobs(recipes, jenkins):
             archiveHandler = SimpleHttpArchive(archiveSpec)
         elif archiveBackend != "none":
             print("Ignoring unsupported archive backend:", archiveBackend)
+    nameFormatter = recipes.getHook('jenkinsNameFormatter')
     rootPackages = recipes.generatePackages(
-        jenkinsNameFormatter(jenkins),
+        jenkinsNamePersister(jenkins, nameFormatter),
         config.get('defines', {}),
         config.get('sandbox', False))
 
@@ -1039,6 +1041,7 @@ def doJenkins(argv, bobRoot):
     args = parser.parse_args(argv)
 
     recipes = RecipeSet()
+    recipes.defineHook('jenkinsNameFormatter', jenkinsNameFormatter)
     recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:
