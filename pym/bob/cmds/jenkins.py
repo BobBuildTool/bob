@@ -223,11 +223,11 @@ class JenkinsJob:
             cmds.append("")
             cmds.append(textwrap.dedent("""\
             # install shared package atomically
-            if [ ! -d ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
-                T=$(mktemp -d -p ${{SLAVE_HOME:-$JENKINS_HOME}})
+            if [ ! -d ${{JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
+                T=$(mktemp -d -p ${{JENKINS_HOME}})
                 rsync -a $WORKSPACE/{WSP_PATH}/ $T
-                mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
-                mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
+                mkdir -p ${{JENKINS_HOME}}/bob/{BID1}
+                mv -T $T ${{JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
             fi""".format(WSP_PATH=d.getWorkspacePath(), BID1=bid[0:2], BID2=bid[2:])))
         cmds.append("")
         cmds.append("# create build-id")
@@ -367,10 +367,10 @@ class JenkinsJob:
                             "class" : "org.jenkins_ci.plugins.run_condition.core.FileExistsCondition"
                         })
                     xml.etree.ElementTree.SubElement(
-                        fileCond, "file").text = "bob/"+bid[0:2]+"/"+bid[2:]
+                        fileCond, "file").text = "${JENKINS_HOME}/bob/"+bid[0:2]+"/"+bid[2:]
                     xml.etree.ElementTree.SubElement(
                         fileCond, "baseDir", attrib={
-                            "class" : "org.jenkins_ci.plugins.run_condition.common.BaseDirectory$JenkinsHome"
+                            "class" : "org.jenkins_ci.plugins.run_condition.common.BaseDirectory$Workspace"
                         })
                     cp = xml.etree.ElementTree.SubElement(
                         guard, "buildStep", attrib={
@@ -408,14 +408,14 @@ class JenkinsJob:
                 if d.isShared():
                     bid = asHexStr(d.getBuildId())
                     prepareCmds.append(textwrap.dedent("""\
-                        if [ ! -d ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
-                            T=$(mktemp -d -p ${{SLAVE_HOME:-$JENKINS_HOME}})
+                        if [ ! -d ${{JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
+                            T=$(mktemp -d -p ${{JENKINS_HOME}})
                             tar xf {TGZ} -C $T
-                            mkdir -p ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}
-                            mv -T $T ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
+                            mkdir -p ${{JENKINS_HOME}}/bob/{BID1}
+                            mv -T $T ${{JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
                         fi
                         mkdir -p {WSP_DIR}
-                        ln -sfT ${{SLAVE_HOME:-$JENKINS_HOME}}/bob/{BID1}/{BID2} {WSP_PATH}
+                        ln -sfT ${{JENKINS_HOME}}/bob/{BID1}/{BID2} {WSP_PATH}
                         """.format(BID1=bid[0:2], BID2=bid[2:], TGZ=JenkinsJob._tgzName(d),
                                    WSP_DIR=os.path.dirname(d.getWorkspacePath()),
                                    WSP_PATH=d.getWorkspacePath())))
