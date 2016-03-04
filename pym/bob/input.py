@@ -753,7 +753,7 @@ class CheckoutStep(BaseStep):
             return None
 
     def getJenkinsXml(self):
-        return [ s.asJenkins(self.getExecPath()) for s in self.__scmList if s.hasJenkinsPlugin() ]
+        return [ s.asJenkins(self.getWorkspacePath()) for s in self.__scmList if s.hasJenkinsPlugin() ]
 
     def getScmDirectories(self):
         dirs = {}
