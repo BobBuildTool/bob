@@ -322,6 +322,7 @@ class JenkinsJob:
         prepareCmds.append("              fi")
         prepareCmds.append("          else")
         prepareCmds.append("              echo \"Remove $PWD/$i\"")
+        prepareCmds.append("              chmod -R u+rw \"$i\"")
         prepareCmds.append("              rm -rf \"$i\"")
         prepareCmds.append("          fi")
         prepareCmds.append("   done")
