@@ -320,7 +320,7 @@ class JenkinsJob:
         prepareCmds.append("                  pruneUnused ${allowed[\"$i\"]}")
         prepareCmds.append("                  popd > /dev/null")
         prepareCmds.append("              fi")
-        prepareCmds.append("          else")
+        prepareCmds.append("          elif [[ -e \"$i\" ]] ; then")
         prepareCmds.append("              echo \"Remove $PWD/$i\"")
         prepareCmds.append("              chmod -R u+rw \"$i\"")
         prepareCmds.append("              rm -rf \"$i\"")
