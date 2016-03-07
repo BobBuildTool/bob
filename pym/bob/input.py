@@ -557,6 +557,8 @@ class ConcreteTool:
         self.libs = libs
 
 class Sandbox:
+    """Represents a sandbox that is used when executing a step."""
+
     def __init__(self, step, env, enabled, spec):
         self.step = step
         self.enabled = enabled
@@ -574,24 +576,34 @@ class Sandbox:
                 raise ParseError("Error substituting {} in provideSandbox: {}".format(mount, str(e)))
 
     def getStep(self):
+        """Get the package step that yields the content of the sandbox image."""
         return self.step
 
     def getPaths(self):
+        """Return list of global search paths.
+
+        This is the base $PATH in the sandbox."""
         return self.paths
 
     def getMounts(self):
+        """Get custom mounts.
+
+        This returns a list of tuples where each tuple has the format
+        (hostPath, sandboxPath).
+        """
         return self.mounts
 
     def isEnabled(self):
+        """Return True if the sandbox is used in the current build configuration."""
         return self.enabled
 
 class Step(metaclass=ABCMeta):
-    """Represents the smalles unit of execution of a package.
+    """Represents the smallest unit of execution of a package.
 
     A step is what gets actually executed when building packages.
 
     Steps can be compared and sorted. This is done based on the Variant-Id of
-    the step. See getVariantId() for details how the hash is calculated.
+    the step. See :meth:`bob.input.Step.getVariantId` for details.
     """
     def __init__(self, package, pathFormatter, sandbox, label, env={},
                  tools={}, args=[]):
@@ -631,33 +643,58 @@ class Step(metaclass=ABCMeta):
 
     @abstractmethod
     def getScript(self):
+        """Return a single big script of the whole step.
+
+        Besides considerations of special backends (such as Jenkins) this
+        script is what should be executed to build this step."""
         pass
 
     @abstractmethod
     def getJenkinsScript(self):
+        """Return the relevant parts as shell script that have no Jenkins plugin."""
         pass
 
     @abstractmethod
     def getDigestScript(self):
+        """Return a long term stable script.
+
+        The digest script will not be executed but is the basis to calculate if
+        the step has changed. In case of the checkout step the involved SCMs will
+        return a stable representation of _what_ is checked out and not the real
+        script of _how_ this is done.
+        """
         pass
 
     @abstractmethod
     def isDeterministic(self):
+        """Return whether the step is deterministic.
+
+        Checkout steps that have a script are considered indeterministic unless
+        the recipe declares it otherwise (checkoutDeterministic). Then the SCMs
+        are checked if they all consider themselves deterministic.
+
+        Build and package steps are always deterministic.
+        """
         pass
 
     def isValid(self):
+        """Returns True if this step is valid, False otherwise."""
         return self.getScript() is not None
 
     def isCheckoutStep(self):
+        """Return True if this is a checkout step."""
         return False
 
     def isBuildStep(self):
+        """Return True if this is a build step."""
         return False
 
     def isPackageStep(self):
+        """Return True if this is a package step."""
         return False
 
     def getPackage(self):
+        """Get Package object that is the parent of this Step."""
         return self.__package
 
     def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.md5):
@@ -700,6 +737,12 @@ class Step(metaclass=ABCMeta):
         return h.digest()
 
     def getVariantId(self):
+        """Return Variant-Id of this Step.
+
+        The Variant-Id is used to distinguish different packages or multiple
+        variants of a package. Each Variant-Id need only be built once but
+        successive builds might yield different results (e.g. when builting
+        from branches)."""
         try:
             ret = self.__variantId
         except AttributeError:
@@ -707,6 +750,11 @@ class Step(metaclass=ABCMeta):
         return ret
 
     def getBuildId(self):
+        """Return static Build-Id of this Step.
+
+        The Build-Id represents the expected result of the Step. This method
+        will return None if the Build-Id cannot be determined in advance.
+        """
         try:
             ret = self.__buildId
         except AttributeError:
@@ -715,12 +763,21 @@ class Step(metaclass=ABCMeta):
         return ret
 
     def getSandbox(self):
+        """Return Sandbox used in this Step.
+
+        Returns a Sandbox object or None if this Step is built without one.
+        """
         if self.__sandbox and self.__sandbox.isEnabled():
             return self.__sandbox
         else:
             return None
 
     def getLabel(self):
+        """Return path label for step.
+
+        This is currently defined as "src", "build" and "dist" for the
+        respective steps.
+        """
         return self.__label
 
     def getExecPath(self):
@@ -776,46 +833,68 @@ class Step(metaclass=ABCMeta):
             for (name, tool) in self.__tools.items() }
 
     def getArguments(self):
+        """Get list of all inputs for this Step.
+
+        The arguments are passed as absolute paths to the script starting from $1.
+        """
         return self.__args
 
     def getAllDepSteps(self):
+        """Get all dependent steps of this Step.
+
+        This includes the direct input to the Step as well as indirect inputs
+        such as the used tools or the sandbox.
+        """
         return self.__args + sorted([ d.step for d in self.__tools.values() ]) + (
             [self.__sandbox.getStep()] if (self.__sandbox and self.__sandbox.isEnabled()) else [])
 
     def getEnv(self):
+        """Return dict of environment variables."""
         return self.__env
 
-    def setProvidedEnv(self, provides):
+    def _setProvidedEnv(self, provides):
         self.__providedEnv = provides
 
     def getProvidedEnv(self):
+        """Return provided environemt variables for upstream packages."""
         return self.__providedEnv
 
-    def setProvidedTools(self, provides):
+    def _setProvidedTools(self, provides):
         self.__providedTools = provides
 
     def getProvidedTools(self):
+        """Return provided tools for upstream recipes."""
         return self.__providedTools
 
     def doesProvideTools(self):
+        """Return True if this step provides at least one tool."""
         return self.__providedTools != {}
 
-    def setProvidedDeps(self, deps):
+    def _setProvidedDeps(self, deps):
         self.__providedDeps = deps
 
     def getProvidedDeps(self):
+        """Get provided dependencies for upstream recipes."""
         return self.__providedDeps
 
-    def setProvidedSandbox(self, sandbox):
+    def _setProvidedSandbox(self, sandbox):
         self.__providedSandbox = sandbox
 
     def getProvidedSandbox(self):
+        """Get provided sandbox for upstream recipes."""
         return self.__providedSandbox
 
-    def setShared(self, shared):
+    def _setShared(self, shared):
         self.__shared = shared
 
     def isShared(self):
+        """Returns True if the result of the Step should be shared globally.
+
+        The exact behaviour of a shared step/package depends on the build
+        backend. In general a shared package means that the result is put into
+        some shared location where it is likely that the same result is needed
+        again.
+        """
         return self.__shared
 
 class CheckoutStep(Step):
@@ -854,25 +933,16 @@ class CheckoutStep(Step):
         return True
 
     def getScript(self):
-        """Return a single big script of the whole checkout step"""
         if self.__script is not None:
             return joinScripts([s.asScript() for s in self.__scmList] + [self.__script])
         else:
             return None
 
     def getJenkinsScript(self):
-        """Return the relevant parts as shell script that have no plugin"""
         return joinScripts([ s.asScript() for s in self.__scmList if not s.hasJenkinsPlugin() ]
             + [self.__script])
 
     def getDigestScript(self):
-        """Return a long term stable script.
-
-        The digest script will not be executed but is the basis to calculate if
-        the step has changed. In case of the checkout step the involved SCMs will
-        return a stable representation of _what_ is checked out and not the real
-        script of _how_ this is done.
-        """
         if self.__script is not None:
             return "\n".join([s.asDigestScript() for s in self.__scmList] + [self.__script])
         else:
@@ -888,12 +958,6 @@ class CheckoutStep(Step):
         return dirs
 
     def isDeterministic(self):
-        """Return whether the checkout step is deterministic.
-
-        Having a script is considered indeterministic unless the recipe declares
-        it otherwise (checkoutDeterministic). Then the SCMs are checked if they
-        all consider themselves deterministic.
-        """
         return self.__deterministic and all([ s.isDeterministic() for s in self.__scmList ])
 
 class RegularStep(Step):
@@ -938,6 +1002,15 @@ class PackageStep(RegularStep):
 
 
 class Package(object):
+    """Representation of a package that was created from a recipe.
+
+    Usually multiple packages will be created from a single recipe. This is
+    either due to multiple upstream recipes or different variants of the same
+    package. This does not preclude the possibility that multiple Package
+    objects describe exactly the same package (read: same Variant-Id). It is
+    the responsibility of the build backend to detect this and build only one
+    package.
+    """
     def __init__(self, name, stack, pathFormatter, recipe, sandbox,
                  directDepSteps, indirectDepSteps, states):
         self.__name = name
@@ -955,12 +1028,18 @@ class Package(object):
         self.__packageStep = PackageStep(self, pathFormatter)
 
     def getName(self):
+        """Name of the package"""
         return self.__name
 
     def getStack(self):
+        """Returns the recipe processing stack leading to this package.
+
+        The method returns a list of package names. The first entry is a root
+        recipe and the last entry is this package."""
         return self.__stack
 
     def getRecipe(self):
+        """Return Recipe object that was the template for this package."""
         return self.__recipe
 
     def getDirectDepSteps(self):
@@ -982,31 +1061,37 @@ class Package(object):
         return self.__indirectDepSteps
 
     def getAllDepSteps(self):
+        """Return list of all dependencies of the package.
+
+        This list includes all direct and indirect dependencies."""
         return sorted(set(self.__directDepSteps) | set(self.__indirectDepSteps))
 
-    def setCheckoutStep(self, script, fullEnv, env, tools, deterministic):
+    def _setCheckoutStep(self, script, fullEnv, env, tools, deterministic):
         self.__checkoutStep = CheckoutStep(
             self, self.__pathFormatter, self.__sandbox, script, fullEnv, env,
             tools, deterministic)
         return self.__checkoutStep
 
     def getCheckoutStep(self):
+        """Return the checkout step of this package."""
         return self.__checkoutStep
 
-    def setBuildStep(self, script, env, tools, args):
+    def _setBuildStep(self, script, env, tools, args):
         self.__buildStep = BuildStep(
             self, self.__pathFormatter, self.__sandbox, script, env, tools, args)
         return self.__buildStep
 
     def getBuildStep(self):
+        """Return the build step of this package."""
         return self.__buildStep
 
-    def setPackageStep(self, script, env, tools, args):
+    def _setPackageStep(self, script, env, tools, args):
         self.__packageStep = PackageStep(
             self, self.__pathFormatter, self.__sandbox, script, env, tools, args)
         return self.__packageStep
 
     def getPackageStep(self):
+        """Return the package step of this package."""
         return self.__packageStep
 
     def _getStates(self):
@@ -1076,6 +1161,15 @@ class IncludeHelper:
             return text
 
 class Recipe(object):
+    """Representation of a single recipe
+
+    Multiple instaces of this class will be created if the recipe used the
+    ``multiPackage`` keyword.  In this case the getName() method will return
+    the name of the original recipe but the getPackageName() method will return
+    it with some addition suffix. Without a ``multiPackage`` keyword there will
+    only be one Recipe instance.
+    """
+
     class Dependency(object):
         def __init__(self, dep):
             if isinstance(dep, str):
@@ -1278,6 +1372,7 @@ class Recipe(object):
         return self.__baseName
 
     def isRoot(self):
+        """Returns True if this is a root recipe."""
         return self.__root
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, states, sandbox=None,
@@ -1358,20 +1453,20 @@ class Recipe(object):
 
         # optional checkout step
         if self.__checkout != (None, []):
-            srcStep = p.setCheckoutStep(self.__checkout, env, env.prune(self.__varDepCheckout),
+            srcStep = p._setCheckoutStep(self.__checkout, env, env.prune(self.__varDepCheckout),
                 tools.prune(self.__toolDepCheckout), self.__checkoutDeterministic)
         else:
             srcStep = p.getCheckoutStep() # return invalid step
 
         # optional build step
         if self.__build:
-            buildStep = p.setBuildStep(self.__build, env.prune(self.__varDepBuild),
+            buildStep = p._setBuildStep(self.__build, env.prune(self.__varDepBuild),
                 tools.prune(self.__toolDepBuild), [srcStep] + results)
         else:
             buildStep = p.getBuildStep() # return invalid step
 
         # mandatory package step
-        p.setPackageStep(self.__package, env.prune(self.__varDepPackage),
+        p._setPackageStep(self.__package, env.prune(self.__varDepPackage),
             tools.prune(self.__toolDepPackage), [buildStep])
         packageStep = p.getPackageStep()
 
@@ -1384,12 +1479,12 @@ class Recipe(object):
                 raise ParseError("Error substituting {} in provideVars: {}".format(key, str(e)))
             except ValueError as e:
                 raise ParseError("Error substituting {} in provideVars: {}".format(key, str(e)))
-        packageStep.setProvidedEnv(provideEnv)
+        packageStep._setProvidedEnv(provideEnv)
 
         # provide tools
         provideTools = { name : tool.prepare(packageStep, env)
             for (name, tool) in self.__provideTools.items() }
-        packageStep.setProvidedTools(provideTools)
+        packageStep._setProvidedTools(provideTools)
 
         # provide deps (direct and indirect deps)
         provideDeps = Recipe.DependencyList()
@@ -1398,12 +1493,12 @@ class Recipe(object):
             provideDeps.append(dep)
             [subDep] = [ p for p in packages if p.getPackage().getName() == dep.recipe ]
             for d in subDep.getProvidedDeps(): provideDeps.append(d)
-        packageStep.setProvidedDeps(provideDeps)
+        packageStep._setProvidedDeps(provideDeps)
 
         # provide Sandbox
         if self.__provideSandbox:
-            packageStep.setProvidedSandbox(Sandbox(packageStep, env, sandboxEnabled,
-                                                   self.__provideSandbox))
+            packageStep._setProvidedSandbox(Sandbox(packageStep, env, sandboxEnabled,
+                                                    self.__provideSandbox))
 
         # update plugin states
         for s in states.values(): s.onFinish(env, tools, self.__properties, p)
@@ -1411,7 +1506,7 @@ class Recipe(object):
         if self.__shared:
             if packageStep.getBuildId() is None:
                 raise ParseError("Shared packages must be deterministic!")
-            packageStep.setShared(True)
+            packageStep._setShared(True)
 
         return p
 
