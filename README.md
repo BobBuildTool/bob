@@ -15,5 +15,7 @@ Getting started
 It's probably the best to head over to the
 [documentation](http://bob-build-tool.readthedocs.org/). To get an impression
 how Bob is configured have a look at the
-[tutorials](https://github.com/BobBuildTool/bob-tutorials).
-
+[tutorials](https://github.com/BobBuildTool/bob-tutorials). If you have a
+specific question you're welcome to post on the
+[mailing list](mailto:bob-build-tool@freelists.org)
+([FreeLists](http://www.freelists.org/list/bob-build-tool)).
