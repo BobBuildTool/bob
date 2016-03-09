@@ -548,13 +548,37 @@ class AbstractTool:
             raise ParseError("Error substituting {} in provideTools: {}".format(key, str(e)))
         except ValueError as e:
             raise ParseError("Error substituting {} in provideTools: {}".format(key, str(e)))
-        return ConcreteTool(step, path, libs)
+        return Tool(step, path, libs)
 
-class ConcreteTool:
+class Tool:
+    """Representation of a tool.
+
+    A tool is made of the result of a package, a relative path into this result
+    and some optional relative library paths.
+    """
     def __init__(self, step, path, libs):
         self.step = step
         self.path = path
         self.libs = libs
+
+    def getStep(self):
+        """Return package step that produces the result holding the tool
+        binaries/scripts.
+
+        :return: :class:`bob.input.Step`
+        """
+        return self.step
+
+    def getPath(self):
+        """Get relative path into the result."""
+        return self.path
+
+    def getLibs(self):
+        """Get list of relative library paths into the result.
+
+        :return: List[str]
+        """
+        return self.libs
 
 class Sandbox:
     """Represents a sandbox that is used when executing a step."""
