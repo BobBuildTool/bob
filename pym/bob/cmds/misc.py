@@ -14,10 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from ..input import RecipeSet
 import argparse
 import sys
 
-def doLS(recipes, argv, bobRoot):
+def doLS(argv, bobRoot):
     def showTree(packages, recurse, level=0):
         for p in packages:
             print("{}{}".format("    "*level, p.getName()))
@@ -42,6 +43,9 @@ def doLS(recipes, argv, bobRoot):
     parser.add_argument('-p', '--prefixed', default=False, action='store_true',
                         help="Prints the full path prefix for each package")
     args = parser.parse_args(argv)
+
+    recipes = RecipeSet()
+    recipes.parse()
 
     roots = recipes.generatePackages(lambda step, mode: "unused").values()
     stack = []

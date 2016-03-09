@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ..errors import ParseError, BuildError
-from ..input import walkPackagePath
+from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
 from ..utils import asHexStr
 from pipes import quote
@@ -109,7 +109,7 @@ class JenkinsJob:
         self.__deps = {}
 
     def __getJobName(self, p):
-        return escapeJobName(self.__prefix + p.getRecipe().getBaseName())
+        return escapeJobName(self.__prefix + p.getRecipe().getName())
 
     def getName(self):
         return self.__name
@@ -497,7 +497,7 @@ class JenkinsJob:
 
 
 def _genJenkinsJobs(p, jobs, prefix, archiveBackend):
-    displayName = prefix + p.getRecipe().getBaseName()
+    displayName = prefix + p.getRecipe().getName()
     name = escapeJobName(displayName)
     if name in jobs:
         jj = jobs[name]
@@ -519,7 +519,7 @@ def _genJenkinsJobs(p, jobs, prefix, archiveBackend):
         _genJenkinsJobs(d.getPackage(), jobs, prefix, archiveBackend)
 
 def checkRecipeCycles(p, stack=[]):
-    name = p.getRecipe().getBaseName()
+    name = p.getRecipe().getName()
     if name in stack:
         ParseError("Job cycle found in '{}': {}".format(name, stack))
     else:
@@ -527,20 +527,22 @@ def checkRecipeCycles(p, stack=[]):
         for d in p.getAllDepSteps():
             checkRecipeCycles(d.getPackage(), stack)
 
-def jenkinsNameFormatter(jenkins):
+def jenkinsNameFormatter(step, props):
+    return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
 
-    def workspaceDir(step):
+def jenkinsNamePersister(jenkins, wrapFmt):
+
+    def persist(step, props):
         return BobState().getJenkinsByNameDirectory(
-            jenkins, step.getPackage().getPath()+"/"+step.getLabel(),
-            step.getVariantId())
+            jenkins, wrapFmt(step, props), step.getVariantId())
 
-    def fmt(step, mode):
+    def fmt(step, mode, props):
         if mode == 'workspace':
-            return workspaceDir(step)
+            return persist(step, props)
         else:
             assert mode == 'exec'
             if step.getSandbox() is None:
-                return os.path.join("$WORKSPACE", quote(workspaceDir(step)))
+                return os.path.join("$WORKSPACE", quote(persist(step, props)))
             else:
                 return os.path.join("/bob", asHexStr(step.getVariantId()))
 
@@ -558,8 +560,9 @@ def genJenkinsJobs(recipes, jenkins):
             archiveHandler = SimpleHttpArchive(archiveSpec)
         elif archiveBackend != "none":
             print("Ignoring unsupported archive backend:", archiveBackend)
+    nameFormatter = recipes.getHook('jenkinsNameFormatter')
     rootPackages = recipes.generatePackages(
-        jenkinsNameFormatter(jenkins),
+        jenkinsNamePersister(jenkins, nameFormatter),
         config.get('defines', {}),
         config.get('sandbox', False))
 
@@ -1023,7 +1026,7 @@ availableJenkinsCmds = {
     "set-options" : (doJenkinsSetOptions, "NAME [--{add,del}-root <package>] ...")
 }
 
-def doJenkins(recipes, argv, bobRoot):
+def doJenkins(argv, bobRoot):
     subHelp = "\n             ... ".join(sorted(
         [ "{} {}".format(c, d[1]) for (c, d) in availableJenkinsCmds.items() ]))
     parser = argparse.ArgumentParser(prog="bob jenkins",
@@ -1036,6 +1039,10 @@ def doJenkins(recipes, argv, bobRoot):
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for subcommand")
     args = parser.parse_args(argv)
+
+    recipes = RecipeSet()
+    recipes.defineHook('jenkinsNameFormatter', jenkinsNameFormatter)
+    recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:
         availableJenkinsCmds[args.subcommand][0](recipes, args.args)

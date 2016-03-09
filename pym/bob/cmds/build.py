@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ..errors import BuildError
-from ..input import walkPackagePath
+from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
 from ..tty import colorize
 from ..utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirectory
@@ -277,23 +277,32 @@ esac
 """
 
     @staticmethod
-    def releaseNameFormatter(persistent=True):
+    def releaseNameFormatter(step, props):
+        return os.path.join("work", step.getPackage().getName().replace('::', os.sep),
+                            step.getLabel())
 
-        def fmt(step, mode):
+    @staticmethod
+    def releaseNamePersister(wrapFmt, persistent=True):
+
+        def fmt(step, props):
             return BobState().getByNameDirectory(
-                os.path.join("work", step.getPackage().getPath(),
-                             step.getLabel()),
+                wrapFmt(step, props),
                 asHexStr(step.getVariantId()),
                 persistent)
 
         return fmt
 
     @staticmethod
-    def developNameFormatter(dirs = {}):
+    def developNameFormatter(step, props):
+        return os.path.join("dev", step.getLabel(),
+                            step.getPackage().getName().replace('::', os.sep))
 
-        def fmt(step, mode):
-            baseDir = os.path.join("dev", step.getLabel(),
-                                   step.getPackage().getPath())
+    @staticmethod
+    def developNamePersister(wrapFmt):
+        dirs = {}
+
+        def fmt(step, props):
+            baseDir = wrapFmt(step, props)
             digest = step.getVariantId()
             if digest in dirs:
                 res = dirs[digest]
@@ -310,13 +319,13 @@ esac
     def makeRunnable(wrapFmt):
         baseDir = os.getcwd()
 
-        def fmt(step, mode):
+        def fmt(step, mode, props):
             if mode == 'workspace':
-                ret = wrapFmt(step, mode)
+                ret = wrapFmt(step, props)
             else:
                 assert mode == 'exec'
                 if step.getSandbox() is None:
-                    ret = os.path.join(baseDir, wrapFmt(step, mode))
+                    ret = os.path.join(baseDir, wrapFmt(step, props))
                 else:
                     ret = os.path.join("/bob", asHexStr(step.getVariantId()))
             return os.path.join(ret, "workspace")
@@ -763,7 +772,7 @@ def touch(packages):
         p.getPackageStep().getWorkspacePath()
 
 
-def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
+def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('packages', metavar='PACKAGE', type=str, nargs='+',
         help="(Sub-)package to build")
     parser.add_argument('--destination', metavar="DEST",
@@ -807,15 +816,22 @@ def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
         else:
             parser.error("Malformed define: "+define)
 
+    recipes = RecipeSet()
+    recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
+    recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
+    recipes.parse()
+
     envWhiteList = recipes.envWhiteList()
     envWhiteList |= set(args.white_list)
 
     cleanBuild = not develop
 
     if develop:
-        nameFormatter = LocalBuilder.developNameFormatter()
+        nameFormatter = recipes.getHook('developNameFormatter')
+        nameFormatter = LocalBuilder.developNamePersister(nameFormatter)
     else:
-        nameFormatter = LocalBuilder.releaseNameFormatter()
+        nameFormatter = recipes.getHook('releaseNameFormatter')
+        nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
     rootPackages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if develop:
@@ -854,14 +870,14 @@ def commonBuildDevelop(recipes, parser, argv, bobRoot, develop):
             removePath(args.destination)
         shutil.copytree(prettyResultPath, args.destination, symlinks=True)
 
-def doBuild(recipes, argv, bobRoot):
+def doBuild(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob build", description='Build packages in release mode.')
-    commonBuildDevelop(recipes, parser, argv, bobRoot, False)
+    commonBuildDevelop(parser, argv, bobRoot, False)
 
-def doDevelop(recipes, argv, bobRoot):
+def doDevelop(argv, bobRoot):
     print(colorize("WARNING: developer mode might exhibit problems and is subject to change! Use with care.", "33"))
     parser = argparse.ArgumentParser(prog="bob dev", description='Build packages in development mode.')
-    commonBuildDevelop(recipes, parser, argv, bobRoot, True)
+    commonBuildDevelop(parser, argv, bobRoot, True)
 
 ### Clean #############################
 
@@ -876,7 +892,7 @@ def collectPaths(package):
         paths |= collectPaths(d.getPackage())
     return paths
 
-def doClean(recipes, argv, bobRoot):
+def doClean(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob clean", description='Clean unused directories.')
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="Don't delete, just print what would be deleted")
@@ -884,14 +900,21 @@ def doClean(recipes, argv, bobRoot):
         help="Print what is done")
     args = parser.parse_args(argv)
 
+    recipes = RecipeSet()
+    recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
+    recipes.parse()
+
+    nameFormatter = recipes.getHook('releaseNameFormatter')
+    nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter, False)
+
     # collect all used paths (with and without sandboxing)
     usedPaths = set()
-    rootPackages = recipes.generatePackages(
-        LocalBuilder.releaseNameFormatter(False), sandboxEnabled=True).values()
+    rootPackages = recipes.generatePackages(nameFormatter,
+                                            sandboxEnabled=True).values()
     for root in rootPackages:
         usedPaths |= collectPaths(root)
-    rootPackages = recipes.generatePackages(
-        LocalBuilder.releaseNameFormatter(False), sandboxEnabled=False).values()
+    rootPackages = recipes.generatePackages(nameFormatter,
+                                            sandboxEnabled=False).values()
     for root in rootPackages:
         usedPaths |= collectPaths(root)
 

@@ -9,4 +9,5 @@ Contents:
    introduction
    concepts
    configuration
+   extending
 
