@@ -18,6 +18,7 @@ from .errors import BuildError
 from binascii import hexlify
 from tempfile import NamedTemporaryFile
 import hashlib
+import logging
 import os
 import shutil
 import stat
@@ -75,8 +76,8 @@ def hashFile(path):
             while len(buf) > 0:
                 m.update(buf)
                 buf = f.read(16384)
-    except IOError as e:
-        print("      Error hashing file:", str(e))
+    except OSError as e:
+        logging.getLogger(__name__).warning("Cannot hash file: %s", str(e))
     return m.digest()
 
 def float2ns(v):
@@ -116,28 +117,35 @@ class DirHasher:
             self.__inPos = 0
             self.__inPosOld = 0
             self.__outFile = None
-            if os.path.exists(self.__cachePath):
-                self.__inFile = open(self.__cachePath, "rb")
-                sig = self.__inFile.read(4)
-                if sig == DirHasher.FileIndex.SIGNATURE:
-                    self.__mismatch = False
-                    self.__inPos = self.__inPosOld = 4
+            try:
+                if os.path.exists(self.__cachePath):
+                    self.__inFile = open(self.__cachePath, "rb")
+                    sig = self.__inFile.read(4)
+                    if sig == DirHasher.FileIndex.SIGNATURE:
+                        self.__mismatch = False
+                        self.__inPos = self.__inPosOld = 4
+                    else:
+                        logging.getLogger(__name__).info(
+                            "Wrong signature at '%s': %s", self.__cachePath, sig)
+                        self.__inFile.close()
+                        self.__inFile = None
+                        self.__mismatch = True
                 else:
-                    print("Wrong signature at", self.__cachePath, ":", sig)
-                    self.__inFile.close()
                     self.__inFile = None
                     self.__mismatch = True
-            else:
-                self.__inFile = None
-                self.__mismatch = True
+            except OSError as e:
+                raise BuildError("Error opening hash cache: " + str(e))
             self.__current = DirHasher.FileIndex.Stat()
 
         def close(self):
-            if self.__inFile:
-                self.__inFile.close()
-            if self.__outFile:
-                self.__outFile.close()
-                os.rename(self.__outFile.name, self.__cachePath)
+            try:
+                if self.__inFile:
+                    self.__inFile.close()
+                if self.__outFile:
+                    self.__outFile.close()
+                    os.replace(self.__outFile.name, self.__cachePath)
+            except OSError as e:
+                raise BuildError("Error closing hash cache: " + str(e))
 
         def __readEntry(self):
             if not self.__inFile: return False
@@ -218,30 +226,43 @@ class DirHasher:
         elif stat.S_ISFIFO(s.st_mode):
             digest = b''
         else:
-            raise Exception("Unsopported file: "+repr(s))
+            digest = b''
+            logging.getLogger(__name__).warning("Unknown file: %s", entry)
 
         return struct.pack("=L", s.st_mode) + digest + file
 
     @staticmethod
     def __hashLink(path):
         m = hashlib.sha1()
-        m.update(os.readlink(path))
+        try:
+            m.update(os.readlink(path))
+        except OSError as e:
+            logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
         return m.digest()
 
     def __hashDir(self, prefix, path=b''):
         entries = []
-        for f in os.listdir(os.path.join(prefix, path if path else b'.')):
+        try:
+            dirEntries = os.listdir(os.path.join(prefix, path if path else b'.'))
+        except OSError as e:
+            logging.getLogger(__name__).warning("Cannot list directory: %s", str(e))
+            dirEntries = []
+
+        for f in dirEntries:
             e = os.path.join(path, f)
-            s = os.lstat(os.path.join(prefix, e))
-            if stat.S_ISDIR(s.st_mode):
-                # skip useless directories
-                if f in DirHasher.IGNORE_DIRS: continue
-                # add training '/' for directores for correct sorting
-                f = f + os.fsencode(os.path.sep)
-            else:
-                # skip useless files
-                if f in DirHasher.IGNORE_FILES: continue
-            entries.append((e, f, s))
+            try:
+                s = os.lstat(os.path.join(prefix, e))
+                if stat.S_ISDIR(s.st_mode):
+                    # skip useless directories
+                    if f in DirHasher.IGNORE_DIRS: continue
+                    # add training '/' for directores for correct sorting
+                    f = f + os.fsencode(os.path.sep)
+                else:
+                    # skip useless files
+                    if f in DirHasher.IGNORE_FILES: continue
+                entries.append((e, f, s))
+            except OSError as err:
+                logging.getLogger(__name__).warning("Cannot stat '%s': %s", e, str(err))
         entries = sorted(entries, key=lambda x: x[1])
         dirList = [ self.__hashEntry(prefix, e, f, s) for (e, f, s) in entries ]
         dirBlob = b"".join(dirList)
