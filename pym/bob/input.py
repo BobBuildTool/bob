@@ -18,7 +18,7 @@ from . import BOB_VERSION
 from .errors import ParseError, BuildError
 from .state import BobState
 from .tty import colorize
-from .utils import joinScripts, compareVersion
+from .utils import joinScripts, compareVersion, binLstat
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
 from glob import glob
@@ -28,6 +28,7 @@ import copy
 import hashlib
 import os, os.path
 import re
+import shelve
 import struct
 import sys
 import xml.etree.ElementTree
@@ -1238,12 +1239,7 @@ class Recipe(object):
 
     @staticmethod
     def loadFromFile(recipeSet, fileName, properties, isClass):
-        try:
-            with open(fileName, "r") as f:
-                recipe = yaml.safe_load(f.read())
-                if recipe is None: recipe = {}
-        except Exception as e:
-            raise ParseError("Error while parsing {}: {}".format(fileName, str(e)))
+        recipe = recipeSet.loadYaml(fileName)
 
         # MultiPackages are handled as separate recipes with an anonymous base
         # class. Ignore first dir in path, which is 'recipes' by default.
@@ -1547,6 +1543,7 @@ class RecipeSet:
         self.__hooks = {}
         self.__properties = {}
         self.__states = {}
+        self.__cache = YamlCache()
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -1625,36 +1622,35 @@ class RecipeSet:
     def archiveSpec(self):
         return self.__archive
 
-    def parse(self):
+    def loadYaml(self, path, default={}):
         if os.path.exists("config.yaml"):
-            try:
-                with open("config.yaml", "r") as f:
-                    config = yaml.safe_load(f.read())
-                if config is None: config = {}
-            except Exception as e:
-                raise ParseError("Error while parsing config.yaml: {}".format(str(e)))
+            data = self.__cache.loadYaml(path)
+            if data is None: data = default
+            return data
         else:
-            config = {}
+            return default
 
+    def parse(self):
+        self.__cache.open()
+        try:
+            self.__parse()
+        finally:
+            self.__cache.close()
+
+    def __parse(self):
+        config = self.loadYaml("config.yaml")
         minVer = config.get("bobMinimumVersion", "0.1")
         if compareVersion(BOB_VERSION, minVer) < 0:
             raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
-
         self.__loadPlugins(config.get("plugins", []))
 
-        if os.path.exists("default.yaml"):
-            try:
-                with open("default.yaml", "r") as f:
-                    defaults = yaml.safe_load(f.read())
-                    if defaults is None: defaults = {}
-            except Exception as e:
-                raise ParseError("Error while parsing default.yaml: {}".format(str(e)))
-            if "environment" in defaults:
-                self.__defaultEnv = defaults["environment"]
-                if not isinstance(self.__defaultEnv, dict):
-                    raise ParseError("default.yaml environment must be a dict")
-            self.__whiteList |= set(defaults.get("whitelist", []))
-            self.__archive = defaults.get("archive", { "backend" : "none" })
+        defaults = self.loadYaml("default.yaml")
+        if "environment" in defaults:
+            self.__defaultEnv = defaults["environment"]
+            if not isinstance(self.__defaultEnv, dict):
+                raise ParseError("default.yaml environment must be a dict")
+        self.__whiteList |= set(defaults.get("whitelist", []))
+        self.__archive = defaults.get("archive", { "backend" : "none" })
 
         if not os.path.isdir("recipes"):
             raise ParseError("No recipes directory found.")
@@ -1704,6 +1700,29 @@ class RecipeSet:
         finally:
             BobState().setSynchronous()
         return result
+
+
+class YamlCache:
+    def open(self):
+        self.__shelve = shelve.open(".bob-cache.shelve")
+
+    def close(self):
+        self.__shelve.close()
+
+    def loadYaml(self, name):
+        binStat = binLstat(name)
+        if name in self.__shelve:
+            cached = self.__shelve[name]
+            if cached['lstat'] == binStat: return cached['data']
+
+        with open(name, "r") as f:
+            try:
+                data = yaml.safe_load(f.read())
+            except Exception as e:
+                raise ParseError("Error while parsing {}: {}".format(name, str(e)))
+
+        self.__shelve[name] = { 'lstat' : binStat, 'data' : data }
+        return data
 
 
 def walkPackagePath(rootPackages, path):
