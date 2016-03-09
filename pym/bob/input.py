@@ -1240,7 +1240,8 @@ class Recipe(object):
     def loadFromFile(recipeSet, fileName, properties, isClass):
         try:
             with open(fileName, "r") as f:
-                recipe = yaml.load(f.read())
+                recipe = yaml.safe_load(f.read())
+                if recipe is None: recipe = {}
         except Exception as e:
             raise ParseError("Error while parsing {}: {}".format(fileName, str(e)))
 
@@ -1628,7 +1629,7 @@ class RecipeSet:
         if os.path.exists("config.yaml"):
             try:
                 with open("config.yaml", "r") as f:
-                    config = yaml.load(f.read())
+                    config = yaml.safe_load(f.read())
                 if config is None: config = {}
             except Exception as e:
                 raise ParseError("Error while parsing config.yaml: {}".format(str(e)))
@@ -1644,7 +1645,8 @@ class RecipeSet:
         if os.path.exists("default.yaml"):
             try:
                 with open("default.yaml", "r") as f:
-                    defaults = yaml.load(f.read())
+                    defaults = yaml.safe_load(f.read())
+                    if defaults is None: defaults = {}
             except Exception as e:
                 raise ParseError("Error while parsing default.yaml: {}".format(str(e)))
             if "environment" in defaults:
