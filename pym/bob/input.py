@@ -1623,7 +1623,7 @@ class RecipeSet:
         return self.__archive
 
     def loadYaml(self, path, default={}):
-        if os.path.exists("config.yaml"):
+        if os.path.exists(path):
             data = self.__cache.loadYaml(path)
             if data is None: data = default
             return data
