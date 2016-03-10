@@ -1,0 +1,8 @@
+checkoutScript: |
+    cp $<<src/lib.txt>> lib.txt
+
+buildScript: |
+    cp $1/lib.txt .
+
+packageScript: |
+    cp $1/lib.txt .

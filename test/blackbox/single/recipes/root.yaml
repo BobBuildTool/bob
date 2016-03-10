@@ -1,0 +1,5 @@
+root: true
+
+packageScript: |
+    echo "ok" > result.txt
+

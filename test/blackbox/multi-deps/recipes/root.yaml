@@ -1,0 +1,13 @@
+root: true
+
+depends:
+    - lib
+
+checkoutScript: |
+    cp $<<src/main.txt>> main.txt
+
+buildScript: |
+    cat $2/lib.txt $1/main.txt > result.txt
+
+packageScript: |
+    cp -a $1/result.txt .
