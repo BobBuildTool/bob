@@ -905,6 +905,7 @@ def doClean(argv, bobRoot):
 
     nameFormatter = recipes.getHook('releaseNameFormatter')
     nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter, False)
+    nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
 
     # collect all used paths (with and without sandboxing)
     usedPaths = set()
