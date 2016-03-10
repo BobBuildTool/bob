@@ -875,7 +875,6 @@ def doBuild(argv, bobRoot):
     commonBuildDevelop(parser, argv, bobRoot, False)
 
 def doDevelop(argv, bobRoot):
-    print(colorize("WARNING: developer mode might exhibit problems and is subject to change! Use with care.", "33"))
     parser = argparse.ArgumentParser(prog="bob dev", description='Build packages in development mode.')
     commonBuildDevelop(parser, argv, bobRoot, True)
 
