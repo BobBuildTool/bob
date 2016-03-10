@@ -169,3 +169,9 @@ def __processBlock(h, inFile, stateDir):
         else:
             h.update(__process(l, inFile, stateDir))
 
+if __name__ == '__main__':
+    if sys.argv[1] == 'bob':
+        rootDir = sys.argv[2]
+        del sys.argv[1:3]
+        bob(rootDir)
+
