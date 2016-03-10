@@ -47,7 +47,7 @@ def doLS(argv, bobRoot):
     recipes = RecipeSet()
     recipes.parse()
 
-    roots = recipes.generatePackages(lambda step, mode: "unused").values()
+    roots = recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=True).values()
     stack = []
     if args.package:
         steps = [ s for s in args.package.split("/") if s != "" ]
