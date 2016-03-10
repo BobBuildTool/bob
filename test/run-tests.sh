@@ -18,7 +18,7 @@ FAILED=0
 
 run_bob()
 {
-	$RUN -m bob.scrips bob "$BOB_ROOT" "$@"
+	$RUN -m bob.scripts bob "$BOB_ROOT" "$@"
 }
 
 run_blackbox_test()

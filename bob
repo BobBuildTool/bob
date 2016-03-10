@@ -2,5 +2,5 @@
 D="$(dirname "$(realpath "${0}")")"
 export PYTHONPATH="$D/pym:${PYTHONPATH}"
 exec python3 -c "import sys
-from bob.scrips import bob
+from bob.scripts import bob
 sys.exit(bob(\"$D\"))" "$@"
