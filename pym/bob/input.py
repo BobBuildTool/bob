@@ -1652,6 +1652,11 @@ class RecipeSet:
         self.__whiteList |= set(defaults.get("whitelist", []))
         self.__archive = defaults.get("archive", { "backend" : "none" })
 
+        for p in defaults.get("include", []):
+            include = self.loadYaml(str(p) + ".yaml")
+            if include and "environment" in include:
+                self.__defaultEnv.update(include["environment"])
+
         if not os.path.isdir("recipes"):
             raise ParseError("No recipes directory found.")
 
