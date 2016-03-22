@@ -278,8 +278,11 @@ esac
 
     @staticmethod
     def releaseNameFormatter(step, props):
-        return os.path.join("work", step.getPackage().getName().replace('::', os.sep),
-                            step.getLabel())
+        if step.isCheckoutStep():
+            base = step.getPackage().getRecipe().getName()
+        else:
+            base = step.getPackage().getName()
+        return os.path.join("work", base.replace('::', os.sep), step.getLabel())
 
     @staticmethod
     def releaseNamePersister(wrapFmt, persistent=True):
@@ -294,8 +297,11 @@ esac
 
     @staticmethod
     def developNameFormatter(step, props):
-        return os.path.join("dev", step.getLabel(),
-                            step.getPackage().getName().replace('::', os.sep))
+        if step.isCheckoutStep():
+            base = step.getPackage().getRecipe().getName()
+        else:
+            base = step.getPackage().getName()
+        return os.path.join("dev", step.getLabel(), base.replace('::', os.sep))
 
     @staticmethod
     def developNamePersister(wrapFmt):
