@@ -31,11 +31,6 @@ import textwrap
 import urllib.parse
 import xml.etree.ElementTree
 
-regexJobName = re.compile(r'[^a-zA-Z0-9-_]', re.DOTALL)
-
-def escapeJobName(name):
-    return regexJobName.sub('_', name)
-
 
 class DummyArchive:
     """Archive that does nothing"""
@@ -97,10 +92,10 @@ def getBuildIdSpec(step):
 
 
 class JenkinsJob:
-    def __init__(self, name, displayName, prefix, root, archiveBackend):
+    def __init__(self, name, displayName, nameCalculator, root, archiveBackend):
         self.__name = name
         self.__displayName = displayName
-        self.__prefix = prefix
+        self.__nameCalculator = nameCalculator
         self.__isRoot = root
         self.__archive = archiveBackend
         self.__checkoutSteps = {}
@@ -109,7 +104,7 @@ class JenkinsJob:
         self.__deps = {}
 
     def __getJobName(self, p):
-        return escapeJobName(self.__prefix + p.getRecipe().getName())
+        return self.__nameCalculator.getJobInternalName(p)
 
     def getName(self):
         return self.__name
@@ -496,13 +491,83 @@ class JenkinsJob:
                 done.add(key)
 
 
-def _genJenkinsJobs(p, jobs, prefix, archiveBackend):
-    displayName = prefix + p.getRecipe().getName()
-    name = escapeJobName(displayName)
+class JobNameCalculator:
+    """Utility class to calculate job names for packages.
+
+    By default the name of the recipe is used for the job name. Depending on
+    the package structure this may lead to cyclic job dependencies. If such
+    cycles are found the package name is used for affected jobs. If this still
+    leads to cycles the package name with an incrementing suffix is used.
+    """
+
+    def __init__(self, prefix):
+        self.__prefix = prefix
+        self.__packages = {}
+        self.__names = {}
+        self.__roots = []
+        self.__regexJobName = re.compile(r'[^a-zA-Z0-9-_]', re.DOTALL)
+
+    def addPackage(self, package):
+        self.__roots.append(package)
+        self._addPackage(package)
+
+    def _addPackage(self, package):
+        variantId = package.getPackageStep().getVariantId()
+        if variantId not in self.__packages:
+            name = package.getRecipe().getName()
+            self.__packages[variantId] = (package, name)
+            self.__names.setdefault(name, []).append(package)
+            for d in package.getAllDepSteps():
+                self.addPackage(d.getPackage())
+
+    def sanitize(self):
+        toSplit = True
+        while toSplit:
+            toSplit = set()
+            for r in self.__roots:
+                toSplit |= self._findCycle(r)
+            for r in toSplit: self._split(r)
+
+    def _findCycle(self, package, stack=[]):
+        variantId = package.getPackageStep().getVariantId()
+        (p, name) = self.__packages[variantId]
+        if name in stack:
+            return set([name])
+        ret = set()
+        stack = stack + [name]
+        for d in package.getAllDepSteps():
+            ret |= self._findCycle(d.getPackage(), stack)
+        return ret
+
+    def _split(self, name):
+        packages = self.__names[name].copy()
+        # Do we have to add a counting suffix?
+        if name == packages[0].getName():
+            newNames = [ (p, name+"-"+str(n)) for (p, n) in zip(packages, range(1, 1000)) ]
+        else:
+            newNames = [ (p, p.getName()) for p in packages ]
+
+        # re-arrange the naming graph
+        del self.__names[name]
+        for (p, name) in newNames:
+            self.__packages[p.getPackageStep().getVariantId()] = (p, name)
+            self.__names.setdefault(name, []).append(p)
+
+    def getJobDisplayName(self, p):
+        (_p, name) = self.__packages[p.getPackageStep().getVariantId()]
+        return self.__prefix + name
+
+    def getJobInternalName(self, p):
+        return self.__regexJobName.sub('_', self.getJobDisplayName(p))
+
+
+def _genJenkinsJobs(p, jobs, nameCalculator, archiveBackend):
+    name = nameCalculator.getJobInternalName(p)
     if name in jobs:
         jj = jobs[name]
     else:
-        jj = JenkinsJob(name, displayName, prefix, p.getRecipe().isRoot(), archiveBackend)
+        jj = JenkinsJob(name, nameCalculator.getJobDisplayName(p), nameCalculator,
+                        p.getRecipe().isRoot(), archiveBackend)
         jobs[name] = jj
 
     checkout = p.getCheckoutStep()
@@ -516,7 +581,7 @@ def _genJenkinsJobs(p, jobs, prefix, archiveBackend):
     allDeps = p.getAllDepSteps()
     jj.addDependencies(allDeps)
     for d in allDeps:
-        _genJenkinsJobs(d.getPackage(), jobs, prefix, archiveBackend)
+        _genJenkinsJobs(d.getPackage(), jobs, nameCalculator, archiveBackend)
 
 def checkRecipeCycles(p, stack=[]):
     name = p.getRecipe().getName()
@@ -566,9 +631,15 @@ def genJenkinsJobs(recipes, jenkins):
         config.get('defines', {}),
         config.get('sandbox', False))
 
-    for root in [ walkPackagePath(rootPackages, r) for r in config["roots"] ]:
+    nameCalculator = JobNameCalculator(prefix)
+    rootPackages = [ walkPackagePath(rootPackages, r) for r in config["roots"] ]
+    for root in rootPackages:
         checkRecipeCycles(root)
-        _genJenkinsJobs(root, jobs, prefix, archiveHandler)
+        nameCalculator.addPackage(root)
+
+    nameCalculator.sanitize()
+    for root in rootPackages:
+        _genJenkinsJobs(root, jobs, nameCalculator, archiveHandler)
 
     return jobs
 
