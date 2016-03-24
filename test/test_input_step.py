@@ -122,6 +122,7 @@ class TestCheckoutStep(TestCase):
         t1 = Empty()
         t1.step = Empty()
         t1.step.getVariantId = Mock(return_value=b'0123456789abcdef')
+        t1.step._getStableVariantId = t1.step.getVariantId
         t1.path = "p1"
         t1.libs = []
 
@@ -137,6 +138,7 @@ class TestCheckoutStep(TestCase):
         t2 = Empty()
         t2.step = Empty()
         t2.step.getVariantId = Mock(return_value=b'0123456789000000')
+        t2.step._getStableVariantId = t2.step.getVariantId
         t2.path = "p1"
         t2.libs = []
 
@@ -146,6 +148,7 @@ class TestCheckoutStep(TestCase):
 
         # path change
         t2.step.getVariantId = Mock(return_value=b'0123456789abcdef')
+        t2.step._getStableVariantId = t2.step.getVariantId
         t2.path = "foo"
         t2.libs = []
 
@@ -155,6 +158,7 @@ class TestCheckoutStep(TestCase):
 
         # libs change
         t2.step.getVariantId = Mock(return_value=b'0123456789abcdef')
+        t2.step._getStableVariantId = t2.step.getVariantId
         t2.path = "p1"
         t2.libs = ["asdf"]
 

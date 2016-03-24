@@ -646,25 +646,25 @@ class Step(metaclass=ABCMeta):
         self.__shared = False
 
     def __hash__(self):
-        return int.from_bytes(self.getVariantId()[0:8], sys.byteorder)
+        return int.from_bytes(self._getStableVariantId()[0:8], sys.byteorder)
 
     def __lt__(self, other):
-        return self.getVariantId() < other.getVariantId()
+        return self._getStableVariantId() < other._getStableVariantId()
 
     def __le__(self, other):
-        return self.getVariantId() <= other.getVariantId()
+        return self._getStableVariantId() <= other._getStableVariantId()
 
     def __eq__(self, other):
-        return self.getVariantId() == other.getVariantId()
+        return self._getStableVariantId() == other._getStableVariantId()
 
     def __ne__(self, other):
-        return self.getVariantId() != other.getVariantId()
+        return self._getStableVariantId() != other._getStableVariantId()
 
     def __gt__(self, other):
-        return self.getVariantId() > other.getVariantId()
+        return self._getStableVariantId() > other._getStableVariantId()
 
     def __ge__(self, other):
-        return self.getVariantId() >= other.getVariantId()
+        return self._getStableVariantId() >= other._getStableVariantId()
 
     @abstractmethod
     def getScript(self):
@@ -741,7 +741,7 @@ class Step(metaclass=ABCMeta):
         else:
             h.update(b'\x00\x00\x00\x00')
         h.update(struct.pack("<I", len(self.__tools)))
-        for tool in sorted(self.__tools.values(), key=lambda t: (t.step.getVariantId(), t.path, t.libs)):
+        for tool in sorted(self.__tools.values(), key=lambda t: (t.step._getStableVariantId(), t.path, t.libs)):
             d = calculate(tool.step)
             if d is None: return None
             h.update(d)
@@ -772,6 +772,19 @@ class Step(metaclass=ABCMeta):
             ret = self.__variantId
         except AttributeError:
             ret = self.__variantId = self.getDigest(lambda step: step.getVariantId())
+        return ret
+
+    def _getStableVariantId(self):
+        """Return stable Variant-Id of this Step.
+
+        Like getVariantId() but always considering the sandbox. Used for stable
+        sorting of steps regardless of the build settings.
+        """
+        try:
+            ret = self.__stableVariantId
+        except AttributeError:
+            ret = self.__stableVariantId = self.getDigest(
+                lambda step: step._getStableVariantId(), True)
         return ret
 
     def getBuildId(self):
