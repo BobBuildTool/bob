@@ -609,7 +609,7 @@ def jenkinsNamePersister(jenkins, wrapFmt):
             if step.getSandbox() is None:
                 return os.path.join("$WORKSPACE", quote(persist(step, props)))
             else:
-                return os.path.join("/bob", asHexStr(step.getVariantId()))
+                return os.path.join("/bob", asHexStr(step.getVariantId()), "workspace")
 
     return fmt
 
