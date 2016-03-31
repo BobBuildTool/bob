@@ -925,7 +925,7 @@ def doClean(argv, bobRoot):
         usedPaths |= collectPaths(root)
 
     # get all known existing paths
-    allPaths = BobState().getAllNameDirectores()
+    allPaths = [ os.path.join(d, "workspace") for d in BobState().getAllNameDirectores() ]
     allPaths = set([ d for d in allPaths if os.path.exists(d) ])
 
     # delete unused directories
