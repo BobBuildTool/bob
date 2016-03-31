@@ -231,16 +231,16 @@ class JenkinsJob:
                 cmds.append("")
 
         if d.isShared():
-            bid = asHexStr(d.getBuildId())
+            vid = asHexStr(d.getVariantId())
             cmds.append("")
             cmds.append(textwrap.dedent("""\
             # install shared package atomically
-            if [ ! -d ${{JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
+            if [ ! -d ${{JENKINS_HOME}}/bob/{VID1}/{VID2} ] ; then
                 T=$(mktemp -d -p ${{JENKINS_HOME}})
                 rsync -a $WORKSPACE/{WSP_PATH}/ $T
-                mkdir -p ${{JENKINS_HOME}}/bob/{BID1}
-                mv -T $T ${{JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
-            fi""".format(WSP_PATH=d.getWorkspacePath(), BID1=bid[0:2], BID2=bid[2:])))
+                mkdir -p ${{JENKINS_HOME}}/bob/{VID1}
+                mv -T $T ${{JENKINS_HOME}}/bob/{VID1}/{VID2} || rm -rf $T
+            fi""".format(WSP_PATH=d.getWorkspacePath(), VID1=vid[0:2], VID2=vid[2:])))
         cmds.append("")
         cmds.append("# create build-id")
         cmds.append("cd $WORKSPACE")
@@ -365,7 +365,7 @@ class JenkinsJob:
             # copy deps into workspace
             for d in deps:
                 if d.isShared():
-                    bid = asHexStr(d.getBuildId())
+                    vid = asHexStr(d.getVariantId())
                     guard = xml.etree.ElementTree.SubElement(
                         builders, "org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder", attrib={
                             "plugin" : "conditional-buildstep@1.3.3",
@@ -380,7 +380,7 @@ class JenkinsJob:
                             "class" : "org.jenkins_ci.plugins.run_condition.core.FileExistsCondition"
                         })
                     xml.etree.ElementTree.SubElement(
-                        fileCond, "file").text = "${JENKINS_HOME}/bob/"+bid[0:2]+"/"+bid[2:]
+                        fileCond, "file").text = "${JENKINS_HOME}/bob/"+vid[0:2]+"/"+vid[2:]
                     xml.etree.ElementTree.SubElement(
                         fileCond, "baseDir", attrib={
                             "class" : "org.jenkins_ci.plugins.run_condition.common.BaseDirectory$Workspace"
@@ -419,17 +419,17 @@ class JenkinsJob:
             prepareCmds.append("\n# extract deps")
             for d in deps:
                 if d.isShared():
-                    bid = asHexStr(d.getBuildId())
+                    vid = asHexStr(d.getVariantId())
                     prepareCmds.append(textwrap.dedent("""\
-                        if [ ! -d ${{JENKINS_HOME}}/bob/{BID1}/{BID2} ] ; then
+                        if [ ! -d ${{JENKINS_HOME}}/bob/{VID1}/{VID2} ] ; then
                             T=$(mktemp -d -p ${{JENKINS_HOME}})
                             tar xf {TGZ} -C $T
-                            mkdir -p ${{JENKINS_HOME}}/bob/{BID1}
-                            mv -T $T ${{JENKINS_HOME}}/bob/{BID1}/{BID2} || rm -rf $T
+                            mkdir -p ${{JENKINS_HOME}}/bob/{VID1}
+                            mv -T $T ${{JENKINS_HOME}}/bob/{VID1}/{VID2} || rm -rf $T
                         fi
                         mkdir -p {WSP_DIR}
-                        ln -sfT ${{JENKINS_HOME}}/bob/{BID1}/{BID2} {WSP_PATH}
-                        """.format(BID1=bid[0:2], BID2=bid[2:], TGZ=JenkinsJob._tgzName(d),
+                        ln -sfT ${{JENKINS_HOME}}/bob/{VID1}/{VID2} {WSP_PATH}
+                        """.format(VID1=vid[0:2], VID2=vid[2:], TGZ=JenkinsJob._tgzName(d),
                                    WSP_DIR=os.path.dirname(d.getWorkspacePath()),
                                    WSP_PATH=d.getWorkspacePath())))
                 else:
