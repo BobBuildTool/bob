@@ -119,11 +119,20 @@ class JenkinsJob:
     def addCheckoutStep(self, step):
         self.__checkoutSteps[step.getVariantId()] = step
 
+    def getCheckoutSteps(self):
+        return self.__checkoutSteps.values()
+
     def addBuildStep(self, step):
         self.__buildSteps[step.getVariantId()] = step
 
+    def getBuildSteps(self):
+        return self.__buildSteps.values()
+
     def addPackageStep(self, step):
         self.__packageSteps[step.getVariantId()] = step
+
+    def getPackageSteps(self):
+        return self.__packageSteps.values()
 
     def getDependentJobs(self):
         deps = set()
@@ -925,6 +934,11 @@ def doJenkinsPush(recipes, argv):
     jobs = genJenkinsJobs(recipes, args.name)
     buildOrder = genJenkinsBuildOrder(jobs)
 
+    # get hooks
+    jenkinsJobCreate = recipes.getHook('jenkinsJobCreate')
+    jenkinsJobPreUpdate = recipes.getHook('jenkinsJobPreUpdate')
+    jenkinsJobPostUpdate = recipes.getHook('jenkinsJobPostUpdate')
+
     # connect to server
     connection = getConnection(config)
     urlPath = config["url"]["path"]
@@ -939,6 +953,19 @@ def doJenkinsPush(recipes, argv):
 
         # push new jobs / reconfigure existing ones
         for (name, job) in jobs.items():
+            info = {
+                'alias' : args.name,
+                'name' : name,
+                'url' : getUrl(config),
+                'prefix' : config.get('prefix'),
+                'nodes' : nodes,
+                'sandbox' : config['sandbox'],
+                'windows' : windows,
+                'checkoutSteps' : job.getCheckoutSteps(),
+                'buildSteps' : job.getBuildSteps(),
+                'packageSteps' : job.getPackageSteps()
+            }
+
             # get original XML if it exists
             origXML = None
             if name in existingJobs:
@@ -960,13 +987,23 @@ def doJenkinsPush(recipes, argv):
                     origXML = response.read()
 
             try:
-                jobXML = job.dumpXML(origXML, nodes, windows)
+                if origXML is not None:
+                    jobXML = jenkinsJobPreUpdate(origXML, **info)
+                else:
+                    jobXML = None
+
+                jobXML = job.dumpXML(jobXML, nodes, windows)
+
+                if origXML is not None:
+                    jobXML = jenkinsJobPostUpdate(jobXML, **info)
+                else:
+                    jobXML = jenkinsJobCreate(jobXML, **info)
             except xml.etree.ElementTree.ParseError as e:
                 raise BuildError("Cannot parse XML of job '{}': {}".format(
                     name, str(e)))
             jobConfig = {
                 # hash is based on unmerged config to detect just our changes
-                'hash' : hashlib.sha1(job.dumpXML()).digest()
+                'hash' : hashlib.sha1(jenkinsJobCreate(job.dumpXML(), **info)).digest()
             }
 
             if name in existingJobs:
@@ -1122,6 +1159,15 @@ def doJenkinsSetOptions(recipes, argv):
 
     BobState().setJenkinsConfig(args.name, config)
 
+def __jenkinsJobCreate(config, **info):
+    return config
+
+def __jenkinsJobPreUpdate(config, **info):
+    return config
+
+def __jenkinsJobPostUpdate(config, **info):
+    return config
+
 availableJenkinsCmds = {
     "add"        : (doJenkinsAdd, "[-p <prefix>] [-r <package>] NAME URL"),
     "export"  : (doJenkinsExport, "NAME DIR"),
@@ -1154,6 +1200,9 @@ def doJenkins(argv, bobRoot):
     recipes = RecipeSet()
     recipes.defineHook('jenkinsNameFormatter', jenkinsNameFormatter)
     recipes.setConfigFiles(args.configFile)
+    recipes.defineHook('jenkinsJobCreate', __jenkinsJobCreate)
+    recipes.defineHook('jenkinsJobPreUpdate', __jenkinsJobPreUpdate)
+    recipes.defineHook('jenkinsJobPostUpdate', __jenkinsJobPostUpdate)
     recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:
