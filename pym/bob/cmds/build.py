@@ -825,6 +825,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     recipes = RecipeSet()
     recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
+    recipes.defineHook('developNamePersister', LocalBuilder.developNamePersister)
     recipes.parse()
 
     envWhiteList = recipes.envWhiteList()
@@ -834,7 +835,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
     if develop:
         nameFormatter = recipes.getHook('developNameFormatter')
-        nameFormatter = LocalBuilder.developNamePersister(nameFormatter)
+        developPersister = recipes.getHook('developNamePersister')
+        nameFormatter = developPersister(nameFormatter)
     else:
         nameFormatter = recipes.getHook('releaseNameFormatter')
         nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
