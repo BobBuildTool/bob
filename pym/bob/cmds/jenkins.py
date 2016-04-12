@@ -130,9 +130,16 @@ class JenkinsJob:
             deps.add(self.__getJobName(d.getPackage()))
         return deps
 
-    def dumpStep(self, d):
+    def getShebang(self, windows):
+        if windows:
+            return "#!bash -ex"
+        else:
+            return "#!/bin/bash -ex"
+
+    def dumpStep(self, d, windows=False):
         cmds = []
-        cmds.append("#!/bin/bash -ex")
+
+        cmds.append(self.getShebang(windows))
 
         if d.getJenkinsScript():
             cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
@@ -175,6 +182,17 @@ class JenkinsJob:
             else:
                 cmds.append("cd {}".format(d.getWorkspacePath()))
                 cmds.append("")
+
+            if windows:
+                cmds.append("if [ ! -z ${JENKINS_HOME} ]; then")
+                cmds.append("    export JENKINS_HOME=$(echo ${JENKINS_HOME} | sed 's/\\\\/\\//g' | sed 's/://' | sed 's/^/\\//' )")
+                cmds.append("fi")
+                cmds.append("if [ ! -z ${SLAVE_HOME} ]; then")
+                cmds.append("    export SLAVE_HOME=$(echo ${SLAVE_HOME} | sed 's/\\\\/\\//g' | sed 's/://' | sed 's/^/\\//')")
+                cmds.append("fi")
+                cmds.append("if [ ! -z ${WORKSPACE} ]; then")
+                cmds.append("    export WORKSPACE=$(echo ${WORKSPACE} | sed 's/\\\\/\\//g' | sed 's/://' | sed 's/^/\\//')")
+                cmds.append("fi")
 
             cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
                 [ "    [{}]={}".format(quote(a.getPackage().getName()),
@@ -243,7 +261,7 @@ class JenkinsJob:
     def _buildIdName(d):
         return d.getWorkspacePath().replace('/', '_') + ".buildid"
 
-    def dumpXML(self, orig=None, nodes=""):
+    def dumpXML(self, orig=None, nodes="", windows=False):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
             builders = root.find("builders")
@@ -294,7 +312,7 @@ class JenkinsJob:
             xml.etree.ElementTree.SubElement(root, "buildWrappers")
 
         prepareCmds = []
-        prepareCmds.append("#!/bin/bash -ex")
+        prepareCmds.append(self.getShebang(windows))
         prepareCmds.append("mkdir -p .state")
         prepareCmds.append("")
         prepareCmds.append("# delete unused files and directories from workspace")
@@ -432,7 +450,7 @@ class JenkinsJob:
             checkout = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
-                checkout, "command").text = self.dumpStep(d)
+                checkout, "command").text = self.dumpStep(d, windows)
             checkoutSCMs.extend(d.getJenkinsXml())
 
         if len(checkoutSCMs) > 1:
@@ -457,7 +475,7 @@ class JenkinsJob:
             build = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
-                build, "command").text = self.dumpStep(d)
+                build, "command").text = self.dumpStep(d, windows)
 
         # package steps
         publish = []
@@ -465,7 +483,7 @@ class JenkinsJob:
             package = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
-                self.dumpStep(d),
+                self.dumpStep(d, windows),
                 "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
                 "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getWorkspacePath()),
@@ -670,6 +688,7 @@ def genJenkinsBuildOrder(jobs):
 def doJenkinsAdd(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins add")
     parser.add_argument("-n", "--nodes", default="", help="Label for Jenkins Slave")
+    parser.add_argument("-w", "--windows", default=False, action='store_true', help="Jenkins is running on Windows. Produce cygwin compatible scripts.")
     parser.add_argument("-p", "--prefix", default="", help="Prefix for jobs")
     parser.add_argument("-r", "--root", default=[], action='append',
                         help="Root package (may be specified multiple times)")
@@ -721,6 +740,7 @@ def doJenkinsAdd(recipes, argv):
         "defines" : defines,
         "upload" : args.upload,
         "sandbox" : args.sandbox,
+        "windows" : args.windows
     }
     BobState().addJenkins(args.name, config)
 
@@ -902,6 +922,7 @@ def doJenkinsPush(recipes, argv):
         headers['Authorization'] = 'Basic ' + base64.b64encode(
             userPass.encode("utf-8")).decode("ascii")
 
+    windows = config.get("windows")
     nodes = config.get("nodes")
     changedJobs = set([])
 
@@ -929,7 +950,7 @@ def doJenkinsPush(recipes, argv):
                     origXML = response.read()
 
             try:
-                jobXML = job.dumpXML(origXML, nodes)
+                jobXML = job.dumpXML(origXML, nodes, windows)
             except xml.etree.ElementTree.ParseError as e:
                 raise BuildError("Cannot parse XML of job '{}': {}".format(
                     name, str(e)))
