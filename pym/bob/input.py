@@ -1192,7 +1192,7 @@ class IncludeHelper:
             )
             """, re.VERBOSE)
         self.__baseDir = baseDir
-        self.__varBase = re.sub(r'[^a-zA-Z0-9-_]', '_', varBase, flags=re.DOTALL)
+        self.__varBase = re.sub(r'[^a-zA-Z0-9_]', '_', varBase, flags=re.DOTALL)
 
     def resolve(self, text):
         if isinstance(text, str):
