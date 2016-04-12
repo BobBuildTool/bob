@@ -61,6 +61,8 @@ __bob_build()
 {
    if [[ "$prev" = "--destination" ]] ; then
       COMPREPLY=( $(compgen -o dirnames "$cur") )
+   elif [[ "$prev" = "-c" ]] ; then
+      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
    else
       __bob_complete_path "-f --force -n --no-deps -b --build-only -v --verbose"
    fi
