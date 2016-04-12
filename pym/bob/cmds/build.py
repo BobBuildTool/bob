@@ -770,9 +770,11 @@ esac
             return step.getDigest(lambda s: self._getBuildId(s, done, depth+1), True)
 
 
-def touch(packages):
+def touch(packages, done=set()):
     for p in packages:
-        touch([s.getPackage() for s in p.getAllDepSteps()])
+        if p in done: continue
+        done.add(p)
+        touch([s.getPackage() for s in p.getAllDepSteps()], done)
         p.getCheckoutStep().getWorkspacePath()
         p.getBuildStep().getWorkspacePath()
         p.getPackageStep().getWorkspacePath()
