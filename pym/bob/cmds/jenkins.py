@@ -1133,10 +1133,14 @@ def doJenkins(argv, bobRoot):
     parser.add_argument('subcommand', help="Subcommand")
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for subcommand")
+    parser.add_argument('-c', dest="configFile", default=[], action='append', metavar="NAME",
+        help="Use additional config File.")
+
     args = parser.parse_args(argv)
 
     recipes = RecipeSet()
     recipes.defineHook('jenkinsNameFormatter', jenkinsNameFormatter)
+    recipes.setConfigFiles(args.configFile)
     recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:

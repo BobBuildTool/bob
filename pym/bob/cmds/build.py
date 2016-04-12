@@ -797,6 +797,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Increase verbosity (may be specified multiple times)")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
     parser.add_argument('-e', dest="white_list", default=[], action='append', metavar="NAME",
         help="Preserve environment variable")
     parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
@@ -826,6 +828,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
     recipes.defineHook('developNamePersister', LocalBuilder.developNamePersister)
+    recipes.setConfigFiles(args.configFile)
     recipes.parse()
 
     envWhiteList = recipes.envWhiteList()

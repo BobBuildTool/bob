@@ -1561,6 +1561,7 @@ class RecipeSet:
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
         self.__hooks = {}
+        self.__configFiles = {}
         self.__properties = {}
         self.__states = {}
         self.__cache = YamlCache()
@@ -1633,6 +1634,9 @@ class RecipeSet:
     def defineHook(self, name, value):
         self.__hooks[name] = value
 
+    def setConfigFiles(self, configFiles):
+        self.__configFiles = configFiles
+
     def getHook(self, name):
         return self.__hooks[name]
 
@@ -1676,6 +1680,13 @@ class RecipeSet:
             include = self.loadYaml(str(p) + ".yaml")
             if include and "environment" in include:
                 self.__defaultEnv.update(include["environment"])
+
+        for c in self.__configFiles:
+            cc = self.loadYaml(str(c) + ".yaml")
+            if not cc:
+                raise ParseError("Error while loading config File {}".format(c))
+            if "environment" in cc:
+                self.__defaultEnv.update(cc["environment"])
 
         if not os.path.isdir("recipes"):
             raise ParseError("No recipes directory found.")
