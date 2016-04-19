@@ -10,11 +10,14 @@ else
 	RUN=python3
 fi
 
-pushd test
-$RUN -m unittest discover .
-popd
-
 FAILED=0
+
+pushd test
+if ! $RUN -m unittest discover . ; then
+	: $((FAILED++))
+	echo "Some unit test(s) failed"
+fi
+popd
 
 run_bob()
 {
