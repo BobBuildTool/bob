@@ -49,6 +49,146 @@ def overlappingPaths(p1, p2):
         if p1[i] != p2[i]: return False
     return True
 
+class StringParser:
+    """Utility class for complex string parsing/manipulation"""
+
+    def __init__(self, env, funs):
+        self.env = env
+        self.funs = funs
+
+    def parse(self, text):
+        """Parse the text and make substitutions"""
+        self.text = text
+        self.index = 0
+        self.end = len(text)
+        return self.getString()
+
+    def nextChar(self):
+        """Get next character"""
+        i = self.index
+        if i >= self.end:
+            raise ParseError('Unexpected end of string')
+        self.index += 1
+        return self.text[i:i+1]
+
+    def nextToken(self, extra=None):
+        delim=['\"', '\'', '$']
+        if extra: delim.extend(extra)
+
+        # EOS?
+        i = start = self.index
+        if i >= self.end:
+            return None
+
+        # directly on delimiter?
+        if self.text[i] in delim:
+            self.index = i+1
+            return self.text[i]
+
+        # scan
+        tok = []
+        while i < self.end:
+            if self.text[i] in delim: break
+            if self.text[i] == '\\':
+                tok.append(self.text[start:i])
+                start = i = i + 1
+                if i >= self.end:
+                    raise ParseError("Unexpected end after escape")
+            i += 1
+        tok.append(self.text[start:i])
+        self.index = i
+        return "".join(tok)
+
+    def getSingleQuoted(self):
+        i = self.index
+        while i < self.end:
+            if self.text[i] == "'":
+                i += 1
+                break
+            i += 1
+        if i >= self.end:
+            raise ParseError("Missing closing \"'\"")
+        ret = self.text[self.index:i-1]
+        self.index = i
+        return ret
+
+    def getString(self, delim=[None], keep=False):
+        s = []
+        tok = self.nextToken(delim)
+        while tok not in delim:
+            if tok == '"':
+                s.append(self.getString(['"']))
+            elif tok == '\'':
+                s.append(self.getSingleQuoted())
+            elif tok == '$':
+                tok = self.nextChar()
+                if tok == '{':
+                    s.append(self.getVariable())
+                elif tok == '(':
+                    s.append(self.getCommand())
+                else:
+                    raise ParseError("Invalid $-subsitituion")
+            elif tok == None:
+                if None not in delim:
+                    raise ParseError('Unexpected end of string')
+                break
+            else:
+                s.append(tok)
+            tok = self.nextToken(delim)
+        else:
+            if keep: self.index -= 1
+        return "".join(s)
+
+    def getVariable(self):
+        # get variable name
+        varName = self.getString([':', '-', '+', '}'], True)
+
+        # process?
+        op = self.nextChar()
+        unset = varName not in self.env
+        if op == ':':
+            # or null...
+            if not unset: unset = self.env[varName] == ""
+            op = self.nextChar()
+
+        if op == '-':
+            default = self.getString(['}'])
+            if unset:
+                return default
+            else:
+                return self.env[varName]
+        elif op == '+':
+            alternate = self.getString(['}'])
+            if unset:
+                return ""
+            else:
+                return alternate
+        elif op == '}':
+            if varName not in self.env:
+                raise ParseError("Unset variable: " + varName)
+            return self.env[varName]
+        else:
+            raise ParseError("Unterminated variable: " + str(op))
+
+    def getCommand(self):
+        words = []
+        delim = [",", ")"]
+        while True:
+            word = self.getString(delim, True)
+            words.append(word)
+            end = self.nextChar()
+            if end == ")": break
+
+        if len(words) < 1:
+            raise ParseError("Expected function name")
+        cmd = words[0]
+        del words[0]
+
+        if cmd not in self.funs:
+            raise ParseError("Unknown function: "+cmd)
+
+        return self.funs[cmd](words)
+
 class Env(dict):
     def derive(self, overrides = {}):
         ret = Env(self)
