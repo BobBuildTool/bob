@@ -52,9 +52,10 @@ def overlappingPaths(p1, p2):
 class StringParser:
     """Utility class for complex string parsing/manipulation"""
 
-    def __init__(self, env, funs):
+    def __init__(self, env, funs, funArgs):
         self.env = env
         self.funs = funs
+        self.funArgs = funArgs
 
     def parse(self, text):
         """Parse the text and make substitutions"""
@@ -187,27 +188,40 @@ class StringParser:
         if cmd not in self.funs:
             raise ParseError("Unknown function: "+cmd)
 
-        return self.funs[cmd](words)
+        return self.funs[cmd](words, env=self.env, **self.funArgs)
 
 class Env(dict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.funs = []
+        self.funArgs = {}
+
+    def setFuns(self, funs):
+        self.funs = funs
+
+    def setFunArgs(self, funArgs):
+        self.funArgs = funArgs
+
     def derive(self, overrides = {}):
         ret = Env(self)
+        ret.funs = self.funs
+        ret.funArgs = self.funArgs
         ret.update(overrides)
         return ret
 
     def prune(self, allowed):
         ret = Env()
+        ret.funs = self.funs
+        ret.funArgs = self.funArgs
         for (key, value) in self.items():
             if key in allowed: ret[key] = value
         return ret
 
     def substitute(self, value, prop):
         try:
-            return Template(value).substitute(self)
-        except KeyError as e:
-            raise ParseError("Error substituting {}: {}".format(prop, str(e)))
-        except ValueError as e:
-            raise ParseError("Error substituting {}: {}".format(prop, str(e)))
+            return StringParser(self, self.funs, self.funArgs).parse(value)
+        except ParseError as e:
+            raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
 
 
 class PluginProperty:
@@ -1546,11 +1560,14 @@ class Recipe(object):
         stack = inputStack + [self.__packageName]
 
         # make copies because we will modify them
+        tools = inputTools.derive()
+        inputEnv = inputEnv.derive()
+        inputEnv.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
+            "tools" : inputTools, "stack" : stack })
         varSelf = {}
         for (key, value) in self.__varSelf.items():
             varSelf[key] = inputEnv.substitute(value, "environment::"+key)
         env = inputEnv.derive(varSelf)
-        tools = inputTools.derive()
         states = { n : s.copy() for (n,s) in states.items() }
 
         # update plugin states
@@ -1680,6 +1697,7 @@ class RecipeSet:
         self.__properties = {}
         self.__states = {}
         self.__cache = YamlCache()
+        self.__stringFunctions = { }
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -1836,6 +1854,7 @@ class RecipeSet:
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         result = {}
         env = Env(os.environ).prune(self.__whiteList)
+        env.setFuns(self.__stringFunctions)
         env.update(self.__defaultEnv)
         env.update(envOverrides)
         states = { n:s() for (n,s) in self.__states.items() }
