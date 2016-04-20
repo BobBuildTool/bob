@@ -205,9 +205,9 @@ class Env(dict):
         try:
             return Template(value).substitute(self)
         except KeyError as e:
-            raise ParseError("Error substituting {} in {}: {}".format(key, prop, str(e)))
+            raise ParseError("Error substituting {}: {}".format(prop, str(e)))
         except ValueError as e:
-            raise ParseError("Error substituting {} in {}: {}".format(key, prop, str(e)))
+            raise ParseError("Error substituting {}: {}".format(prop, str(e)))
 
 
 class PluginProperty:
@@ -340,18 +340,18 @@ class GitScm(BaseScm):
     def resolveEnv(self, env):
         super().resolveEnv(env)
         if self.__url:
-            self.__url = Template(self.__url).substitute(env)
+            self.__url = env.substitute(self.__url, "git::url")
         if self.__branch:
-            self.__branch = Template(self.__branch).substitute(env)
+            self.__branch = env.substitute(self.__branch, "git::branch")
         if self.__tag:
-            self.__tag = Template(self.__tag).substitute(env)
+            self.__tag = env.substitute(self.__tag, "git::tag")
         if self.__commit:
-            self.__commit = Template(self.__commit).substitute(env).lower()
+            self.__commit = env.substitute(self.__commit, "git::commit").lower()
             # validate commit
             if re.fullmatch("[0-9a-f]{40}", self.__commit) is None:
                 raise ParseError("Invalid commit id: " + str(self.__commit))
         if self.__dir:
-            self.__dir = Template(self.__dir).substitute(env)
+            self.__dir = env.substitute(self.__dir, "git::dir")
 
     def asScript(self):
         if self.__tag or self.__commit:
@@ -484,7 +484,7 @@ fi
     def resolveEnv(self, env):
         super().resolveEnv(env)
         self.__modules = [
-            { k : (Template(v).substitute(env) if isinstance(v, str) else v) for (k,v) in m.items() }
+            { k : (env.substitute(v, "svn::"+k) if isinstance(v, str) else v) for (k,v) in m.items() }
             for m in self.__modules ]
 
     def asScript(self):
@@ -581,22 +581,22 @@ class UrlScm(BaseScm):
     def resolveEnv(self, env):
         super().resolveEnv(env)
         if self.__url:
-            self.__url = Template(self.__url).substitute(env)
+            self.__url = env.substitute(self.__url, "url::url")
         if self.__digestSha1:
-            self.__digestSha1 = Template(self.__digestSha1).substitute(env).lower()
+            self.__digestSha1 = env.substitute(self.__digestSha1, "url::digestSHA1").lower()
             # validate digest
             if re.fullmatch("[0-9a-f]{40}", self.__digestSha1) is None:
                 raise ParseError("Invalid SHA1 digest: " + str(self.__digestSha1))
         if self.__digestSha256:
-            self.__digestSha256 = Template(self.__digestSha256).substitute(env).lower()
+            self.__digestSha256 = env.substitute(self.__digestSha256, "url::digestSHA256").lower()
             # validate digest
             if re.fullmatch("[0-9a-f]{64}", self.__digestSha256) is None:
                 raise ParseError("Invalid SHA256 digest: " + str(self.__digestSha256))
         if self.__dir:
-            self.__dir = Template(self.__dir).substitute(env)
+            self.__dir = env.substitute(self.__dir, "url::dir")
         self.__fn = self.__url.split("/")[-1]
         if isinstance(self.__extract, str):
-            self.__extract = Template(self.__extract).substitute(env)
+            self.__extract = env.substitute(self.__extract, "url::extract")
 
     def asScript(self):
         ret = """
@@ -689,13 +689,8 @@ class AbstractTool:
 
     def prepare(self, step, env):
         """Create concrete tool for given step."""
-        try:
-             path = Template(self.path).substitute(env)
-             libs = [ Template(l).substitute(env) for l in self.libs ]
-        except KeyError as e:
-            raise ParseError("Error substituting {} in provideTools: {}".format(key, str(e)))
-        except ValueError as e:
-            raise ParseError("Error substituting {} in provideTools: {}".format(key, str(e)))
+        path = env.substitute(self.path, "provideTools::path")
+        libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
         return Tool(step, path, libs)
 
 class Tool:
@@ -738,14 +733,9 @@ class Sandbox:
         self.mounts = []
         for mount in spec.get('mount', []):
             m = (mount, mount) if isinstance(mount, str) else mount
-            try:
-                self.mounts.append(
-                    (Template(m[0]).substitute(env),
-                     Template(m[1]).substitute(env)))
-            except KeyError as e:
-                raise ParseError("Error substituting {} in provideSandbox: {}".format(mount, str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting {} in provideSandbox: {}".format(mount, str(e)))
+            self.mounts.append(
+                (env.substitute(m[0], "provideSandbox::mount-from"),
+                 env.substitute(m[1], "provideSandbox::mount-to")))
 
     def getStep(self):
         """Get the package step that yields the content of the sandbox image."""
@@ -1088,12 +1078,7 @@ class CheckoutStep(Step):
         if checkout:
             self.__script = checkout[0] if checkout[0] is not None else ""
             self.__scmList = [ copy.deepcopy(scm) for scm in checkout[1] if scm.enabled(env) ]
-            try:
-                for s in self.__scmList: s.resolveEnv(fullEnv)
-            except KeyError as e:
-                raise ParseError("Error substituting variable in checkoutSCM: {}".format(str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting variable in checkoutSCM: {}".format(str(e)))
+            for s in self.__scmList: s.resolveEnv(fullEnv)
             self.__deterministic = deterministic
 
             # Validate that SCM paths do not overlap
@@ -1563,12 +1548,7 @@ class Recipe(object):
         # make copies because we will modify them
         varSelf = {}
         for (key, value) in self.__varSelf.items():
-            try:
-                 varSelf[key] = Template(value).substitute(inputEnv)
-            except KeyError as e:
-                raise ParseError("Error substituting {} in environment: {}".format(key, str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting {} in environment: {}".format(key, str(e)))
+            varSelf[key] = inputEnv.substitute(value, "environment::"+key)
         env = inputEnv.derive(varSelf)
         tools = inputTools.derive()
         states = { n : s.copy() for (n,s) in states.items() }
@@ -1654,12 +1634,7 @@ class Recipe(object):
         # provide environment
         provideEnv = {}
         for (key, value) in self.__provideVars.items():
-            try:
-                 provideEnv[key] = Template(value).substitute(env)
-            except KeyError as e:
-                raise ParseError("Error substituting {} in provideVars: {}".format(key, str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting {} in provideVars: {}".format(key, str(e)))
+            provideEnv[key] = env.substitute(value, "provideVars::"+key)
         packageStep._setProvidedEnv(provideEnv)
 
         # provide tools
