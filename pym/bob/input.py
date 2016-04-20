@@ -1730,7 +1730,7 @@ class RecipeSet:
         if 'manifest' not in g:
             raise ParseError("Plugin '"+name+"' did not define 'manifest'!")
         manifest = g['manifest']
-        if manifest.get('apiVersion', "0") != "0.1":
+        if manifest.get('apiVersion', "0") not in ["0.1", "0.2"]:
             raise ParseError("Plugin '"+name+"': incompatible apiVersion!")
 
         hooks = manifest.get('hooks', {})
@@ -1763,6 +1763,16 @@ class RecipeSet:
             if i in self.__states:
                 raise ParseError("Plugin '"+name+"': state tracker '" +i+"' already defined by other plugin!")
         self.__states.update(states)
+
+        funs = manifest.get('stringFunctions', {})
+        if not isinstance(funs, dict):
+            raise ParseError("Plugin '"+name+"': 'stringFunctions' has wrong type!")
+        for (i,j) in funs.items():
+            if not isinstance(i, str):
+                raise ParseError("Plugin '"+name+"': string function name must be a string!")
+            if i in self.__stringFunctions:
+                raise ParseError("Plugin '"+name+"': string function '" +i+"' already defined by other plugin!")
+        self.__stringFunctions.update(funs)
 
     def defineHook(self, name, value):
         self.__hooks[name] = value
