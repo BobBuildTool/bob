@@ -1684,6 +1684,41 @@ class Recipe(object):
         return p
 
 
+def funEqual(args, **options):
+    if len(args) != 2: raise ParseError("eq expects two arguments")
+    return "true" if args[0] == args[1] else "false"
+
+def funNotEqual(args, **options):
+    if len(args) != 2: raise ParseError("ne expects two arguments")
+    return "true" if args[0] != args[1] else "false"
+
+def funNot(args, **options):
+    if len(args) != 1: raise ParseError("not expects one argument")
+    return "true" if (args[0].strip().lower() in [ "", "0", "false" ]) else "false"
+
+def funIfThenElse(args, **options):
+    if len(args) != 3: raise ParseError("if-then-else expects three arguments")
+    if args[0].strip().lower() in [ "", "0", "false" ]:
+        return args[2]
+    else:
+        return args[1]
+
+def funSubst(args, **options):
+    if len(args) != 3: raise ParseError("subst expects three arguments")
+    return args[2].replace(args[0], args[1])
+
+def funStrip(args, **options):
+    if len(args) != 1: raise ParseError("strip expects one argument")
+    return args[0].strip()
+
+def funSandboxEnabled(args, sandbox, **options):
+    if len(args) != 0: raise ParseError("is-sandbox-enabled expects no arguments")
+    return "true" if (sandbox is not None) and sandbox.isEnabled() else "false"
+
+def funToolDefined(args, tools, **options):
+    if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
+    return "true" if args[0] in tools else "false"
+
 class RecipeSet:
     def __init__(self):
         self.__defaultEnv = {}
@@ -1697,7 +1732,16 @@ class RecipeSet:
         self.__properties = {}
         self.__states = {}
         self.__cache = YamlCache()
-        self.__stringFunctions = { }
+        self.__stringFunctions = {
+            "eq" : funEqual,
+            "if-then-else" : funIfThenElse,
+            "is-sandbox-enabled" : funSandboxEnabled,
+            "is-tool-defined" : funToolDefined,
+            "ne" : funNotEqual,
+            "not" : funNot,
+            "strip" : funStrip,
+            "subst" : funSubst,
+        }
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
