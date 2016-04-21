@@ -17,10 +17,10 @@ Plugins can be put into a ``plugins`` directory as .py files. A plugin is only
 loaded when it is listed in ``config.yaml`` in the
 :ref:`configuration-config-plugins` section.  Each plugin must provide a
 'manifest' dict that must have at least an 'apiVersion' entry. The current
-version is "0.1". At minimum this looks like this::
+version is "0.2". At minimum this looks like this::
 
     manifest = {
-        'apiVersion' : "0.1"
+        'apiVersion' : "0.2"
     }
 
 A plugin may define any number of properties and state trackers.
@@ -99,6 +99,40 @@ processed. The default implementation in Bob looks like this::
             'releaseNameFormatter' : releaseFormatter,
             'developNameFormatter' : developFormatter,
             'jenkinsNameFormatter' : jenkinsNameFormatter
+        }
+    }
+
+.. _extending-hooks-string:
+
+String functions
+~~~~~~~~~~~~~~~~
+
+String functions can be invoked from any place where string substitution as
+described in :ref:`configuration-principle-subst` is allowed. These functions
+are called with at least one positional parameter for the arguments that were
+specified when invoking the string function. They are expected to return a
+string and shall have no side effects. The function has to accept any number of
+additionaly keyword arguments.  Currently the following additionaly kwargs are
+passed:
+
+* ``env``: dict of all available environment variables at the current context
+* ``recipe``: the current :class:`bob.input.Recipe`
+* ``sandbox``: an instance of :class:`bob.input.Sandbox` of the current context
+  or ``None`` if no sandbox was configured
+* ``tools``: dict of all available tools (see :class:`bob.input.Tool`)
+* ``stack``: list of package names that lead to the currently processed package
+
+In the future additional keyword args may be added without notice. Such string
+functions should therefore have a cach-all ``**kwargs`` parameter. A sample implementation
+could look like this::
+
+    def echo(args, **kwargs):
+        return " ".join(args)
+
+    manifest = {
+        'apiVersion' : "0.2",
+        'stringFunctions' : {
+            "echo" : echo
         }
     }
 
