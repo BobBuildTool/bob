@@ -15,8 +15,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from unittest import TestCase
+from unittest.mock import MagicMock
 
 from bob.input import StringParser
+from bob.input import funEqual, funNotEqual, funNot, funIfThenElse, funSubst, \
+    funStrip, funSandboxEnabled, funToolDefined
 from bob.errors import ParseError
 
 def echo(args, **options):
@@ -101,3 +104,65 @@ class TestStringParser(TestCase):
         self.assertRaises(ParseError, self.p.parse, "${asdf")
         self.assertRaises(ParseError, self.p.parse, "${unknown}")
         self.assertRaises(ParseError, self.p.parse, "${asdf:")
+        self.assertRaises(ParseError, self.p.parse, "$()")
+        self.assertRaises(ParseError, self.p.parse, "$(unknown)")
+
+class TestStringFunctions(TestCase):
+
+    def testEqual(self):
+        self.assertRaises(ParseError, funEqual, [])
+        self.assertEqual(funEqual(["a", "a"]), "true")
+        self.assertEqual(funEqual(["a", "b"]), "false")
+
+    def testNotEqual(self):
+        self.assertRaises(ParseError, funNotEqual, [])
+        self.assertEqual(funNotEqual(["a", "a"]), "false")
+        self.assertEqual(funNotEqual(["a", "b"]), "true")
+
+    def testNot(self):
+        self.assertRaises(ParseError, funNot, [])
+        self.assertEqual(funNot(["true"]), "false")
+        self.assertEqual(funNot(["TRUE"]), "false")
+        self.assertEqual(funNot(["1"]), "false")
+        self.assertEqual(funNot(["foobar"]), "false")
+        self.assertEqual(funNot([""]), "true")
+        self.assertEqual(funNot(["0"]), "true")
+        self.assertEqual(funNot(["false"]), "true")
+        self.assertEqual(funNot(["FaLsE"]), "true")
+
+    def testIfThenElse(self):
+        self.assertRaises(ParseError, funIfThenElse, ["a", "b"])
+        self.assertEqual(funIfThenElse(["true", "a", "b"]), "a")
+        self.assertEqual(funIfThenElse(["qwer", "a", "b"]), "a")
+        self.assertEqual(funIfThenElse(["false", "a", "b"]), "b")
+        self.assertEqual(funIfThenElse(["0", "a", "b"]), "b")
+        self.assertEqual(funIfThenElse(["", "a", "b"]), "b")
+
+    def testSubst(self):
+        self.assertRaises(ParseError, funSubst, ["a"])
+        self.assertEqual(funSubst(["ee","EE","feet on the street"]),
+            "fEEt on the strEEt")
+
+    def testStrip(self):
+        self.assertRaises(ParseError, funStrip, ["a", "b"])
+        self.assertEqual(funStrip(["  asdf  "]), "asdf")
+
+    def testSandboxEnabled(self):
+        with self.assertRaises(ParseError):
+            funSandboxEnabled(["1", "2"], sandbox=None)
+        self.assertEqual(funSandboxEnabled([], sandbox=None), "false")
+
+        attrs = {'isEnabled.return_value' : False}
+        disabledSandbox = MagicMock(**attrs)
+        self.assertEqual(funSandboxEnabled([], sandbox=disabledSandbox), "false")
+
+        attrs = {'isEnabled.return_value' : True}
+        enabledSandbox = MagicMock(**attrs)
+        self.assertEqual(funSandboxEnabled([], sandbox=enabledSandbox), "true")
+
+    def testToolDefined(self):
+        with self.assertRaises(ParseError):
+            funToolDefined([], tools={})
+        self.assertEqual(funToolDefined(["a"], tools={"a":1, "b":2}), "true")
+        self.assertEqual(funToolDefined(["c"], tools={"a":1, "b":2}), "false")
+
