@@ -261,6 +261,11 @@ extended by plugins. The following syntax is supported:
       character. The only exception is within single quotes where backslash is
       not recignized as meta character.
 
+.. note::
+   These facilities are only available if you define ``bobMinimumVersion`` to
+   at least "0.3" in your :ref:`configuration-config`. Otherwise the only available
+   substitutions are ``$VAR`` and ``${VAR}``.
+
 The following built in string functions are supported:
 
 * ``$(eq,left,right)``: Returns ``true`` if the expansions of ``left`` and
@@ -439,8 +444,14 @@ There are three common (string) attributes in all SCM specifications: ``scm``,
 ``dir`` and ``if``. By default the SCMs check out to the root of the workspace.
 You may specify any relative path in ``dir`` to checkout to this directory.
 
-By using ``if`` you can selectively enable or disable a particular SCM. Only
-simple expressions are possible at the moment. TODO
+By using ``if`` you can selectively enable or disable a particular SCM. Define
+``bobMinimumVersion`` to at least "0.3" in your :ref:`configuration-config` to
+enable advanced string substitutions. The string given to the ``if``-keyword is
+substituted according to :ref:`configuration-principle-subst` and the final
+string is interpreted as a boolean value (everything except the empty string,
+``0`` and ``false`` is considered true). The SCM will only be considered if the
+condition passes. The old behaviour before 0.3 is missing intentionally and
+should not be used anymore.
 
 Currently the following ``scm`` values are supported:
 
@@ -549,6 +560,13 @@ supported:
 |             |                 |        FOO: value                                   |
 |             |                 |        BAR: baz                                     |
 |             |                 |                                                     |
++-------------+-----------------+-----------------------------------------------------+
+| if          | String          | The string (subject to substitution) is interpreted |
+|             |                 | as boolean value. The dependency is only considered |
+|             |                 | if the string is considered as true. See            |
+|             |                 | :ref:`configuration-principle-subst`.               |
+|             |                 |                                                     |
+|             |                 | Default: true                                       |
 +-------------+-----------------+-----------------------------------------------------+
 
 environment
@@ -746,6 +764,8 @@ influence on local builds. On Jenkins the result will be copied to a separate
 directory in the Jenkins installation and will be used from there. This reduces
 the job workspace size considerably at the expense of having artifacts outside
 of Jenkins's regular control.
+
+.. _configuration-config:
 
 config.yaml
 -----------
