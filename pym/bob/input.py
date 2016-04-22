@@ -237,6 +237,19 @@ class Env(dict):
             except ParseError as e:
                 raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
 
+    def evaluate(self, condition, prop):
+        if condition is None:
+            return True
+
+        if self.legacy:
+            try:
+                return eval(condition, self.derive({'__builtins__':{}}))
+            except Exception as e:
+                raise ParseError("Error evaluating condition on {}: {}".format(prop, str(e)))
+        else:
+            s = self.substitute(condition, "condition on "+prop)
+            return s.lower() not in ["", "0", "false"]
+
 
 class PluginProperty:
     """Base class for plugin property handlers.
@@ -344,13 +357,7 @@ class BaseScm:
         self.__resolved = False
 
     def enabled(self, env):
-        if self.__condition is not None:
-            try:
-                return eval(self.__condition, env.derive({'__builtins__':{}}))
-            except Exception as e:
-                raise ParseError("Error evaluating condition on checkoutSCM: {}".format(str(e)))
-        else:
-            return True
+        return env.evaluate(self.__condition, "checkoutSCM")
 
     def resolveEnv(self, env):
         assert not self.__resolved
@@ -1599,11 +1606,7 @@ class Recipe(object):
         while i < len(allDeps):
             dep = allDeps[i]
             i += 1
-            if dep.condition is not None:
-                try:
-                    if not eval(dep.condition, env.derive({'__builtins__':{}})): continue
-                except Exception as e:
-                    raise ParseError("Error evaluating condition on dependency {}: {}".format(dep.recipe, str(e)))
+            if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
 
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
