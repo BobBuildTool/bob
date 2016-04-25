@@ -1,0 +1,10 @@
+root: true
+
+environment:
+    FOO: "$(override,FOO_OVERRIDE,foo)"
+    BAR: "$(override,BAR_OVERRIDE,bar)"
+
+packageVars: [FOO, BAR]
+packageScript: |
+    echo "${FOO},${BAR}" > result.txt
+

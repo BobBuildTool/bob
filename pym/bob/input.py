@@ -49,25 +49,206 @@ def overlappingPaths(p1, p2):
         if p1[i] != p2[i]: return False
     return True
 
+class StringParser:
+    """Utility class for complex string parsing/manipulation"""
+
+    def __init__(self, env, funs, funArgs):
+        self.env = env
+        self.funs = funs
+        self.funArgs = funArgs
+
+    def parse(self, text):
+        """Parse the text and make substitutions"""
+        self.text = text
+        self.index = 0
+        self.end = len(text)
+        return self.getString()
+
+    def nextChar(self):
+        """Get next character"""
+        i = self.index
+        if i >= self.end:
+            raise ParseError('Unexpected end of string')
+        self.index += 1
+        return self.text[i:i+1]
+
+    def nextToken(self, extra=None):
+        delim=['\"', '\'', '$']
+        if extra: delim.extend(extra)
+
+        # EOS?
+        i = start = self.index
+        if i >= self.end:
+            return None
+
+        # directly on delimiter?
+        if self.text[i] in delim:
+            self.index = i+1
+            return self.text[i]
+
+        # scan
+        tok = []
+        while i < self.end:
+            if self.text[i] in delim: break
+            if self.text[i] == '\\':
+                tok.append(self.text[start:i])
+                start = i = i + 1
+                if i >= self.end:
+                    raise ParseError("Unexpected end after escape")
+            i += 1
+        tok.append(self.text[start:i])
+        self.index = i
+        return "".join(tok)
+
+    def getSingleQuoted(self):
+        i = self.index
+        while i < self.end:
+            if self.text[i] == "'":
+                i += 1
+                break
+            i += 1
+        if i >= self.end:
+            raise ParseError("Missing closing \"'\"")
+        ret = self.text[self.index:i-1]
+        self.index = i
+        return ret
+
+    def getString(self, delim=[None], keep=False):
+        s = []
+        tok = self.nextToken(delim)
+        while tok not in delim:
+            if tok == '"':
+                s.append(self.getString(['"']))
+            elif tok == '\'':
+                s.append(self.getSingleQuoted())
+            elif tok == '$':
+                tok = self.nextChar()
+                if tok == '{':
+                    s.append(self.getVariable())
+                elif tok == '(':
+                    s.append(self.getCommand())
+                else:
+                    raise ParseError("Invalid $-subsitituion")
+            elif tok == None:
+                if None not in delim:
+                    raise ParseError('Unexpected end of string')
+                break
+            else:
+                s.append(tok)
+            tok = self.nextToken(delim)
+        else:
+            if keep: self.index -= 1
+        return "".join(s)
+
+    def getVariable(self):
+        # get variable name
+        varName = self.getString([':', '-', '+', '}'], True)
+
+        # process?
+        op = self.nextChar()
+        unset = varName not in self.env
+        if op == ':':
+            # or null...
+            if not unset: unset = self.env[varName] == ""
+            op = self.nextChar()
+
+        if op == '-':
+            default = self.getString(['}'])
+            if unset:
+                return default
+            else:
+                return self.env[varName]
+        elif op == '+':
+            alternate = self.getString(['}'])
+            if unset:
+                return ""
+            else:
+                return alternate
+        elif op == '}':
+            if varName not in self.env:
+                raise ParseError("Unset variable: " + varName)
+            return self.env[varName]
+        else:
+            raise ParseError("Unterminated variable: " + str(op))
+
+    def getCommand(self):
+        words = []
+        delim = [",", ")"]
+        while True:
+            word = self.getString(delim, True)
+            words.append(word)
+            end = self.nextChar()
+            if end == ")": break
+
+        if len(words) < 1:
+            raise ParseError("Expected function name")
+        cmd = words[0]
+        del words[0]
+
+        if cmd not in self.funs:
+            raise ParseError("Unknown function: "+cmd)
+
+        return self.funs[cmd](words, env=self.env, **self.funArgs)
+
 class Env(dict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.funs = []
+        self.funArgs = {}
+        self.legacy = False
+
+    def setLegacy(self, enable):
+        self.legacy = enable
+
+    def setFuns(self, funs):
+        self.funs = funs
+
+    def setFunArgs(self, funArgs):
+        self.funArgs = funArgs
+
     def derive(self, overrides = {}):
         ret = Env(self)
+        ret.funs = self.funs
+        ret.funArgs = self.funArgs
+        ret.legacy = self.legacy
         ret.update(overrides)
         return ret
 
     def prune(self, allowed):
         ret = Env()
+        ret.funs = self.funs
+        ret.funArgs = self.funArgs
+        ret.legacy = self.legacy
         for (key, value) in self.items():
             if key in allowed: ret[key] = value
         return ret
 
     def substitute(self, value, prop):
-        try:
-            return Template(value).substitute(self)
-        except KeyError as e:
-            raise ParseError("Error substituting {} in {}: {}".format(key, prop, str(e)))
-        except ValueError as e:
-            raise ParseError("Error substituting {} in {}: {}".format(key, prop, str(e)))
+        if self.legacy:
+            try:
+                return Template(value).substitute(self)
+            except KeyError as e:
+                raise ParseError("Error substituting {}: {}".format(prop, str(e)))
+            except ValueError as e:
+                raise ParseError("Error substituting {}: {}".format(prop, str(e)))
+        else:
+            try:
+                return StringParser(self, self.funs, self.funArgs).parse(value)
+            except ParseError as e:
+                raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
+
+    def evaluate(self, condition, prop):
+        if condition is None:
+            return True
+
+        if self.legacy:
+            try:
+                return eval(condition, self.derive({'__builtins__':{}}))
+            except Exception as e:
+                raise ParseError("Error evaluating condition on {}: {}".format(prop, str(e)))
+        else:
+            s = self.substitute(condition, "condition on "+prop)
+            return s.lower() not in ["", "0", "false"]
 
 
 class PluginProperty:
@@ -176,13 +357,7 @@ class BaseScm:
         self.__resolved = False
 
     def enabled(self, env):
-        if self.__condition is not None:
-            try:
-                return eval(self.__condition, env.derive({'__builtins__':{}}))
-            except Exception as e:
-                raise ParseError("Error evaluating condition on checkoutSCM: {}".format(str(e)))
-        else:
-            return True
+        return env.evaluate(self.__condition, "checkoutSCM")
 
     def resolveEnv(self, env):
         assert not self.__resolved
@@ -200,18 +375,18 @@ class GitScm(BaseScm):
     def resolveEnv(self, env):
         super().resolveEnv(env)
         if self.__url:
-            self.__url = Template(self.__url).substitute(env)
+            self.__url = env.substitute(self.__url, "git::url")
         if self.__branch:
-            self.__branch = Template(self.__branch).substitute(env)
+            self.__branch = env.substitute(self.__branch, "git::branch")
         if self.__tag:
-            self.__tag = Template(self.__tag).substitute(env)
+            self.__tag = env.substitute(self.__tag, "git::tag")
         if self.__commit:
-            self.__commit = Template(self.__commit).substitute(env).lower()
+            self.__commit = env.substitute(self.__commit, "git::commit").lower()
             # validate commit
             if re.fullmatch("[0-9a-f]{40}", self.__commit) is None:
                 raise ParseError("Invalid commit id: " + str(self.__commit))
         if self.__dir:
-            self.__dir = Template(self.__dir).substitute(env)
+            self.__dir = env.substitute(self.__dir, "git::dir")
 
     def asScript(self):
         if self.__tag or self.__commit:
@@ -344,7 +519,7 @@ fi
     def resolveEnv(self, env):
         super().resolveEnv(env)
         self.__modules = [
-            { k : (Template(v).substitute(env) if isinstance(v, str) else v) for (k,v) in m.items() }
+            { k : (env.substitute(v, "svn::"+k) if isinstance(v, str) else v) for (k,v) in m.items() }
             for m in self.__modules ]
 
     def asScript(self):
@@ -441,22 +616,22 @@ class UrlScm(BaseScm):
     def resolveEnv(self, env):
         super().resolveEnv(env)
         if self.__url:
-            self.__url = Template(self.__url).substitute(env)
+            self.__url = env.substitute(self.__url, "url::url")
         if self.__digestSha1:
-            self.__digestSha1 = Template(self.__digestSha1).substitute(env).lower()
+            self.__digestSha1 = env.substitute(self.__digestSha1, "url::digestSHA1").lower()
             # validate digest
             if re.fullmatch("[0-9a-f]{40}", self.__digestSha1) is None:
                 raise ParseError("Invalid SHA1 digest: " + str(self.__digestSha1))
         if self.__digestSha256:
-            self.__digestSha256 = Template(self.__digestSha256).substitute(env).lower()
+            self.__digestSha256 = env.substitute(self.__digestSha256, "url::digestSHA256").lower()
             # validate digest
             if re.fullmatch("[0-9a-f]{64}", self.__digestSha256) is None:
                 raise ParseError("Invalid SHA256 digest: " + str(self.__digestSha256))
         if self.__dir:
-            self.__dir = Template(self.__dir).substitute(env)
+            self.__dir = env.substitute(self.__dir, "url::dir")
         self.__fn = self.__url.split("/")[-1]
         if isinstance(self.__extract, str):
-            self.__extract = Template(self.__extract).substitute(env)
+            self.__extract = env.substitute(self.__extract, "url::extract")
 
     def asScript(self):
         ret = """
@@ -549,13 +724,8 @@ class AbstractTool:
 
     def prepare(self, step, env):
         """Create concrete tool for given step."""
-        try:
-             path = Template(self.path).substitute(env)
-             libs = [ Template(l).substitute(env) for l in self.libs ]
-        except KeyError as e:
-            raise ParseError("Error substituting {} in provideTools: {}".format(key, str(e)))
-        except ValueError as e:
-            raise ParseError("Error substituting {} in provideTools: {}".format(key, str(e)))
+        path = env.substitute(self.path, "provideTools::path")
+        libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
         return Tool(step, path, libs)
 
 class Tool:
@@ -598,14 +768,9 @@ class Sandbox:
         self.mounts = []
         for mount in spec.get('mount', []):
             m = (mount, mount) if isinstance(mount, str) else mount
-            try:
-                self.mounts.append(
-                    (Template(m[0]).substitute(env),
-                     Template(m[1]).substitute(env)))
-            except KeyError as e:
-                raise ParseError("Error substituting {} in provideSandbox: {}".format(mount, str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting {} in provideSandbox: {}".format(mount, str(e)))
+            self.mounts.append(
+                (env.substitute(m[0], "provideSandbox::mount-from"),
+                 env.substitute(m[1], "provideSandbox::mount-to")))
 
     def getStep(self):
         """Get the package step that yields the content of the sandbox image."""
@@ -948,12 +1113,7 @@ class CheckoutStep(Step):
         if checkout:
             self.__script = checkout[0] if checkout[0] is not None else ""
             self.__scmList = [ copy.deepcopy(scm) for scm in checkout[1] if scm.enabled(env) ]
-            try:
-                for s in self.__scmList: s.resolveEnv(fullEnv)
-            except KeyError as e:
-                raise ParseError("Error substituting variable in checkoutSCM: {}".format(str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting variable in checkoutSCM: {}".format(str(e)))
+            for s in self.__scmList: s.resolveEnv(fullEnv)
             self.__deterministic = deterministic
 
             # Validate that SCM paths do not overlap
@@ -1421,16 +1581,14 @@ class Recipe(object):
         stack = inputStack + [self.__packageName]
 
         # make copies because we will modify them
+        tools = inputTools.derive()
+        inputEnv = inputEnv.derive()
+        inputEnv.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
+            "tools" : inputTools, "stack" : stack })
         varSelf = {}
         for (key, value) in self.__varSelf.items():
-            try:
-                 varSelf[key] = Template(value).substitute(inputEnv)
-            except KeyError as e:
-                raise ParseError("Error substituting {} in environment: {}".format(key, str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting {} in environment: {}".format(key, str(e)))
+            varSelf[key] = inputEnv.substitute(value, "environment::"+key)
         env = inputEnv.derive(varSelf)
-        tools = inputTools.derive()
         states = { n : s.copy() for (n,s) in states.items() }
 
         # update plugin states
@@ -1448,11 +1606,7 @@ class Recipe(object):
         while i < len(allDeps):
             dep = allDeps[i]
             i += 1
-            if dep.condition is not None:
-                try:
-                    if not eval(dep.condition, env.derive({'__builtins__':{}})): continue
-                except Exception as e:
-                    raise ParseError("Error evaluating condition on dependency {}: {}".format(dep.recipe, str(e)))
+            if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
 
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
@@ -1514,12 +1668,7 @@ class Recipe(object):
         # provide environment
         provideEnv = {}
         for (key, value) in self.__provideVars.items():
-            try:
-                 provideEnv[key] = Template(value).substitute(env)
-            except KeyError as e:
-                raise ParseError("Error substituting {} in provideVars: {}".format(key, str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting {} in provideVars: {}".format(key, str(e)))
+            provideEnv[key] = env.substitute(value, "provideVars::"+key)
         packageStep._setProvidedEnv(provideEnv)
 
         # provide tools
@@ -1552,6 +1701,41 @@ class Recipe(object):
         return p
 
 
+def funEqual(args, **options):
+    if len(args) != 2: raise ParseError("eq expects two arguments")
+    return "true" if args[0] == args[1] else "false"
+
+def funNotEqual(args, **options):
+    if len(args) != 2: raise ParseError("ne expects two arguments")
+    return "true" if args[0] != args[1] else "false"
+
+def funNot(args, **options):
+    if len(args) != 1: raise ParseError("not expects one argument")
+    return "true" if (args[0].strip().lower() in [ "", "0", "false" ]) else "false"
+
+def funIfThenElse(args, **options):
+    if len(args) != 3: raise ParseError("if-then-else expects three arguments")
+    if args[0].strip().lower() in [ "", "0", "false" ]:
+        return args[2]
+    else:
+        return args[1]
+
+def funSubst(args, **options):
+    if len(args) != 3: raise ParseError("subst expects three arguments")
+    return args[2].replace(args[0], args[1])
+
+def funStrip(args, **options):
+    if len(args) != 1: raise ParseError("strip expects one argument")
+    return args[0].strip()
+
+def funSandboxEnabled(args, sandbox, **options):
+    if len(args) != 0: raise ParseError("is-sandbox-enabled expects no arguments")
+    return "true" if (sandbox is not None) and sandbox.isEnabled() else "false"
+
+def funToolDefined(args, tools, **options):
+    if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
+    return "true" if args[0] in tools else "false"
+
 class RecipeSet:
     def __init__(self):
         self.__defaultEnv = {}
@@ -1565,6 +1749,16 @@ class RecipeSet:
         self.__properties = {}
         self.__states = {}
         self.__cache = YamlCache()
+        self.__stringFunctions = {
+            "eq" : funEqual,
+            "if-then-else" : funIfThenElse,
+            "is-sandbox-enabled" : funSandboxEnabled,
+            "is-tool-defined" : funToolDefined,
+            "ne" : funNotEqual,
+            "not" : funNot,
+            "strip" : funStrip,
+            "subst" : funSubst,
+        }
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -1597,7 +1791,7 @@ class RecipeSet:
         if 'manifest' not in g:
             raise ParseError("Plugin '"+name+"' did not define 'manifest'!")
         manifest = g['manifest']
-        if manifest.get('apiVersion', "0") != "0.1":
+        if manifest.get('apiVersion', "0") not in ["0.1", "0.2"]:
             raise ParseError("Plugin '"+name+"': incompatible apiVersion!")
 
         hooks = manifest.get('hooks', {})
@@ -1630,6 +1824,16 @@ class RecipeSet:
             if i in self.__states:
                 raise ParseError("Plugin '"+name+"': state tracker '" +i+"' already defined by other plugin!")
         self.__states.update(states)
+
+        funs = manifest.get('stringFunctions', {})
+        if not isinstance(funs, dict):
+            raise ParseError("Plugin '"+name+"': 'stringFunctions' has wrong type!")
+        for (i,j) in funs.items():
+            if not isinstance(i, str):
+                raise ParseError("Plugin '"+name+"': string function name must be a string!")
+            if i in self.__stringFunctions:
+                raise ParseError("Plugin '"+name+"': string function '" +i+"' already defined by other plugin!")
+        self.__stringFunctions.update(funs)
 
     def defineHook(self, name, value):
         self.__hooks[name] = value
@@ -1666,6 +1870,7 @@ class RecipeSet:
         minVer = config.get("bobMinimumVersion", "0.1")
         if compareVersion(BOB_VERSION, minVer) < 0:
             raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
+        self.__extStrings = compareVersion(minVer, "0.3") >= 0
         self.__loadPlugins(config.get("plugins", []))
 
         defaults = self.loadYaml("default.yaml")
@@ -1721,6 +1926,8 @@ class RecipeSet:
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         result = {}
         env = Env(os.environ).prune(self.__whiteList)
+        env.setLegacy(not self.__extStrings)
+        env.setFuns(self.__stringFunctions)
         env.update(self.__defaultEnv)
         env.update(envOverrides)
         states = { n:s() for (n,s) in self.__states.items() }

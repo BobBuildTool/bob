@@ -225,6 +225,72 @@ restrict side effects. The sandbox image must provide everything to execute the
 steps (including bash). The only component used from the host is the Linux
 kernel and indirectly Python because Bob is written in this language.
 
+.. _configuration-principle-subst:
+
+String substitution
+~~~~~~~~~~~~~~~~~~~
+
+At most places where strings are handled in keywords it is possible to use
+variable substitution. These substitutions might be simple variables but also a
+variety of string processing functions are available that can optionally be
+extended by plugins. The following syntax is supported:
+
+* Variable substitution
+    * ``${var}``: The value of ``var`` is substituted. The variable has to be
+      defined or an error will be raised. Unlike unix shells the braces are
+      always required.
+    * ``${var:-default}``: If variable ``var`` is unset or null, the expansion
+      of ``default`` is substituted. Otherwise the value of ``var`` is
+      substituted. Omitting the colon results in a test only for ``var`` being
+      unset.
+    * ``${var:+alternate}``: If variable ``var`` is unset or null, nothing is
+      substituted. Otherwise the expansion of ``alternate`` is substituted.
+      Omitting the colon results in a test only for ``var`` being unset.
+* ``$(fun,arg1,...)``: Substitutes the result of calling ``fun`` with the given
+  arguments. Unlike unix shells, whish employ word splitting at whitespaces, the
+  function arguments are separated by commas. Any white spaces are kept and belong
+  to the arguments. To put a comma or closing brace into an argument it has to
+  be escaped by a backslash or double/single quotes.
+* Quoting
+    * ``"..."``: Double quotes begin a new substitution context that runs until
+      the matching closing double quote. All substituions are still recognized.
+    * ``'...'``: Enclosing characters in single quotes preserves the literal
+      value of each character within the quotes.  A single quote may not occur
+      between single quotes, even when preceded by a backslash.
+    * ``\.``: A backslash preserves the literal meaning of the following
+      character. The only exception is within single quotes where backslash is
+      not recignized as meta character.
+
+.. note::
+   These facilities are only available if you define ``bobMinimumVersion`` to
+   at least "0.3" in your :ref:`configuration-config`. Otherwise the only available
+   substitutions are ``$VAR`` and ``${VAR}``.
+
+The following built in string functions are supported:
+
+* ``$(eq,left,right)``: Returns ``true`` if the expansions of ``left`` and
+  ``right`` are equal, ``false`` otherwise.
+* ``$(if-then-else,condition,then,else)``: The expansion of ``condition`` is
+  interpreted as boolean value. If the contition is true the expansion of
+  ``then`` is returned. Otherwise ``else`` is returned.
+* ``$(is-sandbox-enabled)``: Return ``true`` if a sandbox is enabled in the
+  current context, ``false`` otherwise.
+* ``$(is-tool-defined,name)``: If ``name`` is a defined tool in the current
+  context the function will return ``true``. Otherwise ``false`` is returned.
+* ``$(ne,left,right)``: Returns ``true`` if the expansions of ``left`` and
+  ``right`` differ, otherwise ``false`` is returned.
+* ``$(not,condition)``: Interpret the expansion of ``condition`` as boolean
+  value and return the opposite.
+* ``$(strip,text)``: Remove leading and trailing whitespaces from the expansion
+  of ``text``.
+* ``$(subst,from,to,text)``: Replace every occurence of ``from`` with ``to`` in
+  ``text``.
+
+Plugins may provide additional functions as described in
+:ref:`extending-hooks-string`. If a string is interpreted as a boolean then the
+empty string, "0" and "false" (case insensitive) are considered as locical
+"false".  Any other value is considered as "true".
+
 Recipe and class keywords
 -------------------------
 
@@ -378,8 +444,14 @@ There are three common (string) attributes in all SCM specifications: ``scm``,
 ``dir`` and ``if``. By default the SCMs check out to the root of the workspace.
 You may specify any relative path in ``dir`` to checkout to this directory.
 
-By using ``if`` you can selectively enable or disable a particular SCM. Only
-simple expressions are possible at the moment. TODO
+By using ``if`` you can selectively enable or disable a particular SCM. Define
+``bobMinimumVersion`` to at least "0.3" in your :ref:`configuration-config` to
+enable advanced string substitutions. The string given to the ``if``-keyword is
+substituted according to :ref:`configuration-principle-subst` and the final
+string is interpreted as a boolean value (everything except the empty string,
+``0`` and ``false`` is considered true). The SCM will only be considered if the
+condition passes. The old behaviour before 0.3 is missing intentionally and
+should not be used anymore.
 
 Currently the following ``scm`` values are supported:
 
@@ -488,6 +560,13 @@ supported:
 |             |                 |        FOO: value                                   |
 |             |                 |        BAR: baz                                     |
 |             |                 |                                                     |
++-------------+-----------------+-----------------------------------------------------+
+| if          | String          | The string (subject to substitution) is interpreted |
+|             |                 | as boolean value. The dependency is only considered |
+|             |                 | if the string is considered as true. See            |
+|             |                 | :ref:`configuration-principle-subst`.               |
+|             |                 |                                                     |
+|             |                 | Default: true                                       |
 +-------------+-----------------+-----------------------------------------------------+
 
 environment
@@ -685,6 +764,8 @@ influence on local builds. On Jenkins the result will be copied to a separate
 directory in the Jenkins installation and will be used from there. This reduces
 the job workspace size considerably at the expense of having artifacts outside
 of Jenkins's regular control.
+
+.. _configuration-config:
 
 config.yaml
 -----------

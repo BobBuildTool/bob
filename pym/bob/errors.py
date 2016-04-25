@@ -18,12 +18,13 @@ from .tty import colorize
 
 class BobError(Exception):
     def __init__(self, kind, slogan, help=""):
-        self.slogan = colorize(kind+" error: ", "31;1") + colorize(slogan, "31")
+        self.kind = kind
+        self.slogan = slogan
         self.stack = []
         self.help = help
 
     def __str__(self):
-        ret = self.slogan
+        ret = colorize(self.kind+" error: ", "31;1") + colorize(self.slogan, "31")
         if self.stack:
             ret = ret + "\nProcessing stack: " + "/".join(self.stack)
         if self.help:

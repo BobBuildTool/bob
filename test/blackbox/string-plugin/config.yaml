@@ -1,0 +1,5 @@
+# request 0.3 to get string functions
+bobMinimumVersion: "0.3"
+plugins:
+    - "override"
+
