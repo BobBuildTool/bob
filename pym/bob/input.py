@@ -1680,9 +1680,12 @@ class Recipe(object):
         provideDeps = Recipe.DependencyList()
         for dep in self.__deps:
             if dep.recipe not in self.__provideDeps: continue
-            provideDeps.append(dep)
-            [subDep] = [ p for p in packages if p.getPackage().getName() == dep.recipe ]
-            for d in subDep.getProvidedDeps(): provideDeps.append(d)
+            subDeps = [ p for p in packages if p.getPackage().getName() == dep.recipe ]
+            if len(subDeps) == 1:
+                provideDeps.append(dep)
+                for d in subDeps[0].getProvidedDeps(): provideDeps.append(d)
+            else:
+                assert len(subDeps) == 0
         packageStep._setProvidedDeps(provideDeps)
 
         # provide Sandbox
