@@ -61,10 +61,12 @@ __bob_build()
 {
    if [[ "$prev" = "--destination" ]] ; then
       COMPREPLY=( $(compgen -o dirnames "$cur") )
+   elif [[ "$prev" = "--download" ]] ; then
+         __bob_complete_words "yes no deps"
    elif [[ "$prev" = "-c" ]] ; then
       COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
    else
-      __bob_complete_path "-f --force -n --no-deps -b --build-only -v --verbose"
+      __bob_complete_path "-e -f --force -n --no-deps -b --build-only --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose"
    fi
 }
 
