@@ -1708,11 +1708,11 @@ class Recipe(object):
 
 def funEqual(args, **options):
     if len(args) != 2: raise ParseError("eq expects two arguments")
-    return "true" if args[0] == args[1] else "false"
+    return "true" if (args[0] == args[1]) else "false"
 
 def funNotEqual(args, **options):
     if len(args) != 2: raise ParseError("ne expects two arguments")
-    return "true" if args[0] != args[1] else "false"
+    return "true" if (args[0] != args[1]) else "false"
 
 def funNot(args, **options):
     if len(args) != 1: raise ParseError("not expects one argument")
@@ -1735,11 +1735,11 @@ def funStrip(args, **options):
 
 def funSandboxEnabled(args, sandbox, **options):
     if len(args) != 0: raise ParseError("is-sandbox-enabled expects no arguments")
-    return "true" if (sandbox is not None) and sandbox.isEnabled() else "false"
+    return "true" if ((sandbox is not None) and sandbox.isEnabled()) else "false"
 
 def funToolDefined(args, tools, **options):
     if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
-    return "true" if args[0] in tools else "false"
+    return "true" if (args[0] in tools) else "false"
 
 class RecipeSet:
     def __init__(self):
