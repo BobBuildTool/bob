@@ -13,7 +13,7 @@ Getting started
 ===============
 
 It's probably the best to head over to the
-[documentation](http://bob-build-tool.readthedocs.org/). To get an impression
+[documentation](http://bob-build-tool.readthedocs.io/). To get an impression
 how Bob is configured have a look at the
 [tutorials](https://github.com/BobBuildTool/bob-tutorials). If you have a
 specific question you're welcome to post on the
