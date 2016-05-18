@@ -1606,6 +1606,8 @@ class Recipe(object):
         while i < len(allDeps):
             dep = allDeps[i]
             i += 1
+            env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
+                "tools" : tools, "stack" : stack })
             if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
 
             r = self.__recipeSet.getRecipe(dep.recipe)
