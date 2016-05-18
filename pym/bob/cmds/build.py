@@ -468,6 +468,7 @@ esac
         # write scripts
         runFile = os.path.join("..", scriptName+".sh")
         absRunFile = os.path.normpath(os.path.join(workspacePath, runFile))
+        absRunFile = os.path.join(".", absRunFile)
         with open(absRunFile, "w") as f:
             print(LocalBuilder.RUN_TEMPLATE.format(
                     ENV=" ".join(sorted([
