@@ -1184,7 +1184,7 @@ class Step(metaclass=ABCMeta):
 
         The Variant-Id is used to distinguish different packages or multiple
         variants of a package. Each Variant-Id need only be built once but
-        successive builds might yield different results (e.g. when builting
+        successive builds might yield different results (e.g. when building
         from branches)."""
         try:
             ret = self.__variantId
