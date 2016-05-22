@@ -34,7 +34,18 @@ __bob_complete_words()
 
 __bob_complete_path()
 {
-   local prefix result
+   local i prefix result
+
+   for i in "${COMP_WORDS[@]}"; do
+      case "$i" in
+         --sandbox)
+            sandbox="--sandbox"
+            ;;
+         --no-sandbox)
+            sandbox="--no-sandbox"
+            ;;
+      esac
+   done
 
    case "$cur" in
       -*)
@@ -46,7 +57,7 @@ __bob_complete_path()
          else
             prefix=""
          fi
-         result="$($bob ls $prefix 2>/dev/null)"
+         result="$($bob ls $sandbox $prefix 2>/dev/null)"
          __bob_complete_words "$result" "${prefix}" "/"
          ;;
    esac
@@ -57,7 +68,7 @@ __bob_clean()
    __bob_complete_words "-h --help --dry-run -v --verbose"
 }
 
-__bob_build()
+__bob_cook()
 {
    if [[ "$prev" = "--destination" ]] ; then
       COMPREPLY=( $(compgen -o dirnames "$cur") )
@@ -70,18 +81,27 @@ __bob_build()
    fi
 }
 
+__bob_build()
+{
+   sandbox="--sandbox"
+   __bob_cook "$@"
+}
+
 __bob_dev()
 {
-   __bob_build "$@"
+   sandbox="--no-sandbox"
+   __bob_cook "$@"
 }
 
 __bob_ls()
 {
-   __bob_complete_path "-r --recursive"
+   __bob_complete_path "-a --all -r --recursive --sandbox --no-sandbox"
 }
 
 __bob_jenkins_add()
 {
+   sandbox="--no-sandbox"
+
    case "$cur" in
       -*)
          __bob_complete_words "-h --help -r --root -p --prefix"
@@ -182,6 +202,8 @@ __bob_jenkins_set_url()
 
 __bob_jenkins_set_options()
 {
+   sandbox="--no-sandbox"
+
    case "$cur" in
       -*)
          __bob_complete_words "-h --help -n --nodes -p --prefix --add-root --del-root -D -U --upload --no-upload"
@@ -233,6 +255,7 @@ __bob_subcommands()
 __bob()
 {
    local parse_pos=1 bob="$1" cur="$2" prev="$3"
+   local sandbox=""
    __bob_subcommands "build clean dev ls jenkins"
 }
 
