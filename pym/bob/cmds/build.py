@@ -608,12 +608,13 @@ esac
                 for (scmDir, scmDigest) in oldCheckoutState.copy().items():
                     if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
-                        atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
-                        print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
-                        atticPath = os.path.join(prettySrcPath, "..", "attic")
-                        if not os.path.isdir(atticPath):
-                            os.makedirs(atticPath)
-                        os.rename(scmPath, os.path.join(atticPath, atticName))
+                        if os.path.exists(scmPath):
+                            atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
+                            print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
+                            atticPath = os.path.join(prettySrcPath, "..", "attic")
+                            if not os.path.isdir(atticPath):
+                                os.makedirs(atticPath)
+                            os.rename(scmPath, os.path.join(atticPath, atticName))
                         del oldCheckoutState[scmDir]
                         BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
