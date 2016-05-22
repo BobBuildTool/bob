@@ -42,12 +42,17 @@ def doLS(argv, bobRoot):
                         help="Recursively display dependencies")
     parser.add_argument('-p', '--prefixed', default=False, action='store_true',
                         help="Prints the full path prefix for each package")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', default=True,
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
     args = parser.parse_args(argv)
 
     recipes = RecipeSet()
     recipes.parse()
 
-    roots = recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=True).values()
+    roots = recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=args.sandbox).values()
     stack = []
     if args.package:
         steps = [ s for s in args.package.split("/") if s != "" ]
