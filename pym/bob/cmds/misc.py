@@ -19,12 +19,15 @@ import argparse
 import sys
 
 def doLS(argv, bobRoot):
-    def showTree(packages, recurse, showAll, level=0):
+    def showTree(packages, showAll, prefix=""):
+        i = 0
         for p in packages:
-            print("{}{}".format("    "*level, p.getName()))
-            if recurse:
-                deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
-                showTree([d.getPackage() for d in deps], recurse, showAll, level+1)
+            last = (i >= len(packages)-1)
+            print("{}{}{}".format(prefix, "└── " if last else "├── ", p.getName()))
+            deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
+            showTree([d.getPackage() for d in deps], showAll,
+                     prefix + ("    " if last else "│   "))
+            i += 1
 
     def showPrefixed(packages, recurse, showAll, stack, level=0):
         for p in packages:
@@ -71,9 +74,14 @@ def doLS(argv, bobRoot):
             else:
                 roots = [ d.getPackage() for d in roots[0].getDirectDepSteps() ]
             stack.append(s)
+    else:
+        steps = ["/"]
 
     if args.prefixed:
         showPrefixed(roots, args.recursive, showAll, stack)
+    elif args.recursive:
+        print("/".join(steps))
+        showTree(roots, showAll)
     else:
-        showTree(roots, args.recursive, showAll)
+        for p in roots: print(p.getName())
 
