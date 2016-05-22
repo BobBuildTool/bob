@@ -19,25 +19,28 @@ import argparse
 import sys
 
 def doLS(argv, bobRoot):
-    def showTree(packages, recurse, level=0):
+    def showTree(packages, recurse, showAll, level=0):
         for p in packages:
             print("{}{}".format("    "*level, p.getName()))
             if recurse:
-                showTree([d.getPackage() for d in p.getDirectDepSteps()],
-                         recurse, level+1)
+                deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
+                showTree([d.getPackage() for d in deps], recurse, showAll, level+1)
 
-    def showPrefixed(packages, recurse, stack, level=0):
+    def showPrefixed(packages, recurse, showAll, stack, level=0):
         for p in packages:
             newStack = stack[:]
             newStack.append(p.getName())
             print("/".join(newStack))
             if recurse:
-                showPrefixed([d.getPackage() for d in p.getDirectDepSteps()],
-                             recurse, newStack, level+1)
+                deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
+                showPrefixed([d.getPackage() for d in deps], recurse, showAll,
+                             newStack, level+1)
 
     parser = argparse.ArgumentParser(prog="bob ls", description='List packages.')
     parser.add_argument('package', type=str, nargs='?',
                         help="Sub-package to start listing from")
+    parser.add_argument('-a', '--all', default=False, action='store_true',
+                        help="Show indirect dependencies too")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
     parser.add_argument('-p', '--prefixed', default=False, action='store_true',
@@ -52,6 +55,7 @@ def doLS(argv, bobRoot):
     recipes = RecipeSet()
     recipes.parse()
 
+    showAll = args.all
     roots = recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=args.sandbox).values()
     stack = []
     if args.package:
@@ -62,11 +66,14 @@ def doLS(argv, bobRoot):
                 print("{}: not found in '{}'".format(s, "/".join(stack)),
                       file=sys.stderr)
                 sys.exit(1)
-            roots = [ d.getPackage() for d in roots[0].getDirectDepSteps() ]
+            if showAll:
+                roots = [ d.getPackage() for d in roots[0].getAllDepSteps() ]
+            else:
+                roots = [ d.getPackage() for d in roots[0].getDirectDepSteps() ]
             stack.append(s)
 
     if args.prefixed:
-        showPrefixed(roots, args.recursive, stack)
+        showPrefixed(roots, args.recursive, showAll, stack)
     else:
-        showTree(roots, args.recursive)
+        showTree(roots, args.recursive, showAll)
 
