@@ -1199,11 +1199,18 @@ class PackageStep(RegularStep):
     def __init__(self, package, pathFormatter, sandbox=None, script=None, env={},
                  tools={}, args=[]):
         self.__script = script
+        self.__used = False
         super().__init__(package, pathFormatter, sandbox, "dist", script, env,
                          tools, args)
 
     def isPackageStep(self):
         return True
+
+    def isUsed(self):
+        return self.__used
+
+    def markUsed(self):
+        self.__used = True
 
 
 class Package(object):
@@ -1393,29 +1400,15 @@ class Recipe(object):
             self.useSandbox = "sandbox" in self.use
             self.condition = dep.get("if", None)
 
-        def isCompatible(self, other):
-            if self.recipe != other.recipe: return True
-            return ((self.envOverride == other.envOverride) and (self.provideGlobal == other.provideGlobal)
-                    and (self.useEnv == other.useEnv) and (self.useTools == other.useTools)
-                    and (self.useBuildResult == other.useBuildResult) and (self.useDeps == other.useDeps)
-                    and (self.useSandbox == other.useSandbox) and (self.condition == other.condition))
-
-    class DependencyList(list):
-        def __verify(self, item):
-            for d in self:
-                if not item.isCompatible(d):
-                    raise ParseError("Injected dependency '{}' conflicts with existing one.".format(item.recipe))
-                if d.recipe == item.recipe:
-                    return False
-            return True
-
-        def append(self, item):
-            if self.__verify(item):
-                list.append(self, item)
-
-        def insert(self, i, item):
-            if self.__verify(item):
-                list.insert(self, i, item)
+    class InjectedDep:
+        def __init__(self, packageStep):
+            self.provideGlobal = False
+            self.use = ["result"]
+            self.useEnv = False
+            self.useTools = False
+            self.useBuildResult = True
+            self.useSandbox = False
+            self.packageStep = packageStep
 
     @staticmethod
     def loadFromFile(recipeSet, fileName, properties, isClass):
@@ -1595,35 +1588,42 @@ class Recipe(object):
         for s in states.values(): s.onEnter(env, tools, self.__properties)
 
         # traverse dependencies
-        packages = []
+        directPackages = []
+        indirectPackages = []
         results = []
         depEnv = env.derive()
         depTools = tools.derive()
         depSandbox = sandbox
         depStates = { n : s.copy() for (n,s) in states.items() }
-        allDeps = Recipe.DependencyList(self.__deps)
+        allDeps = self.__deps[:]
+        thisDeps = {}
         i = 0
         while i < len(allDeps):
             dep = allDeps[i]
             i += 1
             env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
                 "tools" : tools, "stack" : stack })
-            if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
 
-            r = self.__recipeSet.getRecipe(dep.recipe)
-            try:
-                p = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
-                              sandboxEnabled, depStates, depSandbox, depTools,
-                              stack).getPackageStep()
-            except ParseError as e:
-                e.pushFrame(r.getPackageName())
-                raise e
+            if isinstance(dep, Recipe.Dependency):
+                if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
+                r = self.__recipeSet.getRecipe(dep.recipe)
+                try:
+                    p = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
+                                  sandboxEnabled, depStates, depSandbox, depTools,
+                                  stack).getPackageStep()
+                except ParseError as e:
+                    e.pushFrame(r.getPackageName())
+                    raise e
 
-            if dep.useDeps:
-                # inject provided depndencies right after current one
-                providedDeps = copy.deepcopy(p.getProvidedDeps())
-                providedDeps.reverse()
-                for d in providedDeps: allDeps.insert(i, d)
+                thisDeps[dep.recipe] = p
+                if dep.useDeps:
+                    # inject provided dependencies right after current one
+                    providedDeps = p.getProvidedDeps()
+                    allDeps[i:i] = ( Recipe.InjectedDep(d) for d in providedDeps )
+                directPackages.append(p)
+            else:
+                p = dep.packageStep
+                indirectPackages.append(p)
 
             for (n, s) in states.items():
                 if n in dep.use:
@@ -1640,13 +1640,39 @@ class Recipe(object):
             if dep.useSandbox:
                 sandbox = p.getProvidedSandbox()
                 if dep.provideGlobal: depSandbox = p.getProvidedSandbox()
-            if dep.useBuildResult or dep.useTools or (dep.useSandbox and sandboxEnabled):
-                packages.append(p)
+
+        # filter duplicate results, fail on different variants of same package
+        i = 0
+        while i < len(results):
+            j = i+1
+            r = results[i]
+            while j < len(results):
+                if r.getPackage().getName() == results[j].getPackage().getName():
+                    if r.getVariantId() != results[j].getVariantId():
+                        raise ParseError("Incompatibe variants of package: {} vs. {}"
+                            .format("/".join(r.getPackage().getStack()),
+                                    "/".join(results[j].getPackage().getStack())),
+                            help=
+"""This error is caused by '{PKG}' that is passed upwards via 'provideDeps' from multiple dependencies of '{CUR}'.
+These dependencies constitute different variants of '{PKG}' and can therefore not be used in '{CUR}'."""
+    .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
+                    del results[j]
+                else:
+                    j += 1
+            i += 1
+
+        # mark actually used steps as such
+        if sandbox and sandbox.isEnabled(): sandbox.getStep().markUsed()
+        toolPackages = [ t.step for t in tools.prune(self.__toolDepPackage).values() ]
+        for p in toolPackages: p.markUsed()
+        for p in results: p.markUsed()
+        indirectPackages.extend(toolPackages)
 
         # create package
-        p = Package(self.__packageName, stack, pathFormatter, self, sandbox, packages,
-                    [ t.step for t  in tools.prune(self.__toolDepPackage).values()  ],
-                    states)
+        directPackages = [ p for p in directPackages if p.isUsed() ]
+        indirectPackages = [ p for p in indirectPackages if p.isUsed() ]
+        p = Package(self.__packageName, stack, pathFormatter, self, sandbox,
+                    directPackages, indirectPackages, states)
 
         # optional checkout step
         if self.__checkout != (None, []):
@@ -1679,15 +1705,14 @@ class Recipe(object):
         packageStep._setProvidedTools(provideTools)
 
         # provide deps (direct and indirect deps)
-        provideDeps = Recipe.DependencyList()
+        provideDeps = []
         for dep in self.__deps:
             if dep.recipe not in self.__provideDeps: continue
-            subDeps = [ p for p in packages if p.getPackage().getName() == dep.recipe ]
-            if len(subDeps) == 1:
-                provideDeps.append(dep)
-                for d in subDeps[0].getProvidedDeps(): provideDeps.append(d)
-            else:
-                assert len(subDeps) == 0
+            subDep = thisDeps.get(dep.recipe)
+            if subDep is not None:
+                provideDeps.append(subDep)
+                if dep.useDeps:
+                    for d in subDep.getProvidedDeps(): provideDeps.append(d)
         packageStep._setProvidedDeps(provideDeps)
 
         # provide Sandbox
