@@ -454,7 +454,7 @@ fi
                 "hudson.plugins.git.BranchSpec"),
             "name")
         if self.__commit:
-            branch.text = self.__commmit
+            branch.text = self.__commit
         elif self.__tag:
             branch.text = "refs/tags/" + self.__tag
         else:
