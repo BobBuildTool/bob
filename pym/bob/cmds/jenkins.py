@@ -1058,12 +1058,12 @@ def doJenkinsSetOptions(recipes, argv):
     parser.add_argument('-U', default=[], action='append', dest="undefines",
                         help="Undefine environment variable override")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--upload', action='store_true',
+    group.add_argument('--upload', action='store_true', default=None,
         help="Enable binary archive upload")
     group.add_argument('--no-upload', action='store_false', dest='upload',
         help="Disable binary archive upload")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true',
+    group.add_argument('--sandbox', action='store_true', default=None,
         help="Enable sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
