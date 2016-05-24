@@ -1326,7 +1326,11 @@ class IncludeHelper:
             item = item[1:]
             content = []
             try:
-                for path in sorted(glob(os.path.join(self.baseDir, item))):
+                paths = sorted(glob(os.path.join(self.baseDir, item)))
+                if not paths:
+                    raise ParseError("No files matched in include pattern '{}'!"
+                        .format(item))
+                for path in paths:
                     with open(path, "rb") as f:
                         content.append(f.read(-1))
             except OSError as e:
