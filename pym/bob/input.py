@@ -611,6 +611,7 @@ class UrlScm(BaseScm):
         self.__digestSha1 = spec.get("digestSHA1")
         self.__digestSha256 = spec.get("digestSHA256")
         self.__dir = spec.get("dir", ".")
+        self.__fn = spec.get("fileName")
         self.__extract = spec.get("extract", "auto")
 
     def resolveEnv(self, env):
@@ -629,7 +630,10 @@ class UrlScm(BaseScm):
                 raise ParseError("Invalid SHA256 digest: " + str(self.__digestSha256))
         if self.__dir:
             self.__dir = env.substitute(self.__dir, "url::dir")
-        self.__fn = self.__url.split("/")[-1]
+        if self.__fn:
+            self.__fn = env.substitute(self.__fn, "url::fileName")
+        else:
+            self.__fn = self.__url.split("/")[-1]
         if isinstance(self.__extract, str):
             self.__extract = env.substitute(self.__extract, "url::extract")
 

@@ -468,6 +468,7 @@ url While not a real SCM it      | ``url``: File that should be downloaded
     allows to download (and      | ``digestSHA1``: Expected SHA1 digest of the file (optional)
     extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
                                  | ``extract``: Extract directive (optional, default: auto)
+                                 | ``fileName``: Local file name (optional, default: url file name)
 === ============================ =========================================
 
 .. _Git: http://git-scm.com/
