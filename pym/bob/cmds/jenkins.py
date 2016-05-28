@@ -141,7 +141,7 @@ class JenkinsJob:
 
         cmds.append(self.getShebang(windows))
 
-        if d.getJenkinsScript():
+        if d.getJenkinsScript() is not None:
             cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
             if d.getSandbox() is not None:
                 sandbox = []
