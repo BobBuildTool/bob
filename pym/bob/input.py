@@ -1719,8 +1719,7 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             subDep = thisDeps.get(dep.recipe)
             if subDep is not None:
                 provideDeps.append(subDep)
-                if dep.useDeps:
-                    for d in subDep.getProvidedDeps(): provideDeps.append(d)
+                for d in subDep.getProvidedDeps(): provideDeps.append(d)
         packageStep._setProvidedDeps(provideDeps)
 
         # provide Sandbox
