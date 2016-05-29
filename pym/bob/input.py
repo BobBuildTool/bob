@@ -1444,6 +1444,9 @@ class Recipe(object):
 
     def __init__(self, recipeSet, recipe, baseDir, packageName, baseName, properties, anonBaseClass=None):
         self.__recipeSet = recipeSet
+        self.__classesResolved = False
+        self.__inherit = recipe.get("inherit", [])
+        self.__anonBaseClass = anonBaseClass
         self.__deps = [ Recipe.Dependency(d) for d in recipe.get("depends", []) ]
         self.__packageName = packageName
         self.__baseName = baseName
@@ -1496,13 +1499,30 @@ class Recipe(object):
         # involved.
         self.__checkoutDeterministic = recipe.get("checkoutDeterministic", checkoutScript is None)
 
-        self.__inherited = set()
-        inherit = [ self.__recipeSet.getClass(c) for c in recipe.get("inherit", []) ]
-        if anonBaseClass: inherit.append(anonBaseClass)
+    def __resolveClasses(self):
+        # must be done only once
+        if self.__classesResolved: return
+        self.__classesResolved = True
+
+        # calculate order of classes (depth first)
+        visited = set()
+        backlog = [ self.__recipeSet.getClass(c) for c in self.__inherit ]
+        if self.__anonBaseClass: backlog.insert(0, self.__anonBaseClass)
+        inherit = []
+        while backlog:
+            next = backlog.pop(0)
+            if next.getName() in visited: continue
+            subInherit = [ self.__recipeSet.getClass(c) for c in next.__inherit if c not in visited ]
+            if subInherit:
+                # prepend and re-insert current class
+                backlog[0:0] = subInherit + [next]
+            else:
+                inherit.append(next)
+                visited.add(next.getName())
+
+        # inherit classes
         inherit.reverse()
         for cls in inherit:
-            if cls.getName() in self.__inherited:
-                continue
             self.__deps[0:0] = cls.__deps
             tmp = cls.__provideTools.copy()
             tmp.update(self.__provideTools)
@@ -1534,9 +1554,6 @@ class Recipe(object):
             self.__package = joinScripts([cls.__package, self.__package])
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
-
-            self.__inherited.add(cls.getName())
-            self.__inherited |= cls.__inherited
 
         # the package step must always be valid
         if self.__package is None:
@@ -1583,6 +1600,7 @@ class Recipe(object):
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, states, sandbox=None,
                 inputTools=Env(), inputStack=[]):
+        self.__resolveClasses()
         if self.__packageName in inputStack:
             raise ParseError("Recipes are cyclic (1st package in cylce)")
         stack = inputStack + [self.__packageName]
@@ -1811,6 +1829,12 @@ class RecipeSet:
         if recipe.isRoot():
             self.__rootRecipes.append(recipe)
 
+    def __addClass(self, recipe):
+        name = recipe.getPackageName()
+        if name in self.__classes:
+            raise ParseError("Class "+name+" already defined")
+        self.__classes[name] = recipe
+
     def __loadPlugins(self, plugins):
         for p in plugins:
             name = os.path.join("plugins", p+".py")
@@ -1939,6 +1963,15 @@ class RecipeSet:
         if not os.path.isdir("recipes"):
             raise ParseError("No recipes directory found.")
 
+        for root, dirnames, filenames in os.walk('classes'):
+            for path in fnmatch.filter(filenames, "*.yaml"):
+                try:
+                    [r] = Recipe.loadFromFile(self, os.path.join(root, path), self.__properties, True)
+                    self.__addClass(r)
+                except ParseError as e:
+                    e.pushFrame(path)
+                    raise
+
         for root, dirnames, filenames in os.walk('recipes'):
             for path in fnmatch.filter(filenames, "*.yaml"):
                 try:
@@ -1953,18 +1986,10 @@ class RecipeSet:
             raise ParseError("Package {} requested but not found.".format(packageName))
         return self.__recipes[packageName]
 
-    def getClass(self, name):
-        if name in self.__classes:
-            return self.__classes[name]
-        else:
-            fileName = os.path.join("classes", name+".yaml")
-            try:
-                [r] = Recipe.loadFromFile(self, fileName, self.__properties, True)
-            except ParseError as e:
-                e.pushFrame(fileName)
-                raise
-            self.__classes[name] = r
-            return r
+    def getClass(self, className):
+        if className not in self.__classes:
+            raise ParseError("Class {} requested but not found.".format(className))
+        return self.__classes[className]
 
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         result = {}
