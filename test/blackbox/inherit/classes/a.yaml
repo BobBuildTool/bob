@@ -1,0 +1,3 @@
+packageScript: |
+    echo "a" >> res.txt
+

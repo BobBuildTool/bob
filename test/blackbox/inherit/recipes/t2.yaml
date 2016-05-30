@@ -1,0 +1,4 @@
+inherit: [c]
+packageScript: |
+    echo "t2" >> res.txt
+    mv res.txt result.txt

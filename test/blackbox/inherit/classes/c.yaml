@@ -1,0 +1,4 @@
+inherit: [a, b]
+
+packageScript: |
+    echo "c" >> res.txt

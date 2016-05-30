@@ -1,0 +1,5 @@
+inherit: [b]
+
+packageScript: |
+    echo "d" >> res.txt
+
