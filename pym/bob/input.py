@@ -1583,6 +1583,8 @@ class Recipe(object):
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, states, sandbox=None,
                 inputTools=Env(), inputStack=[]):
+        if self.__packageName in inputStack:
+            raise ParseError("Recipes are cyclic (1st package in cylce)")
         stack = inputStack + [self.__packageName]
 
         # make copies because we will modify them
