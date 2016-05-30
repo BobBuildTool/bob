@@ -38,6 +38,7 @@ import yaml
 warnCheckoutConsume = WarnOnce("Usage of checkoutConsume is deprecated. Use checkoutVars instead.")
 warnBuildConsume = WarnOnce("Usage of buildConsume is deprecated. Use buildVars instead.")
 warnPackageConsume = WarnOnce("Usage of packageConsume is deprecated. Use packageVars instead.")
+warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 
 def _hashString(string):
     h = hashlib.md5()
@@ -52,6 +53,15 @@ def overlappingPaths(p1, p2):
     for i in range(min(len(p1), len(p2))):
         if p1[i] != p2[i]: return False
     return True
+
+def checkGlobList(name, allowed):
+    if allowed is None: return True
+    ok = False
+    for a in allowed:
+        if a.startswith("!"):
+            if fnmatch.fnmatchcase(name, a[1:]): ok = False
+        elif fnmatch.fnmatchcase(name, a): ok = True
+    return ok
 
 class StringParser:
     """Utility class for complex string parsing/manipulation"""
@@ -201,6 +211,13 @@ class Env(dict):
         self.funArgs = {}
         self.legacy = False
 
+    def copy(self):
+        ret = Env(self)
+        ret.funs = self.funs
+        ret.funArgs = self.funArgs
+        ret.legacy = self.legacy
+        return ret
+
     def setLegacy(self, enable):
         self.legacy = enable
 
@@ -211,21 +228,21 @@ class Env(dict):
         self.funArgs = funArgs
 
     def derive(self, overrides = {}):
-        ret = Env(self)
-        ret.funs = self.funs
-        ret.funArgs = self.funArgs
-        ret.legacy = self.legacy
+        ret = self.copy()
         ret.update(overrides)
         return ret
 
     def prune(self, allowed):
-        ret = Env()
-        ret.funs = self.funs
-        ret.funArgs = self.funArgs
-        ret.legacy = self.legacy
-        for (key, value) in self.items():
-            if key in allowed: ret[key] = value
-        return ret
+        if allowed is None:
+            return self.copy()
+        else:
+            ret = Env()
+            ret.funs = self.funs
+            ret.funArgs = self.funArgs
+            ret.legacy = self.legacy
+            for (key, value) in self.items():
+                if checkGlobList(key, allowed): ret[key] = value
+            return ret
 
     def substitute(self, value, prop):
         if self.legacy:
@@ -1384,6 +1401,13 @@ class IncludeHelper:
         else:
             return text
 
+def mergeFilter(left, right):
+    if left is None:
+        return right
+    if right is None:
+        return left
+    return left + right
+
 class Recipe(object):
     """Representation of a single recipe
 
@@ -1448,6 +1472,11 @@ class Recipe(object):
         self.__inherit = recipe.get("inherit", [])
         self.__anonBaseClass = anonBaseClass
         self.__deps = [ Recipe.Dependency(d) for d in recipe.get("depends", []) ]
+        filt = recipe.get("filter", {})
+        if filt: warnFilter.warn(baseName)
+        self.__filterEnv = filt.get("environment")
+        self.__filterTools = filt.get("tools")
+        self.__filterSandbox = filt.get("sandbox")
         self.__packageName = packageName
         self.__baseName = baseName
         self.__root = recipe.get("root", False)
@@ -1524,6 +1553,9 @@ class Recipe(object):
         inherit.reverse()
         for cls in inherit:
             self.__deps[0:0] = cls.__deps
+            self.__filterEnv = mergeFilter(self.__filterEnv, cls.__filterEnv)
+            self.__filterTools = mergeFilter(self.__filterTools, cls.__filterTools)
+            self.__filterSandbox = mergeFilter(self.__filterSandbox, cls.__filterSandbox)
             tmp = cls.__provideTools.copy()
             tmp.update(self.__provideTools)
             self.__provideTools = tmp
@@ -1607,14 +1639,17 @@ class Recipe(object):
         stack = inputStack + [self.__packageName]
 
         # make copies because we will modify them
-        tools = inputTools.derive()
+        tools = inputTools.prune(self.__filterTools)
         inputEnv = inputEnv.derive()
         inputEnv.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
             "tools" : inputTools, "stack" : stack })
         varSelf = {}
         for (key, value) in self.__varSelf.items():
             varSelf[key] = inputEnv.substitute(value, "environment::"+key)
-        env = inputEnv.derive(varSelf)
+        env = inputEnv.prune(self.__filterEnv).derive(varSelf)
+        if sandbox is not None:
+            if not checkGlobList(sandbox.getStep().getPackage().getName(), self.__filterSandbox):
+                sandbox = None
         states = { n : s.copy() for (n,s) in states.items() }
 
         # update plugin states
