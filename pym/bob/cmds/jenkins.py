@@ -17,7 +17,7 @@
 from ..errors import ParseError, BuildError
 from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
-from ..tty import colorize
+from ..tty import colorize, WarnOnce
 from ..utils import asHexStr
 from pipes import quote
 import argparse
@@ -33,6 +33,7 @@ import textwrap
 import urllib.parse
 import xml.etree.ElementTree
 
+warnCertificate = WarnOnce("Using HTTPS without certificate check.")
 
 class DummyArchive:
     """Archive that does nothing"""
@@ -816,7 +817,7 @@ def getConnection(config):
                                                 config["url"].get("port"))
     elif config["url"]["scheme"] == 'https':
         ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-        print(colorize("WARNING: using HTTPS without certificate check.", "33"))
+        warnCertificate.warn()
         connection = http.client.HTTPSConnection(config["url"]["server"],
                                                 config["url"].get("port"), context=ctx)
     else:

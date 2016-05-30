@@ -17,7 +17,7 @@
 from . import BOB_VERSION
 from .errors import ParseError, BuildError
 from .state import BobState
-from .tty import colorize
+from .tty import colorize, WarnOnce
 from .utils import joinScripts, compareVersion, binLstat
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
@@ -34,6 +34,10 @@ import struct
 import sys
 import xml.etree.ElementTree
 import yaml
+
+warnCheckoutConsume = WarnOnce("Usage of checkoutConsume is deprecated. Use checkoutVars instead.")
+warnBuildConsume = WarnOnce("Usage of buildConsume is deprecated. Use buildVars instead.")
+warnPackageConsume = WarnOnce("Usage of packageConsume is deprecated. Use packageVars instead.")
 
 def _hashString(string):
     h = hashlib.md5()
@@ -1452,16 +1456,16 @@ class Recipe(object):
         self.__varSelf = recipe.get("environment", {})
         self.__varDepCheckout = set(recipe.get("checkoutVars", []))
         if "checkoutConsume" in recipe:
-            print(colorize("WARNING: {}: usage of checkoutConsume is deprecated. Use checkoutVars instead.".format(baseName), "33"))
+            warnCheckoutConsume.warn(baseName)
             self.__varDepCheckout |= set(recipe["checkoutConsume"])
         self.__varDepBuild = set(recipe.get("buildVars", []))
         if "buildConsume" in recipe:
-            print(colorize("WARNING: {}: usage of buildConsume is deprecated. Use buildVars instead.".format(baseName), "33"))
+            warnBuildConsume.warn(baseName)
             self.__varDepBuild |= set(recipe["buildConsume"])
         self.__varDepBuild |= self.__varDepCheckout
         self.__varDepPackage = set(recipe.get("packageVars", []))
         if "packageConsume" in recipe:
-            print(colorize("WARNING: {}: usage of packageConsume is deprecated. Use packageVars instead.".format(baseName), "33"))
+            warnPackageConsume.warn(baseName)
             self.__varDepPackage |= set(recipe["packageConsume"])
         self.__varDepPackage |= self.__varDepBuild
         self.__toolDepCheckout = set(recipe.get("checkoutTools", []))

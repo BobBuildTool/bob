@@ -31,6 +31,17 @@ class Unbuffered(object):
     def __getattr__(self, attr):
         return getattr(self.stream, attr)
 
+class WarnOnce:
+    def __init__(self, message):
+        self.__message = message
+        self.__triggered = False
+
+    def warn(self, location=None):
+        if not self.__triggered:
+            print(colorize("WARNING: " + ((location + ": ") if location else "")
+                + self.__message, "33"), file=sys.stderr)
+            self.__triggered = True
+
 # module initialization
 
 __onTTY = False
