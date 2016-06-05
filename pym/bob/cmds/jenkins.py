@@ -160,8 +160,7 @@ class JenkinsJob:
                 addDep = lambda s: (sandbox.extend([
                         "-M", "$WORKSPACE/"+s.getWorkspacePath(),
                         "-m", s.getExecPath() ]) if s.isValid() else None)
-                for s in d.getAllDepSteps():
-                    if s != d.getSandbox().getStep(): addDep(s)
+                for s in d.getAllDepSteps(): addDep(s)
                 # special handling to mount all previous steps of current package
                 s = d
                 while s.isValid():
