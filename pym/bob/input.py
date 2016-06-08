@@ -1531,6 +1531,7 @@ class Recipe(object):
             tmp.update(self.__provideVars)
             self.__provideVars = tmp
             self.__provideDeps |= cls.__provideDeps
+            if self.__provideSandbox is None: self.__provideSandbox = cls.__provideSandbox
             tmp = cls.__varSelf.copy()
             tmp.update(self.__varSelf)
             self.__varSelf = tmp
