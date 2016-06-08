@@ -1486,6 +1486,7 @@ class Recipe(object):
         self.__provideDeps = set(recipe.get("provideDeps", []))
         self.__provideSandbox = recipe.get("provideSandbox")
         self.__varSelf = recipe.get("environment", {})
+        self.__varPrivate = recipe.get("privateEnvironment", {})
         self.__varDepCheckout = set(recipe.get("checkoutVars", []))
         if "checkoutConsume" in recipe:
             warnCheckoutConsume.warn(baseName)
@@ -1567,6 +1568,9 @@ class Recipe(object):
             tmp = cls.__varSelf.copy()
             tmp.update(self.__varSelf)
             self.__varSelf = tmp
+            tmp = cls.__varPrivate.copy()
+            tmp.update(self.__varPrivate)
+            self.__varPrivate = tmp
             self.__varDepCheckout |= cls.__varDepCheckout
             self.__varDepBuild |= cls.__varDepBuild
             self.__varDepPackage |= cls.__varDepPackage
@@ -1708,6 +1712,14 @@ class Recipe(object):
             if dep.useSandbox:
                 sandbox = p.getProvidedSandbox()
                 if dep.provideGlobal: depSandbox = p.getProvidedSandbox()
+
+        # apply private environment
+        env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
+            "tools" : tools, "stack" : stack })
+        varPrivate = {}
+        for (key, value) in self.__varPrivate.items():
+            varPrivate[key] = env.substitute(value, "privateEnvironment::"+key)
+        env.update(varPrivate)
 
         # filter duplicate results, fail on different variants of same package
         i = 0
