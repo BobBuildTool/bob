@@ -199,7 +199,7 @@ class JenkinsJob:
             cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
                 [ "    [{}]={}".format(quote(a.getPackage().getName()),
                                        a.getExecPath())
-                    for a in d.getArguments() ] ))))
+                    for a in d.getArguments() if a.isValid() ] ))))
             cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
                 [ "    [{}]={}".format(quote(t), p)
                     for (t,p) in d.getTools().items()] ))))
