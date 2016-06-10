@@ -584,6 +584,37 @@ Example::
    environment:
       PKG_VERSION: "1.2.3"
 
+filter
+~~~~~~
+
+Type: Dictionary ( "environment" | "sandbox" | "tools" -> List of Strings)
+
+The filter keyword allows to restrict the environment variables, tools and
+sandboxes inherited from upstream recipes. This way a recipe can effectively
+restrict the number of package variants.
+
+The filters specifications may use shell globbing patterns. As a special
+extension there is also a negative match if the pattern starts with a "!". Such
+patterns will filter out entries that have been otherwise included by previous
+patterns in the list (e.g. by inherited classes).
+
+Example::
+
+    filter:
+        environment: [ "*_MIRROR" ]
+        tools: [ "*toolchain*", "!host-toolchain" ]
+        sandbox: [ "*" ]
+
+In the above example the recipe would inherit only environment variables that
+end with "_MIRROR". All other variables are unset. Likewise all tools that have
+"toolchain" in their name are inherited, except the "host-toolchain". Anything
+is accepted as sandbox which would also be the default if left out.
+
+.. warning::
+   The filter keyword is still experimental and may change in the future or
+   might be removed completely.
+
+
 inherit
 ~~~~~~~
 
