@@ -570,6 +570,8 @@ supported:
 |             |                 | Default: true                                       |
 +-------------+-----------------+-----------------------------------------------------+
 
+.. _configuration-recipes-env:
+
 environment
 ~~~~~~~~~~~
 
@@ -583,6 +585,8 @@ Example::
 
    environment:
       PKG_VERSION: "1.2.3"
+
+See also :ref:`configuration-recipes-privateenv`.
 
 filter
 ~~~~~~
@@ -660,6 +664,25 @@ A typical use case for this feature are recipes for libraries. There are two
 packages that are built from a library: a ``-target`` packet that has the
 shared libraries needed during runtime and a ``-dev`` packet that has the
 header files and other needed files to link with this library.
+
+.. _configuration-recipes-privateenv:
+
+privateEnvironment
+~~~~~~~~~~~~~~~~~~
+
+Type: Dictionary (String -> String)
+
+Defines environment variables just for the current recipe. Any inherited
+variables with the same name of the upstream recipe or others that were
+consumed from the dependencies are overwritten. All variables defined or
+replaced by this keyword are private to the current recipe.
+
+Example::
+
+   privateEnvironment:
+      APPLY_FOO_PATCH: "no"
+
+See also :ref:`configuration-recipes-env`.
 
 provideDeps
 ~~~~~~~~~~~
