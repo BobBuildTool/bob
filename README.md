@@ -15,7 +15,9 @@ Getting started
 It's probably the best to head over to the
 [documentation](http://bob-build-tool.readthedocs.io/). To get an impression
 how Bob is configured have a look at the
-[tutorials](https://github.com/BobBuildTool/bob-tutorials). If you have a
-specific question you're welcome to post on the
+[tutorials](https://github.com/BobBuildTool/bob-tutorials). A real project that
+is built by Bob can be found [here](https://github.com/BobBuildTool/basement).
+
+If you have a specific question you're welcome to post on the
 [mailing list](mailto:bob-build-tool@freelists.org)
 ([FreeLists](http://www.freelists.org/list/bob-build-tool)).
