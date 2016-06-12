@@ -428,7 +428,7 @@ git checkout -f {TAG}
 export GIT_SSL_NO_VERIFY=true
 if [ -d {DIR}/.git ] ; then
     cd {DIR}
-    git pull
+    git pull --ff-only
 else
     if ! git clone -b {BRANCH} {URL} {DIR} ; then
         rm -rf {DIR}/.git {DIR}/*
