@@ -167,4 +167,3 @@ def doQueryRecipe(argv, bobRoot):
 
     for fn in package.getRecipe().getSources():
         print(fn)
-

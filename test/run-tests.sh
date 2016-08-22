@@ -57,6 +57,11 @@ exec_generator_test()
 	diff -Nurp $RES output
 }
 
+exec_fancy_test()
+{
+	. run.sh > log.txt
+}
+
 run_test()
 {
 	echo "Run" $1
@@ -81,6 +86,9 @@ done
 
 # run generator test
 run_test test/generator exec_generator_test
+
+# run query-path test
+run_test test/query-path exec_fancy_test
 
 # collect coverage
 if [[ $USE_COVERAGE -eq 1 ]]; then

@@ -1,0 +1,11 @@
+root: true
+
+depends:
+  - interm1
+  - interm2
+
+buildScript: |
+  cat $2/result.txt $3/result.txt > result.txt
+
+packageScript: |
+  cat $1/result.txt > result.txt

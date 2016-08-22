@@ -1,0 +1,10 @@
+depends:
+  - name: child
+    environment:
+      MODE: "1"
+
+buildScript: |
+  cat $2/result.txt > result.txt
+
+packageScript: |
+  cat $1/result.txt > result.txt
