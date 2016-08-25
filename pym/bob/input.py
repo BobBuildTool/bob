@@ -603,6 +603,89 @@ fi
     def hasJenkinsPlugin(self):
         return True
 
+
+class CvsScm(BaseScm):
+    # Checkout using CVS
+    # - mandatory parameters: cvsroot, module
+    # - optional parameters: rev, dir (dir is required if there are multiple checkouts)
+    def __init__(self, spec):
+        super().__init__(spec)
+        self.__cvsroot = spec["cvsroot"]
+        self.__module = spec["module"]
+        self.__rev = spec.get("rev")
+        self.__dir = spec.get("dir", ".")
+
+    def resolveEnv(self, env):
+        # Resolve macros in CVS config
+        super().resolveEnv(env)
+        self.__cvsroot = env.substitute(self.__cvsroot, "cvs::cvsroot")
+        self.__module = env.substitute(self.__module, "cvs::module")
+        if self.__rev:
+            self.__rev = env.substitute(self.__rev, "cvs::rev")
+        if self.__dir:
+            self.__dir = env.substitute(self.__dir, "cvs::dir")
+
+    def asScript(self):
+        # If given a ":ssh:" cvsroot, translate that to CVS_RSH using ssh, and ":ext:"
+        # (some versions of CVS do that internally)
+        m = re.match('^:ssh:(.*)', self.__cvsroot)
+        if m:
+            prefix="CVS_RSH=ssh "
+            rootarg=":ext:" + m.group(1)
+        else:
+            prefix=""
+            rootarg=self.__cvsroot
+        revarg = "-r {rev}".format(rev=self.__rev) if self.__rev != None else "-A"
+
+        # Workaround: CVS 1.12.13 refuses to checkout with '-d .' when using remote access
+        #   cvs checkout: existing repository /home/stefan/cvsroot does not match /home/stefan/cvsroot/cxxtest
+        #   cvs checkout: ignoring module cxxtest
+        # Thus, we have to trick it with a symlink.
+        if re.match('^:ext:', rootarg) and self.__dir == '.':
+            return """
+# Checkout or update
+if [ -d CVS ]; then
+   {prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} .
+else
+   ln -s . __tmp$$
+   {prefix}cvs -qz3 -d '{rootarg}' co {revarg} -d __tmp$$ '{module}'
+   rm __tmp$$
+fi
+""".format(prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module)
+        else:
+            return """
+# Checkout or update
+if [ -d {dir}/CVS ]; then
+   {prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} {dir}
+else
+   {prefix}cvs -qz3 -d '{rootarg}' co {revarg} -d {dir} '{module}'
+fi
+""".format(prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module, dir=self.__dir)
+
+    def asDigestScript(self):
+        # Describe what we do: just all the parameters concatenated.
+        revarg = "-r {rev}".format(rev=self.__rev) if self.__rev != None else "-A"
+        return "{cvsroot} {revarg} {module} {dir}".format(cvsroot=self.__cvsroot,
+                                                          revarg=revarg,
+                                                          module=self.__module,
+                                                          dir=self.__dir)
+
+    def merge(self, other):
+        return False
+
+    def getDirectories(self):
+        return {self.__dir: _hashString(self.asDigestScript())}
+
+    def isDeterministic(self):
+        # We cannot know whether this step is deterministic because we
+        # don't know whether the given revision (if any) refers to a
+        # tag or branch.
+        return False
+
+    def hasJenkinsPlugin(self):
+        return False
+
+
 class UrlScm(BaseScm):
 
     EXTENSIONS = [
@@ -733,6 +816,8 @@ def Scm(spec):
         return GitScm(spec)
     elif scm == "svn":
         return SvnScm(spec)
+    elif scm == "cvs":
+        return CvsScm(spec)
     elif scm == "url":
         return UrlScm(spec)
     else:

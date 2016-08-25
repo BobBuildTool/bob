@@ -464,6 +464,9 @@ git `Git`_ project               | ``url``: URL of remote repository
                                  | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
 svn `Svn`_ repository            | ``url``: URL of SVN module
                                  | ``revision``: Optional revision number (optional)
+cvs CVS repository               | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
+                                 | ``module``: module name
+                                 | ``rev``: revision, branch, or tag name (optional)
 url While not a real SCM it      | ``url``: File that should be downloaded
     allows to download (and      | ``digestSHA1``: Expected SHA1 digest of the file (optional)
     extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
@@ -485,6 +488,16 @@ attribute too.
 
 The Svn SCM, like git, requires the ``url`` attribute too. If you specify a
 numeric ``revision`` Bob considers the SCM as deterministic.
+
+The CVS SCM requires a ``cvsroot``, which is what you would normally put in
+your CVSROOT environment variable or pass to CVS using ``-d``. If you specify
+a revision, branch, or tag name, Bob will check out that instead of the HEAD.
+Unfortunately, because Bob cannot know beforehand whether the ``rev`` you gave
+it points to a branch or tag, it must consider this SCM nondeterministic.
+To check out using ssh, you can use the syntax ``:ssh:user@host:/path``,
+which will be translated into an appropriate ``CVS_RSH`` assignment by Bob.
+Alternatively, you can use a normal ``:ext:`` CVSROOT and manually pass the
+``CVS_RSH`` value into the recipe using ``checkoutVars``.
 
 The ``url`` SCM naturally needs an ``url`` attribute. If a SHA digest is given
 with ``digestSHA1`` and/or ``digestSHA256`` the downloaded file will be checked
