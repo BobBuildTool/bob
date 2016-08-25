@@ -824,6 +824,33 @@ def getConnection(config):
             config["url"]["scheme"]))
     return connection
 
+def getHeaders(connection, config):
+    headers = { "Content-Type": "application/xml" }
+
+    # authorization
+    if config["url"].get("username"):
+        passwd = config["url"].get("password")
+        if passwd is None:
+            passwd = getpass.getpass()
+        userPass = config["url"]["username"] + ":" + passwd
+        headers['Authorization'] = 'Basic ' + base64.b64encode(
+            userPass.encode("utf-8")).decode("ascii")
+
+    # get CSRF token
+    connection.request("GET", config["url"]["path"] + "crumbIssuer/api/xml",
+                       headers=headers)
+    response = connection.getresponse()
+    if response.status == 200:
+        resp = xml.etree.ElementTree.fromstring(response.read())
+        crumb = resp.find("crumb").text
+        field = resp.find("crumbRequestField").text
+        headers[field] = crumb
+    else:
+        # dump response
+        response.read()
+
+    return headers
+
 def doJenkinsPrune(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins prune")
     parser.add_argument("name", help="Prune jobs from Jenkins server")
@@ -839,18 +866,8 @@ def doJenkinsPrune(recipes, argv):
     # connect to server
     connection = getConnection(config)
     urlPath = config["url"]["path"]
-
-    # construct headers
-    headers = { "Content-Type": "application/xml" }
-    if config["url"].get("username"):
-        passwd = config["url"].get("password")
-        if passwd is None:
-            passwd = getpass.getpass()
-        userPass = config["url"]["username"] + ":" + passwd
-        headers['Authorization'] = 'Basic ' + base64.b64encode(
-            userPass.encode("utf-8")).decode("ascii")
-
     try:
+        headers = getHeaders(connection, config)
         for name in existingJobs:
             print("Delete", name, "...")
             connection.request("POST", urlPath + "job/" + name + "/doDelete",
@@ -909,21 +926,14 @@ def doJenkinsPush(recipes, argv):
     connection = getConnection(config)
     urlPath = config["url"]["path"]
 
-    # construct headers
-    headers = { "Content-Type": "application/xml" }
-    if config["url"].get("username"):
-        passwd = config["url"].get("password")
-        if passwd is None:
-            passwd = getpass.getpass()
-        userPass = config["url"]["username"] + ":" + passwd
-        headers['Authorization'] = 'Basic ' + base64.b64encode(
-            userPass.encode("utf-8")).decode("ascii")
-
     windows = config.get("windows")
     nodes = config.get("nodes")
     changedJobs = set([])
 
     try:
+        # construct headers
+        headers = getHeaders(connection, config)
+
         # push new jobs / reconfigure existing ones
         for (name, job) in jobs.items():
             # get original XML if it exists
