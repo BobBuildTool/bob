@@ -59,7 +59,7 @@ def doLS(argv, bobRoot):
     recipes.parse()
 
     showAll = args.all
-    roots = recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=args.sandbox).values()
+    roots = sorted(recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=args.sandbox).values(), key=lambda a:a.getName())
     stack = []
     if args.package:
         steps = [ s for s in args.package.split("/") if s != "" ]
