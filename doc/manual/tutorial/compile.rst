@@ -187,9 +187,11 @@ requires that the following plugins are available:
 .. _Multiple SCMs plugin: https://wiki.jenkins-ci.org/display/JENKINS/Multiple+SCMs+Plugin
 .. _Conditional BuildStep Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Conditional+BuildStep+Plugin
 
-Right now the sandbox feature is not supported on Jenkins. This requires that you
-still have all tools installed on the Jenkins master/slave that would be needed
-for development mode builds.
+Additionally some of the Bob helper tools must be installed on the Jenkins
+server and be available in the PATH. The ``bob-hash-engine`` script is always
+needed.  If you're using the sandbox feature ``bob-namespace-sandbox`` must be
+available too. To keep the setup simple it is recommended to install Bob
+entirely on the server.
 
 Suppose you have a suitable Jenkins server located at
 http://jenkins.intranet.local:8080. Go to the recipes directory and tell Bob
@@ -206,6 +208,8 @@ specify what should be built. To view the settings type::
     intranet
      URL: http://<user>:<pass>@jenkins.intranet.local:8080/
      Prefix: sandbox-
+     Upload: disabled
+     Sandbox: disabled
      Roots: vexpress
      Jobs: 
 
