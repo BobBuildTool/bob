@@ -22,12 +22,23 @@ from bob.input import CheckoutStep, BuildStep, PackageStep
 class Empty:
     pass
 
+class MockRecipeSet:
+    def scmOverrides(self):
+        return []
+
+class MockRecipe:
+    def getRecipeSet(self):
+        return MockRecipeSet()
+
 class MockPackage:
     def __init__(self):
         self.name = "package"
 
     def getName(self):
         return self.name
+
+    def getRecipe(self):
+        return MockRecipe()
 
 nullPkg = MockPackage()
 nullFmt = lambda s,t: ""

@@ -405,19 +405,7 @@ class PluginState:
         pass
 
 
-class BaseScm:
-    def __init__(self, spec):
-        self.__condition = spec.get("if", None)
-        self.__resolved = False
-
-    def enabled(self, env):
-        return env.evaluate(self.__condition, "checkoutSCM")
-
-    def resolveEnv(self, env):
-        assert not self.__resolved
-        self.__resolved = True
-
-class GitScm(BaseScm):
+class GitScm:
 
     SCHEMA = schema.Schema({
         'scm' : 'git',
@@ -430,28 +418,15 @@ class GitScm(BaseScm):
     })
 
     def __init__(self, spec):
-        super().__init__(spec)
         self.__url = spec["url"]
         self.__branch = spec.get("branch", "master")
         self.__tag = spec.get("tag")
         self.__commit = spec.get("commit")
-        self.__dir = spec.get("dir", ".")
-
-    def resolveEnv(self, env):
-        super().resolveEnv(env)
-        if self.__url:
-            self.__url = env.substitute(self.__url, "git::url")
-        if self.__branch:
-            self.__branch = env.substitute(self.__branch, "git::branch")
-        if self.__tag:
-            self.__tag = env.substitute(self.__tag, "git::tag")
         if self.__commit:
-            self.__commit = env.substitute(self.__commit, "git::commit").lower()
             # validate commit
             if re.fullmatch("[0-9a-f]{40}", self.__commit) is None:
                 raise ParseError("Invalid commit id: " + str(self.__commit))
-        if self.__dir:
-            self.__dir = env.substitute(self.__dir, "git::dir")
+        self.__dir = spec.get("dir", ".")
 
     def asScript(self):
         if self.__tag or self.__commit:
@@ -556,7 +531,7 @@ fi
     def hasJenkinsPlugin(self):
         return True
 
-class SvnScm(BaseScm):
+class SvnScm:
 
     SCHEMA = schema.Schema({
         'scm' : 'svn',
@@ -567,7 +542,6 @@ class SvnScm(BaseScm):
     })
 
     def __init__(self, spec):
-        super().__init__(spec)
         self.__modules = [{
             "url" : spec["url"],
             "dir" : spec.get("dir"),
@@ -597,12 +571,6 @@ fi
     def __moduleAsDigestScript(m):
         return (m["url"] + ( ("@"+str(m["revision"])) if m["revision"] else "" ) + " > "
                 + (m["dir"] if m["dir"] else "."))
-
-    def resolveEnv(self, env):
-        super().resolveEnv(env)
-        self.__modules = [
-            { k : (env.substitute(v, "svn::"+k) if isinstance(v, str) else v) for (k,v) in m.items() }
-            for m in self.__modules ]
 
     def asScript(self):
         return joinScripts([ SvnScm.__moduleAsScript(m) for m in self.__modules ])
@@ -665,7 +633,7 @@ fi
         return True
 
 
-class CvsScm(BaseScm):
+class CvsScm:
 
     SCHEMA = schema.Schema({
         'scm' : 'cvs',
@@ -680,21 +648,10 @@ class CvsScm(BaseScm):
     # - mandatory parameters: cvsroot, module
     # - optional parameters: rev, dir (dir is required if there are multiple checkouts)
     def __init__(self, spec):
-        super().__init__(spec)
         self.__cvsroot = spec["cvsroot"]
         self.__module = spec["module"]
         self.__rev = spec.get("rev")
         self.__dir = spec.get("dir", ".")
-
-    def resolveEnv(self, env):
-        # Resolve macros in CVS config
-        super().resolveEnv(env)
-        self.__cvsroot = env.substitute(self.__cvsroot, "cvs::cvsroot")
-        self.__module = env.substitute(self.__module, "cvs::module")
-        if self.__rev:
-            self.__rev = env.substitute(self.__rev, "cvs::rev")
-        if self.__dir:
-            self.__dir = env.substitute(self.__dir, "cvs::dir")
 
     def asScript(self):
         # If given a ":ssh:" cvsroot, translate that to CVS_RSH using ssh, and ":ext:"
@@ -757,7 +714,7 @@ fi
         return False
 
 
-class UrlScm(BaseScm):
+class UrlScm:
 
     SCHEMA = schema.Schema({
         'scm' : 'url',
@@ -766,8 +723,7 @@ class UrlScm(BaseScm):
         schema.Optional('if') : str,
         schema.Optional('digestSHA1') : str,
         schema.Optional('digestSHA256') : str,
-        schema.Optional('extract') : schema.Or(bool, 'yes', 'no', 'auto',
-            'tar', 'gzip', 'xz', '7z', 'zip'),
+        schema.Optional('extract') : schema.Or(bool, str),
         schema.Optional('fileName') : str
     })
 
@@ -793,36 +749,22 @@ class UrlScm(BaseScm):
     }
 
     def __init__(self, spec):
-        super().__init__(spec)
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
-        self.__digestSha256 = spec.get("digestSHA256")
-        self.__dir = spec.get("dir", ".")
-        self.__fn = spec.get("fileName")
-        self.__extract = spec.get("extract", "auto")
-
-    def resolveEnv(self, env):
-        super().resolveEnv(env)
-        if self.__url:
-            self.__url = env.substitute(self.__url, "url::url")
         if self.__digestSha1:
-            self.__digestSha1 = env.substitute(self.__digestSha1, "url::digestSHA1").lower()
             # validate digest
             if re.fullmatch("[0-9a-f]{40}", self.__digestSha1) is None:
                 raise ParseError("Invalid SHA1 digest: " + str(self.__digestSha1))
+        self.__digestSha256 = spec.get("digestSHA256")
         if self.__digestSha256:
-            self.__digestSha256 = env.substitute(self.__digestSha256, "url::digestSHA256").lower()
             # validate digest
             if re.fullmatch("[0-9a-f]{64}", self.__digestSha256) is None:
                 raise ParseError("Invalid SHA256 digest: " + str(self.__digestSha256))
-        if self.__dir:
-            self.__dir = env.substitute(self.__dir, "url::dir")
-        if self.__fn:
-            self.__fn = env.substitute(self.__fn, "url::fileName")
-        else:
+        self.__dir = spec.get("dir", ".")
+        self.__fn = spec.get("fileName")
+        if not self.__fn:
             self.__fn = self.__url.split("/")[-1]
-        if isinstance(self.__extract, str):
-            self.__extract = env.substitute(self.__extract, "url::extract")
+        self.__extract = spec.get("extract", "auto")
 
     def asScript(self):
         ret = """
@@ -893,7 +835,41 @@ fi
         return False
 
 
-def Scm(spec):
+class ScmOverride:
+    def __init__(self, override):
+        self.__match = override.get("match", {})
+        self.__del = override.get("del", [])
+        self.__set = override.get("set", {})
+        self.__replace = { key : (re.compile(subst["pattern"]), subst["replacement"])
+            for (key, subst) in override.get("replace", {}).items() }
+
+    def __doesMatch(self, scm):
+        for (key, value) in self.__match.items():
+            if key not in scm: return False
+            if not fnmatch.fnmatchcase(scm[key], value): return False
+        return True
+
+    def mangle(self, scm):
+        if self.__doesMatch(scm):
+            scm = scm.copy()
+            for d in self.__del:
+                if d in scm: del scm[d]
+            scm.update(self.__set)
+            for (key, (pat, repl)) in self.__replace.items():
+                if key in scm:
+                    scm[key] = re.sub(pat, repl, scm[key])
+        return scm
+
+def Scm(spec, env, overrides):
+    # resolve with environment
+    spec = { k : ( env.substitute(v, "checkoutSCM::"+k) if isinstance(v, str) else v)
+        for (k, v) in spec.items() }
+
+    # apply overrides
+    for override in overrides:
+        spec = override.mangle(spec)
+
+    # create scm instance
     scm = spec["scm"]
     if scm == "git":
         return GitScm(spec)
@@ -1305,9 +1281,18 @@ class CheckoutStep(Step):
                  fullEnv={}, env={}, tools={}, deterministic=False):
         if checkout:
             self.__script = checkout[0] if checkout[0] is not None else ""
-            self.__scmList = [ copy.deepcopy(scm) for scm in checkout[1] if scm.enabled(env) ]
-            for s in self.__scmList: s.resolveEnv(fullEnv)
             self.__deterministic = deterministic
+
+            # try to merge compatible SCMs
+            overrides = package.getRecipe().getRecipeSet().scmOverrides()
+            checkoutSCMs = [ Scm(scm, fullEnv, overrides) for scm in checkout[1]
+                if env.evaluate(scm.get("if"), "checkoutSCM") ]
+            mergedCheckoutSCMs = []
+            while checkoutSCMs:
+                head = checkoutSCMs.pop(0)
+                checkoutSCMs = [ s for s in checkoutSCMs if not head.merge(s) ]
+                mergedCheckoutSCMs.append(head)
+            self.__scmList = mergedCheckoutSCMs
 
             # Validate that SCM paths do not overlap
             knownPaths = []
@@ -1707,12 +1692,11 @@ class Recipe(object):
         incHelper = IncludeHelper(baseDir, packageName)
 
         checkoutScript = incHelper.resolve(recipe.get("checkoutScript"))
-        scms = recipe.get("checkoutSCM", [])
-        if isinstance(scms, dict):
-            scms = [scms]
-        elif not isinstance(scms, list):
+        checkoutSCMs = recipe.get("checkoutSCM", [])
+        if isinstance(checkoutSCMs, dict):
+            checkoutSCMs = [checkoutSCMs]
+        elif not isinstance(checkoutSCMs, list):
             raise ParseError("checkoutSCM must be a dict or a list")
-        checkoutSCMs = [ Scm(s) for s in scms ]
         self.__checkout = (checkoutScript, checkoutSCMs)
         self.__build = incHelper.resolve(recipe.get("buildScript"))
         self.__package = incHelper.resolve(recipe.get("packageScript"))
@@ -1794,16 +1778,6 @@ class Recipe(object):
         for d in self.__provideDeps:
             if d not in availDeps:
                 raise ParseError("Unknown dependency '{}' in provideDeps".format(d))
-
-        # try to merge compatible SCMs
-        (checkoutScript, checkoutSCMs) = self.__checkout
-        checkoutSCMs = checkoutSCMs[:]
-        mergedCheckoutSCMs = []
-        while checkoutSCMs:
-            head = checkoutSCMs.pop(0)
-            checkoutSCMs = [ s for s in checkoutSCMs if not head.merge(s) ]
-            mergedCheckoutSCMs.append(head)
-        self.__checkout = (checkoutScript, mergedCheckoutSCMs)
 
     def getRecipeSet(self):
         return self.__recipeSet
@@ -2065,7 +2039,21 @@ class RecipeSet:
                 schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
             ]),
             schema.Optional('archive') : ArchiveValidator(),
-            schema.Optional('include') : schema.Schema([str])
+            schema.Optional('include') : schema.Schema([str]),
+            schema.Optional('scmOverrides') : [ schema.Schema({
+                schema.Optional('match') : schema.Schema({ str: str }),
+                schema.Optional('del') : [
+                    "branch", "commit", "digestSHA1", "digestSHA256", "dir",
+                    "extract", "fileName", "if", "rev", "revision", "tag"
+                ],
+                schema.Optional('set') : schema.Schema({ str : str }),
+                schema.Optional('replace') : schema.Schema({
+                    str : schema.Schema({
+                        'pattern' : str,
+                        'replacement' : str
+                    })
+                })
+            }) ],
         })
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
@@ -2080,6 +2068,7 @@ class RecipeSet:
         self.__classes = {}
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
+        self.__scmOverrides = []
         self.__hooks = {}
         self.__configFiles = []
         self.__properties = {}
@@ -2195,6 +2184,9 @@ class RecipeSet:
     def defaultEnv(self):
         return self.__defaultEnv
 
+    def scmOverrides(self):
+        return self.__scmOverrides
+
     def loadYaml(self, path, schema, default={}):
         if os.path.exists(path):
             return self.__cache.loadYaml(path, schema, default)
@@ -2256,6 +2248,7 @@ class RecipeSet:
         self.__defaultEnv.update(cfg.get("environment", {}))
         self.__whiteList |= set(cfg.get("whitelist", []))
         self.__archive = cfg.get("archive", { "backend" : "none" })
+        self.__scmOverrides.extend([ ScmOverride(o) for o in cfg.get("scmOverrides", []) ])
 
         for p in cfg.get("include", []):
             self.__parseUserConfig(str(p) + ".yaml")
