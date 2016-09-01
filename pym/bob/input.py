@@ -1939,7 +1939,7 @@ class RecipeSet:
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
         self.__hooks = {}
-        self.__configFiles = {}
+        self.__configFiles = []
         self.__properties = {}
         self.__states = {}
         self.__cache = YamlCache()
@@ -2062,6 +2062,13 @@ class RecipeSet:
         self.__cache.open()
         try:
             self.__parse()
+
+            # config files overrule everything else
+            for c in self.__configFiles:
+                c = str(c) + ".yaml"
+                if not os.path.isfile(c):
+                    raise ParseError("Config file {} does not exist!".format(c))
+                self.__parseUserConfig(c)
         finally:
             self.__cache.close()
 
@@ -2073,26 +2080,10 @@ class RecipeSet:
         self.__extStrings = compareVersion(minVer, "0.3") >= 0
         self.__loadPlugins(config.get("plugins", []))
 
-        defaults = self.loadYaml("default.yaml")
-        if "environment" in defaults:
-            self.__defaultEnv = defaults["environment"]
-            if not isinstance(self.__defaultEnv, dict):
-                raise ParseError("default.yaml environment must be a dict")
-        self.__whiteList |= set(defaults.get("whitelist", []))
-        self.__archive = defaults.get("archive", { "backend" : "none" })
+        # user config(s)
+        self.__parseUserConfig("default.yaml")
 
-        for p in defaults.get("include", []):
-            include = self.loadYaml(str(p) + ".yaml")
-            if include and "environment" in include:
-                self.__defaultEnv.update(include["environment"])
-
-        for c in self.__configFiles:
-            cc = self.loadYaml(str(c) + ".yaml")
-            if not cc:
-                raise ParseError("Error while loading config File {}".format(c))
-            if "environment" in cc:
-                self.__defaultEnv.update(cc["environment"])
-
+        # finally parse recipes
         if not os.path.isdir("recipes"):
             raise ParseError("No recipes directory found.")
 
@@ -2113,6 +2104,15 @@ class RecipeSet:
                 except ParseError as e:
                     e.pushFrame(path)
                     raise
+
+    def __parseUserConfig(self, fileName):
+        cfg = self.loadYaml(fileName)
+        self.__defaultEnv.update(cfg.get("environment", {}))
+        self.__whiteList |= set(cfg.get("whitelist", []))
+        self.__archive = cfg.get("archive", { "backend" : "none" })
+
+        for p in cfg.get("include", []):
+            self.__parseUserConfig(self, str(p) + ".yaml")
 
     def getRecipe(self, packageName):
         if packageName not in self.__recipes:
