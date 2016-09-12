@@ -54,13 +54,29 @@ def overlappingPaths(p1, p2):
         if p1[i] != p2[i]: return False
     return True
 
+def __maybeGlob(pred):
+    if pred.startswith("!"):
+        pred = pred[1:]
+        if any(i in pred for i in '*?[]'):
+            return lambda prev, elem: False if fnmatch.fnmatchcase(elem, pred) else prev
+        else:
+            return lambda prev, elem: False if elem == pred else prev
+    else:
+        if any(i in pred for i in '*?[]'):
+            return lambda prev, elem: True if fnmatch.fnmatchcase(elem, pred) else prev
+        else:
+            return lambda prev, elem: True if elem == pred else prev
+
+def maybeGlob(pattern):
+    if isinstance(pattern, list):
+        return [ __maybeGlob(p) for p in pattern ]
+    else:
+        return None
+
 def checkGlobList(name, allowed):
     if allowed is None: return True
     ok = False
-    for a in allowed:
-        if a.startswith("!"):
-            if fnmatch.fnmatchcase(name, a[1:]): ok = False
-        elif fnmatch.fnmatchcase(name, a): ok = True
+    for pred in allowed: ok = pred(ok, name)
     return ok
 
 class StringParser:
@@ -1559,9 +1575,9 @@ class Recipe(object):
         self.__deps = [ Recipe.Dependency(d) for d in recipe.get("depends", []) ]
         filt = recipe.get("filter", {})
         if filt: warnFilter.warn(baseName)
-        self.__filterEnv = filt.get("environment")
-        self.__filterTools = filt.get("tools")
-        self.__filterSandbox = filt.get("sandbox")
+        self.__filterEnv = maybeGlob(filt.get("environment"))
+        self.__filterTools = maybeGlob(filt.get("tools"))
+        self.__filterSandbox = maybeGlob(filt.get("sandbox"))
         self.__packageName = packageName
         self.__baseName = baseName
         self.__root = recipe.get("root", False)
@@ -1572,24 +1588,24 @@ class Recipe(object):
         self.__provideSandbox = recipe.get("provideSandbox")
         self.__varSelf = recipe.get("environment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
-        self.__varDepCheckout = set(recipe.get("checkoutVars", []))
+        self.__varDepCheckout = set(maybeGlob(recipe.get("checkoutVars", [])))
         if "checkoutConsume" in recipe:
             warnCheckoutConsume.warn(baseName)
-            self.__varDepCheckout |= set(recipe["checkoutConsume"])
-        self.__varDepBuild = set(recipe.get("buildVars", []))
+            self.__varDepCheckout |= set(maybeGlob(recipe["checkoutConsume"]))
+        self.__varDepBuild = set(maybeGlob(recipe.get("buildVars", [])))
         if "buildConsume" in recipe:
             warnBuildConsume.warn(baseName)
-            self.__varDepBuild |= set(recipe["buildConsume"])
+            self.__varDepBuild |= set(maybeGlob(recipe["buildConsume"]))
         self.__varDepBuild |= self.__varDepCheckout
-        self.__varDepPackage = set(recipe.get("packageVars", []))
+        self.__varDepPackage = set(maybeGlob(recipe.get("packageVars", [])))
         if "packageConsume" in recipe:
             warnPackageConsume.warn(baseName)
-            self.__varDepPackage |= set(recipe["packageConsume"])
+            self.__varDepPackage |= set(maybeGlob(recipe["packageConsume"]))
         self.__varDepPackage |= self.__varDepBuild
-        self.__toolDepCheckout = set(recipe.get("checkoutTools", []))
-        self.__toolDepBuild = set(recipe.get("buildTools", []))
+        self.__toolDepCheckout = set(maybeGlob(recipe.get("checkoutTools", [])))
+        self.__toolDepBuild = set(maybeGlob(recipe.get("buildTools", [])))
         self.__toolDepBuild |= self.__toolDepCheckout
-        self.__toolDepPackage = set(recipe.get("packageTools", []))
+        self.__toolDepPackage = set(maybeGlob(recipe.get("packageTools", [])))
         self.__toolDepPackage |= self.__toolDepBuild
         self.__shared = recipe.get("shared", False)
         self.__properties = {
@@ -1936,7 +1952,7 @@ class RecipeSet:
         self.__rootRecipes = []
         self.__recipes = {}
         self.__classes = {}
-        self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
+        self.__whiteList = set(maybeGlob(["TERM", "SHELL", "USER", "HOME"]))
         self.__archive = { "backend" : "none" }
         self.__hooks = {}
         self.__configFiles = []
@@ -2108,7 +2124,7 @@ class RecipeSet:
     def __parseUserConfig(self, fileName):
         cfg = self.loadYaml(fileName)
         self.__defaultEnv.update(cfg.get("environment", {}))
-        self.__whiteList |= set(cfg.get("whitelist", []))
+        self.__whiteList |= set(maybeGlob(cfg.get("whitelist", [])))
         self.__archive = cfg.get("archive", { "backend" : "none" })
 
         for p in cfg.get("include", []):
