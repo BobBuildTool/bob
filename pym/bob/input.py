@@ -89,7 +89,7 @@ class StringParser:
 
     def parse(self, text):
         """Parse the text and make substitutions"""
-        if all((c not in text) for c in '\"\'$'):
+        if all((c not in text) for c in '\\\"\'$'):
             return text
         else:
             self.text = text
