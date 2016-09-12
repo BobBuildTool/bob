@@ -1956,7 +1956,7 @@ class RecipeSet:
         self.__rootRecipes = []
         self.__recipes = {}
         self.__classes = {}
-        self.__whiteList = set(maybeGlob(["TERM", "SHELL", "USER", "HOME"]))
+        self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
         self.__hooks = {}
         self.__configFiles = []
@@ -2128,7 +2128,7 @@ class RecipeSet:
     def __parseUserConfig(self, fileName):
         cfg = self.loadYaml(fileName)
         self.__defaultEnv.update(cfg.get("environment", {}))
-        self.__whiteList |= set(maybeGlob(cfg.get("whitelist", [])))
+        self.__whiteList |= set(cfg.get("whitelist", []))
         self.__archive = cfg.get("archive", { "backend" : "none" })
 
         for p in cfg.get("include", []):
@@ -2146,7 +2146,9 @@ class RecipeSet:
 
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         result = {}
-        env = Env(os.environ).prune(self.__whiteList)
+        env = Env(os.environ).prune([
+            lambda prev, elem: True if elem == pred else prev
+            for pred in self.__whiteList ])
         env.setLegacy(not self.__extStrings)
         env.setFuns(self.__stringFunctions)
         env.update(self.__defaultEnv)
