@@ -89,10 +89,13 @@ class StringParser:
 
     def parse(self, text):
         """Parse the text and make substitutions"""
-        self.text = text
-        self.index = 0
-        self.end = len(text)
-        return self.getString()
+        if all((c not in text) for c in '\"\'$'):
+            return text
+        else:
+            self.text = text
+            self.index = 0
+            self.end = len(text)
+            return self.getString()
 
     def nextChar(self):
         """Get next character"""
