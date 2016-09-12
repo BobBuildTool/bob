@@ -1583,7 +1583,7 @@ class Recipe(object):
         self.__filterSandbox = maybeGlob(filt.get("sandbox"))
         self.__packageName = packageName
         self.__baseName = baseName
-        self.__root = recipe.get("root", False)
+        self.__root = recipe.get("root")
         self.__provideTools = { name : AbstractTool(spec)
             for (name, spec) in recipe.get("provideTools", {}).items() }
         self.__provideVars = recipe.get("provideVars", {})
@@ -1661,6 +1661,7 @@ class Recipe(object):
             self.__filterEnv = mergeFilter(self.__filterEnv, cls.__filterEnv)
             self.__filterTools = mergeFilter(self.__filterTools, cls.__filterTools)
             self.__filterSandbox = mergeFilter(self.__filterSandbox, cls.__filterSandbox)
+            if self.__root is None: self.__root = cls.__root
             tmp = cls.__provideTools.copy()
             tmp.update(self.__provideTools)
             self.__provideTools = tmp
@@ -1737,7 +1738,7 @@ class Recipe(object):
 
     def isRoot(self):
         """Returns True if this is a root recipe."""
-        return self.__root
+        return self.__root == True
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, states, sandbox=None,
                 inputTools=Env(), inputStack=[]):
