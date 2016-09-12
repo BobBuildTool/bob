@@ -434,14 +434,18 @@ class GitScm(BaseScm):
 export GIT_SSL_NO_VERIFY=true
 if [ ! -d {DIR}/.git ] ; then
     git init {DIR}
-    cd {DIR}
-    git remote add origin {URL}
-else
-    cd {DIR}
 fi
-git fetch -t origin
-git checkout -f {TAG}
-""".format(URL=self.__url, TAG=self.__commit if self.__commit else self.__tag, DIR=self.__dir)
+cd {DIR}
+# see if we have a remote
+if ! git remote get-url origin >/dev/null 2>&1 ; then
+    git remote add origin {URL}
+fi
+# checkout only if HEAD is invalid
+if ! git rev-parse --verify -q HEAD >/dev/null ; then
+    git fetch -t origin
+    git checkout -q {REF}
+fi
+""".format(URL=self.__url, REF=self.__commit if self.__commit else "tags/"+self.__tag, DIR=self.__dir)
         else:
             return """
 export GIT_SSL_NO_VERIFY=true
