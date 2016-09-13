@@ -617,6 +617,13 @@ esac
                         del oldCheckoutState[scmDir]
                         BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
+                # Store new SCM checkout state. The script state is not stored
+                # so that this step will run again if it fails. OTOH we must
+                # record the SCM directories as some checkouts might already
+                # succeeded before the step ultimately fails.
+                BobState().setDirectoryState(prettySrcPath,
+                    { d:s for (d,s) in checkoutState.items() if d is not None })
+
                 print(colorize("   CHECKOUT  {}".format(prettySrcPath), "32"))
                 self._runShell(checkoutStep, "checkout")
 
