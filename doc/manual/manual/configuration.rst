@@ -376,8 +376,8 @@ Type: List of strings
 
 This is a list of environment variables that should be set during the execution
 of the checkout/build/package script. This declares the dependency of the
-respective step to the named variables. The content of the variables are
-computed as described in section TODO.
+respective step to the named variables. You may use shell patterns (e.g.
+``CONFIG_*``) to match multiple variables.
 
 It is not an error that a variable listed here is unset. This is especially
 useful for classes or to implement default behaviour that can be overridden by
