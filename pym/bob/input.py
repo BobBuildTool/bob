@@ -29,6 +29,7 @@ import hashlib
 import fnmatch
 import os, os.path
 import re
+import schema
 import shelve
 import struct
 import sys
@@ -325,6 +326,19 @@ class PluginProperty:
         """Get (parsed) value of the property."""
         return self.value
 
+    @staticmethod
+    def validate(data):
+        """Validate type of property.
+
+        Ususally the plugin will reimplement this static method and return True
+        only if *data* has the expected type. The default implementation will
+        always return True.
+
+        :param data: Parsed property data from the recipe
+        :return: True if data has expected type, otherwise False.
+        """
+        return True
+
 
 class PluginState:
     """Base class for plugin state trackers.
@@ -404,6 +418,17 @@ class BaseScm:
         self.__resolved = True
 
 class GitScm(BaseScm):
+
+    SCHEMA = schema.Schema({
+        'scm' : 'git',
+        'url' : str,
+        schema.Optional('dir') : str,
+        schema.Optional('if') : str,
+        schema.Optional('branch') : str,
+        schema.Optional('tag') : str,
+        schema.Optional('commit') : str
+    })
+
     def __init__(self, spec):
         super().__init__(spec)
         self.__url = spec["url"]
@@ -528,6 +553,15 @@ fi
         return True
 
 class SvnScm(BaseScm):
+
+    SCHEMA = schema.Schema({
+        'scm' : 'svn',
+        'url' : str,
+        schema.Optional('dir') : str,
+        schema.Optional('if') : str,
+        schema.Optional('revision') : schema.Or(int, str)
+    })
+
     def __init__(self, spec):
         super().__init__(spec)
         self.__modules = [{
@@ -628,6 +662,16 @@ fi
 
 
 class CvsScm(BaseScm):
+
+    SCHEMA = schema.Schema({
+        'scm' : 'cvs',
+        'cvsroot' : str,
+        'module' : str,
+        schema.Optional('dir') : str,
+        schema.Optional('if') : str,
+        schema.Optional('rev') : str
+    })
+
     # Checkout using CVS
     # - mandatory parameters: cvsroot, module
     # - optional parameters: rev, dir (dir is required if there are multiple checkouts)
@@ -710,6 +754,18 @@ fi
 
 
 class UrlScm(BaseScm):
+
+    SCHEMA = schema.Schema({
+        'scm' : 'url',
+        'url' : str,
+        schema.Optional('dir') : str,
+        schema.Optional('if') : str,
+        schema.Optional('digestSHA1') : str,
+        schema.Optional('digestSHA256') : str,
+        schema.Optional('extract') : schema.Or(bool, 'yes', 'no', 'auto',
+            'tar', 'gzip', 'xz', '7z', 'zip'),
+        schema.Optional('fileName') : str
+    })
 
     EXTENSIONS = [
         (".tar.gz",    "tar"),
@@ -1516,6 +1572,31 @@ def mergeFilter(left, right):
         return left
     return left + right
 
+class ScmValidator:
+    def __init__(self, scmSpecs):
+        self.__scmSpecs = scmSpecs
+
+    def __validateScm(self, scm):
+        if 'scm' not in scm:
+            raise schema.SchemaMissingKeyError("Missing 'scm' key in {}".format(scm), None)
+        if scm['scm'] not in self.__scmSpecs.keys():
+            raise schema.SchemaWrongKeyError('Invalid SCM: {}'.format(scm['scm']), None)
+        self.__scmSpecs[scm['scm']].validate(scm)
+
+    def validate(self, data):
+        if isinstance(data, dict):
+            self.__validateScm(data)
+        elif isinstance(data, list):
+            for i in data: self.__validateScm(i)
+        else:
+            raise schema.SchemaUnexpectedTypeError(
+                'checkoutSCM must be a SCM spec or a list threreof',
+                None)
+        return data
+
+
+RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.-]+$')
+
 class Recipe(object):
     """Representation of a single recipe
 
@@ -1555,18 +1636,17 @@ class Recipe(object):
             self.packageStep = packageStep
 
     @staticmethod
-    def loadFromFile(recipeSet, fileName, properties, isClass):
-        recipe = recipeSet.loadYaml(fileName)
+    def loadFromFile(recipeSet, fileName, properties, schema):
+        recipe = recipeSet.loadYaml(fileName, schema)
 
         # MultiPackages are handled as separate recipes with an anonymous base
         # class. Ignore first dir in path, which is 'recipes' by default.
         # Following dirs are treated as categories separated by '::'.
-        baseName = "::".join( os.path.splitext( fileName )[0].split( os.sep )[1:] )
+        baseName = os.path.splitext( fileName )[0].split( os.sep )[1:]
+        for n in baseName: RECIPE_NAME_SCHEMA.validate(n)
+        baseName = "::".join( baseName )
         baseDir = os.path.dirname(fileName)
         if "multiPackage" in recipe:
-            if isClass:
-                raise ParseError("Classes may not use 'multiPackage'")
-
             anonBaseClass = Recipe(recipeSet, recipe, baseDir, baseName, baseName, properties)
             return [
                 Recipe(recipeSet, subSpec, baseDir, baseName+"-"+subName, baseName, properties, anonBaseClass)
@@ -1954,7 +2034,41 @@ def funToolDefined(args, tools, **options):
     if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
     return "true" if (args[0] in tools) else "false"
 
+
+class ArchiveValidator:
+    def __init__(self):
+        self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http')},
+            ignore_extra_keys=True)
+        self.__backends = {
+            'none' : schema.Schema({'backend' : 'none'}),
+            'file' : schema.Schema({'backend' : 'file', 'path' : str}),
+            'http' : schema.Schema({'backend' : 'http', 'url' : str})
+        }
+
+    def validate(self, data):
+        self.__validTypes.validate(data)
+        return self.__backends[data['backend']].validate(data)
+
+
 class RecipeSet:
+
+    USER_CONFIG_SCHEMA = schema.Schema(
+        {
+            schema.Optional('environment') : schema.Schema({
+                schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') : str
+            }),
+            schema.Optional('whitelist') : schema.Schema([
+                schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
+            ]),
+            schema.Optional('archive') : ArchiveValidator(),
+            schema.Optional('include') : schema.Schema([str])
+        })
+
+    STATIC_CONFIG_SCHEMA = schema.Schema({
+        schema.Optional('bobMinimumVersion') : str,
+        schema.Optional('plugins') : [str]
+    })
+
     def __init__(self):
         self.__defaultEnv = {}
         self.__rootRecipes = []
@@ -2074,9 +2188,9 @@ class RecipeSet:
     def archiveSpec(self):
         return self.__archive
 
-    def loadYaml(self, path, default={}):
+    def loadYaml(self, path, schema, default={}):
         if os.path.exists(path):
-            data = self.__cache.loadYaml(path)
+            data = self.__cache.loadYaml(path, schema)
             if data is None: data = default
             return data
         else:
@@ -2097,12 +2211,13 @@ class RecipeSet:
             self.__cache.close()
 
     def __parse(self):
-        config = self.loadYaml("config.yaml")
+        config = self.loadYaml("config.yaml", RecipeSet.STATIC_CONFIG_SCHEMA)
         minVer = config.get("bobMinimumVersion", "0.1")
         if compareVersion(BOB_VERSION, minVer) < 0:
             raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
         self.__extStrings = compareVersion(minVer, "0.3") >= 0
         self.__loadPlugins(config.get("plugins", []))
+        self.__createSchemas()
 
         # user config(s)
         self.__parseUserConfig("default.yaml")
@@ -2114,7 +2229,8 @@ class RecipeSet:
         for root, dirnames, filenames in os.walk('classes'):
             for path in fnmatch.filter(filenames, "*.yaml"):
                 try:
-                    [r] = Recipe.loadFromFile(self, os.path.join(root, path), self.__properties, True)
+                    [r] = Recipe.loadFromFile(self, os.path.join(root, path),
+                        self.__properties, self.__classSchema)
                     self.__addClass(r)
                 except ParseError as e:
                     e.pushFrame(path)
@@ -2123,20 +2239,109 @@ class RecipeSet:
         for root, dirnames, filenames in os.walk('recipes'):
             for path in fnmatch.filter(filenames, "*.yaml"):
                 try:
-                    for r in Recipe.loadFromFile(self,  os.path.join(root, path), self.__properties, False):
+                    for r in Recipe.loadFromFile(self,  os.path.join(root, path),
+                                                 self.__properties, self.__recipeSchema):
                         self.__addRecipe(r)
                 except ParseError as e:
                     e.pushFrame(path)
                     raise
 
     def __parseUserConfig(self, fileName):
-        cfg = self.loadYaml(fileName)
+        cfg = self.loadYaml(fileName, RecipeSet.USER_CONFIG_SCHEMA)
         self.__defaultEnv.update(cfg.get("environment", {}))
         self.__whiteList |= set(cfg.get("whitelist", []))
         self.__archive = cfg.get("archive", { "backend" : "none" })
 
         for p in cfg.get("include", []):
             self.__parseUserConfig(self, str(p) + ".yaml")
+
+    def __createSchemas(self):
+        varNameSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
+        varGlobSchema = schema.Regex(r'^[][A-Za-z_*?][][A-Za-z0-9_*?]*$')
+        toolGlobSchema = schema.Regex(r'^[][0-9A-Za-z_.:*?-]+$')
+        varFilterSchema = schema.Regex(r'^!?[][A-Za-z_*?][][A-Za-z0-9_*?]*$')
+        recipeFilterSchema = schema.Regex(r'^!?[][0-9A-Za-z_.:*?-]+$')
+
+        useClauses = ['deps', 'environment', 'result', 'tools', 'sandbox']
+        useClauses.extend(self.__states.keys())
+
+        classSchemaSpec = {
+            schema.Optional('checkoutScript') : str,
+            schema.Optional('buildScript') : str,
+            schema.Optional('packageScript') : str,
+            schema.Optional('checkoutTools') : [ toolGlobSchema ],
+            schema.Optional('buildTools') : [ toolGlobSchema ],
+            schema.Optional('packageTools') : [ toolGlobSchema ],
+            schema.Optional('checkoutVars') : [ varGlobSchema ],
+            schema.Optional('buildVars') : [ varGlobSchema ],
+            schema.Optional('packageVars') : [ varGlobSchema ],
+            schema.Optional('checkoutDeterministic') : bool,
+            schema.Optional('checkoutSCM') : ScmValidator({
+                'git' : GitScm.SCHEMA,
+                'svn' : SvnScm.SCHEMA,
+                'cvs' : CvsScm.SCHEMA,
+                'url' : UrlScm.SCHEMA
+            }),
+            schema.Optional('depends') : schema.Schema([
+                schema.Or(
+                    str,
+                    schema.Schema({
+                        'name' : str,
+                        schema.Optional('use') : useClauses,
+                        schema.Optional('forward') : bool,
+                        schema.Optional('environment') : schema.Schema({
+                            varNameSchema : str
+                        }),
+                        schema.Optional('if') : str
+                    })
+                )
+            ]),
+            schema.Optional('environment') : schema.Schema({
+                varNameSchema : str
+            }),
+            schema.Optional('filter') : schema.Schema({
+                schema.Optional('environment') : [ varFilterSchema ],
+                schema.Optional('tools') : [ recipeFilterSchema ],
+                schema.Optional('sandbox') : [ recipeFilterSchema ]
+            }),
+            schema.Optional('inherit') : [str],
+            schema.Optional('privateEnvironment') : schema.Schema({
+                varNameSchema : str
+            }),
+            schema.Optional('provideDeps') : [str],
+            schema.Optional('provideTools') : schema.Schema({
+                str: schema.Or(
+                    str,
+                    schema.Schema({
+                        'path' : str,
+                        schema.Optional('libs') : [str]
+                    })
+                )
+            }),
+            schema.Optional('provideVars') : schema.Schema({
+                varNameSchema : str
+            }),
+            schema.Optional('provideSandbox') : schema.Schema({
+                'paths' : [str],
+                schema.Optional('mount') : schema.Schema([
+                    str,
+                    schema.And([str], lambda x: len(x) == 2)
+                ], error="provideSandbox::mount must be a list of paths or tuples of two paths each!")
+            }),
+            schema.Optional('root') : bool,
+            schema.Optional('shared') : bool
+        }
+        for (name, prop) in self.__properties.items():
+            classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
+                error="property '"+name+"' has an invalid type")
+
+        self.__classSchema = schema.Schema(classSchemaSpec)
+
+        recipeSchemaSpec = classSchemaSpec.copy()
+        recipeSchemaSpec[schema.Optional('multiPackage')] = schema.Schema({
+            RECIPE_NAME_SCHEMA : self.__classSchema
+        })
+        self.__recipeSchema = schema.Schema(recipeSchemaSpec)
 
     def getRecipe(self, packageName):
         if packageName not in self.__recipes:
@@ -2180,7 +2385,7 @@ class YamlCache:
     def close(self):
         self.__shelve.close()
 
-    def loadYaml(self, name):
+    def loadYaml(self, name, yamlSchema):
         binStat = binLstat(name)
         if name in self.__shelve:
             cached = self.__shelve[name]
@@ -2191,6 +2396,11 @@ class YamlCache:
                 data = yaml.safe_load(f.read())
             except Exception as e:
                 raise ParseError("Error while parsing {}: {}".format(name, str(e)))
+
+        try:
+            data = yamlSchema.validate(data)
+        except schema.SchemaError as e:
+            raise ParseError("Error while validating {}: {}".format(name, str(e)))
 
         self.__shelve[name] = { 'lstat' : binStat, 'data' : data }
         return data
