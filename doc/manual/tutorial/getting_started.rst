@@ -7,8 +7,10 @@ Installation
 Bob is built with Python3 and needs the following additional packages and
 Python modules that are not in the standard library:
 
-* `PyYAML`_. Either install via pip (``pip install PyYAML``) or the package
+* `PyYAML`_. Either install via pip (``pip3 install PyYAML``) or the package
   that comes with your distribution (e.g. python3-yaml on Debian).
+* `schema`_. Either install via pip (``pip3 install schema``) or the package
+  that comes with your distribution (e.g. python3-schema on Debian).
 * gcc
 
 Python 3.3 or later should work. For the basic usage there is no installation
@@ -40,6 +42,7 @@ not permitted" error when building. Add the line ::
 to your ``/etc/sysctl.conf`` (or wherever your distro stores that).
 
 .. _PyYAML: http://pyyaml.org/
+.. _schema: https://pypi.python.org/pypi/schema
 .. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
 
 Getting shell completion
