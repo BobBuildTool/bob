@@ -52,26 +52,22 @@ class PathFmtState(PluginState):
         return self.__platformDir
 
 
-def StringProperty(propertyName):
+class StringProperty(PluginProperty):
+    @staticmethod
+    def validate(data):
+        return isinstance(data, str)
 
-    class CustomStringPoperty(PluginProperty):
-        def __init__(self, present, value):
-            if present and not isinstance(value, str):
-                raise ParseError(propertyName + " must be a string!")
-            super().__init__(present, value)
-
-    return CustomStringPoperty
 
 manifest = {
-    'apiVersion' : "0.1",
+    'apiVersion' : "0.3",
     'hooks' : {
         'releaseNameFormatter' : releaseFormatter,
         'developNameFormatter' : developFormatter,
         'jenkinsNameFormatter' : jenkinsFormatter
     },
     'properties' : {
-        "checkoutDir" : StringProperty("checkoutDir"),
-        "platform" : StringProperty("platform")
+        "checkoutDir" : StringProperty,
+        "platform" : StringProperty
     },
     'state' : {
         "pathFmt" : PathFmtState
