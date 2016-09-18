@@ -42,6 +42,10 @@ def __ls(*args, **kwargs):
      from .cmds.misc import doLS
      doLS(*args, **kwargs)
 
+def __project(*args, **kwargs):
+     from .cmds.build import doProject
+     doProject(*args, **kwargs)
+
 def __queryscm(*args, **kwargs):
      from .cmds.misc import doQuerySCM
      doQuerySCM(*args, **kwargs)
@@ -56,6 +60,7 @@ availableCommands = {
     "clean"         : (True, __clean, "Delete unused src/build/dist paths of release builds"),
     "jenkins"       : (True, __jenkins, "Configure Jenkins server"),
     "ls"            : (True, __ls, "List package hierarchy"),
+    "project"       : (True, __project, "Create project files"),
 
     "query-scm"     : (False, __queryscm, "Query SCM information"),
     "query-recipe"  : (False, __queryrecipe, "Query package sources"),

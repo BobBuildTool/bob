@@ -237,6 +237,38 @@ __bob_jenkins()
    __bob_subcommands "add export ls prune push rm set-url set-options" "jenkins"
 }
 
+__bob_project_generators()
+{
+   local i c command completion_func
+
+   while [[ $parse_pos -lt $COMP_CWORD ]] ; do
+      c="${COMP_WORDS[parse_pos]}"
+      : $((parse_pos++))
+      case "$c" in
+         -*) ;;
+         *) command="$c" ; break ;;
+      esac
+   done
+
+   if [[ -z "$command" ]] ; then
+      case "$cur" in
+         -*)
+            __bob_complete_words "-D -E -e -n -c"
+            ;;
+         *)
+            __bob_complete_words "$1"
+            ;;
+      esac
+   else
+       __bob_complete_path "--help"
+   fi
+}
+
+__bob_project()
+{
+    __bob_project_generators "$($bob project --list)"
+}
+
 __bob_subcommands()
 {
    local i c command completion_func
@@ -270,7 +302,7 @@ __bob()
 {
    local parse_pos=1 bob="$1" cur="$2" prev="$3"
    local sandbox=""
-   __bob_subcommands "build clean dev ls jenkins"
+   __bob_subcommands "build clean dev ls jenkins project"
 }
 
 # noquote is quite new...
