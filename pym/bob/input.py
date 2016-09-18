@@ -2129,7 +2129,7 @@ class RecipeSet:
         if 'manifest' not in g:
             raise ParseError("Plugin '"+name+"' did not define 'manifest'!")
         manifest = g['manifest']
-        if manifest.get('apiVersion', "0") not in ["0.1", "0.2"]:
+        if manifest.get('apiVersion', "0") not in ["0.1", "0.2", "0.3"]:
             raise ParseError("Plugin '"+name+"': incompatible apiVersion!")
 
         hooks = manifest.get('hooks', {})
