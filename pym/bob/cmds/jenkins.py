@@ -787,16 +787,7 @@ def doJenkinsLs(recipes, argv):
         print(j)
         cfg = BobState().getJenkinsConfig(j)
         if args.verbose >= 1:
-            url = cfg["url"]
-            if url.get('username'):
-                userPass = url['username']
-                if url.get('password'):
-                    userPass += ":" + url['password']
-                userPass += "@"
-            else:
-                userPass = ""
-            print(" URL:", "{}://{}{}{}{}".format(url['scheme'], userPass, url['server'],
-                ":{}".format(url['port']) if url.get('port') else "", url['path']))
+            print(" URL:", getUrl(cfg))
             if cfg.get('prefix'):
                 print(" Prefix:", cfg['prefix'])
             if cfg.get('nodes'):
@@ -809,6 +800,18 @@ def doJenkinsLs(recipes, argv):
             print(" Roots:", ", ".join(cfg['roots']))
         if args.verbose >= 2:
             print(" Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
+
+def getUrl(config):
+    url = config["url"]
+    if url.get('username'):
+        userPass = url['username']
+        if url.get('password'):
+            userPass += ":" + url['password']
+        userPass += "@"
+    else:
+        userPass = ""
+    return "{}://{}{}{}{}".format(url['scheme'], userPass, url['server'],
+        ":{}".format(url['port']) if url.get('port') else "", url['path'])
 
 def getConnection(config):
     if config["url"]["scheme"] == 'http':
