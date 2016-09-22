@@ -136,3 +136,55 @@ could look like this::
         }
     }
 
+Jenkins job mangling
+~~~~~~~~~~~~~~~~~~~~
+
+Jenkins jobs that are created by Bob are very simple and contain only
+information that was taken from the recipes. It might be necessary to enable
+additional plugins, add build steps or alter the job configuration in special
+ways. For such use cases the following hooks are available:
+
+ * ``jenkinsJobCreate``: initial creation of a job
+ * ``jenkinsJobPreUpdate``: called before updating a job config
+ * ``jenkinsJobPostUpdate``: called after updating a job config
+
+All hooks take a single mandatory positional parameter: the job config XML as
+string. The hook is expected to return the altered config XML as string too.
+The function has to accept any number of additionaly keyword arguments.
+Currently the following additionaly kwargs are passed:
+
+ * ``alias``: alias name used for jenkins
+ * ``buildSteps``: list of all build steps (:class:`bob.input.Step`) used in
+   the job
+ * ``checkoutSteps``: list of all checkout steps (:class:`bob.input.Step`) used
+   in the job
+ * ``name``: name of Jenkins job
+ * ``nodes``: The nodes where the job should run
+ * ``packageSteps``: list of all package steps (:class:`bob.input.Step`) used
+   in the job
+ * ``prefix``: Prefix of all job names
+ * ``sandbox``: Boolean wether sandbox should be used
+ * ``url``: URL of Jenkins instane
+ * ``windows``: True if Jenkins runs on Windows
+
+See the jenkins-cobertura plugin in the "contrib" directory for an example. The
+default implementation in Bob looks like this::
+
+    def jenkinsJobCreate(config, **info):
+        return config
+
+    def jenkinsJobPreUpdate(config, **info):
+        return config
+
+    def jenkinsJobPostUpdate(config, **info):
+        return config
+
+    manifest = {
+        'apiVersion' : "0.4",
+        'hooks' : {
+            'jenkinsJobCreate' : jenkinsJobCreate,
+            'jenkinsJobPreUpdate' : jenkinsJobPreUpdate,
+            'jenkinsJobPostUpdate' : jenkinsJobPostUpdate
+        }
+    }
+
