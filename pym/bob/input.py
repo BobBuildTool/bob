@@ -462,7 +462,7 @@ if [ ! -d {DIR}/.git ] ; then
 fi
 cd {DIR}
 # see if we have a remote
-if ! git remote get-url origin >/dev/null 2>&1 ; then
+if [[ -z $(git remote) ]] ; then
     git remote add origin {URL}
 fi
 # checkout only if HEAD is invalid
