@@ -476,7 +476,11 @@ fi
 export GIT_SSL_NO_VERIFY=true
 if [ -d {DIR}/.git ] ; then
     cd {DIR}
-    git pull --ff-only
+    if [[ $(git rev-parse --abbrev-ref HEAD) == "{BRANCH}" ]] ; then
+        git pull --ff-only
+    else
+        echo "Warning: not updating {DIR} because branch was changed manually..." >&2
+    fi
 else
     if ! git clone -b {BRANCH} {URL} {DIR} ; then
         rm -rf {DIR}/.git {DIR}/*
