@@ -799,6 +799,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Don't build dependencies")
     parser.add_argument('-b', '--build-only', default=False, action='store_true',
         help="Don't checkout, just build and package")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--clean', action='store_true', default=not develop,
+        help="Do clean builds (clear build directory)")
+    group.add_argument('--incremental', action='store_false', dest='clean',
+        help="Reuse build directory for incremental builds")
     parser.add_argument('--resume', default=False, action='store_true',
         help="Resume build where it was previously interrupted")
     parser.add_argument('-q', '--quiet', default=0, action='count',
@@ -844,8 +849,6 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     envWhiteList = recipes.envWhiteList()
     envWhiteList |= set(args.white_list)
 
-    cleanBuild = not develop
-
     if develop:
         nameFormatter = recipes.getHook('developNameFormatter')
         developPersister = recipes.getHook('developNamePersister')
@@ -863,7 +866,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
     builder = LocalBuilder(recipes, args.verbose - args.quiet, args.force,
                            args.no_deps, args.build_only, args.preserve_env,
-                           envWhiteList, bobRoot, cleanBuild)
+                           envWhiteList, bobRoot, args.clean)
 
     archiveSpec = recipes.archiveSpec()
     archiveBackend = archiveSpec.get("backend", "none")
