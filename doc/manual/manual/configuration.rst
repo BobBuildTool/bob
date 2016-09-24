@@ -408,6 +408,8 @@ determining automatically whether they are determinstic.
 If the checkout is deemed deterministic it enables Bob to apply various
 optimizations.  It is also the basis for binary artifacts.
 
+.. _configuration-recipes-scm:
+
 checkoutSCM
 ~~~~~~~~~~~
 
@@ -944,4 +946,40 @@ Example::
    archive:
       backend: http
       url: "http://localhost:8001/upload"
+
+scmOverrides
+~~~~~~~~~~~~
+
+Type: List of override specifications
+
+SCM overrides allow the user to alter any attribute of SCMs
+(:ref:`configuration-recipes-scm`) without touching the recipes. They are quite
+useful to change e.g. the server url or to override the branch of some SCMs. Overrides
+are applied after string substitution. The general syntax looks like the following::
+
+    scmOverrides:
+      -
+        match:
+          url: "git@acme.com:/foo/repo.git"
+        del: [commit, tag]
+        set:
+          branch: develop
+        replace:
+          url:
+            pattern: "foo"
+            replacement: "bar"
+
+The ``scmOverrides`` key takes a list of one or more override specifications.
+The override is first matched via patterns that are in the ``match`` section.
+All entries under ``match`` must be matching for the override to apply. The
+right side of a match entry can use shell globbing patterns.
+
+If an override is matching the actions are then applied in the following order:
+
+ * ``del``: The list of attributes that are removed.
+ * ``set``: The attributes and their values are taken, overwriting previous values.
+ * ``replace``: Performs a substitution based on regular expressions. This
+   section can hold any number of attributes with a ``pattern`` and a
+   ``replacement``. Each occurrence of ``pattern`` is replaced by
+   ``replacement``.
 
