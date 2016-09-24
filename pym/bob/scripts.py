@@ -42,20 +42,31 @@ def __ls(*args, **kwargs):
      from .cmds.misc import doLS
      doLS(*args, **kwargs)
 
+def __queryscm(*args, **kwargs):
+     from .cmds.misc import doQuerySCM
+     doQuerySCM(*args, **kwargs)
+
 availableCommands = {
-    "build"  : (__build, "Build (sub-)packages in release mode"),
-    "dev"        : (__develop, "Build (sub-)packages in development mode"),
-    "clean"  : (__clean, "Delete unused src/build/dist paths"),
-    "jenkins" : (__jenkins, "Configure Jenkins server"),
-    "ls"         : (__ls, "List package hierarchy"),
+    "build"         : (True, __build, "Build (sub-)packages in release mode"),
+    "dev"           : (True, __develop, "Build (sub-)packages in development mode"),
+    "clean"         : (True, __clean, "Delete unused src/build/dist paths of release builds"),
+    "jenkins"       : (True, __jenkins, "Configure Jenkins server"),
+    "ls"            : (True, __ls, "List package hierarchy"),
+
+    "query-scm"     : (False, __queryscm, "Query SCM information"),
 }
 
 def doHelp(extended, fd):
-    cmds = "\n".join(sorted([ "  {:16s}{}".format(k, v[1]) for (k,v) in availableCommands.items() ]))
+    hlCmds = "\n".join(sorted([ "  {:16s}{}".format(k, v[2])
+        for (k,v) in availableCommands.items() if v[0] ]))
+    llCmds = "\n".join(sorted([ "  {:16s}{}".format(k, v[2])
+        for (k,v) in availableCommands.items() if not v[0] ]))
     print("usage: bob [-h | --help] [--version] <command> [<args>]", file=fd)
     if extended:
-        print("\nThe following commands are available:", file=fd)
-        print("\n{}\n".format(cmds), file=fd)
+        print("\nThe following high level commands are available:", file=fd)
+        print("\n{}\n".format(hlCmds), file=fd)
+        print("The following scripting commands are available:", file=fd)
+        print("\n{}\n".format(llCmds), file=fd)
         print("See 'bob <command> -h' for more information on a specific command.", file=fd)
 
 def bob(bobRoot):
@@ -74,7 +85,7 @@ def bob(bobRoot):
             verb = sys.argv[1]
             argv = sys.argv[2:]
             if verb in availableCommands:
-                availableCommands[verb][0](argv, bobRoot)
+                availableCommands[verb][1](argv, bobRoot)
             elif (verb == '-h') or (verb == '--help'):
                 doHelp(True, sys.stdout)
             elif (verb == '--version'):

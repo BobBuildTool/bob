@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from ..input import RecipeSet
+from ..input import RecipeSet, walkPackagePath
 import argparse
 import sys
 
@@ -84,4 +84,58 @@ def doLS(argv, bobRoot):
         showTree(roots, showAll)
     else:
         for p in roots: print(p.getName())
+
+class Default(dict):
+    def __init__(self, default, *args, **kwargs):
+        self.__default = default
+        super().__init__(*args, **kwargs)
+
+    def __missing__(self, key):
+        return self.__default
+
+def doQuerySCM(argv, bobRoot):
+    parser = argparse.ArgumentParser(prog="bob query-scm",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""Query SCM configuration of packages.
+
+By default this command will print one line for each SCM in the given package.
+The output format may be overridded by '-f'. By default the following formats
+are used:
+
+ * git="git {dir} {url} {branch}"
+ * svn="svn {dir} {url} {revision}"
+ * cvs="cvs {dir} {cvsroot} {module}"
+ * url="url {dir}/{fileName} {url}"
+""")
+    parser.add_argument('package', help="(Sub-)package to query")
+
+    parser.add_argument('-f', default=[], action='append', dest="formats",
+        help="Output format for scm (syntax: scm=format). Can be specified multiple times.")
+    parser.add_argument('--default', default="", help='Default for missing attributes (default: "")')
+
+    formats = {
+        'git' : "git {dir} {url} {branch}",
+        'svn' : "svn {dir} {url} {revision}",
+        'cvs' : "cvs {dir} {cvsroot} {module}",
+        'url' : "url {dir}/{fileName} {url}",
+    }
+
+    args = parser.parse_args(argv)
+
+    recipes = RecipeSet()
+    recipes.parse()
+    rootPackages = recipes.generatePackages(lambda s,m: "unused")
+    package = walkPackagePath(rootPackages, args.package)
+
+    # update formats
+    for fmt in args.formats:
+        f = fmt.split("=")
+        if len(f) != 2: parser.error("Malformed format: "+fmt)
+        formats[f[0]] = f[1]
+
+    for scm in package.getCheckoutStep().getScmList():
+        for p in scm.getProperties():
+            p = { k:v for (k,v) in p.items() if v is not None }
+            fmt = formats.get(p['scm'], "{scm} {dir}")
+            print(fmt.format_map(Default(args.default, p)))
 

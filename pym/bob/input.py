@@ -428,6 +428,16 @@ class GitScm:
                 raise ParseError("Invalid commit id: " + str(self.__commit))
         self.__dir = spec.get("dir", ".")
 
+    def getProperties(self):
+        return [{
+            'scm' : 'git',
+            'url' : self.__url,
+            'branch' : self.__branch,
+            'tag' : self.__tag,
+            'commit' : self.__commit,
+            'dir' : self.__dir
+        }]
+
     def asScript(self):
         if self.__tag or self.__commit:
             return """
@@ -572,6 +582,11 @@ fi
         return (m["url"] + ( ("@"+str(m["revision"])) if m["revision"] else "" ) + " > "
                 + (m["dir"] if m["dir"] else "."))
 
+    def getProperties(self):
+        ret = [ m.copy() for m in self.__modules ]
+        for m in ret: m['scm'] = "svn"
+        return ret
+
     def asScript(self):
         return joinScripts([ SvnScm.__moduleAsScript(m) for m in self.__modules ])
 
@@ -652,6 +667,15 @@ class CvsScm:
         self.__module = spec["module"]
         self.__rev = spec.get("rev")
         self.__dir = spec.get("dir", ".")
+
+    def getProperties(self):
+        return [{
+            'scm' : 'cvs',
+            'cvsroot' : self.__cvsroot,
+            'module' : self.__module,
+            'rev' : self.__rev,
+            'dir' : self.__dir
+        }]
 
     def asScript(self):
         # If given a ":ssh:" cvsroot, translate that to CVS_RSH using ssh, and ":ext:"
@@ -765,6 +789,17 @@ class UrlScm:
         if not self.__fn:
             self.__fn = self.__url.split("/")[-1]
         self.__extract = spec.get("extract", "auto")
+
+    def getProperties(self):
+        return [{
+            'scm' : 'url',
+            'url' : self.__url,
+            'digestSHA1' : self.__digestSha1,
+            'digestSHA256' : self.__digestSha256,
+            'dir' : self.__dir,
+            'fileName' : self.__fn,
+            'extract' : self.__extract
+        }]
 
     def asScript(self):
         ret = """
@@ -1333,6 +1368,9 @@ class CheckoutStep(Step):
 
     def getJenkinsXml(self):
         return [ s.asJenkins(self.getWorkspacePath()) for s in self.__scmList if s.hasJenkinsPlugin() ]
+
+    def getScmList(self):
+        return self.__scmList
 
     def getScmDirectories(self):
         dirs = {}
