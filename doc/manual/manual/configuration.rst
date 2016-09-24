@@ -835,8 +835,8 @@ of Jenkins's regular control.
 
 .. _configuration-config:
 
-config.yaml
------------
+Project configuration (config.yaml)
+-----------------------------------
 
 The file ``config.yaml`` holds all static configuration options that are not
 subject to be changed when building packages. The following sections describe
@@ -868,11 +868,21 @@ Plugins are loaded in the same order as listed here. For each name in this
 section there must be a .py-file in the ``plugins`` directory next to the
 recipes. For a detailed description of plugins see :ref:`extending-plugins`.
 
-default.yaml
-------------
+User configuration (default.yaml)
+---------------------------------
 
 The ``default.yaml`` file holds configuration options that may be overridden by
-the user.
+the user. Most commands will also take an '-c' option where any number of
+additional configuration files with the same syntax can be specified.
+
+User configuration files may optionally include other configuration files.
+These includes are parsed *after* the current file, meaning that options of
+included configuration files take precedence over the current one. Included
+files do not need to exist and are silently ignored if missing. Includes are
+specified without the .yaml extension::
+
+    include:
+        - overrides
 
 environment
 ~~~~~~~~~~~
