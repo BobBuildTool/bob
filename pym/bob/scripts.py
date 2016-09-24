@@ -46,6 +46,10 @@ def __queryscm(*args, **kwargs):
      from .cmds.misc import doQuerySCM
      doQuerySCM(*args, **kwargs)
 
+def __queryrecipe(*args, **kwargs):
+     from .cmds.misc import doQueryRecipe
+     doQueryRecipe(*args, **kwargs)
+
 availableCommands = {
     "build"         : (True, __build, "Build (sub-)packages in release mode"),
     "dev"           : (True, __develop, "Build (sub-)packages in development mode"),
@@ -54,6 +58,7 @@ availableCommands = {
     "ls"            : (True, __ls, "List package hierarchy"),
 
     "query-scm"     : (False, __queryscm, "Query SCM information"),
+    "query-recipe"  : (False, __queryrecipe, "Query package sources"),
 }
 
 def doHelp(extended, fd):

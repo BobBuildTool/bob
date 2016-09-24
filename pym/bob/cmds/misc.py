@@ -139,3 +139,18 @@ are used:
             fmt = formats.get(p['scm'], "{scm} {dir}")
             print(fmt.format_map(Default(args.default, p)))
 
+def doQueryRecipe(argv, bobRoot):
+    parser = argparse.ArgumentParser(prog="bob query-recipe",
+        description="Query recipe and class files of package.")
+    parser.add_argument('package', help="(Sub-)package to query")
+
+    args = parser.parse_args(argv)
+
+    recipes = RecipeSet()
+    recipes.parse()
+    rootPackages = recipes.generatePackages(lambda s,m: "unused")
+    package = walkPackagePath(rootPackages, args.package)
+
+    for fn in package.getRecipe().getSources():
+        print(fn)
+

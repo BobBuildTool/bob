@@ -1674,15 +1674,16 @@ class Recipe(object):
         baseName = "::".join( baseName )
         baseDir = os.path.dirname(fileName)
         if "multiPackage" in recipe:
-            anonBaseClass = Recipe(recipeSet, recipe, baseDir, baseName, baseName, properties)
+            anonBaseClass = Recipe(recipeSet, recipe, None, baseDir, baseName, baseName, properties)
             return [
-                Recipe(recipeSet, subSpec, baseDir, baseName+"-"+subName, baseName, properties, anonBaseClass)
+                Recipe(recipeSet, subSpec, fileName, baseDir, baseName+"-"+subName, baseName, properties, anonBaseClass)
                 for (subName, subSpec) in recipe["multiPackage"].items() ]
         else:
-            return [ Recipe(recipeSet, recipe, baseDir, baseName, baseName, properties) ]
+            return [ Recipe(recipeSet, recipe, fileName, baseDir, baseName, baseName, properties) ]
 
-    def __init__(self, recipeSet, recipe, baseDir, packageName, baseName, properties, anonBaseClass=None):
+    def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName, properties, anonBaseClass=None):
         self.__recipeSet = recipeSet
+        self.__sources = [ sourceFile ] if sourceFile else []
         self.__classesResolved = False
         self.__inherit = recipe.get("inherit", [])
         self.__anonBaseClass = anonBaseClass
@@ -1767,6 +1768,7 @@ class Recipe(object):
         # inherit classes
         inherit.reverse()
         for cls in inherit:
+            self.__sources.extend(cls.__sources)
             self.__deps[0:0] = cls.__deps
             self.__filterEnv = mergeFilter(self.__filterEnv, cls.__filterEnv)
             self.__filterTools = mergeFilter(self.__filterTools, cls.__filterTools)
@@ -1819,6 +1821,9 @@ class Recipe(object):
 
     def getRecipeSet(self):
         return self.__recipeSet
+
+    def getSources(self):
+        return self.__sources
 
     def getPackageName(self):
         """Get the name of the package that is drived from this recipe.
