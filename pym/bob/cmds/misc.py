@@ -102,22 +102,24 @@ By default this command will print one line for each SCM in the given package.
 The output format may be overridded by '-f'. By default the following formats
 are used:
 
- * git="git {dir} {url} {branch}"
- * svn="svn {dir} {url} {revision}"
- * cvs="cvs {dir} {cvsroot} {module}"
- * url="url {dir}/{fileName} {url}"
+ * git="git {package} {dir} {url} {branch}"
+ * svn="svn {package} {dir} {url} {revision}"
+ * cvs="cvs {package} {dir} {cvsroot} {module}"
+ * url="url {package} {dir}/{fileName} {url}"
 """)
     parser.add_argument('package', help="(Sub-)package to query")
 
     parser.add_argument('-f', default=[], action='append', dest="formats",
         help="Output format for scm (syntax: scm=format). Can be specified multiple times.")
     parser.add_argument('--default', default="", help='Default for missing attributes (default: "")')
+    parser.add_argument('-r', '--recursive', default=False, action='store_true',
+                        help="Recursively display dependencies")
 
     formats = {
-        'git' : "git {dir} {url} {branch}",
-        'svn' : "svn {dir} {url} {revision}",
-        'cvs' : "cvs {dir} {cvsroot} {module}",
-        'url' : "url {dir}/{fileName} {url}",
+        'git' : "git {package} {dir} {url} {branch}",
+        'svn' : "svn {package} {dir} {url} {revision}",
+        'cvs' : "cvs {package} {dir} {cvsroot} {module}",
+        'url' : "url {package} {dir}/{fileName} {url}",
     }
 
     args = parser.parse_args(argv)
@@ -133,11 +135,23 @@ are used:
         if len(f) != 2: parser.error("Malformed format: "+fmt)
         formats[f[0]] = f[1]
 
-    for scm in package.getCheckoutStep().getScmList():
-        for p in scm.getProperties():
-            p = { k:v for (k,v) in p.items() if v is not None }
-            fmt = formats.get(p['scm'], "{scm} {dir}")
-            print(fmt.format_map(Default(args.default, p)))
+    def showPackage(package, recurse, done=set()):
+        key = (package.getRecipe().getName(), package.getCheckoutStep().getVariantId())
+        if key in done: return
+        done.add(key)
+
+        for scm in package.getCheckoutStep().getScmList():
+            for p in scm.getProperties():
+                p = { k:v for (k,v) in p.items() if v is not None }
+                p['package'] = "/".join(package.getStack())
+                fmt = formats.get(p['scm'], "{scm} {dir}")
+                print(fmt.format_map(Default(args.default, p)))
+
+        if recurse:
+            for ps in package.getDirectDepSteps():
+                showPackage(ps.getPackage(), recurse, done)
+
+    showPackage(package, args.recursive)
 
 def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
