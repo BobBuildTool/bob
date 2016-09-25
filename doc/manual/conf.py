@@ -15,6 +15,16 @@
 
 import sys
 import os
+from unittest.mock import MagicMock
+
+# Generic mocking class to hide missing modules
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+            return MagicMock()
+
+MOCK_MODULES = ['schema']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -45,7 +55,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'Bob'
-copyright = '2015, TechniSat Digital GmbH'
+copyright = '2016, TechniSat Digital GmbH'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
