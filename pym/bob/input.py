@@ -2197,9 +2197,7 @@ class RecipeSet:
 
     def loadYaml(self, path, schema, default={}):
         if os.path.exists(path):
-            data = self.__cache.loadYaml(path, schema)
-            if data is None: data = default
-            return data
+            return self.__cache.loadYaml(path, schema, default)
         else:
             return default
 
@@ -2392,7 +2390,7 @@ class YamlCache:
     def close(self):
         self.__shelve.close()
 
-    def loadYaml(self, name, yamlSchema):
+    def loadYaml(self, name, yamlSchema, default):
         binStat = binLstat(name)
         if name in self.__shelve:
             cached = self.__shelve[name]
@@ -2404,6 +2402,7 @@ class YamlCache:
             except Exception as e:
                 raise ParseError("Error while parsing {}: {}".format(name, str(e)))
 
+        if data is None: data = default
         try:
             data = yamlSchema.validate(data)
         except schema.SchemaError as e:
