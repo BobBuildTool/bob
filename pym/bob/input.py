@@ -418,6 +418,7 @@ class GitScm:
     })
 
     def __init__(self, spec):
+        self.__recipe = spec['recipe']
         self.__url = spec["url"]
         self.__branch = spec.get("branch", "master")
         self.__tag = spec.get("tag")
@@ -430,6 +431,7 @@ class GitScm:
 
     def getProperties(self):
         return [{
+            'recipe' : self.__recipe,
             'scm' : 'git',
             'url' : self.__url,
             'branch' : self.__branch,
@@ -553,6 +555,7 @@ class SvnScm:
 
     def __init__(self, spec):
         self.__modules = [{
+            "recipe" : spec['recipe'],
             "url" : spec["url"],
             "dir" : spec.get("dir"),
             "revision" : spec.get("revision")
@@ -663,6 +666,7 @@ class CvsScm:
     # - mandatory parameters: cvsroot, module
     # - optional parameters: rev, dir (dir is required if there are multiple checkouts)
     def __init__(self, spec):
+        self.__recipe = spec['recipe']
         self.__cvsroot = spec["cvsroot"]
         self.__module = spec["module"]
         self.__rev = spec.get("rev")
@@ -670,6 +674,7 @@ class CvsScm:
 
     def getProperties(self):
         return [{
+            'recipe' : self.__recipe,
             'scm' : 'cvs',
             'cvsroot' : self.__cvsroot,
             'module' : self.__module,
@@ -773,6 +778,7 @@ class UrlScm:
     }
 
     def __init__(self, spec):
+        self.__recipe = spec['recipe']
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
         if self.__digestSha1:
@@ -792,6 +798,7 @@ class UrlScm:
 
     def getProperties(self):
         return [{
+            'recipe' : self.__recipe,
             'scm' : 'url',
             'url' : self.__url,
             'digestSHA1' : self.__digestSha1,
@@ -1674,7 +1681,7 @@ class Recipe(object):
         baseName = "::".join( baseName )
         baseDir = os.path.dirname(fileName)
         if "multiPackage" in recipe:
-            anonBaseClass = Recipe(recipeSet, recipe, None, baseDir, baseName, baseName, properties)
+            anonBaseClass = Recipe(recipeSet, recipe, fileName, baseDir, baseName, baseName, properties)
             return [
                 Recipe(recipeSet, subSpec, fileName, baseDir, baseName+"-"+subName, baseName, properties, anonBaseClass)
                 for (subName, subSpec) in recipe["multiPackage"].items() ]
@@ -1683,7 +1690,7 @@ class Recipe(object):
 
     def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName, properties, anonBaseClass=None):
         self.__recipeSet = recipeSet
-        self.__sources = [ sourceFile ] if sourceFile else []
+        self.__sources = [ sourceFile ] if anonBaseClass is None else []
         self.__classesResolved = False
         self.__inherit = recipe.get("inherit", [])
         self.__anonBaseClass = anonBaseClass
@@ -1736,6 +1743,10 @@ class Recipe(object):
             checkoutSCMs = [checkoutSCMs]
         elif not isinstance(checkoutSCMs, list):
             raise ParseError("checkoutSCM must be a dict or a list")
+        i = 0
+        for scm in checkoutSCMs:
+            scm["recipe"] = "{}#{}".format(sourceFile, i)
+            i += 1
         self.__checkout = (checkoutScript, checkoutSCMs)
         self.__build = incHelper.resolve(recipe.get("buildScript"))
         self.__package = incHelper.resolve(recipe.get("packageScript"))
