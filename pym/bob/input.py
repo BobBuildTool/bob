@@ -2192,6 +2192,9 @@ class RecipeSet:
     def archiveSpec(self):
         return self.__archive
 
+    def defaultEnv(self):
+        return self.__defaultEnv
+
     def loadYaml(self, path, schema, default={}):
         if os.path.exists(path):
             data = self.__cache.loadYaml(path, schema)
