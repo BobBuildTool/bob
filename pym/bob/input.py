@@ -2258,7 +2258,7 @@ class RecipeSet:
         self.__archive = cfg.get("archive", { "backend" : "none" })
 
         for p in cfg.get("include", []):
-            self.__parseUserConfig(self, str(p) + ".yaml")
+            self.__parseUserConfig(str(p) + ".yaml")
 
     def __createSchemas(self):
         varNameSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
