@@ -18,8 +18,8 @@ from unittest import TestCase
 from unittest.mock import MagicMock
 
 from bob.input import StringParser
-from bob.input import funEqual, funNotEqual, funNot, funIfThenElse, funSubst, \
-    funStrip, funSandboxEnabled, funToolDefined
+from bob.input import funEqual, funNotEqual, funNot, funOr, funAnd, \
+    funIfThenElse, funSubst, funStrip, funSandboxEnabled, funToolDefined
 from bob.errors import ParseError
 
 def echo(args, **options):
@@ -129,6 +129,22 @@ class TestStringFunctions(TestCase):
         self.assertEqual(funNot(["0"]), "true")
         self.assertEqual(funNot(["false"]), "true")
         self.assertEqual(funNot(["FaLsE"]), "true")
+
+    def testOr(self):
+        self.assertEqual(funOr(["true", "false"]), "true")
+        self.assertEqual(funOr(["false", "true"]), "true")
+        self.assertEqual(funOr(["false", "false"]), "false")
+        self.assertEqual(funOr(["1", "2", "3", "4"]), "true")
+        self.assertEqual(funOr(["0", "0", "0", "0"]), "false")
+        self.assertEqual(funOr(["0", "", "false"]), "false")
+
+    def testAnd(self):
+        self.assertEqual(funAnd(["true", "true"]), "true")
+        self.assertEqual(funAnd(["true", "false"]), "false")
+        self.assertEqual(funAnd(["false", "true"]), "false")
+        self.assertEqual(funAnd(["true", "true", "true"]), "true")
+        self.assertEqual(funAnd(["true", "1", "abq"]), "true")
+        self.assertEqual(funAnd(["true", ""]), "false")
 
     def testIfThenElse(self):
         self.assertRaises(ParseError, funIfThenElse, ["a", "b"])

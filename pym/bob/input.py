@@ -2018,6 +2018,18 @@ def funNot(args, **options):
     if len(args) != 1: raise ParseError("not expects one argument")
     return "true" if _isFalse(args[0].strip().lower()) else "false"
 
+def funOr(args, **options):
+    for arg in args:
+        if not _isFalse(arg):
+            return "true"
+    return "false"
+
+def funAnd(args, **options):
+    for arg in args:
+        if _isFalse(arg):
+            return "false"
+    return "true"
+
 def funIfThenElse(args, **options):
     if len(args) != 3: raise ParseError("if-then-else expects three arguments")
     if _isFalse(args[0].strip().lower()):
@@ -2090,6 +2102,8 @@ class RecipeSet:
         self.__cache = YamlCache()
         self.__stringFunctions = {
             "eq" : funEqual,
+            "or" : funOr,
+            "and" : funAnd,
             "if-then-else" : funIfThenElse,
             "is-sandbox-enabled" : funSandboxEnabled,
             "is-tool-defined" : funToolDefined,
