@@ -123,7 +123,7 @@ passed:
 * ``stack``: list of package names that lead to the currently processed package
 
 In the future additional keyword args may be added without notice. Such string
-functions should therefore have a cach-all ``**kwargs`` parameter. A sample implementation
+functions should therefore have a catch-all ``**kwargs`` parameter. A sample implementation
 could look like this::
 
     def echo(args, **kwargs):

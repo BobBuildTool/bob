@@ -247,7 +247,7 @@ extended by plugins. The following syntax is supported:
       substituted. Otherwise the expansion of ``alternate`` is substituted.
       Omitting the colon results in a test only for ``var`` being unset.
 * ``$(fun,arg1,...)``: Substitutes the result of calling ``fun`` with the given
-  arguments. Unlike unix shells, whish employ word splitting at whitespaces, the
+  arguments. Unlike unix shells, which employ word splitting at whitespaces, the
   function arguments are separated by commas. Any white spaces are kept and belong
   to the arguments. To put a comma or closing brace into an argument it has to
   be escaped by a backslash or double/single quotes.
@@ -669,7 +669,7 @@ example recipe foo.yaml declares the two packages foo-bar and foo-baz::
       baz:
          ...
 
-All other keywords in the recipe are threated as an anonymous base class that
+All other keywords in the recipe are treated as an anonymous base class that
 is inherited by the defined multiPackage's. That way you can have common parts
 to all multiPackage entries and keep just the distinct parts separately.
 
