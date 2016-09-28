@@ -599,7 +599,11 @@ esac
             checkoutState = checkoutStep.getScmDirectories().copy()
             checkoutState[None] = checkoutDigest
             if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
-                self._info("   CHECKOUT  skipped due to --build-only ({})".format(prettySrcPath))
+                if checkoutState != oldCheckoutState:
+                    print(colorize("   CHECKOUT  WARNING: recipe changed but skipped due to --build-only ({})"
+                        .format(prettySrcPath), "33"))
+                else:
+                    self._info("   CHECKOUT  skipped due to --build-only ({})".format(prettySrcPath))
             elif (self.__force or (not checkoutStep.isDeterministic()) or
                     (BobState().getResultHash(prettySrcPath) is None) or
                     (checkoutState != oldCheckoutState)):
