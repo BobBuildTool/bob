@@ -1,0 +1,15 @@
+root: true
+
+depends:
+    - lib
+
+checkoutScript: |
+    cp $<<src/main.c>> main.c
+
+buildScript:
+    cp $1/main.c .
+
+packageScript: |
+    cp $1/main.c .
+    echo "ok" > result.txt
+    rm main.c

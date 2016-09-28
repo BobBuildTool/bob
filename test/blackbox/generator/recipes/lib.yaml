@@ -1,0 +1,9 @@
+checkoutDeterministic: True
+checkoutScript: |
+    cp $<<src/lib.c>> lib.c
+
+buildScript: |
+  gcc -g -c -o lib.o $1/lib.c
+
+packageScript: |
+    cp -a $1/lib.o .

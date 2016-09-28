@@ -1,0 +1,2 @@
+Generating project: root
+root
