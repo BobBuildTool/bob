@@ -294,7 +294,7 @@ The following built in string functions are supported:
 
 Plugins may provide additional functions as described in
 :ref:`extending-hooks-string`. If a string is interpreted as a boolean then the
-empty string, "0" and "false" (case insensitive) are considered as locical
+empty string, "0" and "false" (case insensitive) are considered as logical
 "false".  Any other value is considered as "true".
 
 Recipe and class keywords
