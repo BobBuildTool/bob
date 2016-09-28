@@ -11,6 +11,8 @@ Python modules that are not in the standard library:
   that comes with your distribution (e.g. python3-yaml on Debian).
 * `schema`_. Either install via pip (``pip3 install schema``) or the package
   that comes with your distribution (e.g. python3-schema on Debian).
+* `python-magic` Either install via pip (``pip3 install python-magic``) or the package
+  that comes with your distribution.
 * gcc
 
 Python 3.3 or later should work. For the basic usage there is no installation
