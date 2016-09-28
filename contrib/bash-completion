@@ -60,7 +60,7 @@ __bob_complete_path()
          else
             prefix=""
          fi
-         local hash="$sandox $(find classes/ recipes/ *.yaml -name '*.yaml' | xargs md5sum | md5sum 2>/dev/null)"
+         local hash="$sandox $(find classes/ recipes/ *.yaml -name '*.yaml' 2>/dev/null | xargs md5sum | md5sum)"
          if [[ "$hash" != "$__bob_path_hash" ]] ; then
             __bob_path_content=( $($bob ls -rp $sandbox 2>/dev/null) )
             __bob_path_hash="$hash"
