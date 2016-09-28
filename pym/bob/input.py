@@ -859,12 +859,12 @@ fi
     def asDigestScript(self):
         """Return forward compatible stable string describing this url.
 
-        The format is "digest dir" if a SHA1 checksum was specified. Otherwise it
-        is "url dir".
+        The format is "digest dir extract" if a SHA checksum was specified.
+        Otherwise it is "url dir extract".
         """
         return ( self.__digestSha256 if self.__digestSha256
                  else (self.__digestSha1 if self.__digestSha1 else self.__url)
-                    ) + " " + os.path.join(self.__dir, self.__fn)
+                    ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract)
 
     def merge(self, other):
         return False
