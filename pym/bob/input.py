@@ -80,6 +80,9 @@ def checkGlobList(name, allowed):
     for pred in allowed: ok = pred(ok, name)
     return ok
 
+def _isFalse(val):
+    return val in [ "", "0", "false" ]
+
 class StringParser:
     """Utility class for complex string parsing/manipulation"""
 
@@ -289,7 +292,7 @@ class Env(dict):
                 raise ParseError("Error evaluating condition on {}: {}".format(prop, str(e)))
         else:
             s = self.substitute(condition, "condition on "+prop)
-            return s.lower() not in ["", "0", "false"]
+            return not _isFalse(s.lower())
 
 
 class PluginProperty:
@@ -2041,11 +2044,23 @@ def funNotEqual(args, **options):
 
 def funNot(args, **options):
     if len(args) != 1: raise ParseError("not expects one argument")
-    return "true" if (args[0].strip().lower() in [ "", "0", "false" ]) else "false"
+    return "true" if _isFalse(args[0].strip().lower()) else "false"
+
+def funOr(args, **options):
+    for arg in args:
+        if not _isFalse(arg):
+            return "true"
+    return "false"
+
+def funAnd(args, **options):
+    for arg in args:
+        if _isFalse(arg):
+            return "false"
+    return "true"
 
 def funIfThenElse(args, **options):
     if len(args) != 3: raise ParseError("if-then-else expects three arguments")
-    if args[0].strip().lower() in [ "", "0", "false" ]:
+    if _isFalse(args[0].strip().lower()):
         return args[2]
     else:
         return args[1]
@@ -2130,6 +2145,8 @@ class RecipeSet:
         self.__cache = YamlCache()
         self.__stringFunctions = {
             "eq" : funEqual,
+            "or" : funOr,
+            "and" : funAnd,
             "if-then-else" : funIfThenElse,
             "is-sandbox-enabled" : funSandboxEnabled,
             "is-tool-defined" : funToolDefined,
