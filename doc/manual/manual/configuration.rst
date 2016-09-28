@@ -281,6 +281,12 @@ The following built in string functions are supported:
   ``right`` differ, otherwise ``false`` is returned.
 * ``$(not,condition)``: Interpret the expansion of ``condition`` as boolean
   value and return the opposite.
+* ``$(or,condition1,condition2,...)``: Expand each condition and then interpret
+  each condition as boolean.  Return ``true`` when the first is true, otherwise
+  ``false``.
+* ``$(and,condition1,condition2,...)``: Expand each condition and the interpret
+  each condition as booelan. Rreturn ``false`` when the first is false,
+  otherwise ``true``.
 * ``$(strip,text)``: Remove leading and trailing whitespaces from the expansion
   of ``text``.
 * ``$(subst,from,to,text)``: Replace every occurence of ``from`` with ``to`` in
