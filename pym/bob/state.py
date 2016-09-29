@@ -23,8 +23,11 @@ class _BobState():
     # Bump CUR_VERSION if internal state is made backwards incompatible, that is
     # older versions ob Bob will choke on the persisted state. The MIN_VERSION
     # should only be incremented if it is impossible to read such an old state.
+    #
+    # Version history:
+    #  2 -> 3: byNameDirs: values are tuples (directory, isSourceDir)
     MIN_VERSION = 2
-    CUR_VERSION = 2
+    CUR_VERSION = 3
 
     instance = None
     def __init__(self):
@@ -50,6 +53,13 @@ class _BobState():
             self.__jenkins = state.get("jenkins", {})
             self.__dirStates = state.get("dirStates", {})
             self.__buildState = state.get("buildState", {})
+
+            # version upgrades
+            if state["version"] == 2:
+                self.__byNameDirs = {
+                    digest : ((dir, False) if isinstance(dir, str) else dir)
+                    for (digest, dir) in self.__byNameDirs.items()
+                }
 
     def __save(self):
         if self.__synchronous:
@@ -80,23 +90,20 @@ class _BobState():
         if self.__dirty:
             self.__save()
 
-    def getByNameDirectory(self, baseDir, digest, persistent):
+    def getByNameDirectory(self, baseDir, digest, isSourceDir, persistent):
         if digest in self.__byNameDirs:
-            return self.__byNameDirs[digest]
+            return self.__byNameDirs[digest][0]
         else:
             num = self.__byNameDirs.setdefault(baseDir, 0) + 1
             res = "{}/{}".format(baseDir, num)
             if persistent:
                 self.__byNameDirs[baseDir] = num
-                self.__byNameDirs[digest] = res
+                self.__byNameDirs[digest] = (res, isSourceDir)
                 self.__save()
             return res
 
     def getAllNameDirectores(self):
-        ret = set()
-        for d in self.__byNameDirs.values():
-            if isinstance(d, str): ret.add(d)
-        return ret
+        return [ d for d in self.__byNameDirs.values() if isinstance(d, tuple) ]
 
     def getResultHash(self, stepDigest):
         return self.__results.get(stepDigest)

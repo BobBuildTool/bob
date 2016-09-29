@@ -291,6 +291,7 @@ esac
             return BobState().getByNameDirectory(
                 wrapFmt(step, props),
                 asHexStr(step.getVariantId()),
+                step.isCheckoutStep(),
                 persistent)
 
         return fmt
@@ -920,9 +921,20 @@ def collectPaths(package):
     return paths
 
 def doClean(argv, bobRoot):
-    parser = argparse.ArgumentParser(prog="bob clean", description='Clean unused directories.')
+    parser = argparse.ArgumentParser(prog="bob clean",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""Clean unused directories.
+
+This command removes currently unused directories from previous "bob build"
+invocations.  By default only 'build' and 'package' steps are evicted. Adding
+'-s' will clean 'checkout' steps too. Make sure that you have checked in (and
+pushed) all your changes, tough. When in doubt add '--dry-run' to see what
+would get removed without acutally deleting that already.
+""")
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="Don't delete, just print what would be deleted")
+    parser.add_argument('-s', '--src', default=False, action='store_true',
+        help="Clean source steps too")
     parser.add_argument('-v', '--verbose', default=False, action='store_true',
         help="Print what is done")
     args = parser.parse_args(argv)
@@ -947,8 +959,11 @@ def doClean(argv, bobRoot):
         usedPaths |= collectPaths(root)
 
     # get all known existing paths
-    allPaths = [ os.path.join(d, "workspace") for d in BobState().getAllNameDirectores() ]
-    allPaths = set([ d for d in allPaths if os.path.exists(d) ])
+    cleanSources = args.src
+    allPaths = ( os.path.join(dir, "workspace")
+        for (dir, isSourceDir) in BobState().getAllNameDirectores()
+        if (not isSourceDir or (isSourceDir and cleanSources)) )
+    allPaths = set(d for d in allPaths if os.path.exists(d))
 
     # delete unused directories
     for d in allPaths - usedPaths:
