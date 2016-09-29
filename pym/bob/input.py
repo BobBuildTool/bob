@@ -777,7 +777,7 @@ class UrlScm:
         "gzip" : "gunzip -kf",
         "xz"   : "unxz -kf",
         "7z"   : "7z x -y",
-        "zip"  : "unzip",
+        "zip"  : "unzip -o",
     }
 
     def __init__(self, spec):
