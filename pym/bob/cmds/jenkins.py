@@ -62,6 +62,13 @@ class SimpleHttpArchive:
                          RESULT=quote(JenkinsJob._tgzName(step))))
 
 
+def genHexSlice(data, i = 0):
+    r = data[i:i+96]
+    while len(r) > 0:
+        yield ("=" + r)
+        i += 96
+        r = data[i:i+96]
+
 class SpecHasher:
     """Track digest calculation and output as spec for bob-hash-engine"""
 
@@ -70,7 +77,7 @@ class SpecHasher:
 
     def update(self, data):
         if isinstance(data, bytes):
-            self.lines.append("=" + asHexStr(data))
+            self.lines.extend(iter(genHexSlice(asHexStr(data))))
         else:
             bid = data.getBuildId()
             if bid is None:
@@ -354,7 +361,13 @@ class JenkinsJob:
         whiteList.extend([ JenkinsJob._buildIdName(d) for d in self.__deps.values()])
         whiteList.extend([ d.getWorkspacePath() for d in self.__checkoutSteps.values() ])
         whiteList.extend([ d.getWorkspacePath() for d in self.__buildSteps.values() ])
-        prepareCmds.append("pruneUnused " + " ".join(sorted(whiteList)))
+        line = "pruneUnused "
+        for w in sorted(whiteList):
+            if len(line) + len(w) > 96:
+                prepareCmds.append(line + " \\")
+                line = "  "
+            line = line + " " + w
+        prepareCmds.append(line)
         prepareCmds.append("set -x")
 
         deps = sorted(self.__deps.values())
