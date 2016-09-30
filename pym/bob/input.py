@@ -40,6 +40,7 @@ warnCheckoutConsume = WarnOnce("Usage of checkoutConsume is deprecated. Use chec
 warnBuildConsume = WarnOnce("Usage of buildConsume is deprecated. Use buildVars instead.")
 warnPackageConsume = WarnOnce("Usage of packageConsume is deprecated. Use packageVars instead.")
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
+warnCredentials = WarnOnce("JENKINS_GIT_CREDENTIALS_ID is deprecated. Use '--credentials' instead.")
 
 def _hashString(string):
     h = hashlib.md5()
@@ -491,7 +492,7 @@ fi
         else:
             return self.__url + " refs/heads/" + self.__branch + " " + self.__dir
 
-    def asJenkins(self, workPath):
+    def asJenkins(self, workPath, credentials):
         scm = xml.etree.ElementTree.Element("scm", attrib={
             "class" : "hudson.plugins.git.GitSCM",
             "plugin" : "git@2.2.7",
@@ -507,9 +508,13 @@ fi
         url.text = self.__url
 
         if "JENKINS_GIT_CREDENTIALS_ID" in os.environ:
+            warnCredentials.warn()
+            if not credentials:
+                credentials = os.environ["JENKINS_GIT_CREDENTIALS_ID"]
+        if credentials:
             credentialsId = xml.etree.ElementTree.SubElement(userconfigs,
                          "credentialsId")
-            credentialsId.text = os.environ["JENKINS_GIT_CREDENTIALS_ID"]
+            credentialsId.text = credentials
 
         branch = xml.etree.ElementTree.SubElement(
             xml.etree.ElementTree.SubElement(
@@ -603,7 +608,7 @@ fi
         """
         return "\n".join([ SvnScm.__moduleAsDigestScript(m) for m in self.__modules ])
 
-    def asJenkins(self, workPath):
+    def asJenkins(self, workPath, credentials):
         scm = xml.etree.ElementTree.Element("scm", attrib={
             "class" : "hudson.scm.SubversionSCM",
             "plugin" : "subversion@2.4.5",
@@ -619,7 +624,8 @@ fi
                 url += ( "@" + m["revision"] )
 
             xml.etree.ElementTree.SubElement(location, "remote").text = url
-            xml.etree.ElementTree.SubElement(location, "credentialsId")
+            credentialsId = xml.etree.ElementTree.SubElement(location, "credentialsId")
+            if credentials: credentialsId.text = credentials
             xml.etree.ElementTree.SubElement(location, "local").text = (
                 os.path.join(workPath, m["dir"]) if m["dir"] else workPath )
             xml.etree.ElementTree.SubElement(location, "depthOption").text = "infinity"
@@ -1376,8 +1382,9 @@ class CheckoutStep(Step):
         else:
             return None
 
-    def getJenkinsXml(self):
-        return [ s.asJenkins(self.getWorkspacePath()) for s in self.__scmList if s.hasJenkinsPlugin() ]
+    def getJenkinsXml(self, credentials):
+        return [ s.asJenkins(self.getWorkspacePath(), credentials)
+                 for s in self.__scmList if s.hasJenkinsPlugin() ]
 
     def getScmList(self):
         return self.__scmList

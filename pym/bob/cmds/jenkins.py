@@ -274,7 +274,7 @@ class JenkinsJob:
     def _buildIdName(d):
         return d.getWorkspacePath().replace('/', '_') + ".buildid"
 
-    def dumpXML(self, orig=None, nodes="", windows=False):
+    def dumpXML(self, orig, nodes, windows, credentials):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
             builders = root.find("builders")
@@ -470,7 +470,7 @@ class JenkinsJob:
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
                 checkout, "command").text = self.dumpStep(d, windows)
-            checkoutSCMs.extend(d.getJenkinsXml())
+            checkoutSCMs.extend(d.getJenkinsXml(credentials))
 
         if len(checkoutSCMs) > 1:
             scm = xml.etree.ElementTree.SubElement(
@@ -717,6 +717,7 @@ def doJenkinsAdd(recipes, argv):
         help="Upload to binary archive")
     parser.add_argument('--no-sandbox', action='store_false', dest='sandbox', default=True,
         help="Disable sandboxing")
+    parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
     parser.add_argument("name", help="Symbolic name for server")
     parser.add_argument("url", help="Server URL")
     args = parser.parse_args(argv)
@@ -759,7 +760,8 @@ def doJenkinsAdd(recipes, argv):
         "defines" : defines,
         "upload" : args.upload,
         "sandbox" : args.sandbox,
-        "windows" : args.windows
+        "windows" : args.windows,
+        "credentials" : args.credentials,
     }
     BobState().addJenkins(args.name, config)
 
@@ -779,9 +781,13 @@ def doJenkinsExport(recipes, argv):
         sys.exit(1)
 
     jobs = genJenkinsJobs(recipes, args.name)
+    config = BobState().getJenkinsConfig(args.name)
+    windows = config.get("windows", False)
+    nodes = config.get("nodes", "")
+    credentials = config.get("credentials")
     for j in sorted(jobs.keys()):
         with open(os.path.join(args.dir, jobs[j].getName()+".xml"), "wb") as f:
-            f.write(jobs[j].dumpXML())
+            f.write(jobs[j].dumpXML(None, nodes, windows, credentials))
 
 def doJenkinsGraph(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins graph")
@@ -820,6 +826,8 @@ def doJenkinsLs(recipes, argv):
                 print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
             print(" Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
             print(" Roots:", ", ".join(cfg['roots']))
+            if cfg.get('credentials'):
+                print(" Credentials:", cfg['credentials'])
         if args.verbose >= 2:
             print(" Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
 
@@ -956,8 +964,9 @@ def doJenkinsPush(recipes, argv):
     connection = getConnection(config)
     urlPath = config["url"]["path"]
 
-    windows = config.get("windows")
-    nodes = config.get("nodes")
+    windows = config.get("windows", False)
+    nodes = config.get("nodes", "")
+    credentials = config.get("credentials")
     changedJobs = set([])
 
     try:
@@ -1005,7 +1014,7 @@ def doJenkinsPush(recipes, argv):
                 else:
                     jobXML = None
 
-                jobXML = job.dumpXML(jobXML, nodes, windows)
+                jobXML = job.dumpXML(jobXML, nodes, windows, credentials)
 
                 if origXML is not None:
                     jobXML = jenkinsJobPostUpdate(jobXML, **info)
@@ -1016,7 +1025,8 @@ def doJenkinsPush(recipes, argv):
                     name, str(e)))
             jobConfig = {
                 # hash is based on unmerged config to detect just our changes
-                'hash' : hashlib.sha1(jenkinsJobCreate(job.dumpXML(), **info)).digest()
+                'hash' : hashlib.sha1(jenkinsJobCreate(job.dumpXML(None, nodes,
+                    windows, credentials), **info)).digest()
             }
 
             if name in existingJobs:
@@ -1120,6 +1130,7 @@ def doJenkinsSetOptions(recipes, argv):
                         help="Override default environment variable")
     parser.add_argument('-U', default=[], action='append', dest="undefines",
                         help="Undefine environment variable override")
+    parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--upload', action='store_true', default=None,
         help="Enable binary archive upload")
@@ -1169,6 +1180,8 @@ def doJenkinsSetOptions(recipes, argv):
             del config["defines"][d]
         except KeyError:
             print("Cannot undefine '{}': not defined".format(d), file=sys.stderr)
+    if args.credentials is not None:
+        config['credentials'] = args.credentials
 
     BobState().setJenkinsConfig(args.name, config)
 
