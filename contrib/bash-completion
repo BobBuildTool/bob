@@ -114,11 +114,11 @@ __bob_ls()
 
 __bob_jenkins_add()
 {
-   sandbox="--no-sandbox"
+   sandbox="--sandbox"
 
    case "$cur" in
       -*)
-         __bob_complete_words "-h --help -r --root -p --prefix"
+         __bob_complete_words "--credentials -D -h --help -n --nodes --no-sandbox -p --prefix -r --root --upload -w --windows"
          ;;
       *)
          if [[ "$prev" = "-r" ]] ; then
@@ -220,7 +220,7 @@ __bob_jenkins_set_options()
 
    case "$cur" in
       -*)
-         __bob_complete_words "-h --help -n --nodes -p --prefix --add-root --del-root -D -U --upload --no-upload"
+         __bob_complete_words "-h --help -n --nodes -p --prefix --add-root --del-root -D -U --credentials --upload --no-upload --sandbox --no-sandbox"
          ;;
       *)
          if [[ "$prev" = "--add-root" ]] ; then
