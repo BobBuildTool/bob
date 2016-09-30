@@ -23,6 +23,7 @@ from datetime import datetime
 from glob import glob
 from pipes import quote
 from tempfile import TemporaryFile
+from ..generators.QtCreatorGenerator import qtProjectGenerator
 import argparse
 import datetime
 import os
@@ -906,6 +907,95 @@ def doBuild(argv, bobRoot):
 def doDevelop(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob dev", description='Build packages in development mode.')
     commonBuildDevelop(parser, argv, bobRoot, True)
+
+def doProject(argv, bobRoot):
+    parser = argparse.ArgumentParser(prog="bob project", description='Generate Project Files')
+    parser.add_argument('projectGenerator', nargs='?', help="Generator to use.")
+    parser.add_argument('package', nargs='?', help="Sub-package that is the root of the project")
+    parser.add_argument('args', nargs=argparse.REMAINDER,
+                        help="Arguments for project generator")
+
+    parser.add_argument('--list', default=False, action='store_true', help="List available Generators")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
+    parser.add_argument('-e', dest="white_list", default=[], action='append', metavar="NAME",
+        help="Preserve environment variable")
+    parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
+        help="Preserve whole environment")
+    parser.add_argument('-n', dest="execute_prebuild", default=True, action='store_false',
+        help="Do not build (bob dev) before generate project Files. RunTargets may not work")
+    args = parser.parse_args(argv)
+
+    defines = {}
+    for define in args.defines:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+
+    recipes = RecipeSet()
+    recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
+    recipes.defineHook('developNamePersister', LocalBuilder.developNamePersister)
+    recipes.setConfigFiles(args.configFile)
+    recipes.parse()
+
+    envWhiteList = recipes.envWhiteList()
+    envWhiteList |= set(args.white_list)
+
+    nameFormatter = recipes.getHook('developNameFormatter')
+    developPersister = recipes.getHook('developNamePersister')
+    nameFormatter = developPersister(nameFormatter)
+    nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
+    rootPackages = recipes.generatePackages(nameFormatter, defines)
+    touch(sorted(rootPackages.values(), key=lambda p: p.getName()))
+
+    generators = { 'qt-creator' : qtProjectGenerator }
+    generators.update(recipes.getProjectGenerators())
+
+    if args.list:
+        for g in generators:
+            print(g)
+        return 0
+    else:
+        if not args.package or not args.projectGenerator:
+            print("bob project: error: the following arguments are required: projectGenerator, package, args")
+            return 1
+
+    try:
+        generator = generators[args.projectGenerator]
+    except KeyError:
+        print("Generator {} not found!".format(args.projectGenerator))
+        return 1
+
+    extra = [ "--download=no" ]
+    for d in args.defines:
+        extra.append('-D')
+        extra.append(d)
+    for c in args.configFile:
+        extra.append('-c')
+        extra.append(c)
+    for e in args.white_list:
+        extra.append('e')
+        extra.append(e)
+    if args.preserve_env: extra.append('-E')
+
+    package = walkPackagePath(rootPackages, args.package)
+
+    # execute a bob dev with the extra arguments to build all executables.
+    # This makes it possible for the plugin to collect them and generate some runTargets.
+    if args.execute_prebuild:
+        devArgs = extra.copy()
+        devArgs.append(args.package)
+        print(colorize("Building project: {}".format(args.package), "32"))
+        doDevelop(devArgs, bobRoot)
+
+    print(colorize("Generating project: {}".format(args.package), "32"))
+    generator(package, args.args, extra)
 
 ### Clean #############################
 

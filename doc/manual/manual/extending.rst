@@ -8,6 +8,8 @@ list.
 
 See ``contrib/plugins`` in the Bob repository for an example.
 
+Another extension are generators. See :ref:`extending-generators`
+
 .. _extending-plugins:
 
 Plugins
@@ -185,6 +187,31 @@ default implementation in Bob looks like this::
             'jenkinsJobCreate' : jenkinsJobCreate,
             'jenkinsJobPreUpdate' : jenkinsJobPreUpdate,
             'jenkinsJobPostUpdate' : jenkinsJobPostUpdate
+        }
+    }
+
+.. _extending-generators:
+
+Generators
+----------
+
+The main purpose of a generator is to generate project files for one or more IDEs. 
+There is a build-in generator for QtCreator project files.
+
+A generator is called with 3 Arguments:
+    * ``package``: package to build project for. 
+    * ``argv``: Arguments not consumed by `bob project`
+    * ``extra``: Extra arguments to be passed back to bob dev when called from the IDE.
+
+A simple genertor may look like::
+
+    def nullGenerator(package, argv, extra):
+        return 0
+
+    manifest = {
+        'apiVersion' : "0.4",
+        'generators' : {
+            'nullGenerator' : nullGenerator,
         }
     }
 

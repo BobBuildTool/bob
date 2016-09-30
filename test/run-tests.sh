@@ -40,6 +40,12 @@ run_blackbox_test()
 		run_bob build root > log.txt
 		RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
 		diff -Nurp $RES output
+        
+        if [ "$1" == "test/blackbox/generator" ]; then
+            run_bob project -n g1 root > log.txt
+            diff -Nurp log.txt plugins 
+            run_bob project qt-creator root > log.txt
+        fi
 
 		run_bob clean
 	)

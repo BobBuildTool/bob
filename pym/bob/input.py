@@ -2139,6 +2139,7 @@ class RecipeSet:
         self.__archive = { "backend" : "none" }
         self.__scmOverrides = []
         self.__hooks = {}
+        self.__projectGenerators = {}
         self.__configFiles = []
         self.__properties = {}
         self.__states = {}
@@ -2201,6 +2202,11 @@ class RecipeSet:
             raise ParseError("Plugin '"+name+"': 'hooks' has wrong type!")
         self.__hooks.update(hooks)
 
+        projectGenerators = manifest.get('projectGenerators', {})
+        if not isinstance(projectGenerators, dict):
+            raise ParseError("Plugin '"+name+"': 'projectGenerators' has wrong type!")
+        self.__projectGenerators.update(projectGenerators)
+
         properties = manifest.get('properties', {})
         if not isinstance(properties, dict):
             raise ParseError("Plugin '"+name+"': 'properties' has wrong type!")
@@ -2245,6 +2251,9 @@ class RecipeSet:
 
     def getHook(self, name):
         return self.__hooks[name]
+
+    def getProjectGenerators(self):
+        return self.__projectGenerators
 
     def envWhiteList(self):
         return set(self.__whiteList)
