@@ -220,7 +220,9 @@ class JenkinsJob:
                     for (t,p) in d.getTools().items()] ))))
             env = { key: quote(value) for (key, value) in d.getEnv().items() }
             env.update({
-                "PATH": ":".join(d.getPaths() + ["$PATH"]),
+                "PATH": ":".join(d.getPaths() + (
+                    ["$PATH"] if d.getSandbox() is None else d.getSandbox().getPaths() )
+                ),
                 "LD_LIBRARY_PATH": ":".join(d.getLibraryPaths()),
                 "BOB_CWD": d.getExecPath(),
             })
