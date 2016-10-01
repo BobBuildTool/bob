@@ -1339,7 +1339,7 @@ class CheckoutStep(Step):
             # try to merge compatible SCMs
             overrides = package.getRecipe().getRecipeSet().scmOverrides()
             checkoutSCMs = [ Scm(scm, fullEnv, overrides) for scm in checkout[1]
-                if env.evaluate(scm.get("if"), "checkoutSCM") ]
+                if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
             mergedCheckoutSCMs = []
             while checkoutSCMs:
                 head = checkoutSCMs.pop(0)
