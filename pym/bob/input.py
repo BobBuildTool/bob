@@ -1022,13 +1022,14 @@ class Step(metaclass=ABCMeta):
     Steps can be compared and sorted. This is done based on the Variant-Id of
     the step. See :meth:`bob.input.Step.getVariantId` for details.
     """
-    def __init__(self, package, pathFormatter, sandbox, label, env={},
-                 tools={}, args=[]):
+    def __init__(self, package, pathFormatter, sandbox, label, digestEnv={},
+                 env={}, tools={}, args=[]):
         self.__package = package
         self.__pathFormatter = pathFormatter
         self.__sandbox = sandbox
         self.__label = label
         self.__tools = tools
+        self.__digestEnv = digestEnv
         self.__env = env
         self.__args = args
         self.__providedEnv = {}
@@ -1142,8 +1143,8 @@ class Step(metaclass=ABCMeta):
             for l in tool.libs:
                 h.update(struct.pack("<I", len(l)))
                 h.update(l.encode('utf8'))
-        h.update(struct.pack("<I", len(self.__env)))
-        for (key, val) in sorted(self.__env.items()):
+        h.update(struct.pack("<I", len(self.__digestEnv)))
+        for (key, val) in sorted(self.__digestEnv.items()):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
         h.update(struct.pack("<I", len(self.__args)))
@@ -1329,7 +1330,8 @@ class Step(metaclass=ABCMeta):
 
 class CheckoutStep(Step):
     def __init__(self, package, pathFormatter, sandbox=None, checkout=None,
-                 fullEnv={}, env={}, tools={}, deterministic=False):
+                 fullEnv={}, digestEnv={}, env={}, tools={},
+                 deterministic=False):
         if checkout:
             self.__script = checkout[0] if checkout[0] is not None else ""
             self.__deterministic = deterministic
@@ -1361,7 +1363,8 @@ class CheckoutStep(Step):
             self.__scmList = []
             self.__deterministic = True
 
-        super().__init__(package, pathFormatter, sandbox, "src", env, tools)
+        super().__init__(package, pathFormatter, sandbox, "src", digestEnv,
+                         env, tools)
 
     def isCheckoutStep(self):
         return True
@@ -1400,9 +1403,10 @@ class CheckoutStep(Step):
 
 class RegularStep(Step):
     def __init__(self, package, pathFormatter, sandbox, label, script=None,
-                 env={}, tools={}, args=[]):
+                 digestEnv={}, env={}, tools={}, args=[]):
         self.__script = script
-        super().__init__(package, pathFormatter, sandbox, label, env, tools, args)
+        super().__init__(package, pathFormatter, sandbox, label, digestEnv,
+                         env, tools, args)
 
     def getScript(self):
         return self.__script
@@ -1419,22 +1423,22 @@ class RegularStep(Step):
         return True
 
 class BuildStep(RegularStep):
-    def __init__(self, package, pathFormatter, sandbox=None, script=None, env={},
-                 tools={}, args=[]):
+    def __init__(self, package, pathFormatter, sandbox=None, script=None,
+                 digestEnv={}, env={}, tools={}, args=[]):
         self.__script = script
-        super().__init__(package, pathFormatter, sandbox, "build", script, env,
-                         tools, args)
+        super().__init__(package, pathFormatter, sandbox, "build", script,
+                         digestEnv, env, tools, args)
 
     def isBuildStep(self):
         return True
 
 class PackageStep(RegularStep):
-    def __init__(self, package, pathFormatter, sandbox=None, script=None, env={},
-                 tools={}, args=[]):
+    def __init__(self, package, pathFormatter, sandbox=None, script=None,
+                 digestEnv={}, env={}, tools={}, args=[]):
         self.__script = script
         self.__used = False
-        super().__init__(package, pathFormatter, sandbox, "dist", script, env,
-                         tools, args)
+        super().__init__(package, pathFormatter, sandbox, "dist", script,
+                         digestEnv, env, tools, args)
 
     def isPackageStep(self):
         return True
@@ -1511,28 +1515,30 @@ class Package(object):
         This list includes all direct and indirect dependencies."""
         return sorted(set(self.__directDepSteps) | set(self.__indirectDepSteps))
 
-    def _setCheckoutStep(self, script, fullEnv, env, tools, deterministic):
+    def _setCheckoutStep(self, script, fullEnv, digestEnv, env, tools, deterministic):
         self.__checkoutStep = CheckoutStep(
-            self, self.__pathFormatter, self.__sandbox, script, fullEnv, env,
-            tools, deterministic)
+            self, self.__pathFormatter, self.__sandbox, script, fullEnv,
+            digestEnv, env, tools, deterministic)
         return self.__checkoutStep
 
     def getCheckoutStep(self):
         """Return the checkout step of this package."""
         return self.__checkoutStep
 
-    def _setBuildStep(self, script, env, tools, args):
+    def _setBuildStep(self, script, digestEnv, env, tools, args):
         self.__buildStep = BuildStep(
-            self, self.__pathFormatter, self.__sandbox, script, env, tools, args)
+            self, self.__pathFormatter, self.__sandbox, script, digestEnv, env,
+            tools, args)
         return self.__buildStep
 
     def getBuildStep(self):
         """Return the build step of this package."""
         return self.__buildStep
 
-    def _setPackageStep(self, script, env, tools, args):
+    def _setPackageStep(self, script, digestEnv, env, tools, args):
         self.__packageStep = PackageStep(
-            self, self.__pathFormatter, self.__sandbox, script, env, tools, args)
+            self, self.__pathFormatter, self.__sandbox, script, digestEnv, env,
+            tools, args)
         return self.__packageStep
 
     def getPackageStep(self):
@@ -1720,20 +1726,25 @@ class Recipe(object):
         self.__provideSandbox = recipe.get("provideSandbox")
         self.__varSelf = recipe.get("environment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
-        self.__varDepCheckout = set(maybeGlob(recipe.get("checkoutVars", [])))
+        self.__checkoutVars = set(maybeGlob(recipe.get("checkoutVars", [])))
         if "checkoutConsume" in recipe:
             warnCheckoutConsume.warn(baseName)
-            self.__varDepCheckout |= set(maybeGlob(recipe["checkoutConsume"]))
-        self.__varDepBuild = set(maybeGlob(recipe.get("buildVars", [])))
+            self.__checkoutVars |= set(maybeGlob(recipe["checkoutConsume"]))
+        self.__checkoutVarsWeak = set(maybeGlob(recipe.get("checkoutVarsWeak", [])))
+        self.__buildVars = set(maybeGlob(recipe.get("buildVars", [])))
         if "buildConsume" in recipe:
             warnBuildConsume.warn(baseName)
-            self.__varDepBuild |= set(maybeGlob(recipe["buildConsume"]))
-        self.__varDepBuild |= self.__varDepCheckout
-        self.__varDepPackage = set(maybeGlob(recipe.get("packageVars", [])))
+            self.__buildVars |= set(maybeGlob(recipe["buildConsume"]))
+        self.__buildVars |= self.__checkoutVars
+        self.__buildVarsWeak = set(maybeGlob(recipe.get("buildVarsWeak", [])))
+        self.__buildVarsWeak |= self.__checkoutVarsWeak
+        self.__packageVars = set(maybeGlob(recipe.get("packageVars", [])))
         if "packageConsume" in recipe:
             warnPackageConsume.warn(baseName)
-            self.__varDepPackage |= set(maybeGlob(recipe["packageConsume"]))
-        self.__varDepPackage |= self.__varDepBuild
+            self.__packageVars |= set(maybeGlob(recipe["packageConsume"]))
+        self.__packageVars |= self.__buildVars
+        self.__packageVarsWeak = set(maybeGlob(recipe.get("packageVarsWeak", [])))
+        self.__packageVarsWeak |= self.__buildVarsWeak
         self.__toolDepCheckout = set(maybeGlob(recipe.get("checkoutTools", [])))
         self.__toolDepBuild = set(maybeGlob(recipe.get("buildTools", [])))
         self.__toolDepBuild |= self.__toolDepCheckout
@@ -1809,9 +1820,12 @@ class Recipe(object):
             tmp = cls.__varPrivate.copy()
             tmp.update(self.__varPrivate)
             self.__varPrivate = tmp
-            self.__varDepCheckout |= cls.__varDepCheckout
-            self.__varDepBuild |= cls.__varDepBuild
-            self.__varDepPackage |= cls.__varDepPackage
+            self.__checkoutVars |= cls.__checkoutVars
+            self.__checkoutVarsWeak |= cls.__checkoutVarsWeak
+            self.__buildVars |= cls.__buildVars
+            self.__buildVarsWeak |= cls.__buildVarsWeak
+            self.__packageVars |= cls.__packageVars
+            self.__packageVarsWeak |= cls.__packageVarsWeak
             self.__toolDepCheckout |= cls.__toolDepCheckout
             self.__toolDepBuild |= cls.__toolDepBuild
             self.__toolDepPackage |= cls.__toolDepPackage
@@ -1987,20 +2001,30 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
 
         # optional checkout step
         if self.__checkout != (None, []):
-            srcStep = p._setCheckoutStep(self.__checkout, env, env.prune(self.__varDepCheckout),
-                tools.prune(self.__toolDepCheckout), self.__checkoutDeterministic)
+            checkoutDigestEnv = env.prune(self.__checkoutVars)
+            checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
+                if self.__checkoutVarsWeak else checkoutDigestEnv )
+            srcStep = p._setCheckoutStep(self.__checkout, env, checkoutDigestEnv,
+                checkoutEnv, tools.prune(self.__toolDepCheckout),
+                self.__checkoutDeterministic)
         else:
             srcStep = p.getCheckoutStep() # return invalid step
 
         # optional build step
         if self.__build:
-            buildStep = p._setBuildStep(self.__build, env.prune(self.__varDepBuild),
-                tools.prune(self.__toolDepBuild), [srcStep] + results)
+            buildDigestEnv = env.prune(self.__buildVars)
+            buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
+                if self.__buildVarsWeak else buildDigestEnv )
+            buildStep = p._setBuildStep(self.__build, buildDigestEnv,
+                buildEnv, tools.prune(self.__toolDepBuild), [srcStep] + results)
         else:
             buildStep = p.getBuildStep() # return invalid step
 
         # mandatory package step
-        p._setPackageStep(self.__package, env.prune(self.__varDepPackage),
+        packageDigestEnv = env.prune(self.__packageVars)
+        packageEnv = ( env.prune(self.__packageVars | self.__packageVarsWeak)
+            if self.__packageVarsWeak else packageDigestEnv )
+        p._setPackageStep(self.__package, packageDigestEnv, packageEnv,
             tools.prune(self.__toolDepPackage), [buildStep])
         packageStep = p.getPackageStep()
 
@@ -2360,6 +2384,9 @@ class RecipeSet:
             schema.Optional('checkoutVars') : [ varGlobSchema ],
             schema.Optional('buildVars') : [ varGlobSchema ],
             schema.Optional('packageVars') : [ varGlobSchema ],
+            schema.Optional('checkoutVarsWeak') : [ varGlobSchema ],
+            schema.Optional('buildVarsWeak') : [ varGlobSchema ],
+            schema.Optional('packageVarsWeak') : [ varGlobSchema ],
             schema.Optional('checkoutDeterministic') : bool,
             schema.Optional('checkoutSCM') : ScmValidator({
                 'git' : GitScm.SCHEMA,
