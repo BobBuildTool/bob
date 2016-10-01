@@ -145,13 +145,18 @@ A copy of the environment is inherited from the upstream recipe.
 
 A subset of the resulting local environment can be passed to the three
 execution steps. The available variables to the scripts are defined by
-{checkout,build,package}Vars. A variable that is consumed in one step is also
-set in the following. This means a variable consumed through checkoutVars is
-also set during the build and package steps. Likewise, a variable consumed by
-buildVars is set in the package step too. The rationale is that all three steps
-form a small pipeline. If a step depends on a certain variable then the result
-of the following step is already indirectly dependent on this variable. Thus it
-can be set during the following step anyway.
+:ref:`configuration-recipes-vars` and :ref:`configuration-recipes-vars-weak`.
+The former property defines variables that are considered to influence the
+build while the latter names variables that are expected to *not* influence the
+outcome of the build.
+
+A variable that is consumed in one step is also set in the following. This
+means a variable consumed through checkoutVars is also set during the build and
+package steps. Likewise, a variable consumed by buildVars is set in the package
+step too. The rationale is that all three steps form a small pipeline. If a
+step depends on a certain variable then the result of the following step is
+already indirectly dependent on this variable. Thus it can be set during the
+following step anyway.
 
 A recipe might optionally offer some variables to the upstream recipe with a
 ``provideVars`` section. The values of these variables might use variable
@@ -375,6 +380,8 @@ already indirectly dependent on this tool. Thus it can be available during the
 following step anyway.
 
 
+.. _configuration-recipes-vars:
+
 {checkout,build,package}Vars
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -399,6 +406,44 @@ If a step depends on a certain variable then the result of the following step
 is already indirectly dependent on this variable. Thus it can be set during the
 following step anyway.
 
+.. _configuration-recipes-vars-weak:
+
+{checkout,build,package}VarsWeak
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: List of strings
+
+This is a list of environment variables that should be set during the execution
+of the checkout/build/package script. These variables are not considered to
+influence the result, very much like the variables listed in
+:ref:`configuration-config-whitelist`. You may use shell patterns (e.g.
+``CONFIG_*``) to match multiple variables.
+
+.. warning::
+   Bob expects that the content of these variables is irrelevant for the actual
+   build result. They neither contribute to variant management nor will they
+   trigger a rebuild of a package if they change.
+
+For example, a typical usage of ``buildVarsWeak`` is to specify the number of
+parallel make jobs. While it changes the behaviour of the job (the number of
+parallel compiler processes) it will not change the actual build result. The
+weak inclusion of a variable has no effect if it is also referenced by
+:ref:`configuration-recipes-vars`. In this case the variable will always be
+considered significant for the build result.
+
+It is not an error that a variable listed here is unset. This is especially
+useful for classes or to implement default behaviour that can be overridden by
+the user from the command line. If you expect a variable to be unset it is your
+responsibility to handle that case in the script. Every reference to such a
+variable should be guarded with ``${VAR-somthing}`` or ``${VAR+something}``.
+
+A variable that is consumed in one step is also set in the following. This
+means a variable consumed through checkoutVarsWeak is also set during the build
+and package steps. Likewise, a variable consumed by buildVarsWeak is set in the
+package step too. The rationale is that all three steps form a small pipeline.
+If a step depends on a certain variable then the result of the following step
+is already indirectly dependent on this variable. Thus it can be set during the
+following step anyway.
 
 checkoutDeterministic
 ~~~~~~~~~~~~~~~~~~~~~
@@ -904,6 +949,8 @@ Specifies default environment variables. Example::
       # (nproc).  If desired it can be set to a specific number, e.g. "2". See
       # classes/make.yaml for details.
       MAKE_JOBS: "nproc"
+
+.. _configuration-config-whitelist:
 
 whitelist
 ~~~~~~~~~
