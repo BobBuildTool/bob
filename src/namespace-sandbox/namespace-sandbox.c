@@ -568,8 +568,10 @@ static void SetupDirectories(struct Options *opt, uid_t uid) {
     strcpy(full_sandbox_path, opt->sandbox_root);
     strcat(full_sandbox_path, opt->mount_targets[i]);
     CHECK_CALL(CreateTarget(full_sandbox_path, S_ISDIR(sb.st_mode)));
-    CHECK_CALL(mount(opt->mount_sources[i], full_sandbox_path, NULL,
-                     MS_REC | MS_BIND, NULL));
+    CHECK_CALL_MSG(mount(opt->mount_sources[i], full_sandbox_path, NULL,
+                         MS_REC | MS_BIND, NULL),
+                   "cannot mount '%s' on '%s'", opt->mount_sources[i],
+                   full_sandbox_path);
     if (!opt->mount_rw[i]) {
       unsigned long mnt_flags = GetMountFlags(full_sandbox_path);
       int ret = mount(opt->mount_sources[i], full_sandbox_path, NULL,
