@@ -2234,8 +2234,11 @@ class RecipeSet:
         if 'manifest' not in g:
             raise ParseError("Plugin '"+name+"' did not define 'manifest'!")
         manifest = g['manifest']
-        if manifest.get('apiVersion', "0") not in ["0.1", "0.2", "0.3"]:
-            raise ParseError("Plugin '"+name+"': incompatible apiVersion!")
+        apiVersion = manifest.get('apiVersion')
+        if apiVersion is None:
+            raise ParseError("Plugin '"+name+"' did not define 'apiVersion'!")
+        if compareVersion(BOB_VERSION, apiVersion) < 0:
+            raise ParseError("Your Bob is too old. Plugin '"+name+"' requires at least version "+apiVersion+"!")
 
         hooks = manifest.get('hooks', {})
         if not isinstance(hooks, dict):

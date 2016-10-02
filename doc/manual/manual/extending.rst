@@ -18,8 +18,9 @@ Plugins
 Plugins can be put into a ``plugins`` directory as .py files. A plugin is only
 loaded when it is listed in ``config.yaml`` in the
 :ref:`configuration-config-plugins` section.  Each plugin must provide a
-'manifest' dict that must have at least an 'apiVersion' entry. The current
-version is "0.2". At minimum this looks like this::
+'manifest' dict that must have at least an 'apiVersion' entry. The apiVersion
+is compared to the Bob version and must not be greater for the plugin to load.
+At minimum this looks like this::
 
     manifest = {
         'apiVersion' : "0.2"
