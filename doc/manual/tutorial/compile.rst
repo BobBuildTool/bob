@@ -180,12 +180,14 @@ requires that the following plugins are available:
 * `Git plugin`_: to clone git repositores
 * `Multiple SCMs plugin`_: used to support recipes that have multiple checkouts
 * `Subversion plugin`_: to checkout SVN modules
+* `Workspace Cleanup Plugin`_: to make clean builds if requested
 
 .. _Copy Artifact plugin: https://wiki.jenkins-ci.org/display/JENKINS/Copy+Artifact+Plugin
 .. _Subversion plugin: https://wiki.jenkins-ci.org/display/JENKINS/Subversion+Plugin
 .. _Git plugin: https://wiki.jenkins-ci.org/display/JENKINS/Git+Plugin
 .. _Multiple SCMs plugin: https://wiki.jenkins-ci.org/display/JENKINS/Multiple+SCMs+Plugin
 .. _Conditional BuildStep Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Conditional+BuildStep+Plugin
+.. _Workspace Cleanup Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Workspace+Cleanup+Plugin
 
 Additionally some of the Bob helper tools must be installed on the Jenkins
 server and be available in the PATH. The ``bob-hash-engine`` script is always
