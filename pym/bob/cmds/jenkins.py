@@ -276,7 +276,7 @@ class JenkinsJob:
     def _buildIdName(d):
         return d.getWorkspacePath().replace('/', '_') + ".buildid"
 
-    def dumpXML(self, orig, nodes, windows, credentials):
+    def dumpXML(self, orig, nodes, windows, credentials, clean):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
             builders = root.find("builders")
@@ -293,6 +293,10 @@ class JenkinsJob:
                 archiver.clear()
             for scm in root.findall("scm"):
                 root.remove(scm)
+            buildWrappers = root.find("buildWrappers")
+            if buildWrappers is None:
+                buildWrappers = xml.etree.ElementTree.SubElement(root,
+                    "buildWrappers")
         else:
             root = xml.etree.ElementTree.Element("project")
             xml.etree.ElementTree.SubElement(root, "actions")
@@ -324,7 +328,7 @@ class JenkinsJob:
             publishers = xml.etree.ElementTree.SubElement(root, "publishers")
             archiver = xml.etree.ElementTree.SubElement(
                 publishers, "hudson.tasks.ArtifactArchiver")
-            xml.etree.ElementTree.SubElement(root, "buildWrappers")
+            buildWrappers = xml.etree.ElementTree.SubElement(root, "buildWrappers")
 
         prepareCmds = []
         prepareCmds.append(self.getShebang(windows))
@@ -519,6 +523,17 @@ class JenkinsJob:
             archiver, "latestOnly").text = "false" if self.__isRoot else "true"
         xml.etree.ElementTree.SubElement(
             archiver, "allowEmptyArchive").text = "false"
+
+        # clean build wrapper
+        preBuildClean = buildWrappers.find("hudson.plugins.ws__cleanup.PreBuildCleanup")
+        if preBuildClean is not None: buildWrappers.remove(preBuildClean)
+        if clean:
+            preBuildClean = xml.etree.ElementTree.SubElement(buildWrappers,
+                "hudson.plugins.ws__cleanup.PreBuildCleanup",
+                attrib={"plugin" : "ws-cleanup@0.30"})
+            xml.etree.ElementTree.SubElement(preBuildClean, "deleteDirs").text = "true"
+            xml.etree.ElementTree.SubElement(preBuildClean, "cleanupParameter")
+            xml.etree.ElementTree.SubElement(preBuildClean, "externalDelete")
 
         return xml.etree.ElementTree.tostring(root, encoding="UTF-8")
 
@@ -720,6 +735,8 @@ def doJenkinsAdd(recipes, argv):
     parser.add_argument('--no-sandbox', action='store_false', dest='sandbox', default=True,
         help="Disable sandboxing")
     parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
+    parser.add_argument('--clean', action='store_true', default=False,
+        help="Do clean builds (clear workspace)")
     parser.add_argument("name", help="Symbolic name for server")
     parser.add_argument("url", help="Server URL")
     args = parser.parse_args(argv)
@@ -764,6 +781,7 @@ def doJenkinsAdd(recipes, argv):
         "sandbox" : args.sandbox,
         "windows" : args.windows,
         "credentials" : args.credentials,
+        "clean" : args.clean,
     }
     BobState().addJenkins(args.name, config)
 
@@ -787,9 +805,10 @@ def doJenkinsExport(recipes, argv):
     windows = config.get("windows", False)
     nodes = config.get("nodes", "")
     credentials = config.get("credentials")
+    clean = config.get("clean", False)
     for j in sorted(jobs.keys()):
         with open(os.path.join(args.dir, jobs[j].getName()+".xml"), "wb") as f:
-            f.write(jobs[j].dumpXML(None, nodes, windows, credentials))
+            f.write(jobs[j].dumpXML(None, nodes, windows, credentials, clean))
 
 def doJenkinsGraph(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins graph")
@@ -826,6 +845,7 @@ def doJenkinsLs(recipes, argv):
                 print(" Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
             if recipes.archiveSpec().get("backend", "none") != "none":
                 print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
+            print(" Clean builds:", "enabled" if cfg.get('clean', False) else "disabled")
             print(" Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
             print(" Roots:", ", ".join(cfg['roots']))
             if cfg.get('credentials'):
@@ -969,6 +989,7 @@ def doJenkinsPush(recipes, argv):
     windows = config.get("windows", False)
     nodes = config.get("nodes", "")
     credentials = config.get("credentials")
+    clean = config.get("clean", False)
     changedJobs = set([])
 
     try:
@@ -1016,7 +1037,7 @@ def doJenkinsPush(recipes, argv):
                 else:
                     jobXML = None
 
-                jobXML = job.dumpXML(jobXML, nodes, windows, credentials)
+                jobXML = job.dumpXML(jobXML, nodes, windows, credentials, clean)
 
                 if origXML is not None:
                     jobXML = jenkinsJobPostUpdate(jobXML, **info)
@@ -1028,7 +1049,7 @@ def doJenkinsPush(recipes, argv):
             jobConfig = {
                 # hash is based on unmerged config to detect just our changes
                 'hash' : hashlib.sha1(jenkinsJobCreate(job.dumpXML(None, nodes,
-                    windows, credentials), **info)).digest()
+                    windows, credentials, clean), **info)).digest()
             }
 
             if name in existingJobs:
@@ -1143,6 +1164,11 @@ def doJenkinsSetOptions(recipes, argv):
         help="Enable sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--clean', action='store_true', default=None,
+        help="Do clean builds (clear workspace)")
+    group.add_argument('--incremental', action='store_false', dest='clean',
+        help="Reuse workspace for incremental builds")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -1184,6 +1210,8 @@ def doJenkinsSetOptions(recipes, argv):
             print("Cannot undefine '{}': not defined".format(d), file=sys.stderr)
     if args.credentials is not None:
         config['credentials'] = args.credentials
+    if args.clean is not None:
+        config['clean'] = args.clean
 
     BobState().setJenkinsConfig(args.name, config)
 
