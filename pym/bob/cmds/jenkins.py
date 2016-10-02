@@ -990,7 +990,7 @@ def doJenkinsPush(recipes, argv):
     nodes = config.get("nodes", "")
     credentials = config.get("credentials")
     clean = config.get("clean", False)
-    changedJobs = set([])
+    updatedJobs = {}
 
     try:
         # construct headers
@@ -1053,8 +1053,7 @@ def doJenkinsPush(recipes, argv):
             }
 
             if name in existingJobs:
-                if (BobState().getJenkinsJobConfig(args.name, name)['hash'] ==
-                        jobConfig['hash']):
+                if BobState().getJenkinsJobConfig(args.name, name) == jobConfig:
                     # skip job if unchanged
                     continue
 
@@ -1064,9 +1063,9 @@ def doJenkinsPush(recipes, argv):
                 if response.status != 200:
                     raise BuildError("Error updating '{}': HTTP error: {} {}"
                         .format(name, response.status, response.reason))
-                BobState().setJenkinsJobConfig(args.name, name, jobConfig)
-                changedJobs.add(name)
+                updatedJobs[name] = jobConfig
             else:
+                initialJobConfig = { 'hash' : b'\x00'*20 }
                 connection.request("POST", urlPath + "createItem?name=" + name,
                     body=jobXML, headers=headers)
                 response = connection.getresponse()
@@ -1078,13 +1077,13 @@ def doJenkinsPush(recipes, argv):
                     if response.status != 200:
                         raise BuildError("Error overwriting '{}': HTTP error: {} {}"
                             .format(name, response.status, response.reason))
-                    BobState().addJenkinsJob(args.name, name, jobConfig)
+                    BobState().addJenkinsJob(args.name, name, initialJobConfig)
                 elif response.status != 200:
                     raise BuildError("Error creating '{}': HTTP error: {} {}"
                         .format(name, response.status, response.reason))
                 else:
-                    BobState().addJenkinsJob(args.name, name, jobConfig)
-                changedJobs.add(name)
+                    BobState().addJenkinsJob(args.name, name, initialJobConfig)
+                updatedJobs[name] = jobConfig
             response.read()
 
         # delete obsolete jobs
@@ -1101,7 +1100,7 @@ def doJenkinsPush(recipes, argv):
 
         # sort changed jobs and trigger them in leaf-to-root order
         if not args.no_trigger:
-            for name in [ j for j in buildOrder if j in changedJobs ]:
+            for name in [ j for j in buildOrder if j in updatedJobs ]:
                 print("Schedule {}...".format(name))
                 connection.request("POST", urlPath + "job/" + name + "/build",
                                    headers=headers)
@@ -1111,6 +1110,15 @@ def doJenkinsPush(recipes, argv):
                             .format(name, response.status, response.reason),
                         file=sys.stderr)
                 response.read()
+
+        # Updated jobs should run. Now it's save to persist the new state of
+        # these jobs...
+        BobState().setAsynchronous()
+        try:
+            for (name, jobConfig) in updatedJobs.items():
+                BobState().setJenkinsJobConfig(args.name, name, jobConfig)
+        finally:
+            BobState().setSynchronous()
 
     finally:
         connection.close()
