@@ -2240,7 +2240,12 @@ class RecipeSet:
         hooks = manifest.get('hooks', {})
         if not isinstance(hooks, dict):
             raise ParseError("Plugin '"+name+"': 'hooks' has wrong type!")
-        self.__hooks.update(hooks)
+        for (hook, fun) in hooks.items():
+            if not isinstance(hook, str):
+                raise ParseError("Plugin '"+name+"': hook name must be a string!")
+            if not callable(fun):
+                raise ParseError("Plugin '"+name+"': "+hook+": hook must be callable!")
+            self.__hooks.setdefault(hook, []).append(fun)
 
         projectGenerators = manifest.get('projectGenerators', {})
         if not isinstance(projectGenerators, dict):
@@ -2284,13 +2289,16 @@ class RecipeSet:
         self.__stringFunctions.update(funs)
 
     def defineHook(self, name, value):
-        self.__hooks[name] = value
+        self.__hooks[name] = [value]
 
     def setConfigFiles(self, configFiles):
         self.__configFiles = configFiles
 
     def getHook(self, name):
-        return self.__hooks[name]
+        return self.__hooks[name][-1]
+
+    def getHookStack(self, name):
+        return self.__hooks.get(name, [])
 
     def getProjectGenerators(self):
         return self.__projectGenerators
