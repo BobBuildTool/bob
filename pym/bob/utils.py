@@ -28,10 +28,10 @@ import sys
 def asHexStr(binary):
     return hexlify(binary).decode("ascii")
 
-def joinScripts(scripts):
+def joinScripts(scripts, glue="\ncd \"${BOB_CWD}\"\n"):
     scripts = [ s for s in scripts if ((s is not None) and (s != "")) ]
     if scripts != []:
-        return "\ncd \"${BOB_CWD}\"\n".join(scripts)
+        return glue.join(scripts)
     else:
         return None
 

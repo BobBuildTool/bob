@@ -18,7 +18,7 @@ from . import BOB_VERSION
 from .errors import ParseError, BuildError
 from .state import BobState
 from .tty import colorize, WarnOnce
-from .utils import joinScripts, compareVersion, binLstat
+from .utils import asHexStr, joinScripts, compareVersion, binLstat
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
 from glob import glob
@@ -1334,11 +1334,12 @@ class CheckoutStep(Step):
                  deterministic=False):
         if checkout:
             self.__script = checkout[0] if checkout[0] is not None else ""
+            self.__digestScript = checkout[1] if checkout[1] is not None else ""
             self.__deterministic = deterministic
 
             # try to merge compatible SCMs
             overrides = package.getRecipe().getRecipeSet().scmOverrides()
-            checkoutSCMs = [ Scm(scm, fullEnv, overrides) for scm in checkout[1]
+            checkoutSCMs = [ Scm(scm, fullEnv, overrides) for scm in checkout[2]
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
             mergedCheckoutSCMs = []
             while checkoutSCMs:
@@ -1360,6 +1361,7 @@ class CheckoutStep(Step):
                     knownPaths.append(p)
         else:
             self.__script = None
+            self.__digestScript = None
             self.__scmList = []
             self.__deterministic = True
 
@@ -1381,7 +1383,7 @@ class CheckoutStep(Step):
 
     def getDigestScript(self):
         if self.__script is not None:
-            return "\n".join([s.asDigestScript() for s in self.__scmList] + [self.__script])
+            return "\n".join([s.asDigestScript() for s in self.__scmList] + [self.__digestScript])
         else:
             return None
 
@@ -1402,9 +1404,10 @@ class CheckoutStep(Step):
         return self.__deterministic and all([ s.isDeterministic() for s in self.__scmList ])
 
 class RegularStep(Step):
-    def __init__(self, package, pathFormatter, sandbox, label, script=None,
+    def __init__(self, package, pathFormatter, sandbox, label, script=(None, None),
                  digestEnv={}, env={}, tools={}, args=[]):
-        self.__script = script
+        self.__script = script[0]
+        self.__digestScript = script[1]
         super().__init__(package, pathFormatter, sandbox, label, digestEnv,
                          env, tools, args)
 
@@ -1415,17 +1418,15 @@ class RegularStep(Step):
         return self.__script
 
     def getDigestScript(self):
-        """Nothing fancy here, just return the script."""
-        return self.__script
+        return self.__digestScript
 
     def isDeterministic(self):
         """Regular steps are assumed to be deterministic."""
         return True
 
 class BuildStep(RegularStep):
-    def __init__(self, package, pathFormatter, sandbox=None, script=None,
+    def __init__(self, package, pathFormatter, sandbox=None, script=(None, None),
                  digestEnv={}, env={}, tools={}, args=[]):
-        self.__script = script
         super().__init__(package, pathFormatter, sandbox, "build", script,
                          digestEnv, env, tools, args)
 
@@ -1433,9 +1434,8 @@ class BuildStep(RegularStep):
         return True
 
 class PackageStep(RegularStep):
-    def __init__(self, package, pathFormatter, sandbox=None, script=None,
+    def __init__(self, package, pathFormatter, sandbox=None, script=(None, None),
                  digestEnv={}, env={}, tools={}, args=[]):
-        self.__script = script
         self.__used = False
         super().__init__(package, pathFormatter, sandbox, "dist", script,
                          digestEnv, env, tools, args)
@@ -1554,10 +1554,11 @@ class Package(object):
 class IncludeHelper:
 
     class Resolver:
-        def __init__(self, baseDir, varBase):
+        def __init__(self, baseDir, varBase, origText):
             self.baseDir = baseDir
             self.varBase = varBase
             self.prolog = []
+            self.incDigests = [ asHexStr(hashlib.sha1(origText.encode('utf8')).digest()) ]
             self.count = 0
 
         def __getitem__(self, item):
@@ -1576,6 +1577,7 @@ class IncludeHelper:
                 raise ParseError("Error including '"+item+"': " + str(e))
             content = b''.join(content)
 
+            self.incDigests.append(asHexStr(hashlib.sha1(content).digest()))
             if mode == '<':
                 var = "_{}{}".format(self.varBase, self.count)
                 self.count += 1
@@ -1606,14 +1608,14 @@ class IncludeHelper:
 
     def resolve(self, text):
         if isinstance(text, str):
-            resolver = IncludeHelper.Resolver(self.__baseDir, self.__varBase)
+            resolver = IncludeHelper.Resolver(self.__baseDir, self.__varBase, text)
             t = Template(text)
             t.delimiter = '$<'
             t.pattern = self.__pattern
             ret = t.substitute(resolver)
-            return "\n".join(resolver.prolog + [ret])
+            return ("\n".join(resolver.prolog + [ret]), "\n".join(resolver.incDigests))
         else:
-            return text
+            return (None, None)
 
 def mergeFilter(left, right):
     if left is None:
@@ -1758,7 +1760,7 @@ class Recipe(object):
 
         incHelper = IncludeHelper(baseDir, packageName)
 
-        checkoutScript = incHelper.resolve(recipe.get("checkoutScript"))
+        (checkoutScript, checkoutDigestScript) = incHelper.resolve(recipe.get("checkoutScript"))
         checkoutSCMs = recipe.get("checkoutSCM", [])
         if isinstance(checkoutSCMs, dict):
             checkoutSCMs = [checkoutSCMs]
@@ -1768,7 +1770,7 @@ class Recipe(object):
         for scm in checkoutSCMs:
             scm["recipe"] = "{}#{}".format(sourceFile, i)
             i += 1
-        self.__checkout = (checkoutScript, checkoutSCMs)
+        self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs)
         self.__build = incHelper.resolve(recipe.get("buildScript"))
         self.__package = incHelper.resolve(recipe.get("packageScript"))
 
@@ -1829,24 +1831,31 @@ class Recipe(object):
             self.__toolDepCheckout |= cls.__toolDepCheckout
             self.__toolDepBuild |= cls.__toolDepBuild
             self.__toolDepPackage |= cls.__toolDepPackage
-            (checkoutScript, checkoutSCMs) = self.__checkout
+            (checkoutScript, checkoutDigestScript, checkoutSCMs) = self.__checkout
             self.__checkoutDeterministic = self.__checkoutDeterministic and cls.__checkoutDeterministic
             # merge scripts
             checkoutScript = joinScripts([cls.__checkout[0], checkoutScript])
+            checkoutDigestScript = joinScripts([cls.__checkout[1], checkoutDigestScript], "\n")
             # merge SCMs
-            scms = cls.__checkout[1][:]
+            scms = cls.__checkout[2][:]
             scms.extend(checkoutSCMs)
             checkoutSCMs = scms
             # store result
-            self.__checkout = (checkoutScript, checkoutSCMs)
-            self.__build = joinScripts([cls.__build, self.__build])
-            self.__package = joinScripts([cls.__package, self.__package])
+            self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs)
+            self.__build = (
+                joinScripts([cls.__build[0], self.__build[0]]),
+                joinScripts([cls.__build[1], self.__build[1]], "\n")
+            )
+            self.__package = (
+                joinScripts([cls.__package[0], self.__package[0]]),
+                joinScripts([cls.__package[1], self.__package[1]], "\n")
+            )
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
 
         # the package step must always be valid
-        if self.__package is None:
-            self.__package = ""
+        if self.__package[0] is None:
+            self.__package = ("", 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
 
         # check provided dependencies
         availDeps = [ d.recipe for d in self.__deps ]
@@ -2000,7 +2009,7 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
                     directPackages, indirectPackages, states)
 
         # optional checkout step
-        if self.__checkout != (None, []):
+        if self.__checkout != (None, None, []):
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
