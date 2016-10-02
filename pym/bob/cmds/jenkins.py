@@ -959,6 +959,11 @@ def doJenkinsRm(recipes, argv):
 
     BobState().delJenkins(args.name)
 
+def applyHooks(hooks, job, info, reverse=False):
+    for h in (reversed(hooks) if reverse else hooks):
+        job = h(job, **info)
+    return job
+
 def doJenkinsPush(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins push")
     parser.add_argument("name", help="Push jobs to Jenkins server")
@@ -978,9 +983,9 @@ def doJenkinsPush(recipes, argv):
     buildOrder = genJenkinsBuildOrder(jobs)
 
     # get hooks
-    jenkinsJobCreate = recipes.getHook('jenkinsJobCreate')
-    jenkinsJobPreUpdate = recipes.getHook('jenkinsJobPreUpdate')
-    jenkinsJobPostUpdate = recipes.getHook('jenkinsJobPostUpdate')
+    jenkinsJobCreate = recipes.getHookStack('jenkinsJobCreate')
+    jenkinsJobPreUpdate = recipes.getHookStack('jenkinsJobPreUpdate')
+    jenkinsJobPostUpdate = recipes.getHookStack('jenkinsJobPostUpdate')
 
     # connect to server
     connection = getConnection(config)
@@ -1033,23 +1038,23 @@ def doJenkinsPush(recipes, argv):
 
             try:
                 if origXML is not None:
-                    jobXML = jenkinsJobPreUpdate(origXML, **info)
+                    jobXML = applyHooks(jenkinsJobPreUpdate, origXML, info, True)
                 else:
                     jobXML = None
 
                 jobXML = job.dumpXML(jobXML, nodes, windows, credentials, clean)
 
                 if origXML is not None:
-                    jobXML = jenkinsJobPostUpdate(jobXML, **info)
+                    jobXML = applyHooks(jenkinsJobPostUpdate, jobXML, info)
                 else:
-                    jobXML = jenkinsJobCreate(jobXML, **info)
+                    jobXML = applyHooks(jenkinsJobCreate, jobXML, info)
             except xml.etree.ElementTree.ParseError as e:
                 raise BuildError("Cannot parse XML of job '{}': {}".format(
                     name, str(e)))
             jobConfig = {
                 # hash is based on unmerged config to detect just our changes
-                'hash' : hashlib.sha1(jenkinsJobCreate(job.dumpXML(None, nodes,
-                    windows, credentials, clean), **info)).digest()
+                'hash' : hashlib.sha1(applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes,
+                    windows, credentials, clean), info)).digest()
             }
 
             if name in existingJobs:
@@ -1223,15 +1228,6 @@ def doJenkinsSetOptions(recipes, argv):
 
     BobState().setJenkinsConfig(args.name, config)
 
-def __jenkinsJobCreate(config, **info):
-    return config
-
-def __jenkinsJobPreUpdate(config, **info):
-    return config
-
-def __jenkinsJobPostUpdate(config, **info):
-    return config
-
 availableJenkinsCmds = {
     "add"        : (doJenkinsAdd, "[-p <prefix>] [-r <package>] NAME URL"),
     "export"  : (doJenkinsExport, "NAME DIR"),
@@ -1264,9 +1260,6 @@ def doJenkins(argv, bobRoot):
     recipes = RecipeSet()
     recipes.defineHook('jenkinsNameFormatter', jenkinsNameFormatter)
     recipes.setConfigFiles(args.configFile)
-    recipes.defineHook('jenkinsJobCreate', __jenkinsJobCreate)
-    recipes.defineHook('jenkinsJobPreUpdate', __jenkinsJobPreUpdate)
-    recipes.defineHook('jenkinsJobPostUpdate', __jenkinsJobPostUpdate)
     recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:
