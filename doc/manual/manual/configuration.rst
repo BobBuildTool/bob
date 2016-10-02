@@ -508,13 +508,14 @@ should not be used anymore.
 
 Currently the following ``scm`` values are supported:
 
-=== ============================ =========================================
+=== ============================ =======================================================================================
 scm Description                  Additional attributes
-=== ============================ =========================================
+=== ============================ =======================================================================================
 git `Git`_ project               | ``url``: URL of remote repository
                                  | ``branch``: Branch to check out (optional, default: master)
                                  | ``tag``: Checkout this tag (optional, overrides branch attribute)
                                  | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
+                                 | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
 svn `Svn`_ repository            | ``url``: URL of SVN module
                                  | ``revision``: Optional revision number (optional)
 cvs CVS repository               | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
@@ -525,7 +526,7 @@ url While not a real SCM it      | ``url``: File that should be downloaded
     extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
                                  | ``extract``: Extract directive (optional, default: auto)
                                  | ``fileName``: Local file name (optional, default: url file name)
-=== ============================ =========================================
+=== ============================ =======================================================================================
 
 .. _Git: http://git-scm.com/
 .. _Svn: http://subversion.apache.org/
@@ -538,6 +539,20 @@ attribute too.
 
 .. note:: The default branch of the remote repository is not used. Bob will
    always checkout "master" unless ``branch``, ``tag`` or ``commit`` is given.
+
+The ``rev`` property of the ``git`` SCM unifies the specification of the
+desired branch/tag/commit into one single property. If present it will be
+evaluated first. Any other ``branch``, ``tag`` or ``commit`` property is
+evalued after it and may override a precious setting made by ``rev``. The
+branch/tag/commit precedence is still respected, though. Following the patterns
+described in git-rev-parse(1) the following formats are currently supported:
+
+* <sha1>, e.g. dae86e1950b1277e545cee180551750029cfe735.
+  The full SHA-1 object name (40-byte hexadecimal string).
+* refs/tags/<tagname>, e.g. refs/tags/v1.0.
+  The symbolic name of a tag.
+* refs/heads/<branchname>, e.g. refs/heads/master.
+  The name of a branch.
 
 The Svn SCM, like git, requires the ``url`` attribute too. If you specify a
 numeric ``revision`` Bob considers the SCM as deterministic.
