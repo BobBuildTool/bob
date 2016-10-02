@@ -418,19 +418,36 @@ class GitScm:
         schema.Optional('if') : str,
         schema.Optional('branch') : str,
         schema.Optional('tag') : str,
-        schema.Optional('commit') : str
+        schema.Optional('commit') : str,
+        schema.Optional('rev') : str,
     })
 
     def __init__(self, spec):
         self.__recipe = spec['recipe']
         self.__url = spec["url"]
-        self.__branch = spec.get("branch", "master")
-        self.__tag = spec.get("tag")
-        self.__commit = spec.get("commit")
+        self.__branch = None
+        self.__tag = None
+        self.__commit = None
+        if "rev" in spec:
+            rev = spec["rev"]
+            if rev.startswith("refs/heads/"):
+                self.__branch = rev[11:]
+            elif rev.startswith("refs/tags/"):
+                self.__tag = rev[10:]
+            elif len(rev) == 40:
+                self.__commit = rev
+            else:
+                raise ParseError("Invalid rev format: " + rev)
+        self.__branch = spec.get("branch", self.__branch)
+        self.__tag = spec.get("tag", self.__tag)
+        self.__commit = spec.get("commit", self.__commit)
         if self.__commit:
             # validate commit
-            if re.fullmatch("[0-9a-f]{40}", self.__commit) is None:
+            if re.match("^[0-9a-f]{40}$", self.__commit) is None:
                 raise ParseError("Invalid commit id: " + str(self.__commit))
+        elif not self.__branch and not self.__tag:
+            # nothing secified at all -> master branch
+            self.__branch = "master"
         self.__dir = spec.get("dir", ".")
 
     def getProperties(self):
@@ -441,7 +458,11 @@ class GitScm:
             'branch' : self.__branch,
             'tag' : self.__tag,
             'commit' : self.__commit,
-            'dir' : self.__dir
+            'dir' : self.__dir,
+            'rev' : ( self.__commit if self.__commit else
+                (("refs/tags/" + self.__tag) if self.__tag else
+                    ("refs/heads/" + self.__branch))
+            )
         }]
 
     def asScript(self):
