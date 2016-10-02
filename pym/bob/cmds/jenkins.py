@@ -800,6 +800,8 @@ def doJenkinsExport(recipes, argv):
               file=sys.stderr)
         sys.exit(1)
 
+    jenkinsJobCreate = recipes.getHookStack('jenkinsJobCreate')
+
     jobs = genJenkinsJobs(recipes, args.name)
     config = BobState().getJenkinsConfig(args.name)
     windows = config.get("windows", False)
@@ -807,8 +809,23 @@ def doJenkinsExport(recipes, argv):
     credentials = config.get("credentials")
     clean = config.get("clean", False)
     for j in sorted(jobs.keys()):
-        with open(os.path.join(args.dir, jobs[j].getName()+".xml"), "wb") as f:
-            f.write(jobs[j].dumpXML(None, nodes, windows, credentials, clean))
+        job = jobs[j]
+        info = {
+            'alias' : args.name,
+            'name' : job.getName(),
+            'url' : getUrl(config),
+            'prefix' : config.get('prefix'),
+            'nodes' : nodes,
+            'sandbox' : config['sandbox'],
+            'windows' : windows,
+            'checkoutSteps' : job.getCheckoutSteps(),
+            'buildSteps' : job.getBuildSteps(),
+            'packageSteps' : job.getPackageSteps()
+        }
+        xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes, windows,
+            credentials, clean), info)
+        with open(os.path.join(args.dir, job.getName()+".xml"), "wb") as f:
+            f.write(xml)
 
 def doJenkinsGraph(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins graph")
