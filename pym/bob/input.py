@@ -1778,7 +1778,7 @@ class Recipe(object):
         # involved.
         self.__checkoutDeterministic = recipe.get("checkoutDeterministic", checkoutScript is None)
 
-    def __resolveClasses(self):
+    def resolveClasses(self):
         # must be done only once
         if self.__classesResolved: return
         self.__classesResolved = True
@@ -1891,7 +1891,6 @@ class Recipe(object):
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, states, sandbox=None,
                 inputTools=Env(), inputStack=[]):
-        self.__resolveClasses()
         if self.__packageName in inputStack:
             raise ParseError("Recipes are cyclic (1st package in cylce)")
         stack = inputStack + [self.__packageName]
@@ -2202,8 +2201,6 @@ class RecipeSet:
         if name in self.__recipes:
             raise ParseError("Package "+name+" already defined")
         self.__recipes[name] = recipe
-        if recipe.isRoot():
-            self.__rootRecipes.append(recipe)
 
     def __addClass(self, recipe):
         name = recipe.getPackageName()
@@ -2373,6 +2370,12 @@ class RecipeSet:
                 except ParseError as e:
                     e.pushFrame(path)
                     raise
+
+        # resolve recipes and their classes
+        for recipe in self.__recipes.values():
+            recipe.resolveClasses()
+            if recipe.isRoot():
+                self.__rootRecipes.append(recipe)
 
     def __parseUserConfig(self, fileName):
         cfg = self.loadYaml(fileName, RecipeSet.USER_CONFIG_SCHEMA)
