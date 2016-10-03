@@ -37,7 +37,7 @@ def joinScripts(scripts, glue="\ncd \"${BOB_CWD}\"\n"):
 
 def removePath(path):
     try:
-        if os.path.exists(path):
+        if os.path.lexists(path):
             if os.path.isdir(path) and not os.path.islink(path):
                 shutil.rmtree(path)
             else:
