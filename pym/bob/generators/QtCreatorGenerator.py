@@ -121,13 +121,11 @@ def generateQtProject(package, destination, updateOnly, projectName, args):
     dirs = []
     getCheckOutDirs(package, dirs)
     if not projectName:
-        # use package stack for project name
-        projectName = project.replace('/','_')
-        if projectName[-1:] == '_':
-            projectName =projectName[:-1]
-
+        # use package name for project name
+        projectName = package.getName()
     if not destination:
-        destination = os.path.join(os.getcwd(), "projects", projectName)
+        # use package stack for project directory
+        destination = os.path.join(os.getcwd(), "projects", "_".join(package.getStack()))
     if not os.path.exists(destination):
         os.makedirs(destination)
 
