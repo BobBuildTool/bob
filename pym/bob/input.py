@@ -2373,7 +2373,11 @@ class RecipeSet:
 
         # resolve recipes and their classes
         for recipe in self.__recipes.values():
-            recipe.resolveClasses()
+            try:
+                recipe.resolveClasses()
+            except ParseError as e:
+                e.pushFrame(recipe.getPackageName())
+                raise
             if recipe.isRoot():
                 self.__rootRecipes.append(recipe)
 
