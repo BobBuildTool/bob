@@ -23,7 +23,6 @@ from datetime import datetime
 from glob import glob
 from pipes import quote
 from tempfile import TemporaryFile
-from ..generators.QtCreatorGenerator import qtProjectGenerator
 import argparse
 import datetime
 import os
@@ -954,6 +953,7 @@ def doProject(argv, bobRoot):
     rootPackages = recipes.generatePackages(nameFormatter, defines)
     touch(sorted(rootPackages.values(), key=lambda p: p.getName()))
 
+    from ..generators.QtCreatorGenerator import qtProjectGenerator
     generators = { 'qt-creator' : qtProjectGenerator }
     generators.update(recipes.getProjectGenerators())
 
