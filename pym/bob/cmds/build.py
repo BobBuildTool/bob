@@ -991,10 +991,10 @@ def doProject(argv, bobRoot):
     if args.execute_prebuild:
         devArgs = extra.copy()
         devArgs.append(args.package)
-        print(colorize("Building project: {}".format(args.package), "32"))
         doDevelop(devArgs, bobRoot)
 
-    print(colorize("Generating project: {}".format(args.package), "32"))
+    print(">>", colorize("/".join(package.getStack()), "32;1"))
+    print(colorize("   PROJECT   {} ({})".format(args.package, args.projectGenerator), "32"))
     generator(package, args.args, extra)
 
 ### Clean #############################
