@@ -1,6 +1,8 @@
 
 def g1(package, argv, extra):
-    print(package.getName())
+    print("PLUGIN:", package.getName())
+    print("PLUGIN:", argv)
+    print("PLUGIN:", extra)
 
 manifest = {
     'apiVersion' : "0.3",

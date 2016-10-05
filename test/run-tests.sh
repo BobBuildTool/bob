@@ -24,30 +24,40 @@ run_bob()
 	$RUN -m bob.scripts bob "$BOB_ROOT" "$@"
 }
 
-run_blackbox_test()
+exec_blackbox_test()
 {
-	echo "Run blackbox test" $1
+	run_bob dev root > log.txt
+	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
+	diff -Nurp $RES output
+
+	run_bob build root > log.txt
+	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
+	diff -Nurp $RES output
+
+	run_bob clean
+}
+
+exec_generator_test()
+{
+	# just generate
+	run_bob project -n g1 root > log.txt
+	diff -u <(grep '^PLUGIN' log.txt) output-plugin.txt
+
+	# run and generate
+	run_bob project qt-creator root > log.txt
+	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
+	diff -Nurp $RES output
+}
+
+run_test()
+{
+	echo "Run" $1
 	(
 		set -o pipefail
 		set -e
 		cd $1
 		rm -rf work dev .bob-*
-
-		run_bob dev root > log.txt
-		RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
-		diff -Nurp $RES output
-
-		run_bob build root > log.txt
-		RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
-		diff -Nurp $RES output
-        
-        if [ "$1" == "test/blackbox/generator" ]; then
-            run_bob project -n g1 root > log.txt
-            diff -Nurp log.txt plugins 
-            run_bob project qt-creator root > log.txt
-        fi
-
-		run_bob clean
+		$2
 	)
 
 	if [[ $? -ne 0 ]] ; then
@@ -58,12 +68,15 @@ run_blackbox_test()
 
 # run blackbox tests
 for i in test/blackbox/* ; do
-	run_blackbox_test $i
+	run_test $i exec_blackbox_test
 done
+
+# run generator test
+run_test test/generator exec_generator_test
 
 # collect coverage
 if [ -n "$(which coverage3)" ] ; then
-	coverage3 combine test test/blackbox/*
+	coverage3 combine test test/blackbox/* test/generator
 fi
 
 exit $FAILED
