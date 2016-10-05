@@ -129,7 +129,7 @@ variables.
 Typically variant management will be done by defining a dedicated environment
 variable for each feature, e.g. FEATURE_FOO which is either disabled ("0") or
 enabled ("1"). A recipe declares that it depends on this variable in the build
-step by listing FEATURE_FOO in the buildConsume clause. Through this
+step by listing FEATURE_FOO in the buildVars clause. Through this
 declaration Bob can selectively set (only) the needed environment variables in
 each step and can track their dependency on them.  When building the whole
 software Bob can calculate how many variants of the recipe have to be built by
