@@ -4,7 +4,7 @@ cd "${0%/*}/.."
 export PYTHONPATH="${PWD}/pym"
 BOB_ROOT="$PWD"
 
-if [ -n "$(which coverage3)" ] ; then
+if type -fp coverage3 >/dev/null; then
 	RUN="coverage3 run --source $PWD/pym  --parallel-mode"
 else
 	RUN=python3
@@ -75,7 +75,7 @@ done
 run_test test/generator exec_generator_test
 
 # collect coverage
-if [ -n "$(which coverage3)" ] ; then
+if type -fp coverage3 >/dev/null; then
 	coverage3 combine test test/blackbox/* test/generator
 fi
 
