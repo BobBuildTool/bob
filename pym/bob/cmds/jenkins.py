@@ -1280,7 +1280,12 @@ def doJenkins(argv, bobRoot):
     recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:
-        availableJenkinsCmds[args.subcommand][0](recipes, args.args)
+        try:
+            availableJenkinsCmds[args.subcommand][0](recipes, args.args)
+        except http.client.HTTPException as e:
+            raise BuildError("HTTP error: " + str(e))
+        except OSError as e:
+            raise BuildError("OS error: " + str(e))
     else:
         parser.error("Unknown subcommand '{}'".format(args.subcommand))
 
