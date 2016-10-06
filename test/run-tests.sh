@@ -4,8 +4,16 @@ cd "${0%/*}/.."
 export PYTHONPATH="${PWD}/pym"
 BOB_ROOT="$PWD"
 
+USE_COVERAGE=0
 if type -fp coverage3 >/dev/null; then
-	RUN="coverage3 run --source $PWD/pym  --parallel-mode"
+    # make sure coverage is installed in the current environment
+    if python3 -c "import coverage" 2>/dev/null; then
+	    RUN="coverage3 run --source $PWD/pym  --parallel-mode"
+        USE_COVERAGE=1
+    else
+        RUN=python3
+        echo "coverage3 is installed but not in the current environment"
+    fi
 else
 	RUN=python3
 fi
@@ -75,7 +83,7 @@ done
 run_test test/generator exec_generator_test
 
 # collect coverage
-if type -fp coverage3 >/dev/null; then
+if [[ $USE_COVERAGE -eq 1 ]]; then
 	coverage3 combine test test/blackbox/* test/generator
 fi
 
