@@ -112,6 +112,11 @@ def bob(bobRoot):
         ret = 1
     except KeyboardInterrupt:
         ret = 2
+    except ImportError as e:
+        print(colorize("Python module '{}' seems to be missing. ".format(e.name) +
+                       "Please check your installation...", "31;1"),
+              file=sys.stderr)
+        ret = 3
     except Exception:
         print(colorize("""An internal Exception has occured. This should not have happenend.
 Please open an issue at https://github.com/BobBuildTool/bob with the following backtrace:""", "31;1"), file=sys.stderr)
