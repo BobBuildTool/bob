@@ -20,9 +20,9 @@ DIR=src/namespace-sandbox
 SOURCE=namespace-sandbox.c network-tools.c process-tools.c
 HEADERS=network-tools.h process-tools.h
 
-.PHONY: all install pym
+.PHONY: all install pym check
 
-all: bin/namespace-sandbox pym
+all: bin/namespace-sandbox pym check
 
 bin/namespace-sandbox: $(patsubst %,$(DIR)/%,$(SOURCE) $(HEADERS))
 	gcc -o $@ -std=c99 $^ -lm
@@ -40,4 +40,9 @@ install: all
 	if [ -d $(DESTDIR)/share/bash-completion ] ; then \
 		ln -s $(DESTDIR)/lib/bob/contrib/bash-completion $(DESTDIR)/share/bash-completion/bob ; \
 	fi
+
+check:
+	@python3 -c 'import schema' || { echo "Module 'schema' missing. Please install: 'pip3 install --user schema'..." ; exit 1 ; }
+	@python3 -c 'import yaml' || { echo "Module 'yaml' missing. Please install: 'pip3 install --user PyYAML'..." ; exit 1 ; }
+	@python3 -c 'import magic' || { echo "Module 'yaml' missing. Please install: 'pip3 install --user python-magic'..." ; exit 1 ; }
 
