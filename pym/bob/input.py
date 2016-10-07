@@ -536,6 +536,9 @@ fi
             xml.etree.ElementTree.SubElement(extensions,
                 "hudson.plugins.git.extensions.impl.RelativeTargetDirectory"),
             "relativeTargetDir").text = os.path.normpath(os.path.join(workPath, self.__dir))
+        # remove untracked files
+        xml.etree.ElementTree.SubElement(extensions,
+            "hudson.plugins.git.extensions.impl.CleanCheckout")
 
         return scm
 
