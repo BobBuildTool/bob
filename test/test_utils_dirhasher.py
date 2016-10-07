@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, mock_open, patch
 import binascii
 
 import os
+import sys
 from bob.utils import hashFile, hashDirectory
 
 class TestHashFile(TestCase):
@@ -34,8 +35,15 @@ class TestHashFile(TestCase):
 
     def testMissingFile(self):
         """Missing files should be treated as empty"""
-        assert hashFile("does-not-exist") == binascii.unhexlify(
-            "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+        # assertLogs was introduced in python 3.4
+        if sys.version_info < (3, 4):
+            assert hashFile("does-not-exist") == binascii.unhexlify(
+                "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+        else:
+            with self.assertLogs(level='WARNING') as cm:
+                assert hashFile("does-not-exist") == binascii.unhexlify(
+                    "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+                self.assertEqual(cm.records[0].msg, "Cannot hash file: %s")
 
 class TestHashDir(TestCase):
     def setUp(self):
