@@ -2388,7 +2388,8 @@ class RecipeSet:
         cfg = self.loadYaml(fileName, RecipeSet.USER_CONFIG_SCHEMA)
         self.__defaultEnv.update(cfg.get("environment", {}))
         self.__whiteList |= set(cfg.get("whitelist", []))
-        self.__archive = cfg.get("archive", { "backend" : "none" })
+        if "archive" in cfg:
+            self.__archive = cfg["archive"]
         self.__scmOverrides.extend([ ScmOverride(o) for o in cfg.get("scmOverrides", []) ])
 
         for p in cfg.get("include", []):
