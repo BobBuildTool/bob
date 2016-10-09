@@ -954,7 +954,8 @@ def doProject(argv, bobRoot):
     touch(sorted(rootPackages.values(), key=lambda p: p.getName()))
 
     from ..generators.QtCreatorGenerator import qtProjectGenerator
-    generators = { 'qt-creator' : qtProjectGenerator }
+    from ..generators.EclipseCdtGenerator import eclipseCdtGenerator
+    generators = { 'qt-creator' : qtProjectGenerator , 'eclipseCdt' : eclipseCdtGenerator }
     generators.update(recipes.getProjectGenerators())
 
     if args.list:
