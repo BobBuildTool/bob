@@ -1,0 +1,6 @@
+root: true
+
+packageScript: |
+    echo $<'inline.txt'> > result.txt
+    cat $<<file.txt>> >> result.txt
+
