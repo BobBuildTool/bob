@@ -570,7 +570,7 @@ fi
         return { self.__dir : _hashString(self.asDigestScript()) }
 
     def isDeterministic(self):
-        return self.__tag or self.__commit
+        return bool(self.__tag) or bool(self.__commit)
 
     def hasJenkinsPlugin(self):
         return True
