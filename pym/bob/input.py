@@ -18,7 +18,7 @@ from . import BOB_VERSION
 from .errors import ParseError, BuildError
 from .state import BobState
 from .tty import colorize, WarnOnce
-from .utils import asHexStr, joinScripts, compareVersion, binLstat
+from .utils import asHexStr, joinScripts, sliceString, compareVersion, binLstat
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
 from glob import glob
@@ -1608,9 +1608,9 @@ class IncludeHelper:
                 self.prolog.extend([
                     "{VAR}=$(mktemp)".format(VAR=var),
                     "_BOB_TMP_CLEANUP=( ${VAR} )".format(VAR=var),
-                    "base64 -d > ${VAR} <<EOF".format(VAR=var),
-                    b64encode(content).decode("ascii"),
-                    "EOF"])
+                    "base64 -d > ${VAR} <<EOF".format(VAR=var)])
+                self.prolog.extend(sliceString(b64encode(content).decode("ascii"), 76))
+                self.prolog.append("EOF")
                 ret = "${" + var + "}"
             else:
                 assert mode == "'"

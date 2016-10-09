@@ -35,6 +35,16 @@ def joinScripts(scripts, glue="\ncd \"${BOB_CWD}\"\n"):
     else:
         return None
 
+def sliceString(data, chunk):
+    """Return iterator that slices string in "chunk" size strings."""
+    def genSlice(i = 0):
+        r = data[i:i+chunk]
+        while len(r) > 0:
+            yield r
+            i += chunk
+            r = data[i:i+chunk]
+    return iter(genSlice())
+
 def removePath(path):
     try:
         if os.path.lexists(path):
