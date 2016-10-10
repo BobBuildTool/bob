@@ -55,6 +55,12 @@ exec_generator_test()
 	run_bob project qt-creator root > log.txt
 	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
 	diff -Nurp $RES output
+	
+   # run and generate
+	run_bob project eclipseCdt root > log.txt
+	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
+	diff -Nurp $RES output
+
 }
 
 run_test()
