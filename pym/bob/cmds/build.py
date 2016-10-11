@@ -195,6 +195,9 @@ run_script()
     return $ret
 }}
 
+# make permissions predictable
+umask 0022
+
 _keep_env=0
 _verbose=1
 _sandbox={SANDBOX_SETUP}
