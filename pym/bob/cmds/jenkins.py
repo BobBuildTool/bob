@@ -39,14 +39,22 @@ class DummyArchive:
     """Archive that does nothing"""
     def upload(self, step):
         return ""
+    def download(self, step):
+        return ""
 
 class SimpleHttpArchive:
     """HTTP archive uploader"""
 
-    def __init__(self, spec):
+    def __init__(self, spec, download, upload):
         self.__url = spec["url"]
+        self.__download = download
+        self.__upload = upload
 
     def upload(self, step):
+        # only upload if requested
+        if not self.__upload:
+            return ""
+
         # only upload tools if built in sandbox
         if step.doesProvideTools() and (step.getSandbox() is None):
             return ""
@@ -60,6 +68,21 @@ class SimpleHttpArchive:
                 curl -sSg -T {RESULT} "$BOB_UPLOAD_URL" || echo Upload failed: $?
             fi""".format(URL=self.__url, BUILDID=quote(JenkinsJob._buildIdName(step)),
                          RESULT=quote(JenkinsJob._tgzName(step))))
+
+    def download(self, step):
+        # only download if requested
+        if not self.__download:
+            return ""
+
+        # only download tools if built in sandbox
+        if step.doesProvideTools() and (step.getSandbox() is None):
+            return ""
+
+        return "\n" + textwrap.dedent("""\
+            BOB_DOWNLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
+            curl -sSg --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
+            """.format(URL=self.__url, BUILDID=quote(JenkinsJob._buildIdName(step)),
+                       RESULT=quote(JenkinsJob._tgzName(step))))
 
 
 def genHexSlice(data, i = 0):
@@ -153,7 +176,7 @@ class JenkinsJob:
         else:
             return "#!/bin/bash -ex"
 
-    def dumpStep(self, d, windows=False):
+    def dumpStep(self, d, windows, checkIfSkip):
         cmds = []
 
         cmds.append(self.getShebang(windows))
@@ -163,6 +186,14 @@ class JenkinsJob:
             # stable Build-IDs. Mask 0022 is enforced on local builds and in
             # the sandbox. Check it and bail out if different.
             cmds.append("[[ $(umask) == 0022 ]] || exit 1")
+
+        if checkIfSkip:
+            cmds.append("if [[ -e {} ]] ; then"
+                            .format(JenkinsJob._tgzName(d.getPackage().getPackageStep())))
+            cmds.append("    echo \"Skip {} step. Artifact already downloaded...\""
+                            .format(d.getLabel()))
+            cmds.append("    exit 0")
+            cmds.append("fi")
 
         if d.getJenkinsScript() is not None:
             cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
@@ -254,25 +285,12 @@ class JenkinsJob:
                 cmds.append("bob-namespace-sandbox {} /bin/bash -x -- /.script".format(" ".join(sandbox)))
                 cmds.append("")
 
-        if d.isShared():
-            vid = asHexStr(d.getVariantId())
-            cmds.append("")
-            cmds.append(textwrap.dedent("""\
-            # install shared package atomically
-            if [ ! -d ${{JENKINS_HOME}}/bob/{VID1}/{VID2} ] ; then
-                T=$(mktemp -d -p ${{JENKINS_HOME}})
-                rsync -a $WORKSPACE/{WSP_PATH}/ $T
-                mkdir -p ${{JENKINS_HOME}}/bob/{VID1}
-                mv -T $T ${{JENKINS_HOME}}/bob/{VID1}/{VID2} || rm -rf $T
-            fi""".format(WSP_PATH=d.getWorkspacePath(), VID1=vid[0:2], VID2=vid[2:])))
-        cmds.append("")
-        cmds.append("# create build-id")
-        cmds.append("cd $WORKSPACE")
-        cmds.append("bob-hash-engine --state .state -o {} <<'EOF'".format(JenkinsJob._buildIdName(d)))
-        cmds.append(getBuildIdSpec(d))
-        cmds.append("EOF")
-
         return "\n".join(cmds)
+
+    def dumpStepBuildIdGen(self, step):
+        return [ "bob-hash-engine --state .state -o {} <<'EOF'".format(JenkinsJob._buildIdName(step)),
+                 getBuildIdSpec(step),
+                 "EOF" ]
 
     @staticmethod
     def _tgzName(d):
@@ -481,7 +499,7 @@ class JenkinsJob:
             checkout = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
-                checkout, "command").text = self.dumpStep(d, windows)
+                checkout, "command").text = self.dumpStep(d, windows, False)
             checkoutSCMs.extend(d.getJenkinsXml(credentials))
 
         if len(checkoutSCMs) > 1:
@@ -501,12 +519,41 @@ class JenkinsJob:
             scm = xml.etree.ElementTree.SubElement(
                 root, "scm", attrib={"class" : "hudson.scm.NullSCM"})
 
+        # calculate Build-ID
+        buildIdCalc = [
+            self.getShebang(windows),
+            "# create build-ids"
+        ]
+        for d in sorted(self.__checkoutSteps.values()):
+            buildIdCalc.extend(self.dumpStepBuildIdGen(d))
+        for d in sorted(self.__buildSteps.values()):
+            buildIdCalc.extend(self.dumpStepBuildIdGen(d))
+        for d in sorted(self.__packageSteps.values()):
+            buildIdCalc.extend(self.dumpStepBuildIdGen(d))
+        checkout = xml.etree.ElementTree.SubElement(
+            builders, "hudson.tasks.Shell")
+        xml.etree.ElementTree.SubElement(
+            checkout, "command").text = "\n".join(buildIdCalc)
+
+        # download if possible
+        downloadCmds = []
+        for d in sorted(self.__packageSteps.values()):
+            cmd = self.__archive.download(d)
+            if not cmd: continue
+            downloadCmds.append(cmd)
+        if downloadCmds:
+            downloadCmds.insert(0, self.getShebang(windows))
+            download = xml.etree.ElementTree.SubElement(
+                builders, "hudson.tasks.Shell")
+            xml.etree.ElementTree.SubElement(
+                download, "command").text = "\n".join(downloadCmds)
+
         # build steps
         for d in sorted(self.__buildSteps.values()):
             build = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
-                build, "command").text = self.dumpStep(d, windows)
+                build, "command").text = self.dumpStep(d, windows, True)
 
         # package steps
         publish = []
@@ -514,7 +561,7 @@ class JenkinsJob:
             package = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
-                self.dumpStep(d, windows),
+                self.dumpStep(d, windows, True),
                 "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
                 "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getWorkspacePath()),
@@ -522,6 +569,26 @@ class JenkinsJob:
             ])
             publish.append(JenkinsJob._tgzName(d))
             publish.append(JenkinsJob._buildIdName(d))
+
+        # install shared packages
+        installCmds = []
+        for d in sorted(self.__packageSteps.values()):
+            if d.isShared():
+                vid = asHexStr(d.getVariantId())
+                installCmds.append(textwrap.dedent("""\
+                # install shared package atomically
+                if [ ! -d ${{JENKINS_HOME}}/bob/{VID1}/{VID2} ] ; then
+                    T=$(mktemp -d -p ${{JENKINS_HOME}})
+                    tar xf {TGZ} -C $T
+                    mkdir -p ${{JENKINS_HOME}}/bob/{VID1}
+                    mv -T $T ${{JENKINS_HOME}}/bob/{VID1}/{VID2} || rm -rf $T
+                fi""".format(TGZ=JenkinsJob._tgzName(d), VID1=vid[0:2], VID2=vid[2:])))
+        if installCmds:
+            installCmds.insert(0, self.getShebang(windows))
+            install = xml.etree.ElementTree.SubElement(
+                builders, "hudson.tasks.Shell")
+            xml.etree.ElementTree.SubElement(
+                install, "command").text = "\n".join(installCmds)
 
         xml.etree.ElementTree.SubElement(
             archiver, "artifacts").text = ",".join(publish)
@@ -680,11 +747,13 @@ def genJenkinsJobs(recipes, jenkins):
     config = BobState().getJenkinsConfig(jenkins)
     prefix = config["prefix"]
     archiveHandler = DummyArchive()
-    if config.get("upload", False):
+    upload = config.get("upload", False)
+    download = config.get("download", False)
+    if download or upload:
         archiveSpec = recipes.archiveSpec()
         archiveBackend = archiveSpec.get("backend", "none")
         if archiveBackend == "http":
-            archiveHandler = SimpleHttpArchive(archiveSpec)
+            archiveHandler = SimpleHttpArchive(archiveSpec, download, upload)
         elif archiveBackend != "none":
             print("Ignoring unsupported archive backend:", archiveBackend)
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
@@ -736,6 +805,8 @@ def doJenkinsAdd(recipes, argv):
                         help="Root package (may be specified multiple times)")
     parser.add_argument('-D', default=[], action='append', dest="defines",
                         help="Override default environment variable")
+    parser.add_argument('--download', default=False, action='store_true',
+        help="Download from binary archive")
     parser.add_argument('--upload', default=False, action='store_true',
         help="Upload to binary archive")
     parser.add_argument('--no-sandbox', action='store_false', dest='sandbox', default=True,
@@ -783,6 +854,7 @@ def doJenkinsAdd(recipes, argv):
         "prefix" : args.prefix,
         "nodes" : args.nodes,
         "defines" : defines,
+        "download" : args.download,
         "upload" : args.upload,
         "sandbox" : args.sandbox,
         "windows" : args.windows,
@@ -867,6 +939,7 @@ def doJenkinsLs(recipes, argv):
             if cfg.get('defines'):
                 print(" Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
             if recipes.archiveSpec().get("backend", "none") != "none":
+                print(" Download:", "enabled" if cfg.get('download', False) else "disabled")
                 print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
             print(" Clean builds:", "enabled" if cfg.get('clean', False) else "disabled")
             print(" Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
@@ -1191,6 +1264,11 @@ def doJenkinsSetOptions(recipes, argv):
                         help="Undefine environment variable override")
     parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
     group = parser.add_mutually_exclusive_group()
+    group.add_argument('--download', action='store_true', default=None,
+        help="Enable binary archive download")
+    group.add_argument('--no-download', action='store_false', dest='download',
+        help="Disable binary archive download")
+    group = parser.add_mutually_exclusive_group()
     group.add_argument('--upload', action='store_true', default=None,
         help="Enable binary archive upload")
     group.add_argument('--no-upload', action='store_false', dest='upload',
@@ -1233,6 +1311,8 @@ def doJenkinsSetOptions(recipes, argv):
             config["roots"].remove(r)
         except ValueError:
             print("Cannot remove root '{}': not found".format(r), file=sys.stderr)
+    if args.download is not None:
+        config["download"] = args.download
     if args.upload is not None:
         config["upload"] = args.upload
     if args.sandbox is not None:
