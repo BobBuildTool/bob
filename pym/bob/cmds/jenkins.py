@@ -339,7 +339,19 @@ class JenkinsJob:
                 xml.etree.ElementTree.SubElement(
                     root, "displayName").text = self.__displayName
             xml.etree.ElementTree.SubElement(root, "keepDependencies").text = "false"
-            xml.etree.ElementTree.SubElement(root, "properties")
+            properties = xml.etree.ElementTree.SubElement(root, "properties")
+            if not self.__isRoot:
+                # only retain one artifact per non-root job
+                discard = xml.etree.ElementTree.fromstring("""
+                    <jenkins.model.BuildDiscarderProperty>
+                      <strategy class="hudson.tasks.LogRotator">
+                        <daysToKeep>-1</daysToKeep>
+                        <numToKeep>-1</numToKeep>
+                        <artifactDaysToKeep>-1</artifactDaysToKeep>
+                        <artifactNumToKeep>1</artifactNumToKeep>
+                      </strategy>
+                    </jenkins.model.BuildDiscarderProperty>""")
+                properties.append(discard)
             if (nodes != ''):
                 xml.etree.ElementTree.SubElement(root, "assignedNode").text = nodes
                 xml.etree.ElementTree.SubElement(root, "canRoam").text = "false"
@@ -602,8 +614,6 @@ class JenkinsJob:
 
         xml.etree.ElementTree.SubElement(
             archiver, "artifacts").text = ",".join(publish)
-        xml.etree.ElementTree.SubElement(
-            archiver, "latestOnly").text = "false" if self.__isRoot else "true"
         xml.etree.ElementTree.SubElement(
             archiver, "allowEmptyArchive").text = "false"
 
