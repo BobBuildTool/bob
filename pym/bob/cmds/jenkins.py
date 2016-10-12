@@ -21,6 +21,7 @@ from ..tty import colorize, WarnOnce
 from ..utils import asHexStr
 from pipes import quote
 import argparse
+import ast
 import base64
 import getpass
 import hashlib
@@ -34,6 +35,15 @@ import urllib.parse
 import xml.etree.ElementTree
 
 warnCertificate = WarnOnce("Using HTTPS without certificate check.")
+
+requiredPlugins = {
+    "conditional-buildstep" : "Conditional BuildStep",
+    "copyartifact" : "Copy Artifact Plugin",
+    "git" : "Jenkins Git plugin",
+    "multiple-scms" : "Jenkins Multiple SCMs plugin",
+    "subversion" : "Jenkins Subversion Plug-in",
+    "ws-cleanup" : "Jenkins Workspace Cleanup Plugin",
+}
 
 class DummyArchive:
     """Archive that does nothing"""
@@ -1060,6 +1070,32 @@ def applyHooks(hooks, job, info, reverse=False):
         job = h(job, **info)
     return job
 
+def checkPlugins(connection, urlPath, headers):
+    connection.request("GET", urlPath + "pluginManager/api/python?depth=1",
+                       headers=headers)
+    response = connection.getresponse()
+    if response.status != 200:
+        print("Warning: could not verify plugins: HTTP error: {} {}"
+                .format(response.status, response.reason),
+            file=sys.stderr)
+        response.read()
+    else:
+        try:
+            plugins =  ast.literal_eval(response.read().decode("utf8"))["plugins"]
+            required = set(requiredPlugins.keys())
+            for p in plugins:
+                if p["shortName"] not in required: continue
+                if not p["active"] or not p["enabled"]:
+                    raise BuildError("Plugin not enabled: " + requiredPlugins[p["shortName"]])
+                required.remove(p["shortName"])
+            if required:
+                raise BuildError("Missing plugin(s): " + ", ".join(
+                    requiredPlugins[p] for p in required))
+        except BuildError:
+            raise
+        except:
+            raise BuildError("Malformed Jenkins response while checking plugins!")
+
 def doJenkinsPush(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins push")
     parser.add_argument("name", help="Push jobs to Jenkins server")
@@ -1096,6 +1132,9 @@ def doJenkinsPush(recipes, argv):
     try:
         # construct headers
         headers = getHeaders(connection, config)
+
+        # verify plugin state
+        checkPlugins(connection, urlPath, headers)
 
         # push new jobs / reconfigure existing ones
         for (name, job) in jobs.items():
