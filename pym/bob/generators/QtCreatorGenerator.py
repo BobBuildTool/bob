@@ -126,6 +126,7 @@ def generateQtProject(package, destination, updateOnly, projectName, args):
     if not destination:
         # use package stack for project directory
         destination = os.path.join(os.getcwd(), "projects", "_".join(package.getStack()))
+        destination = destination.replace(':', '_')
     if not os.path.exists(destination):
         os.makedirs(destination)
 
