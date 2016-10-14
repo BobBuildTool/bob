@@ -314,3 +314,42 @@ def summonMagic():
         return WrapMagic()
     else:
         raise NotImplementedError("I do not understand your magic")
+
+### directory copy ###
+
+def copyTree(src, dst):
+    try:
+        names = os.listdir(src)
+        os.makedirs(dst, exist_ok=True)
+    except OSError as e:
+        logging.getLogger(__name__).error("Copy '%s' to '%s' failed: %s", src,
+                                          dst, str(e))
+        return False
+
+    ret = True
+    for name in names:
+        srcname = os.path.join(src, name)
+        dstname = os.path.join(dst, name)
+        try:
+            if os.path.isdir(srcname):
+                if os.path.exists(dstname) and not os.path.isdir(dstname):
+                    logging.getLogger(__name__).error(
+                        "Cannon overwrite non-directory '%s' with directory '%s'",
+                        dstname, srcname)
+                    ret = False
+                else:
+                    ret = copyTree(srcname, dstname) and ret
+            else:
+                if os.path.exists(dstname):
+                    os.unlink(dstname)
+                if os.path.islink(srcname):
+                    linkto = os.readlink(srcname)
+                    os.symlink(linkto, dstname)
+                else:
+                    shutil.copy(srcname, dstname)
+        except OSError as e:
+            logging.getLogger(__name__).error("Copy failed: %s", str(e))
+            ret = False
+
+    return ret
+

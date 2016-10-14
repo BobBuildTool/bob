@@ -18,7 +18,7 @@ from ..errors import BuildError, ParseError
 from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
 from ..tty import colorize
-from ..utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirectory
+from ..utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirectory, copyTree
 from datetime import datetime
 from glob import glob
 from pipes import quote
@@ -803,7 +803,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('packages', metavar='PACKAGE', type=str, nargs='+',
         help="(Sub-)package to build")
     parser.add_argument('--destination', metavar="DEST",
-        help="Destination of build result (will be cleaned!)")
+        help="Destination of build result (will be overwritten!)")
     parser.add_argument('-f', '--force', default=False, action='store_true',
         help="Force execution of all build steps")
     parser.add_argument('-n', '--no-deps', default=False, action='store_true',
@@ -872,9 +872,6 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     if develop:
         touch(sorted(rootPackages.values(), key=lambda p: p.getName()))
 
-    if (len(args.packages) > 1) and args.destination:
-        raise BuildError("Destination may only be specified when building a single package")
-
     builder = LocalBuilder(recipes, args.verbose - args.quiet, args.force,
                            args.no_deps, args.build_only, args.preserve_env,
                            envWhiteList, bobRoot, args.clean)
@@ -891,19 +888,34 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     builder.setDownloadMode(args.download)
     if args.resume: builder.loadBuildState()
 
+    backlog = []
+    results = []
+    for p in args.packages:
+        packageStep = walkPackagePath(rootPackages, p).getPackageStep()
+        backlog.append(packageStep)
+        # automatically include provided deps when exporting
+        if args.destination: backlog.extend(packageStep.getProvidedDeps())
     try:
-        for p in args.packages:
-            package = walkPackagePath(rootPackages, p)
-            prettyResultPath = builder.cook([package.getPackageStep()], package)
-            print("Build result is in", prettyResultPath)
+        for p in backlog:
+            resultPath = builder.cook([p], p.getPackage())
+            if resultPath is not None:
+                results.append(resultPath)
     finally:
         builder.saveBuildState()
 
+    # tell the user
+    if len(results) == 1:
+        print("Build result is in", results[0])
+    elif len(results) > 1:
+        print("Build results are in:\n  ", "\n   ".join(results))
+
     # copy build result if requested
+    ok = True
     if args.destination:
-        if os.path.exists(args.destination):
-            removePath(args.destination)
-        shutil.copytree(prettyResultPath, args.destination, symlinks=True)
+        for result in results:
+            ok = copyTree(result, args.destination) and ok
+    if not ok:
+        raise BuildError("Could not copy everything to destination. Your aggregated result is probably incomplete.")
 
 def doBuild(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob build", description='Build packages in release mode.')
