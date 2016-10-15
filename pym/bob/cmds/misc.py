@@ -39,22 +39,22 @@ except UnicodeEncodeError:
 def doLS(argv, bobRoot):
     def showTree(packages, showAll, prefix=""):
         i = 0
-        for p in packages:
+        for n,p in sorted(packages.items()):
             last = (i >= len(packages)-1)
-            print("{}{}{}".format(prefix, LS_SEP_1 if last else LS_SEP_2, p.getName()))
+            print("{}{}{}".format(prefix, LS_SEP_1 if last else LS_SEP_2, n))
             deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
-            showTree([d.getPackage() for d in deps], showAll,
+            showTree({ d.getPackage().getName():d.getPackage() for d in deps }, showAll,
                      prefix + (LS_SEP_3 if last else LS_SEP_4))
             i += 1
 
     def showPrefixed(packages, recurse, showAll, stack, level=0):
-        for p in packages:
+        for n,p in sorted(packages.items()):
             newStack = stack[:]
-            newStack.append(p.getName())
+            newStack.append(n)
             print("/".join(newStack))
             if recurse:
                 deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
-                showPrefixed([d.getPackage() for d in deps], recurse, showAll,
+                showPrefixed({ d.getPackage().getName():d.getPackage() for d in deps }, recurse, showAll,
                              newStack, level+1)
 
     parser = argparse.ArgumentParser(prog="bob ls", description='List packages.')
@@ -77,21 +77,13 @@ def doLS(argv, bobRoot):
     recipes.parse()
 
     showAll = args.all
-    roots = sorted(recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=args.sandbox).values(), key=lambda a:a.getName())
+    roots = recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=args.sandbox)
     stack = []
     if args.package:
-        steps = [ s for s in args.package.split("/") if s != "" ]
-        for s in steps:
-            roots = [ r for r in roots if r.getName() == s ]
-            if not roots:
-                print("{}: not found in '{}'".format(s, "/".join(stack)),
-                      file=sys.stderr)
-                sys.exit(1)
-            if showAll:
-                roots = [ d.getPackage() for d in roots[0].getAllDepSteps() ]
-            else:
-                roots = [ d.getPackage() for d in roots[0].getDirectDepSteps() ]
-            stack.append(s)
+        package = walkPackagePath(roots, args.package)
+        stack = steps = [ s for s in args.package.split("/") if s != "" ]
+        deps = package.getAllDepSteps() if showAll else package.getDirectDepSteps()
+        roots = { d.getPackage().getName():d.getPackage() for d in deps }
     else:
         steps = ["/"]
 
@@ -101,7 +93,7 @@ def doLS(argv, bobRoot):
         print("/".join(steps))
         showTree(roots, showAll)
     else:
-        for p in roots: print(p.getName())
+        for n,p in sorted(roots.items()): print(n)
 
 class Default(dict):
     def __init__(self, default, *args, **kwargs):

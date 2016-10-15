@@ -2356,6 +2356,9 @@ class RecipeSet:
             schema.Optional('environment') : schema.Schema({
                 schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') : str
             }),
+            schema.Optional('alias') : schema.Schema({
+                schema.Regex(r'^[0-9A-Za-z_-]+$') : str
+            }),
             schema.Optional('whitelist') : schema.Schema([
                 schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
             ]),
@@ -2384,6 +2387,7 @@ class RecipeSet:
 
     def __init__(self):
         self.__defaultEnv = {}
+        self.__aliases = {}
         self.__rootRecipes = []
         self.__recipes = {}
         self.__classes = {}
@@ -2601,6 +2605,7 @@ class RecipeSet:
         if "archive" in cfg:
             self.__archive = cfg["archive"]
         self.__scmOverrides.extend([ ScmOverride(o) for o in cfg.get("scmOverrides", []) ])
+        self.__aliases.update(cfg.get("alias", {}))
 
         for p in cfg.get("include", []):
             self.__parseUserConfig(str(p) + ".yaml")
@@ -2731,6 +2736,13 @@ class RecipeSet:
                 except ParseError as e:
                     e.pushFrame(root.getPackageName())
                     raise e
+            tmp = result.copy()
+            for i in self.__aliases:
+                try:
+                    p = walkPackagePath(tmp, self.__aliases[i])
+                    result[i] = p
+                except BuildError as e:
+                    print(colorize("Bad alias '{}': {}".format(i, str(e)), "33"), file=sys.stderr)
         finally:
             BobState().setSynchronous()
         return result
