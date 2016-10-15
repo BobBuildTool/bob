@@ -768,12 +768,17 @@ See also :ref:`configuration-recipes-env`.
 provideDeps
 ~~~~~~~~~~~
 
-Type: List of Strings
+Type: List of Patterns
 
 The ``provideDeps`` keyword receives a list of dependency names. These must be
 dependencies of the current recipe, i.e. they must appear in the ``depends``
-section. Such dependencies are subsequently injected into the dependency list
-of the upstream recipe that has a dependency to this one. This works in a
+section. It is no error if the condition of such a dependency evaluates to
+false. In this case the entry is silently dropped. To specify multiple
+dependencies with a single entry shell globbing patterns may be used.
+
+Provided dependencies are subsequently injected into the dependency list of the
+upstream recipe that has a dependency to this one (if ``deps`` is included in
+the ``use`` attribute of the dependency, which is the default). This works in a
 transitive fashion too, that is provided dependencies of a downstream recipe
 are forwarded to the upstream recipe too.
 
@@ -786,7 +791,7 @@ Example::
 
    ...
 
-   provideDeps: [common-dev, communication-dev]
+   provideDeps: [ "*-dev" ]
 
 Bob will make sure that the forwarded dependencies are compatible in the
 injected recipe. That is, any duplicates through injected dependencies must
