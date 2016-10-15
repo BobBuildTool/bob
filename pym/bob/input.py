@@ -21,6 +21,7 @@ from .tty import colorize, WarnOnce
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binLstat
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
+from itertools import chain
 from glob import glob
 from pipes import quote
 from string import Template
@@ -1684,22 +1685,49 @@ class Recipe(object):
     """
 
     class Dependency(object):
-        def __init__(self, dep):
-            if isinstance(dep, str):
-                self.recipe = dep
-                dep = {}
-            else:
-                self.recipe = dep["name"]
-
-            self.envOverride = dep.get("environment", {}).copy()
-            self.provideGlobal = dep.get("forward", False)
-            self.use = dep.get("use", ["result", "deps"])
+        def __init__(self, recipe, env, fwd, use, cond):
+            self.recipe = recipe
+            self.envOverride = env
+            self.provideGlobal = fwd
+            self.use = use
             self.useEnv = "environment" in self.use
             self.useTools = "tools" in self.use
             self.useBuildResult = "result" in self.use
             self.useDeps = "deps" in self.use
             self.useSandbox = "sandbox" in self.use
-            self.condition = dep.get("if", None)
+            self.condition = cond
+
+        @staticmethod
+        def __parseEntry(dep, env, fwd, use, cond):
+            if isinstance(dep, str):
+                return [ Recipe.Dependency(dep, env, fwd, use, cond) ]
+            else:
+                envOverride = dep.get("environment")
+                if envOverride:
+                    env = env.copy()
+                    env.update(envOverride)
+                fwd = dep.get("forward", fwd)
+                use = dep.get("use", use)
+                newCond = dep.get("if")
+                if newCond is not None:
+                    cond = "$(and,{},{})".format(cond, newCond) if cond is not None else newCond
+                name = dep.get("name")
+                if name:
+                    if "depends" in dep:
+                        raise ParseError("A dependency must not use 'name' and 'depends' at the same time!")
+                    return [ Recipe.Dependency(name, env, fwd, use, cond) ]
+                dependencies = dep.get("depends")
+                if dependencies is None:
+                    raise ParseError("Either 'name' or 'depends' required for dependencies!")
+                return Recipe.Dependency.parseEntries(dependencies, env, fwd, use, cond)
+
+        @staticmethod
+        def parseEntries(deps, env={}, fwd=False, use=["result", "deps"], cond=None):
+            """Returns an iterator yielding all dependencies as flat list"""
+            # return flattened list of dependencies
+            return chain.from_iterable(
+                Recipe.Dependency.__parseEntry(dep, env, fwd, use, cond)
+                for dep in deps )
 
     class InjectedDep:
         def __init__(self, packageStep):
@@ -1736,7 +1764,7 @@ class Recipe(object):
         self.__classesResolved = False
         self.__inherit = recipe.get("inherit", [])
         self.__anonBaseClass = anonBaseClass
-        self.__deps = [ Recipe.Dependency(d) for d in recipe.get("depends", []) ]
+        self.__deps = list(Recipe.Dependency.parseEntries(recipe.get("depends", [])))
         filt = recipe.get("filter", {})
         if filt: warnFilter.warn(baseName)
         self.__filterEnv = maybeGlob(filt.get("environment"))
@@ -2429,6 +2457,24 @@ class RecipeSet:
         useClauses = ['deps', 'environment', 'result', 'tools', 'sandbox']
         useClauses.extend(self.__states.keys())
 
+        # construct recursive depends clause
+        dependsInnerClause = {
+            schema.Optional('name') : str,
+            schema.Optional('use') : useClauses,
+            schema.Optional('forward') : bool,
+            schema.Optional('environment') : schema.Schema({
+                varNameSchema : str
+            }),
+            schema.Optional('if') : str
+        }
+        dependsClause = schema.Schema([
+            schema.Or(
+                str,
+                schema.Schema(dependsInnerClause)
+            )
+        ])
+        dependsInnerClause[schema.Optional('depends')] = dependsClause
+
         classSchemaSpec = {
             schema.Optional('checkoutScript') : str,
             schema.Optional('buildScript') : str,
@@ -2449,20 +2495,7 @@ class RecipeSet:
                 'cvs' : CvsScm.SCHEMA,
                 'url' : UrlScm.SCHEMA
             }),
-            schema.Optional('depends') : schema.Schema([
-                schema.Or(
-                    str,
-                    schema.Schema({
-                        'name' : str,
-                        schema.Optional('use') : useClauses,
-                        schema.Optional('forward') : bool,
-                        schema.Optional('environment') : schema.Schema({
-                            varNameSchema : str
-                        }),
-                        schema.Optional('if') : str
-                    })
-                )
-            ]),
+            schema.Optional('depends') : dependsClause,
             schema.Optional('environment') : schema.Schema({
                 varNameSchema : str
             }),
