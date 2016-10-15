@@ -1883,9 +1883,13 @@ class Recipe(object):
 
         # check provided dependencies
         availDeps = [ d.recipe for d in self.__deps ]
-        for d in self.__provideDeps:
-            if d not in availDeps:
-                raise ParseError("Unknown dependency '{}' in provideDeps".format(d))
+        providedDeps = set()
+        for pattern in self.__provideDeps:
+            l = set(d for d in availDeps if fnmatch.fnmatchcase(d, pattern))
+            if not l:
+                raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern))
+            providedDeps |= l
+        self.__provideDeps = providedDeps
 
     def getRecipeSet(self):
         return self.__recipeSet
