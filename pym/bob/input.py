@@ -1504,6 +1504,9 @@ class Package(object):
         """Name of the package"""
         return self.__name
 
+    def setName(self, name):
+        self.__name = name
+
     def getStack(self):
         """Returns the recipe processing stack leading to this package.
 
@@ -2167,6 +2170,9 @@ class RecipeSet:
             schema.Optional('environment') : schema.Schema({
                 schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') : str
             }),
+            schema.Optional('alias') : schema.Schema({
+                schema.Regex(r'^!?[][0-9A-Za-z_.:*?-]+$') : str
+            }),
             schema.Optional('whitelist') : schema.Schema([
                 schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
             ]),
@@ -2195,6 +2201,7 @@ class RecipeSet:
 
     def __init__(self):
         self.__defaultEnv = {}
+        self.__packageAliasList = {}
         self.__rootRecipes = []
         self.__recipes = {}
         self.__classes = {}
@@ -2412,6 +2419,7 @@ class RecipeSet:
         if "archive" in cfg:
             self.__archive = cfg["archive"]
         self.__scmOverrides.extend([ ScmOverride(o) for o in cfg.get("scmOverrides", []) ])
+        self.__packageAliasList.update(cfg.get("alias", {}))
 
         for p in cfg.get("include", []):
             self.__parseUserConfig(str(p) + ".yaml")
@@ -2537,6 +2545,15 @@ class RecipeSet:
                 except ParseError as e:
                     e.pushFrame(root.getPackageName())
                     raise e
+            for alias in self.__packageAliasList:
+                realName = self.__packageAliasList[alias]
+                try:
+                    p = walkPackagePath(result, realName)
+                    p = copy.copy(p)
+                    p.setName(alias)
+                    result[alias] = p
+                except BuildError:
+                    raise BuildError("Package '{}' for alias '{}' not found!".format(realName, alias))
         finally:
             BobState().setSynchronous()
         return result

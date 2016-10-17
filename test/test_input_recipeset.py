@@ -104,6 +104,25 @@ class TestUserConfig(TestCase):
 
             assert recipeSet.defaultEnv() == { "FOO":"BAZ", "BAR":"BAZ" }
 
+    def testUserConfigAlias(self):
+        """Test Package Alias Names"""
+        with TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            os.mkdir("recipes")
+            with open(os.path.join("recipes","bar.yaml"), "w") as f:
+                f.write("root: true")
+            with open("default.yaml", "w") as f:
+                f.write("alias:\n")
+                f.write("    FOO: bar\n")
+            recipeSet = RecipeSet()
+            recipeSet.parse()
+            roots = recipeSet.generatePackages(lambda s,m: "unused").values()
+            names = [ "bar", "FOO" ]
+            i = 0
+            for r in roots:
+                assert r.getName() == names[i]
+                i += 1
+
     def testUserConfigMissing(self):
         """Test that missing user config fails parsing"""
         with TemporaryDirectory() as tmp:
