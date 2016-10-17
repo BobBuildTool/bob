@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Bob build tool
 # Copyright (C) 2016  TechniSat Digital GmbH
 #
@@ -16,17 +18,33 @@
 
 from ..input import RecipeSet, walkPackagePath
 import argparse
+import codecs
 import sys
+
+try:
+    # test if stdout can handle box drawing characters
+    codecs.encode("└├│─", sys.stdout.encoding)
+    LS_SEP_1 = u"└── "
+    LS_SEP_2 = u"├── "
+    LS_SEP_3 = u"    "
+    LS_SEP_4 = u"│   "
+except UnicodeEncodeError:
+    # fall back to ASCII
+    LS_SEP_1 = "\\-- "
+    LS_SEP_2 = "|-- "
+    LS_SEP_3 = "    "
+    LS_SEP_4 = "|   "
+
 
 def doLS(argv, bobRoot):
     def showTree(packages, showAll, prefix=""):
         i = 0
         for p in packages:
             last = (i >= len(packages)-1)
-            print("{}{}{}".format(prefix, "└── " if last else "├── ", p.getName()))
+            print("{}{}{}".format(prefix, LS_SEP_1 if last else LS_SEP_2, p.getName()))
             deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
             showTree([d.getPackage() for d in deps], showAll,
-                     prefix + ("    " if last else "│   "))
+                     prefix + (LS_SEP_3 if last else LS_SEP_4))
             i += 1
 
     def showPrefixed(packages, recurse, showAll, stack, level=0):
