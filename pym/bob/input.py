@@ -2346,6 +2346,8 @@ class RecipeSet:
             return default
 
     def parse(self):
+        if not os.path.isdir("recipes"):
+            raise ParseError("No recipes directory found.")
         self.__cache.open()
         try:
             self.__parse()
@@ -2372,9 +2374,6 @@ class RecipeSet:
         self.__parseUserConfig("default.yaml")
 
         # finally parse recipes
-        if not os.path.isdir("recipes"):
-            raise ParseError("No recipes directory found.")
-
         for root, dirnames, filenames in os.walk('classes'):
             for path in fnmatch.filter(filenames, "*.yaml"):
                 try:
