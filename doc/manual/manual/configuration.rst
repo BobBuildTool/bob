@@ -584,31 +584,54 @@ Type: List of Strings or Dependency-Dictionaries
 
 Declares a list of other recipes that this recipe depends on. Each list entry
 might either be a single string with the recipe name or a dictionary with more
-fine grained settings. See the following example for both formats::
+fine grained settings. Such entries might either name another recipe directly
+(``name``) or a list of further dependencies (``depends``) that inherit the
+settings from the current entry. See the following example for both formats::
 
     depends:
         - foo
+        - bar
         -
             name: toolchain
             use: [tools, environment]
             forward: True
-        - bar
+        -
+            if: "${FOOBAR}"
+            depends:
+                - baz
+                - qux
 
-In the first and third case only the package is named, meaning the build result
-of recipe *foo* resp. *bar* is fed as ``$2`` and ``$3`` to the build
-script.
+In the first and second case only the package is named, meaning the build
+result of recipe *foo* resp. *bar* is fed as ``$2`` and ``$3`` to the build
+script. Any provided dependencies of these packages
+(:ref:`configuration-recipes-providedeps`) will be implicitly added to the
+dependency list too.
 
-In the second case a recipe named *toolchain* is required but instead of using
-its result the recipe imports any declared tools and environment variables from *toolchain*.
-Additionally, because of the ``forward`` attribute, these imported
-tools and variables are not only imported into the current recipe but also
-forwarded to the following recipes (*bar*). The following detailed settings are
-supported:
+In the third case a recipe named *toolchain* is required but instead of using
+its result the recipe imports any declared tools and environment variables from
+*toolchain*.  Additionally, because of the ``forward`` attribute, these
+imported tools and variables are not only imported into the current recipe but
+also forwarded to the following recipes (*baz* and *qux*).
+
+The 4th case is a recursive definition where the simple dependencies *baz* and
+*qux* are guarded by a common condition. These dependencies will only be
+considered if the variable ``FOOBAR`` expands to a value that is evaluated as
+boolean true. If the condition passes these dependencies will be available as
+``$4`` and ``$5`` to the build script. Recursive definitions might be nested
+freely and they might override any setting mentioned in the table below. All
+``if`` properties on each nesting level must evaluate to true for an entry to
+take effect.
+
+Detailed entries must either contain a ``name`` property or a ``depends`` list.
+The following settings are supported:
 
 +-------------+-----------------+-----------------------------------------------------+
 | Name        | Type            | Description                                         |
 +=============+=================+=====================================================+
-| name        | String          | Required. The name of the required recipe.          |
+| name        | String          | The name of the required recipe.                    |
++-------------+-----------------+-----------------------------------------------------+
+| depends     | List of         | A list of dependencies inheriting the settings of   |
+|             | Dependencies    | this entry.                                         |
 +-------------+-----------------+-----------------------------------------------------+
 | use         | List of strings | List of the results that are used from the package. |
 |             |                 | The following values are allowed:                   |
@@ -764,6 +787,8 @@ Example::
       APPLY_FOO_PATCH: "no"
 
 See also :ref:`configuration-recipes-env`.
+
+.. _configuration-recipes-providedeps:
 
 provideDeps
 ~~~~~~~~~~~
