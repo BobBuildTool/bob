@@ -926,6 +926,8 @@ def doProject(argv, bobRoot):
         help="Preserve environment variable")
     parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
         help="Preserve whole environment")
+    parser.add_argument('--resume', default=False, action='store_true',
+        help="Resume build where it was previously interrupted")
     parser.add_argument('-n', dest="execute_prebuild", default=True, action='store_false',
         help="Do not build (bob dev) before generate project Files. RunTargets may not work")
     args = parser.parse_args(argv)
@@ -993,6 +995,7 @@ def doProject(argv, bobRoot):
     # This makes it possible for the plugin to collect them and generate some runTargets.
     if args.execute_prebuild:
         devArgs = extra.copy()
+        if args.resume: devArgs.append('--resume')
         devArgs.append(args.package)
         doDevelop(devArgs, bobRoot)
 
