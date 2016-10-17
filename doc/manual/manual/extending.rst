@@ -210,8 +210,8 @@ A simple genertor may look like::
         return 0
 
     manifest = {
-        'apiVersion' : "0.4",
-        'generators' : {
+        'apiVersion' : "0.5",
+        'projectGenerators' : {
             'nullGenerator' : nullGenerator,
         }
     }
