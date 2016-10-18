@@ -1005,9 +1005,13 @@ http        Uses a HTTP server as binary artifact repository. The server has to
             ``url`` key.
 =========== ==================================================================
 
-.. warning::
-   The usage of binary artifact repositories is still experimental. Use with
-   care.
+The directory layouts of the ``file`` and the ``http`` backends are compatible.
+
+.. note::
+   The uploaded artifacts do not have any metadata attached to them yet.
+   Despite the opaque Build-ID there is no information, e.g. about the recipes
+   that created this artifact. Therefore there are no tools to manage binary
+   artifacts yet.
 
 Example::
 
