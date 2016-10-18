@@ -1,0 +1,6 @@
+buildVars: [MODE]
+buildScript: |
+  echo ${MODE} > result.txt
+
+packageScript: |
+  cat $1/result.txt > result.txt

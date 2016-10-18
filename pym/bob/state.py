@@ -90,17 +90,22 @@ class _BobState():
         if self.__dirty:
             self.__save()
 
-    def getByNameDirectory(self, baseDir, digest, isSourceDir, persistent):
+    def getByNameDirectory(self, baseDir, digest, isSourceDir):
         if digest in self.__byNameDirs:
             return self.__byNameDirs[digest][0]
         else:
             num = self.__byNameDirs.setdefault(baseDir, 0) + 1
             res = "{}/{}".format(baseDir, num)
-            if persistent:
-                self.__byNameDirs[baseDir] = num
-                self.__byNameDirs[digest] = (res, isSourceDir)
-                self.__save()
+            self.__byNameDirs[baseDir] = num
+            self.__byNameDirs[digest] = (res, isSourceDir)
+            self.__save()
             return res
+
+    def getExistingByNameDirectory(self, digest):
+        if digest in self.__byNameDirs:
+            return self.__byNameDirs[digest][0]
+        else:
+            return None
 
     def getAllNameDirectores(self):
         return [ d for d in self.__byNameDirs.values() if isinstance(d, tuple) ]
