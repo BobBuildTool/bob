@@ -227,3 +227,47 @@ accommodate for the special environment.
 If all required tools and plugins have been installed on Jenkins the build
 should succeed. Go into the "sandbox-vexpress" job, download the archived
 artifacts and run them locally.
+
+Using IDEs with Bob
+===================
+
+You may want to use a IDE with Bob. At the moment QTCreator and Eclipse are supported. You
+can add more IDE's using :ref:`extending-generators` extension.
+To generate project files the basic call is: ::
+
+    $ bob project <genericArgs> <generator> <specificArgs> <package>
+
+with ``genericArgs``:
+    * ``-n``: Do not build. Usually bob project builds the given package first to
+      be able to collect binaries and add them to the IDEs run/debug targets.
+    * ``-D -c -e -E``: These arguments will be passed to bob dev and will also be
+      used when compiling from IDE.
+
+with ``generator``:
+    * ``eclipseCdt``: Generate project files for eclipse. Tested with eclipse MARS.
+    * ``qt-creator``: Generate project files for QtCreator. Tested with 4.0 and 4.1.
+
+with ``specificArgs``: arguments used by the generator itself. They differ from generator to
+generator (see below).
+
+and ``package``: name of a package to generate the project for. Usually all dependencies for
+this package will be visible in the IDE
+
+QTCreator
+---------
+
+QtCreator specificArgs:
+    * ``--destination``: destination directory for the project files. Default is
+      <workingDir>/projects/package_stack.
+    * ``--name``: name of the project. Default is packageName.
+
+EclipseCdt
+----------
+
+Eclipse specificArgs:
+    * ``--exclude``: eclipse indexer sometimes runs OutOfMemory on large sourcetrees.
+      You can specify package names (or use a regular expression) to define packages
+      excluded from build. This will stop indexer from indexing these packages.
+    * ``--destination``: destination directory for the project files. Default is
+      <workingDir>/projects/package_stack.
+    * ``--name``: name of the project. Default is packageName.
