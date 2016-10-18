@@ -68,8 +68,12 @@ exec_fancy_test()
 	. run.sh > log.txt
 }
 
+declare -a RUN_TEST_DIRS
+
 run_test()
 {
+	RUN_TEST_DIRS+=( $1 )
+
 	echo "Run" $1
 	(
 		set -o pipefail
@@ -98,7 +102,7 @@ run_test test/query-path exec_fancy_test
 
 # collect coverage
 if [[ $USE_COVERAGE -eq 1 ]]; then
-	coverage3 combine test test/blackbox/* test/generator
+	coverage3 combine test "${RUN_TEST_DIRS[@]}"
 fi
 
 exit $FAILED
