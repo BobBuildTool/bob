@@ -295,3 +295,22 @@ def binLstat(path):
     return struct.pack('=QQLqLQ', float2ns(st.st_ctime), float2ns(st.st_mtime),
                        st.st_dev, st.st_ino, st.st_mode, st.st_size)
 
+
+# There are two "magic" modules with similar functionality. Find out which one we got and adapt.
+def summonMagic():
+    import magic
+    if hasattr(magic, 'from_file'):
+        # https://pypi.python.org/pypi/python-magic
+        return magic
+    elif hasattr(magic, 'open'):
+        # http://www.darwinsys.com/file/, in Debian as python3-magic
+        class WrapMagic:
+            def __init__(self):
+                self.magic = magic.open(magic.NONE)
+                self.magic.load()
+
+            def from_file(self, name):
+                return self.magic.file(name)
+        return WrapMagic()
+    else:
+        raise NotImplementedError("I do not understand your magic")

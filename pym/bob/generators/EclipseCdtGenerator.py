@@ -19,12 +19,12 @@ import argparse
 import sys
 import os
 import re
-import magic
 import shutil
 import stat
 import uuid
 from os.path import expanduser
 from os.path import join
+from bob.utils import summonMagic
 from collections import OrderedDict
 from pipes import quote
 
@@ -256,6 +256,7 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
 
         # find all executables in package dir
         runTargets = []
+        magic = summonMagic()
         if package.getPackageStep().isValid():
             packageDir = package.getPackageStep().getWorkspacePath()
             for root, directory, filenames in os.walk(packageDir):

@@ -19,12 +19,12 @@ import argparse
 import sys
 import re
 import os
-import magic
 import shutil
 import stat
 from os.path import expanduser
 from os.path import join
 from bob.errors import ParseError
+from bob.utils import summonMagic
 from collections import OrderedDict, namedtuple
 from pipes import quote
 
@@ -288,6 +288,7 @@ def generateQtProject(package, destination, updateOnly, projectName, args):
 
         # find all executables in package dir
         runTargets = []
+        magic = summonMagic()
         if package.getPackageStep().isValid():
             packageDir = package.getPackageStep().getWorkspacePath()
             for root, directory, filenames in os.walk(packageDir):
