@@ -1,0 +1,3 @@
+inherit: ["a+b"]
+packageScript: |
+  echo x+y > result.txt

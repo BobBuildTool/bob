@@ -1672,7 +1672,7 @@ class ScmValidator:
         return data
 
 
-RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.-]+$')
+RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]+$')
 
 class Recipe(object):
     """Representation of a single recipe
@@ -2450,9 +2450,9 @@ class RecipeSet:
     def __createSchemas(self):
         varNameSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
         varGlobSchema = schema.Regex(r'^[][A-Za-z_*?][][A-Za-z0-9_*?]*$')
-        toolGlobSchema = schema.Regex(r'^[][0-9A-Za-z_.:*?-]+$')
+        toolGlobSchema = schema.Regex(r'^[][0-9A-Za-z_.+:*?-]+$')
         varFilterSchema = schema.Regex(r'^!?[][A-Za-z_*?][][A-Za-z0-9_*?]*$')
-        recipeFilterSchema = schema.Regex(r'^!?[][0-9A-Za-z_.:*?-]+$')
+        recipeFilterSchema = schema.Regex(r'^!?[][0-9A-Za-z_.+:*?-]+$')
 
         useClauses = ['deps', 'environment', 'result', 'tools', 'sandbox']
         useClauses.extend(self.__states.keys())
