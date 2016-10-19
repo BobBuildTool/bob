@@ -129,8 +129,11 @@ def addCConfig(cProjectFile, excludePackages, buildName, id, buildArgs, buildMeF
     cProjectFile.write('   </folderInfo>\n')
 
     cProjectFile.write('   <sourceEntries>\n')
-    for package in excludePackages:
-	    cProjectFile.write('<entry excluding="' + package + '" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>')
+    if len(excludePackages) > 0:
+        excludes = ''
+        for package in excludePackages:
+            excludes += package + '|'
+        cProjectFile.write('<entry excluding="' + excludes[:-1] + '" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>\n')
     cProjectFile.write('   </sourceEntries>\n')
 
     cProjectFile.write(' </configuration>\n')
