@@ -297,11 +297,21 @@ __bob_subcommands()
    fi
 }
 
-# Top level completion function.
+if [[ -n ${ZSH_VERSION} ]]; then
+# Top level completion function for zsh.
 __bob()
 {
-   local parse_pos=1 bob="$1" cur prev
-   local sandbox=""
+    local parse_pos=1 bob="$1" cur="$2" prev="$3"
+    local sandbox=""
+
+   __bob_subcommands "build clean dev ls jenkins project"
+}
+else
+# Top level completion function for bash.
+__bob()
+{
+    local parse_pos=1 bob="$1" cur prev
+    local sandbox=""
 
    _get_comp_words_by_ref -n : cur prev
 
@@ -309,6 +319,7 @@ __bob()
 
    __ltrim_colon_completions "$cur"
 }
+fi
 
 # noquote is quite new...
 complete -o noquote -o nospace -F __bob bob 2>/dev/null || \
