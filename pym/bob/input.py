@@ -15,8 +15,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
-from .errors import ParseError
-from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride
+from .errors import BuildError, ParseError
+from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
 from .tty import colorize, WarnOnce
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binLstat
@@ -2278,7 +2278,6 @@ class RecipeSet:
             "match" : funMatch,
         }
         self.__plugins = {}
-        self.__recipeScmStatus = None
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -2404,21 +2403,19 @@ class RecipeSet:
     def scmOverrides(self):
         return self.__scmOverrides
 
+    def getScmAudit(self):
+        try:
+            ret = self.__recipeScmAudit
+        except AttributeError:
+            ret = self.__recipeScmAudit = auditFromDir(".")
+        return ret
+
     def getScmStatus(self):
-        if self.__recipeScmStatus is not None:
-            return self.__recipeScmStatus
-
-        self.__recipeScmStatus = "unknown"
-        if os.path.isdir(".git"):
-            import subprocess
-            try:
-                self.__recipeScmStatus = "git:" + subprocess.check_output(
-                    ["git", "describe", "--always", "--long", "--dirty", "--abbrev=16"],
-                    universal_newlines=True).strip()
-            except subprocess.CalledProcessError:
-                pass
-
-        return self.__recipeScmStatus
+        audit = self.getScmAudit()
+        if audit is None:
+            return "unknown"
+        else:
+            return audit.getStatusLine()
 
     def loadBinary(self, path):
         return self.__cache.loadBinary(path)

@@ -17,11 +17,11 @@
 from ..errors import BuildError
 from ..tty import colorize
 from ..utils import hashString, joinScripts
-from .scm import Scm
+from .scm import Scm, ScmAudit
 import os, os.path
 import schema
 import subprocess
-import xml.etree.ElementTree
+from xml.etree import ElementTree
 
 class SvnScm(Scm):
 
@@ -82,37 +82,37 @@ fi
         return "\n".join([ SvnScm.__moduleAsDigestScript(m) for m in self.__modules ])
 
     def asJenkins(self, workPath, credentials, options):
-        scm = xml.etree.ElementTree.Element("scm", attrib={
+        scm = ElementTree.Element("scm", attrib={
             "class" : "hudson.scm.SubversionSCM",
             "plugin" : "subversion@2.4.5",
         })
 
-        locations = xml.etree.ElementTree.SubElement(scm, "locations")
+        locations = ElementTree.SubElement(scm, "locations")
         for m in self.__modules:
-            location = xml.etree.ElementTree.SubElement(locations,
+            location = ElementTree.SubElement(locations,
                 "hudson.scm.SubversionSCM_-ModuleLocation")
 
             url = m[ "url" ]
             if m["revision"]:
                 url += ( "@" + m["revision"] )
 
-            xml.etree.ElementTree.SubElement(location, "remote").text = url
-            credentialsId = xml.etree.ElementTree.SubElement(location, "credentialsId")
+            ElementTree.SubElement(location, "remote").text = url
+            credentialsId = ElementTree.SubElement(location, "credentialsId")
             if credentials: credentialsId.text = credentials
-            xml.etree.ElementTree.SubElement(location, "local").text = (
+            ElementTree.SubElement(location, "local").text = (
                 os.path.join(workPath, m["dir"]) if m["dir"] else workPath )
-            xml.etree.ElementTree.SubElement(location, "depthOption").text = "infinity"
-            xml.etree.ElementTree.SubElement(location, "ignoreExternalsOption").text = "true"
+            ElementTree.SubElement(location, "depthOption").text = "infinity"
+            ElementTree.SubElement(location, "ignoreExternalsOption").text = "true"
 
-            xml.etree.ElementTree.SubElement(scm, "excludedRegions")
-            xml.etree.ElementTree.SubElement(scm, "includedRegions")
-            xml.etree.ElementTree.SubElement(scm, "excludedUsers")
-            xml.etree.ElementTree.SubElement(scm, "excludedRevprop")
-            xml.etree.ElementTree.SubElement(scm, "excludedCommitMessages")
-            xml.etree.ElementTree.SubElement(scm, "workspaceUpdater",
+            ElementTree.SubElement(scm, "excludedRegions")
+            ElementTree.SubElement(scm, "includedRegions")
+            ElementTree.SubElement(scm, "excludedUsers")
+            ElementTree.SubElement(scm, "excludedRevprop")
+            ElementTree.SubElement(scm, "excludedCommitMessages")
+            ElementTree.SubElement(scm, "workspaceUpdater",
                 attrib={"class":"hudson.scm.subversion.UpdateUpdater"})
-            xml.etree.ElementTree.SubElement(scm, "ignoreDirPropChanges").text = "false"
-            xml.etree.ElementTree.SubElement(scm, "filterChangelog").text = "false"
+            ElementTree.SubElement(scm, "ignoreDirPropChanges").text = "false"
+            ElementTree.SubElement(scm, "filterChangelog").text = "false"
 
         return scm
 
@@ -183,7 +183,7 @@ fi
                 setStatus('M', longMsg)
 
             svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, dir), 'info', '--xml')
-            info = xml.etree.ElementTree.fromstring(svnoutput)
+            info = ElementTree.fromstring(svnoutput)
             entry = info.find('entry')
             url = entry.find('url').text
             revision = entry.attrib['revision']
@@ -199,3 +199,65 @@ fi
 
         return status, shortStatus, longStatus
 
+    def getAuditSpec(self):
+        return ("svn", [ m["dir"] for m in self.__modules ])
+
+
+class SvnAudit(ScmAudit):
+
+    SCHEMA = schema.Schema({
+        'type' : 'svn',
+        'dir' : str,
+        'url' : str,
+        'revision' : int,
+        'dirty' : bool,
+        'repository' : {
+            'root' : str,
+            'uuid' : str
+        }
+    })
+
+    def _scanDir(self, workspace, dir):
+        self.__dir = dir
+        try:
+            info = ElementTree.fromstring(subprocess.check_output(
+                ["svn", "info", "--xml", dir],
+                cwd=workspace, universal_newlines=True))
+            self.__url = info.find('entry/url').text
+            self.__revision = int(info.find('entry').get('revision'))
+            self.__repoRoot = info.find('entry/repository/root').text
+            self.__repoUuid = info.find('entry/repository/uuid').text
+
+            status = subprocess.check_output(["svn", "status", dir],
+                cwd=workspace, universal_newlines=True)
+            self.__dirty = status != ""
+        except subprocess.CalledProcessError as e:
+            raise BuildError("Svn audit failed: " + str(e))
+        except OSError as e:
+            raise BuildError("Error calling git: " + str(e))
+        except ElementTree.ParseError as e:
+            raise BuildError("Invalid XML received from svn")
+
+    def _load(self, data):
+        self.__dir = data["dir"]
+        self.__url = data["url"]
+        self.__revision = data["revision"]
+        self.__dirty = data["dirty"]
+        self.__repoRoot = data["repository"]["root"]
+        self.__repoUuid = data["repository"]["uuid"]
+
+    def dump(self):
+        return {
+            "type" : "svn",
+            "dir" : self.__dir,
+            "url" : self.__url,
+            "revision" : self.__revision,
+            "dirty" :  self.__dirty,
+            "repository" : {
+                "root" :  self.__repoRoot,
+                "uuid" :  self.__repoUuid,
+            }
+        }
+
+    def getStatusLine(self):
+        return self.__url + "@" + str(self.__revision) + ("-dirty" if self.__dirty else "")

@@ -203,6 +203,50 @@ def hashEngine():
 
     return 0
 
+def auditEngine():
+    parser = argparse.ArgumentParser(description="Create audit trail.")
+    parser.add_argument('-o', dest="output", metavar="OUTPUT", default="-", help="Output file (default: stdout)")
+    parser.add_argument("-D", dest="defines", action="append", default=[], nargs=2)
+    parser.add_argument("--arg", action="append", default=[])
+    parser.add_argument("--env")
+    parser.add_argument("--recipes")
+    parser.add_argument("--sandbox")
+    parser.add_argument("--scm", action="append", default=[], nargs=3)
+    parser.add_argument("--tool", action="append", default=[], nargs=2)
+    parser.add_argument("variantID")
+    parser.add_argument("buildID")
+    parser.add_argument("resultHash")
+    args = parser.parse_args()
+
+    def cmd():
+        from .audit import Audit
+        import json
+        import os
+        try:
+            gen = Audit.create(bytes.fromhex(args.variantID), bytes.fromhex(args.buildID),
+                bytes.fromhex(args.resultHash))
+        except ValueError:
+            raise BuildError("Invalid digest argument")
+        if args.env is not None: gen.setEnv(args.env)
+        for (name, value) in args.defines: gen.addDefine(name, value)
+        for (name, workspace, dir) in args.scm: gen.addScm(name, workspace, dir)
+        for (name, audit) in args.tool: gen.addTool(name, audit)
+        try:
+            if args.recipes is not None: gen.setRecipesData(json.loads(args.recipes))
+        except ValueError as e:
+            raise BuildError("Invalid recipes json: " + str(e))
+        if args.sandbox is not None: gen.setSandbox(args.sandbox)
+        for arg in args.arg: gen.addArg(arg)
+
+        if args.output == "-":
+            gen.save(sys.stdout.buffer)
+        else:
+            gen.save(args.output)
+
+        return 0
+
+    return catchErrors(cmd)
+
 def __process(l, inFile, stateDir):
     if l.startswith("="):
         return bytes.fromhex(l[1:])

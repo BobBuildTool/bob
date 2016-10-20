@@ -1,5 +1,5 @@
 # Bob build tool
-# Copyright (C) 2016  Jan Klötzke
+# Copyright (C) 2017  Jan Klötzke
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from abc import ABCMeta, abstractmethod
 import fnmatch
 import re
 
@@ -86,3 +87,36 @@ class Scm(object):
                 longStatus += "    > Overridden by:\n       {}\n".format(overrideText)
             return True, status, longStatus
         return False, '', ''
+
+class ScmAudit(metaclass=ABCMeta):
+    @classmethod
+    def fromDir(cls, workspace, dir):
+        """Create SCM audit record by scanning a directory"""
+        scm = cls()
+        scm._scanDir(workspace, dir)
+        return scm
+
+    @classmethod
+    def fromData(cls, data):
+        """Restore SCM audit from serialized record"""
+        scm = cls()
+        scm._load(data)
+        return scm
+
+    @abstractmethod
+    def _scanDir(self, workspace, dir):
+        """Scan directory for SCM"""
+        pass
+
+    @abstractmethod
+    def _load(self, data):
+        """Load from persisted record"""
+        pass
+
+    @abstractmethod
+    def dump(self):
+        """Serialize state into an ElementTree.Element"""
+        pass
+
+    def getStatusLine(self):
+        return "unknown"
