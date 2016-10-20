@@ -1301,6 +1301,8 @@ def doJenkinsSetUrl(recipes, argv):
 def doJenkinsSetOptions(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins set-options")
     parser.add_argument("name", help="Jenkins server alias")
+    parser.add_argument("--reset", action='store_true', default=False,
+                        help="Reset all options to their default")
     parser.add_argument("-n", "--nodes", help="Set label for Jenkins Slave")
     parser.add_argument("-p", "--prefix", help="Set prefix for jobs")
     parser.add_argument("--add-root", default=[], action='append',
@@ -1348,6 +1350,20 @@ def doJenkinsSetOptions(recipes, argv):
         print("Jenkins '{}' not known.".format(args.name), file=sys.stderr)
         sys.exit(1)
     config = BobState().getJenkinsConfig(args.name)
+
+    if args.reset:
+        config.update({
+            "roots" : [],
+            "prefix" : "",
+            "nodes" : "",
+            "defines" : {},
+            "download" : False,
+            "upload" : False,
+            "sandbox" : True,
+            "windows" : False,
+            "credentials" : None,
+            "clean" : False,
+        })
 
     if args.nodes is not None:
         config["nodes"] = args.nodes
