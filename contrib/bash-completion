@@ -269,6 +269,25 @@ __bob_project()
     __bob_project_generators "$($bob project --list)"
 }
 
+__bob_query_scm()
+{
+    __bob_complete_path "-f --default -r"
+}
+
+__bob_query_path()
+{
+   if [[ "$prev" = "-c" ]] ; then
+      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
+   else
+      __bob_complete_path "-f -D -c --sandbox --no-sandbox --develop --release"
+   fi
+}
+
+__bob_query_recipe()
+{
+    __bob_complete_path
+}
+
 __bob_subcommands()
 {
    local i c command completion_func
@@ -304,7 +323,7 @@ __bob()
     local parse_pos=1 bob="$1" cur="$2" prev="$3"
     local sandbox=""
 
-   __bob_subcommands "build clean dev ls jenkins project"
+   __bob_subcommands "build clean dev ls jenkins project query-path query-scm query-recipe"
 }
 else
 # Top level completion function for bash.
@@ -315,7 +334,7 @@ __bob()
 
    _get_comp_words_by_ref -n : cur prev
 
-   __bob_subcommands "build clean dev ls jenkins project"
+   __bob_subcommands "build clean dev ls jenkins project query-path query-scm query-recipe"
 
    __ltrim_colon_completions "$cur"
 }
