@@ -363,6 +363,7 @@ esac
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
+        self.__done = set()
 
     def setArchiveHandler(self, archive):
         self.__doDownload = True
@@ -546,7 +547,7 @@ esac
         if self.__verbose >= -1:
             print(*args, **kwargs)
 
-    def cook(self, steps, parentPackage, done=set(), depth=0):
+    def cook(self, steps, parentPackage, depth=0):
         currentPackage = self.__currentPackage
         ret = None
 
@@ -556,7 +557,7 @@ esac
 
         for step in reversed(steps):
             # skip if already processed steps
-            if step in done:
+            if step in self.__done:
                 continue
 
             # update if package changes
@@ -569,19 +570,19 @@ esac
             try:
                 if step.isCheckoutStep():
                     if step.isValid():
-                        self._cookCheckoutStep(step, done, depth)
+                        self._cookCheckoutStep(step, depth)
                 elif step.isBuildStep():
                     if step.isValid():
-                        self._cookBuildStep(step, done, depth)
+                        self._cookBuildStep(step, depth)
                 else:
                     assert step.isPackageStep() and step.isValid()
-                    ret = self._cookPackageStep(step, done, depth)
+                    ret = self._cookPackageStep(step, depth)
             except BuildError as e:
                 e.pushFrame(step.getPackage().getName())
                 raise e
 
             # mark as done
-            done.add(step)
+            self.__done.add(step)
 
         # back to original package
         if currentPackage != self.__currentPackage:
@@ -590,7 +591,7 @@ esac
                 print(">>", colorize("/".join(self.__currentPackage.getStack()), "32;1"))
         return ret
 
-    def _cookCheckoutStep(self, checkoutStep, done, depth):
+    def _cookCheckoutStep(self, checkoutStep, depth):
         checkoutDigest = checkoutStep.getVariantId()
         if self._wasAlreadyRun(checkoutStep):
             prettySrcPath = self._getAlreadyRun(checkoutStep)
@@ -598,7 +599,7 @@ esac
         else:
             # depth first
             self.cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
-                      done, depth+1)
+                      depth+1)
 
             # get directory into shape
             (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
@@ -667,7 +668,7 @@ esac
             BobState().setResultHash(prettySrcPath, hashWorkspace(checkoutStep))
             self._setAlreadyRun(checkoutStep)
 
-    def _cookBuildStep(self, buildStep, done, depth):
+    def _cookBuildStep(self, buildStep, depth):
         # Include actual directories of dependencies in buildDigest.
         # Directories are reused in develop build mode and thus might change
         # even though the variant id of this step is stable. As most tools rely
@@ -680,7 +681,7 @@ esac
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
         else:
             # depth first
-            self.cook(buildStep.getAllDepSteps(), buildStep.getPackage(), done, depth+1)
+            self.cook(buildStep.getAllDepSteps(), buildStep.getPackage(), depth+1)
 
             # get directory into shape
             (prettyBuildPath, created) = self._constructDir(buildStep, "build")
@@ -718,7 +719,7 @@ esac
                 BobState().setInputHashes(prettyBuildPath, buildInputHashes)
             self._setAlreadyRun(buildStep)
 
-    def _cookPackageStep(self, packageStep, done, depth):
+    def _cookPackageStep(self, packageStep, depth):
         packageDigest = packageStep.getVariantId()
         if self._wasAlreadyRun(packageStep):
             prettyPackagePath = self._getAlreadyRun(packageStep)
@@ -750,7 +751,7 @@ esac
                 # Exclude packages that provide host tools when not building in a sandbox
                 packageBuildId = None
             else:
-                packageBuildId = self._getBuildId(packageStep, done, depth) \
+                packageBuildId = self._getBuildId(packageStep, depth) \
                     if (self.__doDownload or self.__doUpload) else None
             if packageBuildId and (depth >= self.__downloadDepth):
                 oldInputHashes = BobState().getInputHashes(prettyPackagePath)
@@ -776,7 +777,7 @@ esac
             # package it if needed
             if not packageDone:
                 # depth first
-                self.cook(packageStep.getAllDepSteps(), packageStep.getPackage(), done, depth+1)
+                self.cook(packageStep.getAllDepSteps(), packageStep.getPackage(), depth+1)
 
                 packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                     for i in packageStep.getArguments() if i.isValid() ]
@@ -801,17 +802,17 @@ esac
 
         return prettyPackagePath
 
-    def _getBuildId(self, step, done, depth):
+    def _getBuildId(self, step, depth):
         if step.isCheckoutStep():
             bid = step.getBuildId()
             if bid is None:
                 # do checkout
-                self.cook([step], step.getPackage(), done, depth)
+                self.cook([step], step.getPackage(), depth)
                 # return directory hash
                 bid = BobState().getResultHash(step.getWorkspacePath())
             return bid
         else:
-            return step.getDigest(lambda s: self._getBuildId(s, done, depth+1), True)
+            return step.getDigest(lambda s: self._getBuildId(s, depth+1), True)
 
 
 def touch(rootPackages):
