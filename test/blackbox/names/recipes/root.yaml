@@ -1,0 +1,13 @@
+root: true
+
+depends:
+  - "x+y"
+
+buildScript: |
+    rm -f result.txt
+    for i in "${@:2}" ; do
+        cat "$i/result.txt" >> result.txt
+    done
+
+packageScript: |
+    cp $1/result.txt .
