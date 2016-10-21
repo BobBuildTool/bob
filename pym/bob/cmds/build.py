@@ -1041,7 +1041,7 @@ This command removes currently unused directories from previous "bob build"
 invocations.  By default only 'build' and 'package' steps are evicted. Adding
 '-s' will clean 'checkout' steps too. Make sure that you have checked in (and
 pushed) all your changes, tough. When in doubt add '--dry-run' to see what
-would get removed without acutally deleting that already.
+would get removed without actually deleting that already.
 """)
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="Don't delete, just print what would be deleted")
