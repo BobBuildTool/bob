@@ -275,6 +275,10 @@ The following built in string functions are supported:
 
 * ``$(eq,left,right)``: Returns ``true`` if the expansions of ``left`` and
   ``right`` are equal, ``false`` otherwise.
+* ``$(match,string,pattern[,flags])``: Returns ``true`` if ``pattern`` is found
+  in ``string``, ``false`` otherwise. Quoting the pattern is recommended. Flags
+  are optional. The only supported flag by now is ``i`` to ignore case while
+  searching.
 * ``$(if-then-else,condition,then,else)``: The expansion of ``condition`` is
   interpreted as boolean value. If the contition is true the expansion of
   ``then`` is returned. Otherwise ``else`` is returned.
