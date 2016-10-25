@@ -89,8 +89,13 @@ def createLaunchFile(outFile, exe, project):
     outFile.write('<stringAttribute key="process_factory_id" value="org.eclipse.cdt.dsf.gdb.GdbProcessFactory"/>\n')
     outFile.write('</launchConfiguration>')
 
+def addIncludes(cProjectFile, includeDirs):
+    cProjectFile.write('<option id="org.eclipse.cdt.build.core.settings.holder.incpaths.'+getId()+'" name="Include Paths" superClass="org.eclipse.cdt.build.core.settings.holder.incpaths" valueType="includePath">\n')
+    for i in includeDirs:
+        cProjectFile.write(' <listOptionValue builtIn="false" value="'+i+'"/>\n')
+    cProjectFile.write('</option>\n')
 
-def addCConfig(cProjectFile, excludePackages, buildName, id, buildArgs, buildMeFile):
+def addCConfig(cProjectFile, excludePackages, includeDirs, buildName, id, buildArgs, buildMeFile):
     cProjectFile.write('<cconfiguration id="' + id + '">\n')
     cProjectFile.write('<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="'
                         + id + '" moduleId="org.eclipse.cdt.core.settings" name="' + buildName + '">\n')
@@ -117,12 +122,18 @@ def addCConfig(cProjectFile, excludePackages, buildName, id, buildArgs, buildMeF
                     superClass="org.eclipse.cdt.build.core.settings.default.builder.' + getId() + '"/>\n')
     cProjectFile.write('     <tool id="org.eclipse.cdt.build.core.settings.holder.libs.' + getId() + '" name="holder for library settings" superClass="org.eclipse.cdt.build.core.settings.holder.libs"/>\n')
     cProjectFile.write('     <tool id="org.eclipse.cdt.build.core.settings.holder.' + getId() + '" name="Assembly" superClass="org.eclipse.cdt.build.core.settings.holder">\n')
+    if len(includeDirs):
+        addIncludes(cProjectFile, includeDirs)
     cProjectFile.write('             <inputType id="org.eclipse.cdt.build.core.settings.holder.inType.' + getId() + '" languageId="org.eclipse.cdt.core.assembly" languageName="Assembly" sourceContentType="org.eclipse.cdt.core.asmSource" superClass="org.eclipse.cdt.build.core.settings.holder.inType"/>\n')
     cProjectFile.write('     </tool>\n')
     cProjectFile.write('     <tool id="org.eclipse.cdt.build.core.settings.holder.' + getId() + '" name="GNU C++" superClass="org.eclipse.cdt.build.core.settings.holder">\n')
+    if len(includeDirs):
+        addIncludes(cProjectFile, includeDirs)
     cProjectFile.write('             <inputType id="org.eclipse.cdt.build.core.settings.holder.inType.' + getId() + '" languageId="org.eclipse.cdt.core.g++" languageName="GNU C++" sourceContentType="org.eclipse.cdt.core.cxxSource,org.eclipse.cdt.core.cxxHeader" superClass="org.eclipse.cdt.build.core.settings.holder.inType"/>\n')
     cProjectFile.write('     </tool>\n')
     cProjectFile.write('     <tool id="org.eclipse.cdt.build.core.settings.holder.' + getId() + '" name="GNU C" superClass="org.eclipse.cdt.build.core.settings.holder">\n')
+    if len(includeDirs):
+        addIncludes(cProjectFile, includeDirs)
     cProjectFile.write('             <inputType id="org.eclipse.cdt.build.core.settings.holder.inType.' + getId() + '" languageId="org.eclipse.cdt.core.gcc" languageName="GNU C" sourceContentType="org.eclipse.cdt.core.cSource,org.eclipse.cdt.core.cHeader" superClass="org.eclipse.cdt.build.core.settings.holder.inType"/>\n')
     cProjectFile.write('     </tool>\n')
     cProjectFile.write('    </toolChain>\n')
@@ -141,7 +152,7 @@ def addCConfig(cProjectFile, excludePackages, buildName, id, buildArgs, buildMeF
     cProjectFile.write('<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>\n')
     cProjectFile.write('</cconfiguration>\n')
 
-def generateEclipseProject(package, destination, updateOnly, projectName, excludes, args):
+def generateEclipseProject(package, destination, updateOnly, projectName, excludes, additional_includes, args):
     project = "/".join(package.getStack())
 
     dirs = []
@@ -194,14 +205,20 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
         for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
             if exp.match(name):
                 excludePackages.append(name)
+    includeDirs = []
+    # find additional include dirs
+    for i in additional_includes:
+        if os.path.exists(i):
+            for root, directories, filenames in os.walk(i):
+                includeDirs.append(os.path.join(i,root))
 
     with open(os.path.join(destination, ".cproject"), 'w') as cProjectFile:
         cProjectFile.write(cProjectHeader)
-        addCConfig(cProjectFile, excludePackages, "Bob dev", id, "", buildMeFile)
-        addCConfig(cProjectFile, excludePackages, "Bob dev (force)", id + "." + getId(), "-f", buildMeFile)
-        addCConfig(cProjectFile, excludePackages, "Bob dev (no checkout)",id + "." + getId(), "-b", buildMeFile)
-        addCConfig(cProjectFile, excludePackages, "Bob dev (no deps)",id + "." + getId(), "-n", buildMeFile)
-        addCConfig(cProjectFile, excludePackages, "Bob dev (no checkout, no deps)",id + "." + getId(), "-bn", buildMeFile)
+        addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev", id, "", buildMeFile)
+        addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (force)", id + "." + getId(), "-f", buildMeFile)
+        addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no checkout)",id + "." + getId(), "-b", buildMeFile)
+        addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no deps)",id + "." + getId(), "-n", buildMeFile)
+        addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no checkout, no deps)",id + "." + getId(), "-bn", buildMeFile)
         cProjectFile.write(cProjectFooter)
 
     projectFileHeader = """<?xml version="1.0" encoding="UTF-8"?>
@@ -248,8 +265,11 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
         # Generate buildme
         buildMe = []
         buildMe.append("#!/bin/sh")
-        buildMe.append("bob dev $1 " + args + " " + project )
-        buildMe.append("bob project -n eclipseCdt " + project + " -u --destination " + destination + ' --name ' + projectName)
+        buildMe.append("bob dev $1 " + quote(args) + " " + quote(project))
+        projectCmd = "bob project -n eclipseCdt " + quote(project) + " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
+        for i in additional_includes:
+            projectCmd += " -I " + quote(i)
+        buildMe.append(projectCmd)
         generateFile(buildMe, buildMeFile)
         os.chmod(buildMeFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
@@ -276,7 +296,10 @@ def eclipseCdtGenerator(package, argv, extra):
         help="Name of project. Default is complete_path_to_package")
     parser.add_argument('--exclude', default=[], action='append', dest="excludes",
             help="Packages will be marked as 'exclude from build' in eclipse. Usefull if indexer runs OOM.")
+    parser.add_argument('-I', dest="additional_includes", default=[], action='append',
+        help="Additional include directories. (added recursive starting from this directory)")
 
     args = parser.parse_args(argv)
     extra = " ".join(quote(e) for e in extra)
-    generateEclipseProject(package, args.destination, args.update, args.name, args.excludes, extra)
+    generateEclipseProject(package, args.destination, args.update, args.name,
+            args.excludes, args.additional_includes, extra)

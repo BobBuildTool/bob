@@ -115,7 +115,7 @@ def addBuildSteps(outFile, buildMeFile):
     outFile.write(' <value type="QString">ProjectExplorer.ProjectConfiguration.DisplayName</value>\n')
     outFile.write('</valuelist>\n')
 
-def generateQtProject(package, destination, updateOnly, projectName, args):
+def generateQtProject(package, destination, updateOnly, projectName, includeDirs, filter, args):
     project = "/".join(package.getStack())
 
     dirs = []
@@ -147,6 +147,9 @@ def generateQtProject(package, destination, updateOnly, projectName, args):
     source  = re.compile(r".*\.[ch](pp)?$")
     cmake = re.compile(r".*\.cmake$")
 
+    if filter:
+       additionalFiles = re.compile(filter)
+
     # lists for storing all found sources files / include directories
     sList = []
     hList = []
@@ -159,10 +162,18 @@ def generateQtProject(package, destination, updateOnly, projectName, args):
             for filename in filenames:
                 if source.match(filename) or cmake.match(filename) or filename == 'CMakeLists.txt':
                     sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
-            # it's more faster to add all directories to includes and not to use regex, sort & remove duplicate entries
+                if filter and additionalFiles.match(filename):
+                    sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
+            # it's faster to add all directories to includes and not to use regex, sort & remove duplicate entries
             # this also helps qt-creator to resolve includes like <linux/bitops.h> which
             # is not found in case there is no header in 'linux'
-            hList.append(os.path.join(os.getcwd(),root))
+            if not '.git' in root and not '.subversion' in root:
+               hList.append(os.path.join(os.getcwd(),root))
+
+    for i in includeDirs:
+        if os.path.exists(i):
+            for root, directories, filenames in os.walk(i):
+                hList.append(os.path.join(i,root))
 
     # get system default project id
     # storred in ~/.config/QtProject/qtcreator/profiles.xml
@@ -193,8 +204,15 @@ def generateQtProject(package, destination, updateOnly, projectName, args):
         # Generate Buildme.sh
         buildMe = []
         buildMe.append("#!/bin/sh")
-        buildMe.append("bob dev $1 " + args + " " + project )
-        buildMe.append("bob project -n qt-creator " + project + " -u --destination " + destination + ' --name ' + projectName)
+        buildMe.append("bob dev $1 " + args + " " + quote(project))
+        projectCmd = "bob project -n qt-creator " + quote(project) + " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
+        for i in includeDirs:
+            projectCmd += " -I " + quote(i)
+        if filter:
+            projectCmd += " --filter " + quote(filter)
+
+        buildMe.append(projectCmd)
+
         generateFile(buildMe, buildMeFile)
         os.chmod(buildMeFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
@@ -316,8 +334,12 @@ def qtProjectGenerator(package, argv, extra):
         help="Destination of project files")
     parser.add_argument('--name', metavar="NAME",
         help="Name of project. Default is complete_path_to_package")
+    parser.add_argument('-I', dest="additional_includes", default=[], action='append',
+        help="Additional include directories. (added recursive starting from this directory)")
+    parser.add_argument('-f', '--filter', metavar="Filter",
+        help="File filter. A regex for matching additional files.")
 
     args = parser.parse_args(argv)
     extra = " ".join(quote(e) for e in extra)
-    generateQtProject(package, args.destination, args.update, args.name, extra)
+    generateQtProject(package, args.destination, args.update, args.name, args.additional_includes, args.filter, extra)
 
