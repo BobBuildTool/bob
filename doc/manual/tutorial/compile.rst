@@ -260,6 +260,10 @@ QtCreator specificArgs:
     * ``--destination``: destination directory for the project files. Default is
       <workingDir>/projects/package_stack.
     * ``--name``: name of the project. Default is packageName.
+    * ``-I``: additional include directories. They will only be added for indexer and will not
+      change the buildresult.
+    * ``-f``: additional files. Normally only c[pp] and h[pp] files will be added. You can
+            add more files using a regex.
 
 EclipseCdt
 ----------
@@ -271,3 +275,5 @@ Eclipse specificArgs:
     * ``--destination``: destination directory for the project files. Default is
       <workingDir>/projects/package_stack.
     * ``--name``: name of the project. Default is packageName.
+    * ``-I``: additional include directories. They will only be added for indexer and will not
+      change the buildresult.
