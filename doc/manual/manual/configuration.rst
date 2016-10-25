@@ -264,7 +264,7 @@ extended by plugins. The following syntax is supported:
       between single quotes, even when preceded by a backslash.
     * ``\.``: A backslash preserves the literal meaning of the following
       character. The only exception is within single quotes where backslash is
-      not recignized as meta character.
+      not recognized as meta character.
 
 .. note::
    These facilities are only available if you define ``bobMinimumVersion`` to
