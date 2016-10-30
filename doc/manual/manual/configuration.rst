@@ -264,7 +264,7 @@ extended by plugins. The following syntax is supported:
       between single quotes, even when preceded by a backslash.
     * ``\.``: A backslash preserves the literal meaning of the following
       character. The only exception is within single quotes where backslash is
-      not recignized as meta character.
+      not recognized as meta character.
 
 .. note::
    These facilities are only available if you define ``bobMinimumVersion`` to
@@ -275,6 +275,10 @@ The following built in string functions are supported:
 
 * ``$(eq,left,right)``: Returns ``true`` if the expansions of ``left`` and
   ``right`` are equal, ``false`` otherwise.
+* ``$(match,string,pattern[,flags])``: Returns ``true`` if ``pattern`` is found
+  in ``string``, ``false`` otherwise. Quoting the pattern is recommended. Flags
+  are optional. The only supported flag by now is ``i`` to ignore case while
+  searching.
 * ``$(if-then-else,condition,then,else)``: The expansion of ``condition`` is
   interpreted as boolean value. If the contition is true the expansion of
   ``then`` is returned. Otherwise ``else`` is returned.

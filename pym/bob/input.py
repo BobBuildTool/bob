@@ -2153,6 +2153,24 @@ def funAnd(args, **options):
             return "false"
     return "true"
 
+def funMatch(args, **options):
+    try:
+        [2, 3].index(len(args))
+    except ValueError:
+        raise ParseError("match expects either two or three arguments")
+
+    flags = 0
+    if len(args) == 3:
+        if args[2] == 'i':
+            flags = re.IGNORECASE
+        else:
+            raise ParseError('match only supports the ignore case flag "i"')
+
+    if re.search(args[1],args[0],flags):
+        return "true"
+    else:
+        return "false"
+
 def funIfThenElse(args, **options):
     if len(args) != 3: raise ParseError("if-then-else expects three arguments")
     if _isFalse(args[0].strip().lower()):
@@ -2250,6 +2268,7 @@ class RecipeSet:
             "not" : funNot,
             "strip" : funStrip,
             "subst" : funSubst,
+            "match" : funMatch,
         }
 
     def __addRecipe(self, recipe):

@@ -18,8 +18,9 @@ from unittest import TestCase
 from unittest.mock import MagicMock
 
 from bob.input import StringParser
-from bob.input import funEqual, funNotEqual, funNot, funOr, funAnd, \
-    funIfThenElse, funSubst, funStrip, funSandboxEnabled, funToolDefined
+from bob.input import funEqual, funNotEqual, funNot, funOr, \
+    funAnd, funMatch, funIfThenElse, funSubst, funStrip, \
+    funSandboxEnabled, funToolDefined
 from bob.errors import ParseError
 
 def echo(args, **options):
@@ -145,6 +146,25 @@ class TestStringFunctions(TestCase):
         self.assertEqual(funAnd(["true", "true", "true"]), "true")
         self.assertEqual(funAnd(["true", "1", "abq"]), "true")
         self.assertEqual(funAnd(["true", ""]), "false")
+
+    def testMatch(self):
+        self.assertEqual(funMatch(["string", "pattern"]), "false")
+        self.assertEqual(funMatch(["string", "trin"]), "true")
+        self.assertEqual(funMatch(["string", "tr(i|j|k)n"]), "true")
+        self.assertEqual(funMatch(["string", "tr[ijk]n"]), "true")
+        self.assertEqual(funMatch(["xyyz", "^xy{2}z$"]), "true")
+        self.assertEqual(funMatch(["xyyz", "^xy{1}z$"]), "false")
+        self.assertEqual(funMatch(["abc", "."]), "true")
+        self.assertEqual(funMatch(["abc", ".+"]), "true")
+        self.assertEqual(funMatch([".", "\."]), "true")
+        self.assertEqual(funMatch(["a.", "^\."]), "false")
+        self.assertEqual(funMatch(["(a)", "\(a"]), "true")
+        self.assertEqual(funMatch(["(a)", "\(a$"]), "false")
+        self.assertEqual(funMatch(["\\a)", "\\\\a\)"]), "true")
+        self.assertEqual(funMatch(["ABC", "a", "i"]), "true")
+        self.assertRaises(ParseError, funMatch, ["a"])
+        self.assertRaises(ParseError, funMatch, ["a","b","x"])
+        self.assertRaises(ParseError, funMatch, ["a","b","i","y"])
 
     def testIfThenElse(self):
         self.assertRaises(ParseError, funIfThenElse, ["a", "b"])
