@@ -21,6 +21,7 @@ import re
 import os
 import shutil
 import stat
+import xml.etree.ElementTree
 from os.path import expanduser
 from os.path import join
 from bob.errors import ParseError
@@ -115,7 +116,7 @@ def addBuildSteps(outFile, buildMeFile):
     outFile.write(' <value type="QString">ProjectExplorer.ProjectConfiguration.DisplayName</value>\n')
     outFile.write('</valuelist>\n')
 
-def generateQtProject(package, destination, updateOnly, projectName, includeDirs, filter, args):
+def generateQtProject(package, destination, updateOnly, projectName, includeDirs, filter, kit, args):
     project = "/".join(package.getStack())
 
     dirs = []
@@ -175,19 +176,33 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             for root, directories, filenames in os.walk(i):
                 hList.append(os.path.join(i,root))
 
-    # get system default project id
-    # storred in ~/.config/QtProject/qtcreator/profiles.xml
-    # <value type="QString" key="PE.Profile.Id">{4bf97dcc-3970-4b8f-97cc-b4ce38f2b2d7}</value>
-    projectid = str(-1)
+    # use default kit "Desktop" if no kit is given
+    if kit is None:
+        kit = "Desktop"
+
+    id = None
+    name = None
     try:
-        with open(os.path.join(expanduser('~'), ".config/QtProject/qtcreator/profiles.xml")) as profilesFile:
-            for line in profilesFile:
-                if 'PE.Profile.Id' in line:
-                    m = re.search('.*PE.Profile.Id">(.+?)</value>', line)
-                    if m:
-                        projectid = m.group(1)
+        profiles = xml.etree.ElementTree.parse(os.path.join(expanduser('~'), ".config/QtProject/qtcreator/profiles.xml")).getroot()
+        for profile in profiles:
+            for valuemap in profile:
+                id = None
+                name = None
+                for value in valuemap.findall('value'):
+                    if (value.attrib.get('key') == 'PE.Profile.Id'):
+                        id = str(value.text)
+                    if (value.attrib.get('key') == 'PE.Profile.Name'):
+                        name = str(value.text)
+                    if (id is not None) and (name is not None) and (name == kit):
+                        break
+                else:
+                    continue
+                break
+            else:
+                continue
+            break
     except FileNotFoundError:
-        print("No profile file found. Generated projects may not work")
+        # if kits are generared using sdk tool this is stored somewhere else...
         pass
 
     buildMeFile = os.path.join(destination, "buildme")
@@ -210,6 +225,8 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             projectCmd += " -I " + quote(i)
         if filter:
             projectCmd += " --filter " + quote(filter)
+        if kit:
+            projectCmd += " --kit " + quote(kit)
 
         buildMe.append(projectCmd)
 
@@ -222,7 +239,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
         # Generate the creator.shared file using a template and modify some settings
         sharedFile = os.path.join(destination, projectName  + ".creator.shared")
 
-        template = """<?xml version="1.0" encoding="UTF-8"?>
+        template_head = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
 <qtcreator>
  <data>
@@ -274,22 +291,9 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
  <data>
   <variable>ProjectExplorer.Project.PluginSettings</variable>
   <valuemap type="QVariantMap"/>
- </data>
- <data>
-  <variable>ProjectExplorer.Project.Target.0</variable>
-  <valuemap type="QVariantMap">
-   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">Desktop</value>
-   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">Desktop</value>
-   <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id"><!-- plugin:id --></value>
-   <value type="int" key="ProjectExplorer.Target.ActiveBuildConfiguration">0</value>
-   <value type="int" key="ProjectExplorer.Target.ActiveDeployConfiguration">0</value>
-   <value type="int" key="ProjectExplorer.Target.ActiveRunConfiguration">0</value>
-   <!-- plugin:buildstep -->
-   <value type="int" key="ProjectExplorer.Target.DeployConfigurationCount">0</value>
-   <valuemap type="QVariantMap" key="ProjectExplorer.Target.PluginSettings"/>
-   <!-- plugin:runsteps -->
-  </valuemap>
- </data>
+ </data>"""
+
+        template_foot = """
  <data>
   <variable>ProjectExplorer.Project.TargetCount</variable>
   <value type="int">1</value>
@@ -302,7 +306,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
   <variable>Version</variable>
   <value type="int">18</value>
  </data>
-</qtcreator>""".split('\n')
+</qtcreator>"""
 
         # find all executables in package dir
         runTargets = []
@@ -316,15 +320,23 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
                         runTargets.append(RunStep(os.path.join(os.getcwd(), root), filename))
 
         with open(sharedFile, 'w') as sharedFile:
-            for line in template:
-                if 'plugin:id' in line:
-                    sharedFile.write(line.replace("<!-- plugin:id -->", projectid ))
-                elif 'plugin:buildstep' in line:
-                    addBuildSteps(sharedFile, buildMeFile)
-                elif 'plugin:runsteps' in line:
-                    addRunSteps(sharedFile, runTargets)
-                else:
-                    sharedFile.write(line + '\n')
+            sharedFile.write(template_head)
+            sharedFile.write(' <data>\n')
+            sharedFile.write('  <variable>ProjectExplorer.Project.Target.0</variable>\n')
+            sharedFile.write('  <valuemap type="QVariantMap">\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">Bob</value>\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">Bob</value>\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">' + (id if id else kit) + '</value>\n')
+            sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveBuildConfiguration">0</value>\n')
+            sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveDeployConfiguration">0</value>\n')
+            sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveRunConfiguration">0</value>\n')
+            addBuildSteps(sharedFile, buildMeFile)
+            sharedFile.write('   <value type="int" key="ProjectExplorer.Target.DeployConfigurationCount">0</value>\n')
+            sharedFile.write('   <valuemap type="QVariantMap" key="ProjectExplorer.Target.PluginSettings"/>\n')
+            addRunSteps(sharedFile, runTargets)
+            sharedFile.write('  </valuemap>\n')
+            sharedFile.write(' </data>\n')
+            sharedFile.write(template_foot)
 
 def qtProjectGenerator(package, argv, extra):
     parser = argparse.ArgumentParser(prog="bob project qt-project", description='Generate QTCreator Project Files')
@@ -338,8 +350,10 @@ def qtProjectGenerator(package, argv, extra):
         help="Additional include directories. (added recursive starting from this directory)")
     parser.add_argument('-f', '--filter', metavar="Filter",
         help="File filter. A regex for matching additional files.")
+    parser.add_argument('--kit',
+        help="Kit to use for this project")
 
     args = parser.parse_args(argv)
     extra = " ".join(quote(e) for e in extra)
-    generateQtProject(package, args.destination, args.update, args.name, args.additional_includes, args.filter, extra)
+    generateQtProject(package, args.destination, args.update, args.name, args.additional_includes, args.filter, args.kit, extra)
 

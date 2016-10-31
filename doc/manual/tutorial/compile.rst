@@ -264,6 +264,31 @@ QtCreator specificArgs:
       change the buildresult.
     * ``-f``: additional files. Normally only c[pp] and h[pp] files will be added. You can
             add more files using a regex.
+    * ``--kit``: kit to use for this project. You may want to use a different sysroot for includes
+      and buildin preprocessor settings from your compiler. To tell QtCreator which toolchain to
+      use you need to specify a kit. There are at least two options to create a kit: using the GUI
+      or the sdkTools.
+
+    The following example shows how to create a cross compiling project for the sandbox-tutorial and
+    the included arm-toolchain: ::
+
+        $ sdktool addTC \
+            --id "ProjectExplorer.ToolChain.Gcc:arm" \
+            --name "ARM-Linux-Gnueabihf" \
+            --path "<toolchain-dist>/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux/bin/arm-linux-gnueabihf-g++" \
+            --abi arm-linux-generic-elf-32bit
+        $ sdktool addDebugger \
+            --id "gdb:ARM32" \
+            --name "ARM-gdb" \
+            --binary <toolchain-dist>/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux/bin/arm-linux-gnueabihf-gdb
+        $ sdktool addKit \
+            --id "ARM_Linux" \
+            --name "ARM Linux Gnueabi" \
+            --devicetype Desktop \
+            --toolchain "ProjectExplorer.ToolChain.Gcc:arm" \
+            --sysroot <toolchain-dist>/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux/arm-linux-gnueabihf/libc/ \
+            --debuggerid "gdb:ARM32"
+        $ bob project qtcreator vexpress --kit ARM_LINUX
 
 EclipseCdt
 ----------
