@@ -25,7 +25,7 @@ import xml.etree.ElementTree
 from os.path import expanduser
 from os.path import join
 from bob.errors import ParseError
-from bob.utils import summonMagic
+from bob.utils import summonMagic, hashFile
 from collections import OrderedDict, namedtuple
 from pipes import quote
 
@@ -116,6 +116,15 @@ def addBuildSteps(outFile, buildMeFile):
     outFile.write(' <value type="QString">ProjectExplorer.ProjectConfiguration.DisplayName</value>\n')
     outFile.write('</valuelist>\n')
 
+def compareAndRenameFileIfNotEqual(orig, new):
+    if os.path.exists(orig):
+        oldHash = hashFile(orig)
+        newHash = hashFile(new)
+        if (oldHash == newHash):
+            os.remove(new)
+            return
+    os.rename(new, orig)
+
 def generateQtProject(package, destination, updateOnly, projectName, includeDirs, filter, kit, args):
     project = "/".join(package.getStack())
 
@@ -168,7 +177,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             # it's faster to add all directories to includes and not to use regex, sort & remove duplicate entries
             # this also helps qt-creator to resolve includes like <linux/bitops.h> which
             # is not found in case there is no header in 'linux'
-            if not '.git' in root and not '.subversion' in root:
+            if not '.git' in root and not '.svn' in root:
                hList.append(os.path.join(os.getcwd(),root))
 
     for i in includeDirs:
@@ -207,13 +216,17 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
 
     buildMeFile = os.path.join(destination, "buildme")
 
-    # Generate the includes file
+    # Generate the includes file. Create a temporary file first and compare it with the old one.
+    # only use the new one if different to prevent reindexing after each build.
     includesFile = os.path.join(destination, projectName + ".includes")
-    generateFile(hList, includesFile)
+    generateFile(sorted(hList, key=lambda file: (os.path.dirname(file))), includesFile + ".new")
+    compareAndRenameFileIfNotEqual(includesFile, includesFile + ".new")
+
     # Generate files file
     filesFile = os.path.join(destination, projectName  + ".files")
     sList.append(buildMeFile)
-    generateFile(sList, filesFile)
+    generateFile(sorted(sList, key=lambda file: (os.path.dirname(file), os.path.basename(file))), filesFile + ".new")
+    compareAndRenameFileIfNotEqual(filesFile, filesFile + ".new")
 
     if not updateOnly:
         # Generate Buildme.sh
