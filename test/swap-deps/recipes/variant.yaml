@@ -1,0 +1,23 @@
+depends:
+    - dep
+
+buildScript: |
+    # remember dependency path
+    if [ ! -e dep.txt ] ; then
+        echo $2 >> dep.txt
+    fi
+
+    read d < dep.txt
+    cat $d/result.txt > result.txt
+
+packageVars: [UNUSED]
+packageScript: |
+    cp $1/result.txt .
+
+multiPackage:
+    a:
+        environment:
+            VARIANT: a
+    b:
+        environment:
+            VARIANT: b

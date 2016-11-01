@@ -1,0 +1,14 @@
+root: true
+
+depends:
+    - variant-a
+    - variant-b
+
+buildScript: |
+    cat $2/result.txt $3/result.txt > result.txt
+
+packageScript: |
+    echo "a" > expect.txt
+    echo "b" >> expect.txt
+    cp $1/result.txt .
+    cmp result.txt expect.txt
