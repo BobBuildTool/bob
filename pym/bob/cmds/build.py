@@ -649,7 +649,13 @@ esac
             self._setAlreadyRun(checkoutStep)
 
     def _cookBuildStep(self, buildStep, done, depth):
-        buildDigest = buildStep.getVariantId()
+        # Include actual directories of dependencies in buildDigest.
+        # Directories are reused in develop build mode and thus might change
+        # even though the variant id of this step is stable. As most tools rely
+        # on stable input directories we have to make a clean build if any of
+        # the dependency directories change.
+        buildDigest = [buildStep.getVariantId()] + [
+            i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
         if self._wasAlreadyRun(buildStep):
             prettyBuildPath = self._getAlreadyRun(buildStep)
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
