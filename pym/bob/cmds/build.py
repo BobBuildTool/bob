@@ -362,6 +362,7 @@ esac
         self.__downloadDepth = 0xffff
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
+        self.__cleanCheckout = False
 
     def setArchiveHandler(self, archive):
         self.__doDownload = True
@@ -378,6 +379,9 @@ esac
 
     def setUploadMode(self, mode):
         self.__doUpload = mode
+
+    def setCleanCheckout(self, clean):
+        self.__cleanCheckout = clean
 
     def saveBuildState(self):
         # save as plain dict
@@ -613,37 +617,49 @@ esac
                         .format(prettySrcPath), "33"))
                 else:
                     self._info("   CHECKOUT  skipped due to --build-only ({})".format(prettySrcPath))
-            elif (self.__force or (not checkoutStep.isDeterministic()) or
+            else:
+                if self.__cleanCheckout:
+                    # check state of SCMs and invalidate if the directory is unclean
+                    stats = {}
+                    for scm in checkoutStep.getScmList():
+                        stats.update({ dir : scm for dir in scm.getDirectories().keys() })
+                    for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                        if scmDir is None: continue
+                        if scmDigest != checkoutState.get(scmDir): continue
+                        if stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir) == 'unclean':
+                            oldCheckoutState[scmDir] = None
+
+                if (self.__force or (not checkoutStep.isDeterministic()) or
                     (BobState().getResultHash(prettySrcPath) is None) or
                     (checkoutState != oldCheckoutState)):
-                # move away old or changed source directories
-                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
-                    if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
-                        scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
-                        if os.path.exists(scmPath):
-                            atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
-                            print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
-                            atticPath = os.path.join(prettySrcPath, "..", "attic")
-                            if not os.path.isdir(atticPath):
-                                os.makedirs(atticPath)
-                            os.rename(scmPath, os.path.join(atticPath, atticName))
-                        del oldCheckoutState[scmDir]
-                        BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
+                    # move away old or changed source directories
+                    for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                        if ((scmDir is not None) and ((scmDigest != checkoutState.get(scmDir)))):
+                            scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                            if os.path.exists(scmPath):
+                                atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
+                                print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
+                                atticPath = os.path.join(prettySrcPath, "..", "attic")
+                                if not os.path.isdir(atticPath):
+                                    os.makedirs(atticPath)
+                                os.rename(scmPath, os.path.join(atticPath, atticName))
+                            del oldCheckoutState[scmDir]
+                            BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
-                # Store new SCM checkout state. The script state is not stored
-                # so that this step will run again if it fails. OTOH we must
-                # record the SCM directories as some checkouts might already
-                # succeeded before the step ultimately fails.
-                BobState().setDirectoryState(prettySrcPath,
-                    { d:s for (d,s) in checkoutState.items() if d is not None })
+                    # Store new SCM checkout state. The script state is not stored
+                    # so that this step will run again if it fails. OTOH we must
+                    # record the SCM directories as some checkouts might already
+                    # succeeded before the step ultimately fails.
+                    BobState().setDirectoryState(prettySrcPath,
+                        { d:s for (d,s) in checkoutState.items() if d is not None })
 
-                print(colorize("   CHECKOUT  {}".format(prettySrcPath), "32"))
-                self._runShell(checkoutStep, "checkout")
+                    print(colorize("   CHECKOUT  {}".format(prettySrcPath), "32"))
+                    self._runShell(checkoutStep, "checkout")
 
-                # reflect new checkout state
-                BobState().setDirectoryState(prettySrcPath, checkoutState)
-            else:
-                self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
+                    # reflect new checkout state
+                    BobState().setDirectoryState(prettySrcPath, checkoutState)
+                else:
+                    self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
 
             # We always have to rehash the directory as the user might have
             # changed the source code manually.
@@ -849,6 +865,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Enable sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
+    parser.add_argument('--clean-checkout', action='store_true', default=False, dest='clean_checkout',
+        help="Do a clean checkout if SCM state is unclean.")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -897,6 +915,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         raise BuildError("Invalid archive backend: "+archiveBackend)
     builder.setUploadMode(args.upload)
     builder.setDownloadMode(args.download)
+    builder.setCleanCheckout(args.clean_checkout)
     if args.resume: builder.loadBuildState()
 
     backlog = []
