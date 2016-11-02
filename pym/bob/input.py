@@ -32,6 +32,7 @@ import os, os.path
 import re
 import schema
 import shelve
+import subprocess
 import struct
 import sys
 import xml.etree.ElementTree
@@ -409,7 +410,6 @@ class PluginState:
         """
         pass
 
-
 class GitScm:
 
     SCHEMA = schema.Schema({
@@ -576,6 +576,83 @@ fi
     def hasJenkinsPlugin(self):
         return True
 
+    def callGit(self, workspacePath, *args):
+        cmdLine = ['git']
+        cmdLine.extend(args)
+        try:
+            output = subprocess.check_output(cmdLine, cwd=os.path.join(os.getcwd(), workspacePath, self.__dir),
+                universal_newlines=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            raise BuildError("git error: '{}'\n'{}'".format(" ".join(cmdLine), e.output))
+        return output
+
+    def status(self, workspacePath, dir, verbose=0):
+        scmdir = os.path.join(workspacePath, dir)
+        if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
+            return 'error'
+
+        status = ""
+        longStatus = ""
+
+        output = self.callGit(workspacePath, 'ls-remote' ,'--get-url').rstrip()
+        if output != self.__url:
+            status += "S"
+            longStatus += colorize("   > URL: configured: '{}'  actual: '{}'\n".format(self.__url, output), "33")
+        else:
+            if self.__commit:
+                output = self.callGit(workspacePath, 'rev-parse', 'HEAD').rstrip()
+                if output != self.__commit:
+                    status += "S"
+                    longStatus +=  colorize("   > commitId: configured: {}  actual: {}\n".format(self.__commit, output), "33")
+            elif self.__tag:
+                output = self.callGit(workspacePath, 'describe', '--tags', '--always').rstrip()
+                if output != self.__tag:
+                    status += "S"
+                    longStatus += colorize("    > tag: configured: {} actual: {}\n".format(self.__tag, output), "33")
+            elif self.__branch:
+                output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD').rstrip()
+                if output != self.__branch:
+                    status += "S"
+                    longStatus += colorize("    > branch: configured: {} actual: {}\n".format(self.__branch, output), "33")
+                else:
+                    output = self.callGit(workspacePath, 'rev-list', 'origin/'+self.__branch+'..HEAD')
+                    if len(output):
+                        status += "U"
+                        # do not print detailed status this point.
+                        # git log --branches --not --remotes --decorate will give the same informations.
+
+        output = self.callGit(workspacePath, 'status', '--porcelain')
+        if len(output):
+            longStatus += colorize("    > modified:\n", "33")
+            status += "M"
+            if verbose >=2:
+                for line in output.split('\n'):
+                    if line != "":
+                       longStatus += '      '+line + '\n'
+
+        # the following shows unpushed commits even on local branches. do not mark the SCM as unclean.
+        output = self.callGit(workspacePath, 'log', '--branches', '--not', '--remotes', '--decorate')
+        if len(output):
+            status += "u"
+            longStatus += colorize("     > unpushed:\n", "33")
+            if verbose >= 2:
+                for line in output.split('\n'):
+                   if line != "":
+                       longStatus += '      ' + line + '\n'
+        ret = 'clean'
+        if status == "":
+            if verbose >= 3:
+                print(colorize("   STATUS      {0}".format(scmdir), "32"))
+        elif status != "u":
+            ret = 'unclean'
+
+        if (status != "") and (verbose != 0):
+            print(colorize("   STATUS {0: <4} {1}".format(status, scmdir), "33"))
+            if (verbose >= 2) and (longStatus != ""):
+                print(longStatus)
+
+        return ret
+
 class SvnScm:
 
     SCHEMA = schema.Schema({
@@ -684,6 +761,59 @@ fi
     def hasJenkinsPlugin(self):
         return True
 
+    def callSubversion(self, workspacePath, *args):
+        cmdLine = ['svn']
+        cmdLine.extend(args)
+
+        try:
+            output = subprocess.check_output(cmdLine, cwd=workspacePath,
+                universal_newlines=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            raise BuildError("svn error: '{}' '{}'".format(" ".join(cmdLine), e.output))
+        return output
+
+    def status(self, workspacePath, dir, verbose=0):
+        scmdir = os.path.join(workspacePath, dir)
+        if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
+            return 'error'
+
+        for m in self.__modules:
+            if m['dir'] == dir:
+                break;
+
+        status = ""
+        longStatus = ""
+        svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, m['dir']), 'status')
+        if len(svnoutput):
+            status += "M"
+            longStatus += colorize("    > modified:\n", "33")
+            if verbose >= 2:
+                for line in svnoutput.split('\n'):
+                    longStatus += '       '+line.rstrip()
+
+        svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, m['dir']), 'info', '--xml')
+        info = xml.etree.ElementTree.fromstring(svnoutput)
+        entry = info.find('entry')
+        url = entry.find('url').text
+        revision = entry.attrib['revision']
+
+        if m['url'] != url:
+            status += "S"
+            longStatus += colorize("     > URLs do not match!\n     recipe:\t{}\n     svn info:\t{}".format(m['url'], url), "33")
+        if m['revision'] is not None and int(revision) != int(m['revision']):
+            status += "S"
+            longStatus += colorize("    ! wrong revision: recipe: {} svn info: {}".format(m['revision'], revision), "33")
+
+        if status == "":
+            if verbose >= 3:
+                print(colorize("   STATUS   {}".format(scmdir), "32"))
+            return 'clean'
+        else:
+            if verbose != 0:
+                print(colorize("   STATUS {0: <4} {1}".format(status, scmdir), "33"))
+            if (verbose >= 2) and (longStatus != ""):
+                print(longStatus)
+            return 'unclean'
 
 class CvsScm:
 
@@ -776,6 +906,9 @@ fi
     def hasJenkinsPlugin(self):
         return False
 
+    def status(self, workspacePath, dir, verbose = 0):
+        print("CVS SCM status not implemented!")
+        return 'error'
 
 class UrlScm:
 
@@ -910,6 +1043,8 @@ fi
     def hasJenkinsPlugin(self):
         return False
 
+    def status(self, workspacePath, dir, verbose = 0):
+        return 'clean'
 
 class ScmOverride:
     def __init__(self, override):
