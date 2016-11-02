@@ -795,14 +795,17 @@ esac
             return step.getDigest(lambda s: self._getBuildId(s, done, depth+1), True)
 
 
-def touch(packages, done=set()):
-    for p in packages:
-        if p in done: continue
-        done.add(p)
-        touch([s.getPackage() for s in p.getAllDepSteps()], done)
-        p.getCheckoutStep().getWorkspacePath()
-        p.getBuildStep().getWorkspacePath()
-        p.getPackageStep().getWorkspacePath()
+def touch(rootPackages):
+    done = set()
+    def touchStep(step):
+        if step in done: return
+        done.add(step)
+        for d in step.getAllDepSteps():
+            if d.isValid(): touchStep(d)
+        step.getWorkspacePath()
+
+    for p in sorted(rootPackages.values(), key=lambda p: p.getName()):
+        touchStep(p.getPackageStep())
 
 
 def commonBuildDevelop(parser, argv, bobRoot, develop):
@@ -876,7 +879,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
     rootPackages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if develop:
-        touch(sorted(rootPackages.values(), key=lambda p: p.getName()))
+        touch(rootPackages)
 
     builder = LocalBuilder(recipes, args.verbose - args.quiet, args.force,
                            args.no_deps, args.build_only, args.preserve_env,
@@ -977,7 +980,7 @@ def doProject(argv, bobRoot):
     nameFormatter = developPersister(nameFormatter)
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
     rootPackages = recipes.generatePackages(nameFormatter, defines)
-    touch(sorted(rootPackages.values(), key=lambda p: p.getName()))
+    touch(rootPackages)
 
     from ..generators.QtCreatorGenerator import qtProjectGenerator
     from ..generators.EclipseCdtGenerator import eclipseCdtGenerator
@@ -1181,7 +1184,7 @@ been executed or does not exist), the line is omitted.
     # Find roots
     roots = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if args.dev:
-        touch(sorted(roots.values(), key=lambda p: p.getName()))
+        touch(roots)
 
     # Loop through packages
     for p in args.packages:
