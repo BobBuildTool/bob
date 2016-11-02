@@ -1,11 +1,14 @@
 root: true
 
 depends:
-    - variant-a
+    -   name: variant-a
+        if: "$(eq,${ORDER:-ab},ab)"
     - variant-b
+    -   name: variant-a
+        if: "$(eq,${ORDER:-ab},ba)"
 
 buildScript: |
-    cat $2/result.txt $3/result.txt > result.txt
+    cat ${BOB_DEP_PATHS[variant-a]}/result.txt ${BOB_DEP_PATHS[variant-b]}/result.txt > result.txt
 
 packageScript: |
     echo "a" > expect.txt

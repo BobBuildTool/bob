@@ -9,22 +9,12 @@ if [[ "$(type -t run_bob)" != function ]] ; then
   exit 1
 fi
 
-# build in first variant
-run_bob dev root -DUNUSED=0
-V1="$(run_bob query-path --develop -DUNUSED=0 root/variant-a/dep)"
+run_bob dev root -DORDER=ab
+V1="$(run_bob query-path --develop -DORDER=ab root/variant-a/dep)"
+run_bob dev root -DORDER=ba
+V2="$(run_bob query-path --develop -DORDER=ba root/variant-a/dep)"
 
-# search for variant where dependency directories swap
-i=1
-while [[ $i -lt 100 ]] ; do
-	V2="$(run_bob query-path --develop -DUNUSED=$i root/variant-a/dep)"
-	[ "$V1" = "$V2" ] || break
-	: $(( i++ ))
-done
-
-if [ "$V1" = "$V2" ] ; then
-	echo "Could not find case where directories are swapped"
-	exit 1
+if [[ $V1 = $V2 ]] ; then
+   echo "Directories did not change as exptected" >&2
+   exit 1
 fi
-
-# build second variant incrementally
-run_bob dev root -DUNUSED=$i
