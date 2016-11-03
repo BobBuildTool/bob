@@ -1,0 +1,17 @@
+root: true
+
+depends:
+    -   name: variant-a
+        if: "$(eq,${ORDER:-ab},ab)"
+    - variant-b
+    -   name: variant-a
+        if: "$(eq,${ORDER:-ab},ba)"
+
+buildScript: |
+    cat ${BOB_DEP_PATHS[variant-a]}/result.txt ${BOB_DEP_PATHS[variant-b]}/result.txt > result.txt
+
+packageScript: |
+    echo "a" > expect.txt
+    echo "b" >> expect.txt
+    cp $1/result.txt .
+    cmp result.txt expect.txt

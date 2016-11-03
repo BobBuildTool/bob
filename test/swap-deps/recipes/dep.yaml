@@ -1,0 +1,10 @@
+checkoutScript: |
+    date --rfc-3339=ns > date.txt
+
+buildScript: |
+    cp $1/date.txt .
+
+packageVars: [VARIANT]
+packageScript: |
+    cp $1/date.txt .
+    echo "$VARIANT" > result.txt

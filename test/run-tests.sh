@@ -100,6 +100,8 @@ run_test test/generator exec_generator_test
 # run query-path test
 run_test test/query-path exec_fancy_test
 
+run_test test/swap-deps exec_fancy_test
+
 # collect coverage
 if [[ $USE_COVERAGE -eq 1 ]]; then
 	coverage3 combine test "${RUN_TEST_DIRS[@]}"
