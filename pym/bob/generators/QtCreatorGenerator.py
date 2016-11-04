@@ -232,7 +232,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
         # Generate Buildme.sh
         buildMe = []
         buildMe.append("#!/bin/sh")
-        buildMe.append("bob dev $@ " + args + " " + quote(project))
+        buildMe.append('bob dev "$@" ' + args + ' ' + quote(project))
         projectCmd = "bob project -n qt-creator " + quote(project) + " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
         for i in includeDirs:
             projectCmd += " -I " + quote(i)
