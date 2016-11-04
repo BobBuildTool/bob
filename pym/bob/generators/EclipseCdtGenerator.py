@@ -265,7 +265,7 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
         # Generate buildme
         buildMe = []
         buildMe.append("#!/bin/sh")
-        buildMe.append("bob dev $@ " + quote(args) + " " + quote(project))
+        buildMe.append('bob dev "$@" ' + quote(args) + ' ' + quote(project))
         projectCmd = "bob project -n eclipseCdt " + quote(project) + " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
         for i in additional_includes:
             projectCmd += " -I " + quote(i)
