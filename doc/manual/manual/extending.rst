@@ -105,6 +105,55 @@ processed. The default implementation in Bob looks like this::
         }
     }
 
+Additionally there is a special hook (``developNamePersister``) that is
+responsible to create a surjective mapping between steps and workspace paths
+with the restriction that different variant ids must not be mapped to the same
+directory. The hook function is taking the configured develop name formatter
+(see above) and is expected to return a callable name formatter too. The
+``developNamePersister`` must handle two cases in the following way:
+
+* The passed name formatter returns different paths for steps that have the
+  same variant id. In this case the ``developNamePersister`` should only return
+  one such path for the same variant id.
+* The name formatter returns the same path for different variant ids. In this
+  case the ``developNamePersister`` must disambiguate the path (e.g. by adding
+  a unique suffix) to return different paths for the different variants of the
+  step(s).
+
+Even though it is not strictly required by Bob it is highly recommended to map
+all steps with the same variant id to a single directory. The hook is currently
+only available for the develop mode. The default implementation in Bob is to
+append an incrementing number starting by one for each variant to the path
+returned by the configured name formatter::
+
+    def developNamePersister(nameFormatter):
+        dirs = {}
+
+        def fmt(step, props):
+            baseDir = nameFormatter(step, props)
+            digest = step.getVariantId()
+            if digest in dirs:
+                res = dirs[digest]
+            else:
+                num = dirs.setdefault(baseDir, 0) + 1
+                res = os.path.join(baseDir, str(num))
+                dirs[baseDir] = num
+                dirs[digest] = res
+            return res
+
+        return fmt
+
+    manifest = {
+        'apiVersion' : "0.1",
+        'hooks' : {
+            'developNamePersister' : developNamePersister
+        }
+    }
+
+If your name formatter generates unique names for each variant of the steps you
+may want to override the persister to change this behavior, e.g. to not add a
+number for the first variant.
+
 .. _extending-hooks-string:
 
 String functions
