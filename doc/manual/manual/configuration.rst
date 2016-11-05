@@ -226,9 +226,18 @@ sandbox for their execution.
 Inside the sandbox the result of the consumed or inherited sandbox image is
 used as root file system. Only direct inputs of the executed step are visible.
 Everything except the working directory and ``/tmp`` is mounted read only to
-restrict side effects. The sandbox image must provide everything to execute the
-steps (including bash). The only component used from the host is the Linux
-kernel and indirectly Python because Bob is written in this language.
+restrict side effects. The only component used from the host is the Linux
+kernel and indirectly Python because Bob is written in this language. The
+sandbox image must provide everything to execute the steps. In particular the
+following things must be provided by the sandbox image:
+
+* There must be a ``etc/passwd`` file containing the "nobody" user with uid
+  65534.
+* There must *not* be a ``home`` directory. Bob creates this directory on
+  demand and will fail if it already exists.
+* There must *not* be a ``tmp`` directory for the same reason.
+* At least bash 4 must be installed as ``bin/bash``. Bob uses associative
+  arrays that are not available in earlier versions.
 
 .. _configuration-principle-subst:
 

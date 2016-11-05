@@ -349,7 +349,7 @@ esac
                  envWhiteList, bobRoot, cleanBuild):
         self.__recipes = recipes
         self.__wasRun= Bijection()
-        self.__verbose = max(-2, min(2, verbose))
+        self.__verbose = max(-2, min(3, verbose))
         self.__force = force
         self.__skipDeps = skipDeps
         self.__buildOnly = buildOnly
@@ -441,6 +441,8 @@ esac
             sandboxSetup = "\"$(mktemp -d)\""
             sandbox.append(quote(os.path.join(self.__bobRoot,
                                               "bin", "namespace-sandbox")))
+            if self.__verbose >= 3:
+                sandbox.append('-D')
             sandbox.extend(["-S", "\"$_sandbox\""])
             sandbox.extend(["-W", quote(step.getExecPath())])
             sandbox.extend(["-H", "bob"])
