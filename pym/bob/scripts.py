@@ -95,8 +95,33 @@ def doHelp(extended, fd):
         print("\n{}\n".format(llCmds), file=fd)
         print("See 'bob <command> -h' for more information on a specific command.", file=fd)
 
+def catchErrors(fun, *args, **kwargs):
+    try:
+        ret = fun(*args, **kwargs)
+    except BrokenPipeError:
+        # explicitly close stderr to suppress further error messages
+        sys.stderr.close()
+        ret = 0
+    except BobError as e:
+        print(e, file=sys.stderr)
+        ret = 1
+    except KeyboardInterrupt:
+        ret = 2
+    except ImportError as e:
+        print(colorize("Python module '{}' seems to be missing. ".format(e.name) +
+                       "Please check your installation...", "31;1"),
+              file=sys.stderr)
+        ret = 3
+    except Exception:
+        print(colorize("""An internal Exception has occured. This should not have happenend.
+Please open an issue at https://github.com/BobBuildTool/bob with the following backtrace:""", "31;1"), file=sys.stderr)
+        print("Bob version", BOB_VERSION, file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        ret = 3
+
+    return ret
+
 def bob(bobRoot):
-    ret = 0
     origSysStdOut = sys.stdout
     origSysStdErr = sys.stderr
 
@@ -106,7 +131,8 @@ def bob(bobRoot):
     if not sys.stderr.isatty():
         sys.stderr = Unbuffered(sys.stderr)
 
-    try:
+    def cmd():
+        ret = 0
         while len(sys.argv) > 1:
             verb = sys.argv[1]
             argv = sys.argv[2:]
@@ -127,26 +153,10 @@ def bob(bobRoot):
             break
         else:
             doHelp(False, sys.stderr)
+        return ret
 
-    except BrokenPipeError:
-        # explicitly close stderr to suppress further error messages
-        sys.stderr.close()
-    except BobError as e:
-        print(e, file=sys.stderr)
-        ret = 1
-    except KeyboardInterrupt:
-        ret = 2
-    except ImportError as e:
-        print(colorize("Python module '{}' seems to be missing. ".format(e.name) +
-                       "Please check your installation...", "31;1"),
-              file=sys.stderr)
-        ret = 3
-    except Exception:
-        print(colorize("""An internal Exception has occured. This should not have happenend.
-Please open an issue at https://github.com/BobBuildTool/bob with the following backtrace:""", "31;1"), file=sys.stderr)
-        print("Bob version", BOB_VERSION, file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        ret = 3
+    try:
+        ret = catchErrors(cmd)
     finally:
         sys.stdout = origSysStdOut
         sys.stderr = origSysStdErr
