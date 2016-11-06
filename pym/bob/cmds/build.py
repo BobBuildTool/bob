@@ -362,6 +362,7 @@ esac
         self.__downloadDepth = 0xffff
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
+        self.__cleanCheckout = False
 
     def setArchiveHandler(self, archive):
         self.__doDownload = True
@@ -378,6 +379,9 @@ esac
 
     def setUploadMode(self, mode):
         self.__doUpload = mode
+
+    def setCleanCheckout(self, clean):
+        self.__cleanCheckout = clean
 
     def saveBuildState(self):
         # save as plain dict
@@ -613,37 +617,49 @@ esac
                         .format(prettySrcPath), "33"))
                 else:
                     self._info("   CHECKOUT  skipped due to --build-only ({})".format(prettySrcPath))
-            elif (self.__force or (not checkoutStep.isDeterministic()) or
+            else:
+                if self.__cleanCheckout:
+                    # check state of SCMs and invalidate if the directory is unclean
+                    stats = {}
+                    for scm in checkoutStep.getScmList():
+                        stats.update({ dir : scm for dir in scm.getDirectories().keys() })
+                    for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                        if scmDir is None: continue
+                        if scmDigest != checkoutState.get(scmDir): continue
+                        if stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir) == 'unclean':
+                            oldCheckoutState[scmDir] = None
+
+                if (self.__force or (not checkoutStep.isDeterministic()) or
                     (BobState().getResultHash(prettySrcPath) is None) or
                     (checkoutState != oldCheckoutState)):
-                # move away old or changed source directories
-                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
-                    if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
-                        scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
-                        if os.path.exists(scmPath):
-                            atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
-                            print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
-                            atticPath = os.path.join(prettySrcPath, "..", "attic")
-                            if not os.path.isdir(atticPath):
-                                os.makedirs(atticPath)
-                            os.rename(scmPath, os.path.join(atticPath, atticName))
-                        del oldCheckoutState[scmDir]
-                        BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
+                    # move away old or changed source directories
+                    for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                        if ((scmDir is not None) and ((scmDigest != checkoutState.get(scmDir)))):
+                            scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                            if os.path.exists(scmPath):
+                                atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
+                                print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
+                                atticPath = os.path.join(prettySrcPath, "..", "attic")
+                                if not os.path.isdir(atticPath):
+                                    os.makedirs(atticPath)
+                                os.rename(scmPath, os.path.join(atticPath, atticName))
+                            del oldCheckoutState[scmDir]
+                            BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
-                # Store new SCM checkout state. The script state is not stored
-                # so that this step will run again if it fails. OTOH we must
-                # record the SCM directories as some checkouts might already
-                # succeeded before the step ultimately fails.
-                BobState().setDirectoryState(prettySrcPath,
-                    { d:s for (d,s) in checkoutState.items() if d is not None })
+                    # Store new SCM checkout state. The script state is not stored
+                    # so that this step will run again if it fails. OTOH we must
+                    # record the SCM directories as some checkouts might already
+                    # succeeded before the step ultimately fails.
+                    BobState().setDirectoryState(prettySrcPath,
+                        { d:s for (d,s) in checkoutState.items() if d is not None })
 
-                print(colorize("   CHECKOUT  {}".format(prettySrcPath), "32"))
-                self._runShell(checkoutStep, "checkout")
+                    print(colorize("   CHECKOUT  {}".format(prettySrcPath), "32"))
+                    self._runShell(checkoutStep, "checkout")
 
-                # reflect new checkout state
-                BobState().setDirectoryState(prettySrcPath, checkoutState)
-            else:
-                self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
+                    # reflect new checkout state
+                    BobState().setDirectoryState(prettySrcPath, checkoutState)
+                else:
+                    self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
 
             # We always have to rehash the directory as the user might have
             # changed the source code manually.
@@ -849,6 +865,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Enable sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
+    parser.add_argument('--clean-checkout', action='store_true', default=False, dest='clean_checkout',
+        help="Do a clean checkout if SCM state is unclean.")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -897,6 +915,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         raise BuildError("Invalid archive backend: "+archiveBackend)
     builder.setUploadMode(args.upload)
     builder.setDownloadMode(args.download)
+    builder.setCleanCheckout(args.clean_checkout)
     if args.resume: builder.loadBuildState()
 
     backlog = []
@@ -1029,6 +1048,90 @@ def doProject(argv, bobRoot):
     print(">>", colorize("/".join(package.getStack()), "32;1"))
     print(colorize("   PROJECT   {} ({})".format(args.package, args.projectGenerator), "32"))
     generator(package, args.args, extra)
+
+def doStatus(argv, bobRoot):
+    parser = argparse.ArgumentParser(prog="bob status", description='Show SCM status')
+    parser.add_argument('packages', nargs='+', help="(Sub-)packages")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--develop', action='store_true',  dest='develop', help="Use developer mode", default=True)
+    group.add_argument('--release', action='store_false', dest='develop', help="Use release mode")
+
+    parser.add_argument('-r', '--recursive', default=False, action='store_true',
+                        help="Recursively display dependencies")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
+    parser.add_argument('-e', dest="white_list", default=[], action='append', metavar="NAME",
+        help="Preserve environment variable")
+    parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
+        help="Preserve whole environment")
+    parser.add_argument('-v', '--verbose', default=1, action='count',
+        help="Increase verbosity (may be specified multiple times)")
+    args = parser.parse_args(argv)
+
+    defines = {}
+    for define in args.defines:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+
+    recipes = RecipeSet()
+    recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
+    recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
+    recipes.defineHook('developNamePersister', LocalBuilder.developNamePersister)
+    recipes.setConfigFiles(args.configFile)
+    recipes.parse()
+
+    envWhiteList = recipes.envWhiteList()
+    envWhiteList |= set(args.white_list)
+
+    if args.develop:
+        # Develop names are stable. All we need to do is to replicate build's algorithm,
+        # and when we produce a name, check whether it exists.
+        nameFormatter = recipes.getHook('developNameFormatter')
+        developPersister = recipes.getHook('developNamePersister')
+        nameFormatter = developPersister(nameFormatter)
+    else:
+        # Release names are taken from persistence.
+        nameFormatter = LocalBuilder.releaseNameInterrogator
+    nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
+
+    roots = recipes.generatePackages(nameFormatter, defines)
+    if args.develop:
+       touch(roots)
+
+    def showStatus(package, recurse, verbose, done):
+        checkoutStep = package.getCheckoutStep()
+        if checkoutStep.isValid() and (not checkoutStep.getVariantId() in done):
+            done.add(checkoutStep.getVariantId())
+            print(">>", colorize("/".join(package.getStack()), "32;1"))
+            if checkoutStep.getWorkspacePath() is not None:
+                oldCheckoutState = BobState().getDirectoryState(checkoutStep.getWorkspacePath(), {})
+                if not os.path.isdir(checkoutStep.getWorkspacePath()):
+                    oldCheckoutState = {}
+                checkoutState = checkoutStep.getScmDirectories().copy()
+                stats = {}
+                for scm in checkoutStep.getScmList():
+                    stats.update({ dir : scm for dir in scm.getDirectories().keys() })
+                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                    if scmDir is None: continue
+                    if scmDigest != checkoutState.get(scmDir): continue
+                    stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir, verbose)
+
+        if recurse:
+            for d in package.getDirectDepSteps():
+                showStatus(d.getPackage(), recurse, verbose, done)
+
+    done = set()
+    for p in args.packages:
+        package = walkPackagePath(roots, p)
+        showStatus(package, args.recursive, args.verbose, done)
 
 ### Clean #############################
 

@@ -91,7 +91,7 @@ __bob_cook()
    elif [[ "$prev" = "-c" ]] ; then
       COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
    else
-      __bob_complete_path "-e -f --force -n --no-deps -b --build-only --clean --incremental --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose"
+      __bob_complete_path "-e -f --force --clean-checkout -n --no-deps -b --build-only --clean --incremental --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose"
    fi
 }
 
@@ -283,6 +283,15 @@ __bob_query_recipe()
     __bob_complete_path
 }
 
+__bob_status()
+{
+   if [[ "$prev" = "-c" ]] ; then
+      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
+   else
+      __bob_complete_path "-r --recursive -D -c --build --release -e -E -v"
+   fi
+}
+
 __bob_subcommands()
 {
    local i c command completion_func
@@ -318,7 +327,7 @@ __bob()
     local parse_pos=1 bob="$1" cur="$2" prev="$3"
     local sandbox=""
 
-   __bob_subcommands "build clean dev ls jenkins project query-path query-scm query-recipe"
+   __bob_subcommands "build clean dev ls jenkins project query-path query-scm query-recipe status"
 }
 else
 # Top level completion function for bash.
@@ -329,7 +338,7 @@ __bob()
 
    _get_comp_words_by_ref -n : cur prev
 
-   __bob_subcommands "build clean dev ls jenkins project query-path query-scm query-recipe"
+   __bob_subcommands "build clean dev ls jenkins project query-path query-scm query-recipe status"
 
    __ltrim_colon_completions "$cur"
 }

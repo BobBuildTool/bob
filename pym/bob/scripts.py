@@ -46,6 +46,10 @@ def __project(*args, **kwargs):
      from .cmds.build import doProject
      doProject(*args, **kwargs)
 
+def __status(*args, **kwars):
+     from .cmds.build import doStatus
+     doStatus(*args, **kwars)
+
 def __queryscm(*args, **kwargs):
      from .cmds.misc import doQuerySCM
      doQuerySCM(*args, **kwargs)
@@ -65,6 +69,7 @@ availableCommands = {
     "jenkins"       : (True, __jenkins, "Configure Jenkins server"),
     "ls"            : (True, __ls, "List package hierarchy"),
     "project"       : (True, __project, "Create project files"),
+    "status"        : (True, __status, "Show SCM status"),
 
     "query-scm"     : (False, __queryscm, "Query SCM information"),
     "query-recipe"  : (False, __queryrecipe, "Query package sources"),
