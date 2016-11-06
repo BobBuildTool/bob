@@ -870,7 +870,7 @@ class Step(metaclass=ABCMeta):
         """Get Package object that is the parent of this Step."""
         return self.__package
 
-    def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.md5):
+    def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
         h = hasher()
         if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
             d = calculate(self.__sandbox.getStep())

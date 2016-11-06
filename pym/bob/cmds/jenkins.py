@@ -71,7 +71,7 @@ class SpecHasher:
     """Track digest calculation and output as spec for bob-hash-engine"""
 
     def __init__(self):
-        self.lines = ["{md5"]
+        self.lines = ["{sha1"]
 
     def update(self, data):
         if isinstance(data, bytes):

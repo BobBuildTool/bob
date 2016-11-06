@@ -247,7 +247,8 @@ class SimpleHttpArchive(BaseArchive):
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
-            BOB_UPLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
+            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
+            BOB_UPLOAD_URL="{URL}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}.tgz"
             if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
                 curl -sSg -T {RESULT} "$BOB_UPLOAD_URL"{FIXUP}
             fi""".format(URL=self.__url, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
@@ -260,7 +261,8 @@ class SimpleHttpArchive(BaseArchive):
 
         return "\n" + textwrap.dedent("""\
             if [[ ! -e {RESULT} ]] ; then
-                BOB_DOWNLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
+                BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
+                BOB_DOWNLOAD_URL="{URL}/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}.tgz"
                 curl -sSg --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
             fi
             """.format(URL=self.__url, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
