@@ -44,5 +44,5 @@ install: all
 check:
 	@python3 -c 'import schema' || { echo "Module 'schema' missing. Please install: 'pip3 install --user schema'..." ; exit 1 ; }
 	@python3 -c 'import yaml' || { echo "Module 'yaml' missing. Please install: 'pip3 install --user PyYAML'..." ; exit 1 ; }
-	@python3 -c 'import magic' || { echo "Module 'yaml' missing. Please install: 'pip3 install --user python-magic'..." ; exit 1 ; }
+	@python3 -c 'import magic' || { echo "Module 'magic' missing. Please install: 'pip3 install --user python-magic'..." ; exit 1 ; }
 
