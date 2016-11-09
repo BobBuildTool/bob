@@ -626,7 +626,8 @@ esac
                     for (scmDir, scmDigest) in oldCheckoutState.copy().items():
                         if scmDir is None: continue
                         if scmDigest != checkoutState.get(scmDir): continue
-                        if stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir) == 'unclean':
+                        status = stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir)
+                        if (status == 'unclean') or (status == 'error'):
                             oldCheckoutState[scmDir] = None
 
                 if (self.__force or (not checkoutStep.isDeterministic()) or

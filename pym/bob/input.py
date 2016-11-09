@@ -583,73 +583,77 @@ fi
             output = subprocess.check_output(cmdLine, cwd=os.path.join(os.getcwd(), workspacePath, self.__dir),
                 universal_newlines=True, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
-            raise BuildError("git error: '{}'\n'{}'".format(" ".join(cmdLine), e.output))
+            raise BuildError("git error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
+                os.path.join(workspacePath, self.__dir), " ".join(cmdLine), e.output.rstrip()))
         return output
 
     def status(self, workspacePath, dir, verbose=0):
         scmdir = os.path.join(workspacePath, dir)
         if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
-            return 'error'
+            return 'empty'
 
         status = ""
         longStatus = ""
+        try:
+            output = self.callGit(workspacePath, 'ls-remote' ,'--get-url').rstrip()
+            if output != self.__url:
+                status += "S"
+                longStatus += colorize("   > URL: configured: '{}'  actual: '{}'\n".format(self.__url, output), "33")
+            else:
+                if self.__commit:
+                    output = self.callGit(workspacePath, 'rev-parse', 'HEAD').rstrip()
+                    if output != self.__commit:
+                        status += "S"
+                        longStatus +=  colorize("   > commitId: configured: {}  actual: {}\n".format(self.__commit, output), "33")
+                elif self.__tag:
+                    output = self.callGit(workspacePath, 'describe', '--tags', '--always').rstrip()
+                    if output != self.__tag:
+                        status += "S"
+                        longStatus += colorize("    > tag: configured: {} actual: {}\n".format(self.__tag, output), "33")
+                elif self.__branch:
+                    output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD').rstrip()
+                    if output != self.__branch:
+                        status += "S"
+                        longStatus += colorize("    > branch: configured: {} actual: {}\n".format(self.__branch, output), "33")
+                    else:
+                        output = self.callGit(workspacePath, 'rev-list', 'origin/'+self.__branch+'..HEAD')
+                        if len(output):
+                            status += "U"
+                            # do not print detailed status this point.
+                            # git log --branches --not --remotes --decorate will give the same informations.
 
-        output = self.callGit(workspacePath, 'ls-remote' ,'--get-url').rstrip()
-        if output != self.__url:
-            status += "S"
-            longStatus += colorize("   > URL: configured: '{}'  actual: '{}'\n".format(self.__url, output), "33")
-        else:
-            if self.__commit:
-                output = self.callGit(workspacePath, 'rev-parse', 'HEAD').rstrip()
-                if output != self.__commit:
-                    status += "S"
-                    longStatus +=  colorize("   > commitId: configured: {}  actual: {}\n".format(self.__commit, output), "33")
-            elif self.__tag:
-                output = self.callGit(workspacePath, 'describe', '--tags', '--always').rstrip()
-                if output != self.__tag:
-                    status += "S"
-                    longStatus += colorize("    > tag: configured: {} actual: {}\n".format(self.__tag, output), "33")
-            elif self.__branch:
-                output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD').rstrip()
-                if output != self.__branch:
-                    status += "S"
-                    longStatus += colorize("    > branch: configured: {} actual: {}\n".format(self.__branch, output), "33")
-                else:
-                    output = self.callGit(workspacePath, 'rev-list', 'origin/'+self.__branch+'..HEAD')
-                    if len(output):
-                        status += "U"
-                        # do not print detailed status this point.
-                        # git log --branches --not --remotes --decorate will give the same informations.
+            output = self.callGit(workspacePath, 'status', '--porcelain')
+            if len(output):
+                longStatus += colorize("    > modified:\n", "33")
+                status += "M"
+                if verbose >=2:
+                    for line in output.split('\n'):
+                        if line != "":
+                           longStatus += '      '+line + '\n'
 
-        output = self.callGit(workspacePath, 'status', '--porcelain')
-        if len(output):
-            longStatus += colorize("    > modified:\n", "33")
-            status += "M"
-            if verbose >=2:
-                for line in output.split('\n'):
-                    if line != "":
-                       longStatus += '      '+line + '\n'
+            # the following shows unpushed commits even on local branches. do not mark the SCM as unclean.
+            output = self.callGit(workspacePath, 'log', '--branches', '--not', '--remotes', '--decorate')
+            if len(output):
+                status += "u"
+                longStatus += colorize("     > unpushed:\n", "33")
+                if verbose >= 2:
+                    for line in output.split('\n'):
+                       if line != "":
+                           longStatus += '      ' + line + '\n'
+            ret = 'clean'
+            if status == "":
+                if verbose >= 3:
+                    print(colorize("   STATUS      {0}".format(scmdir), "32"))
+            elif status != "u":
+                ret = 'unclean'
 
-        # the following shows unpushed commits even on local branches. do not mark the SCM as unclean.
-        output = self.callGit(workspacePath, 'log', '--branches', '--not', '--remotes', '--decorate')
-        if len(output):
-            status += "u"
-            longStatus += colorize("     > unpushed:\n", "33")
-            if verbose >= 2:
-                for line in output.split('\n'):
-                   if line != "":
-                       longStatus += '      ' + line + '\n'
-        ret = 'clean'
-        if status == "":
-            if verbose >= 3:
-                print(colorize("   STATUS      {0}".format(scmdir), "32"))
-        elif status != "u":
-            ret = 'unclean'
-
-        if (status != "") and (verbose != 0):
-            print(colorize("   STATUS {0: <4} {1}".format(status, scmdir), "33"))
-            if (verbose >= 2) and (longStatus != ""):
-                print(longStatus)
+            if (status != "") and (verbose != 0):
+                print(colorize("   STATUS {0: <4} {1}".format(status, scmdir), "33"))
+                if (verbose >= 2) and (longStatus != ""):
+                    print(longStatus)
+        except BuildError as e:
+            print(e)
+            ret = 'error'
 
         return ret
 
