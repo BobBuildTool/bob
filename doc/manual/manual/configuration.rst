@@ -260,6 +260,29 @@ extended by plugins. The following syntax is supported:
     * ``${var:+alternate}``: If variable ``var`` is unset or null, nothing is
       substituted. Otherwise the expansion of ``alternate`` is substituted.
       Omitting the colon results in a test only for ``var`` being unset.
+    * ``${var%pattern}``: Removes the *shortest* substring matching ``pattern``
+      from the end of ``var``. Character ranges (``[...]``) and wildcards
+      (``*``, ``?``) in ``pattern`` are supported.
+    * ``${var%%pattern}``:  Removes the *longest* substring matching
+      ``pattern`` from the end of ``var``. Character ranges (``[...]``) and
+      wildcards (``*``, ``?``) in ``pattern`` are supported.
+    * ``${var#pattern}``: Removes the *shortest* substring matching ``pattern``
+      from the beginning of ``var``. Character ranges (``[...]``) and wildcards
+      (``*``, ``?``) in ``pattern`` are supported.
+    * ``${var##pattern}``:  Removes the *longest* substring matching ``pattern``
+      from the beginning of ``var``. Character ranges (``[...]``) and wildcards
+      (``*``, ``?``) in ``pattern`` are supported.
+    * ``${var/pattern/string}``: Substitutes the *first* occurence of
+      ``pattern`` in ``var`` with ``string``.  Character ranges (``[...]``) and
+      wildcards (``*``, ``?``) in ``pattern`` are supported.
+    * ``${var//pattern/string}``: Substitutes *all* occurences of ``pattern`` in
+      ``var`` with ``string``.  Character ranges (``[...]``) and wildcards
+      (``*``, ``?``) in ``pattern`` are supported.
+    * ``${var,}``: Converts the *first* character of ``var`` to lowercase.
+    * ``${var,,}``: Converts *all* characters of ``var`` to lowercase.
+    * ``${var^}``: Converts the *first* character of ``var`` to uppercase.
+    * ``${var^^}``: Converts *all* characters of ``var`` to uppercase.
+
 * ``$(fun,arg1,...)``: Substitutes the result of calling ``fun`` with the given
   arguments. Unlike unix shells, which employ word splitting at whitespaces, the
   function arguments are separated by commas. Any white spaces are kept and belong
@@ -277,8 +300,11 @@ extended by plugins. The following syntax is supported:
 
 .. note::
    These facilities are only available if you define ``bobMinimumVersion`` to
-   at least "0.3" in your :ref:`configuration-config`. Otherwise the only available
-   substitutions are ``$VAR`` and ``${VAR}``.
+   at least "0.3" in your :ref:`configuration-config`. Otherwise the only
+   available substitutions are ``$VAR`` and ``${VAR}``. Substring removal
+   (``#``, ``##``, ``%``, ``%%``), case modification (``^``, ``^^``, ``,``,
+   ``,,``) as well as search and replace (``//``, ``/``) are available in
+   versions above "0.7.1".
 
 The following built in string functions are supported:
 

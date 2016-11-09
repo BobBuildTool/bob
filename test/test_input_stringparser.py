@@ -17,7 +17,7 @@
 from unittest import TestCase
 from unittest.mock import MagicMock
 
-from bob.input import StringParser
+from bob.parser import StringParser, substituteParseResult
 from bob.input import funEqual, funNotEqual, funNot, funOr, \
     funAnd, funMatch, funIfThenElse, funSubst, funStrip, \
     funSandboxEnabled, funToolDefined
@@ -34,79 +34,183 @@ def echo(args, **options):
 class TestStringParser(TestCase):
 
     def setUp(self):
-        self.p = StringParser(
-            {
-                "asdf": "qwer",
-                "xyz" : "123",
-                "null" : "",
-                "indirect" : "asdf"
-            },
-            {"echo" : echo},
-            {})
+        self.p = StringParser()
+
+        self.env = {
+            "asdf": "qwer",
+            "ASDF": "QWER",
+            "xyxx": "xyxx",
+            "xyz" : "123",
+            "null" : "",
+            "indirect" : "asdf",
+            "special1"  : "{{//",
+            "special2"  : "{{}}"
+            }
+
+        self.funs = { "echo" : echo }
+
+        self.funArgs = {}
 
     def tearDown(self):
         self.p = None
 
+    def parse( self, input ):
+        text, tokens = self.p.parse( input )
+        return substituteParseResult( tokens, self.env, self.funs, self.funArgs )
+
     def testNoSubst(self):
-        self.assertEqual(self.p.parse("string"), "string")
-        self.assertEqual(self.p.parse('asdf"123"gf'), "asdf123gf")
-        self.assertEqual(self.p.parse('a\'sd\'f"123"gf'), "asdf123gf")
+        self.assertEqual(self.parse("string"), "string")
+        self.assertEqual(self.parse('asdf"123"gf'), "asdf123gf")
+        self.assertEqual(self.parse('a\'sd\'f"123"gf'), "asdf123gf")
 
     def testVariables(self):
-        self.assertEqual(self.p.parse("${asdf}"), "qwer")
-        self.assertEqual(self.p.parse(">${asdf}<"), ">qwer<")
-        self.assertEqual(self.p.parse("..${asdf}..${xyz}.."), "..qwer..123..")
+        self.assertEqual(self.parse("${asdf}"), "qwer")
+        self.assertEqual(self.parse(">${asdf}<"), ">qwer<")
+        self.assertEqual(self.parse("..${asdf}..${xyz}.."), "..qwer..123..")
 
-        self.assertEqual(self.p.parse("${asdf:-foobar}"), "qwer")
-        self.assertEqual(self.p.parse("${asdf:+foobar}"), "foobar")
-        self.assertEqual(self.p.parse("${asdf-foobar}"), "qwer")
-        self.assertEqual(self.p.parse("${asdf+foobar}"), "foobar")
+        self.assertEqual(self.parse("${asdf:-foobar}"), "qwer")
+        self.assertEqual(self.parse("${asdf:+foobar}"), "foobar")
+        self.assertEqual(self.parse("${asdf-foobar}"), "qwer")
+        self.assertEqual(self.parse("${asdf+foobar}"), "foobar")
 
-        self.assertEqual(self.p.parse("${null:-foobar}"), "foobar")
-        self.assertEqual(self.p.parse("${null:+foobar}"), "")
-        self.assertEqual(self.p.parse("${null-foobar}"), "")
-        self.assertEqual(self.p.parse("${null+foobar}"), "foobar")
+        self.assertEqual(self.parse("${null:-foobar}"), "foobar")
+        self.assertEqual(self.parse("${null:+foobar}"), "")
+        self.assertEqual(self.parse("${null-foobar}"), "")
+        self.assertEqual(self.parse("${null+foobar}"), "foobar")
 
-        self.assertEqual(self.p.parse("${unset:-foobar}"), "foobar")
-        self.assertEqual(self.p.parse("${unset:+foobar}"), "")
-        self.assertEqual(self.p.parse("${unset-foobar}"), "foobar")
-        self.assertEqual(self.p.parse("${unset+foobar}"), "")
+        self.assertEqual(self.parse("${unset:-foobar}"), "foobar")
+        self.assertEqual(self.parse("${unset:+foobar}"), "")
+        self.assertEqual(self.parse("${unset-foobar}"), "foobar")
+        self.assertEqual(self.parse("${unset+foobar}"), "")
+
+        self.assertEqual(self.parse("${asdf^}"), "Qwer")
+        self.assertEqual(self.parse("${asdf^^}"), "QWER")
+        self.assertEqual(self.parse("${ASDF,}"), "qWER")
+        self.assertEqual(self.parse("${ASDF,,}"), "qwer")
+
+        self.assertEqual(self.parse("${xyxx%x}"), "xyx")
+        self.assertEqual(self.parse("${xyxx%y}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx%y*}"), "x")
+        self.assertEqual(self.parse("${xyxx%x*}"), "xyx")
+        self.assertEqual(self.parse("${xyxx%*x}"), "xyx")
+        self.assertEqual(self.parse("${xyxx%*}"), "xyx")
+        self.assertEqual(self.parse("${xyxx%a}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx%a*}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx%*a}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx%??}"), "xy")
+        self.assertEqual(self.parse("${xyxx%\??}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx%%x*}"), "")
+        self.assertEqual(self.parse("${xyxx%%*x}"), "")
+        self.assertEqual(self.parse("${xyxx%%y*}"), "x")
+        self.assertEqual(self.parse("${xyxx%%*}"), "")
+        self.assertEqual(self.parse("${xyxx%%a}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx%%a*}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx%%*a}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx%%??}"), "xy")
+        self.assertEqual(self.parse("${xyxx%%?\?}"), "xyxx")
+        self.assertEqual(self.parse("${null%a*}"), "")
+        self.assertEqual(self.parse("${null%%a*}"), "")
+
+        self.assertEqual(self.parse("${xyxx#x}"), "yxx")
+        self.assertEqual(self.parse("${xyxx#x*}"), "yxx")
+        self.assertEqual(self.parse("${xyxx#*x}"), "yxx")
+        self.assertEqual(self.parse("${xyxx#*y}"), "xx")
+        self.assertEqual(self.parse("${xyxx#y*}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx#a}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx#*}"), "yxx")
+        self.assertEqual(self.parse("${xyxx##*x}"), "")
+        self.assertEqual(self.parse("${xyxx##x*}"), "")
+        self.assertEqual(self.parse("${xyxx##y*}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx##*y}"), "xx")
+        self.assertEqual(self.parse("${xyxx##y*}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx##a}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx##*}"), "")
+        self.assertEqual(self.parse("${null#a*}"), "")
+        self.assertEqual(self.parse("${null##a*}"), "")
+
+        self.assertEqual(self.parse("${special1/\//}"), "{{/")
+        self.assertEqual(self.parse("${special1//\//}"), "{{")
+        self.assertEqual(self.parse("${special1%/}"), "{{/")
+        self.assertEqual(self.parse("${special1%%/*}"), "{{")
+        self.assertEqual(self.parse("${special2%\}}"), "{{}")
+        self.assertEqual(self.parse("${special2%%\}*}"), "{{")
+        self.assertEqual(self.parse("${special2#\{}"), "{}}")
+        self.assertEqual(self.parse("${special2##*\{}"), "}}")
+
+        self.assertEqual(self.parse("${xyxx/x/a}"), "ayxx")
+        self.assertEqual(self.parse("${xyxx//x/a}"), "ayaa")
+        self.assertEqual(self.parse("${xyxx/[a-z]/a}"), "ayxx")
+        self.assertEqual(self.parse("${xyxx//[a-z]/a}"), "aaaa")
+        self.assertEqual(self.parse("${xyxx//[a-w]/a}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx/[a-w]/a}"), "xyxx")
+        self.assertEqual(self.parse("${xyxx/*/a}"), "a")
+        self.assertEqual(self.parse("${xyxx//*/a}"), "a")
+        self.assertEqual(self.parse("${xyxx/y*/a}"), "xa")
+        self.assertEqual(self.parse("${xyxx//y*/a}"), "xa")
+        self.assertEqual(self.parse("${xyxx//y*/a}"), "xa")
+        self.assertEqual(self.parse("${xyxx//y*/}"), "x")
+        self.assertEqual(self.parse("${xyxx/y/}"), "xxx")
+        self.assertEqual(self.parse("${xyxx//y/}"), "xxx")
+        self.assertEqual(self.parse("${xyxx//${xyxx}/${special1}}"), "{{//")
+
+        self.assertEqual(self.parse("${asdf/${${indirect}}/hey}"), "hey")
+        self.assertEqual(self.parse("${asdf/${${indirect}}''/hey}"), "qwer")
 
     def testAdvancedVariabled(self):
-        self.assertEqual(self.p.parse("${unset:->${asdf}}"), ">qwer")
-        self.assertEqual(self.p.parse("""${unset:-">${asdf}"}"""), ">qwer")
+        self.assertEqual(self.parse("${unset:->${asdf}}"), ">qwer")
+        self.assertEqual(self.parse("""${unset:-">${asdf}"}"""), ">qwer")
 
     def testIndirectVariables(self):
-        self.assertEqual(self.p.parse("${${indirect}}"), "qwer")
-        self.assertEqual(self.p.parse("${${indirect}:+alternate}"), "alternate")
-        self.assertEqual(self.p.parse("${${asdf}:-default}"), "default")
+        self.assertEqual(self.parse("${${indirect}}"), "qwer")
+        self.assertEqual(self.parse("${${indirect}:+alternate}"), "alternate")
+        self.assertEqual(self.parse("${${asdf}:-default}"), "default")
 
     def testCommandSubst(self):
-        self.assertEqual(self.p.parse("$(echo,foo,bar)"), "1:foo;2:bar")
-        self.assertEqual(self.p.parse("$(echo,foo bar )"), "1:foo bar ")
-        self.assertEqual(self.p.parse("$(echo,\"foo,bar\" )"), "1:foo,bar ")
-        self.assertEqual(self.p.parse("$(echo,foo \"${asdf} bar\" )"), "1:foo qwer bar ")
-        self.assertEqual(self.p.parse("$(echo,\'foo ${asdf} bar)\' )"), "1:foo ${asdf} bar) ")
-        self.assertEqual(self.p.parse("$(echo,a,${null})"), "1:a;2:")
-        self.assertEqual(self.p.parse("$(echo,a \"${null}\" )"), "1:a  ")
+        self.assertEqual(self.parse("$(echo,foo,bar)"), "1:foo;2:bar")
+        self.assertEqual(self.parse("$(echo,foo bar )"), "1:foo bar ")
+        self.assertEqual(self.parse("$(echo,\"foo,bar\" )"), "1:foo,bar ")
+        self.assertEqual(self.parse("$(echo,foo \"${asdf} bar\" )"), "1:foo qwer bar ")
+        self.assertEqual(self.parse("$(echo,\'foo ${asdf} bar)\' )"), "1:foo ${asdf} bar) ")
+        self.assertEqual(self.parse("$(echo,a,${null})"), "1:a;2:")
+        self.assertEqual(self.parse("$(echo,a \"${null}\" )"), "1:a  ")
+
+    def testNesting(self):
+        self.assertEqual(self.parse("${xyxx%${xyxx%y*}}"), "xyx")
+
+        self.assertEqual(self.parse(
+            "$(echo,$(echo,a \"${null:-large ${asdf^^}} word\" ))"),
+            "1:1:a large QWER word "
+            )
+        self.assertEqual(self.parse(
+            "$(echo,$(echo,${asdf},no \"${null:-large '${asdf^^}'} word\" ))"),
+            "1:1:qwer;2:no large ${asdf^^} word "
+            )
+
+        self.assertEqual(self.parse(
+            "${null:-${${indirect}} to something};$(echo,$(echo,${asdf},no \"${null:-large '${asdf^^}'} word\" ))"),
+            "qwer to something;1:1:qwer;2:no large ${asdf^^} word "
+            )
 
     def testEscaping(self):
-        self.assertEqual(self.p.parse("as\\df"), "asdf")
-        self.assertEqual(self.p.parse("as\\'df"), "as'df")
-        self.assertEqual(self.p.parse("\\${null+foobar}"), "${null+foobar}")
-        self.assertEqual(self.p.parse("${null:-\\}}"), "}")
-        self.assertEqual(self.p.parse("$(echo,foo\\,bar)"), "1:foo,bar")
+        self.assertEqual(self.parse(r"as\df"), r"asdf")
+        self.assertEqual(self.parse(r"as\\df"), r"as\df")
+        self.assertEqual(self.parse(r"as\'df"), r"as'df")
+        self.assertEqual(self.parse("\\${null+foobar}"), "${null+foobar}")
+        self.assertEqual(self.parse("${null:-\\}}"), "}")
+        self.assertEqual(self.parse("${null:-\\\\}}"), "\}")
+        self.assertEqual(self.parse(r"${null:-\\}}"), "\}")
+        self.assertEqual(self.parse("$(echo,foo\,bar)"), "1:foo,bar")
+        self.assertEqual(self.parse("$(echo,foo\\,bar)"), "1:foo,bar")
+        self.assertEqual(self.parse(r"$(echo,foo\\,bar)"), "1:foo\;2:bar")
 
     def testFails(self):
-        self.assertRaises(ParseError, self.p.parse, "$")
-        self.assertRaises(ParseError, self.p.parse, "asdf\\")
-        self.assertRaises(ParseError, self.p.parse, "as'df")
-        self.assertRaises(ParseError, self.p.parse, "$<asdf>")
-        self.assertRaises(ParseError, self.p.parse, "${asdf")
-        self.assertRaises(ParseError, self.p.parse, "${unknown}")
-        self.assertRaises(ParseError, self.p.parse, "${asdf:")
-        self.assertRaises(ParseError, self.p.parse, "$()")
-        self.assertRaises(ParseError, self.p.parse, "$(unknown)")
+        self.assertRaises(ParseError, self.parse, "asdf\"")
+        self.assertRaises(ParseError, self.parse, "as'df")
+        self.assertRaises(ParseError, self.parse, "${asdf")
+        self.assertRaises(ParseError, self.parse, "${unknown}")
+        self.assertRaises(ParseError, self.parse, "${asdf:")
+        self.assertRaises(ParseError, self.parse, "$()")
+        self.assertRaises(ParseError, self.parse, "$(unknown)")
 
 class TestStringFunctions(TestCase):
 
