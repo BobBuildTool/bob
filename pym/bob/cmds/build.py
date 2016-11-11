@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from ..archive import DummyArchive, getArchiver
 from ..errors import BuildError, ParseError
 from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
@@ -22,15 +23,12 @@ from ..utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirector
 from datetime import datetime
 from glob import glob
 from pipes import quote
-from tempfile import TemporaryFile
 import argparse
 import datetime
 import os
 import shutil
 import stat
 import subprocess
-import tarfile
-import urllib.request, urllib.error
 
 # Output verbosity:
 #    <= -2: package name
@@ -61,106 +59,6 @@ class Bijection(dict):
 def hashWorkspace(step):
     return hashDirectory(step.getWorkspacePath(),
         os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
-
-class DummyArchive:
-    def uploadPackage(self, buildId, path):
-        pass
-
-    def downloadPackage(self, buildId, path):
-        return False
-
-class LocalArchive:
-    def __init__(self, spec):
-        self.__basePath = os.path.abspath(spec["path"])
-
-    def uploadPackage(self, buildId, path):
-        packageResultId = asHexStr(buildId)
-        packageResultPath = os.path.join(self.__basePath, packageResultId[0:2],
-                                         packageResultId[2:4])
-        packageResultFile = os.path.join(packageResultPath,
-                                         packageResultId[4:]) + ".tgz"
-        if os.path.isfile(packageResultFile):
-            print("   UPLOAD    skipped ({} exists in archive)".format(path))
-            return
-
-        print(colorize("   UPLOAD    {}".format(path), "32"))
-        if not os.path.isdir(packageResultPath): os.makedirs(packageResultPath)
-        with tarfile.open(packageResultFile, "w:gz") as tar:
-            tar.add(path, arcname=".")
-
-    def downloadPackage(self, buildId, path):
-        print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
-        packageResultId = asHexStr(buildId)
-        packageResultPath = os.path.join(self.__basePath, packageResultId[0:2],
-                                         packageResultId[2:4])
-        packageResultFile = os.path.join(packageResultPath,
-                                         packageResultId[4:]) + ".tgz"
-        if os.path.isfile(packageResultFile):
-            removePath(path)
-            os.makedirs(path)
-            with tarfile.open(packageResultFile, "r:gz") as tar:
-                tar.extractall(path)
-            print(colorize("ok", "32"))
-            return True
-        else:
-            print(colorize("not found", "33"))
-            return False
-
-
-class SimpleHttpArchive:
-    def __init__(self, spec):
-        self.__url = spec["url"]
-
-    def _makeUrl(self, buildId):
-        packageResultId = asHexStr(buildId)
-        return "/".join([self.__url, packageResultId[0:2], packageResultId[2:4],
-            packageResultId[4:] + ".tgz"])
-
-    def uploadPackage(self, buildId, path):
-        url = self._makeUrl(buildId)
-
-        # check if already there
-        try:
-            try:
-                req = urllib.request.Request(url=url, method='HEAD')
-                f = urllib.request.urlopen(req)
-                print("   UPLOAD    skipped ({} exists in archive)".format(path))
-                return
-            except urllib.error.HTTPError as e:
-                if e.code != 404:
-                    raise BuildError("Error for HEAD on "+url+": "+e.reason)
-
-            print(colorize("   UPLOAD    {}".format(path), "32"))
-            with TemporaryFile() as tmpFile:
-                with tarfile.open(fileobj=tmpFile, mode="w:gz") as tar:
-                    tar.add(path, arcname=".")
-                tmpFile.seek(0)
-                req = urllib.request.Request(url=url, data=tmpFile.read(),
-                                             method='PUT')
-                f = urllib.request.urlopen(req)
-        except urllib.error.URLError as e:
-            raise BuildError("Error uploading package: "+str(e.reason))
-
-    def downloadPackage(self, buildId, path):
-        ret = False
-        print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
-        url = self._makeUrl(buildId)
-        try:
-            (localFilename, headers) = urllib.request.urlretrieve(url)
-            removePath(path)
-            os.makedirs(path)
-            with tarfile.open(localFilename, "r:gz", errorlevel=1) as tar:
-                tar.extractall(path)
-            ret = True
-            print(colorize("ok", "32"))
-        except urllib.error.URLError as e:
-            print(colorize(str(e.reason), "33"))
-        except OSError as e:
-            raise BuildError("Error: " + str(e))
-        finally:
-            urllib.request.urlcleanup()
-
-        return ret
 
 class LocalBuilder:
 
@@ -358,8 +256,6 @@ esac
         self.__envWhiteList = envWhiteList
         self.__currentPackage = None
         self.__archive = DummyArchive()
-        self.__doDownload = False
-        self.__doUpload = False
         self.__downloadDepth = 0xffff
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
@@ -368,20 +264,24 @@ esac
         self.__skipped = set()  # steps that were visited but skipped due to checkoutOnly
 
     def setArchiveHandler(self, archive):
-        self.__doDownload = True
         self.__archive = archive
 
     def setDownloadMode(self, mode):
+        self.__downloadDepth = 0xffff
         if mode == 'yes':
-            self.__downloadDepth = 0
+            self.__archive.wantDownload(True)
+            if self.__archive.canDownload():
+                self.__downloadDepth = 0
         elif mode == 'deps':
-            self.__downloadDepth = 1
+            self.__archive.wantDownload(True)
+            if self.__archive.canDownload():
+                self.__downloadDepth = 1
         else:
             assert mode == 'no'
-            self.__downloadDepth = 0xffff
+            self.__archive.wantDownload(False)
 
     def setUploadMode(self, mode):
-        self.__doUpload = mode
+        self.__archive.wantUpload(mode)
 
     def setCleanCheckout(self, clean):
         self.__cleanCheckout = clean
@@ -783,7 +683,7 @@ esac
             elif checkoutOnly:
                 # Just the sources! Don't trigger a download dude...
                 packageBuildId = None
-            elif self.__doDownload or self.__doUpload:
+            elif self.__archive.canDownload() or self.__archive.canUpload():
                 # up- or download with valid package -> get BuildId
                 packageBuildId = self._getBuildId(packageStep, depth)
             else:
@@ -827,7 +727,7 @@ esac
                     emptyDirectory(prettyPackagePath)
                     self._runShell(packageStep, "package")
                     packageExecuted = True
-                    if packageBuildId and self.__doUpload:
+                    if packageBuildId and self.__archive.canUpload():
                         self.__archive.uploadPackage(packageBuildId, prettyPackagePath)
             else:
                 # do not change input hashes
@@ -947,14 +847,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                            args.no_deps, args.build_only, args.preserve_env,
                            envWhiteList, bobRoot, args.clean)
 
-    archiveSpec = recipes.archiveSpec()
-    archiveBackend = archiveSpec.get("backend", "none")
-    if archiveBackend == "file":
-        builder.setArchiveHandler(LocalArchive(archiveSpec))
-    elif archiveBackend == "http":
-        builder.setArchiveHandler(SimpleHttpArchive(archiveSpec))
-    elif archiveBackend != "none":
-        raise BuildError("Invalid archive backend: "+archiveBackend)
+    builder.setArchiveHandler(getArchiver(recipes))
     builder.setUploadMode(args.upload)
     builder.setDownloadMode(args.download)
     builder.setCleanCheckout(args.clean_checkout)

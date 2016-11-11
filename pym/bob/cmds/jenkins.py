@@ -14,10 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from ..archive import getArchiver
 from ..errors import ParseError, BuildError
 from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
-from ..tty import colorize, WarnOnce
+from ..tty import WarnOnce
 from ..utils import asHexStr
 from pipes import quote
 import argparse
@@ -44,55 +45,6 @@ requiredPlugins = {
     "subversion" : "Jenkins Subversion Plug-in",
     "ws-cleanup" : "Jenkins Workspace Cleanup Plugin",
 }
-
-class DummyArchive:
-    """Archive that does nothing"""
-    def upload(self, step):
-        return ""
-    def download(self, step):
-        return ""
-
-class SimpleHttpArchive:
-    """HTTP archive uploader"""
-
-    def __init__(self, spec, download, upload):
-        self.__url = spec["url"]
-        self.__download = download
-        self.__upload = upload
-
-    def upload(self, step):
-        # only upload if requested
-        if not self.__upload:
-            return ""
-
-        # only upload tools if built in sandbox
-        if step.doesProvideTools() and (step.getSandbox() is None):
-            return ""
-
-        # upload with curl if file does not exist yet on server
-        return "\n" + textwrap.dedent("""\
-            # upload artifact
-            cd $WORKSPACE
-            BOB_UPLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
-            if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
-                curl -sSg -T {RESULT} "$BOB_UPLOAD_URL" || echo Upload failed: $?
-            fi""".format(URL=self.__url, BUILDID=quote(JenkinsJob._buildIdName(step)),
-                         RESULT=quote(JenkinsJob._tgzName(step))))
-
-    def download(self, step):
-        # only download if requested
-        if not self.__download:
-            return ""
-
-        # only download tools if built in sandbox
-        if step.doesProvideTools() and (step.getSandbox() is None):
-            return ""
-
-        return "\n" + textwrap.dedent("""\
-            BOB_DOWNLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
-            curl -sSg --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
-            """.format(URL=self.__url, BUILDID=quote(JenkinsJob._buildIdName(step)),
-                       RESULT=quote(JenkinsJob._tgzName(step))))
 
 
 def genHexSlice(data, i = 0):
@@ -580,7 +532,7 @@ class JenkinsJob:
         # download if possible
         downloadCmds = []
         for d in sorted(self.__packageSteps.values()):
-            cmd = self.__archive.download(d)
+            cmd = self.__archive.download(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             if not cmd: continue
             downloadCmds.append(cmd)
         if downloadCmds:
@@ -607,7 +559,7 @@ class JenkinsJob:
                 "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
                 "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getWorkspacePath()),
-                self.__archive.upload(d)
+                self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             ])
             publish.append(JenkinsJob._tgzName(d))
             publish.append(JenkinsJob._buildIdName(d))
@@ -779,16 +731,9 @@ def genJenkinsJobs(recipes, jenkins):
     jobs = {}
     config = BobState().getJenkinsConfig(jenkins)
     prefix = config["prefix"]
-    archiveHandler = DummyArchive()
-    upload = config.get("upload", False)
-    download = config.get("download", False)
-    if download or upload:
-        archiveSpec = recipes.archiveSpec()
-        archiveBackend = archiveSpec.get("backend", "none")
-        if archiveBackend == "http":
-            archiveHandler = SimpleHttpArchive(archiveSpec, download, upload)
-        elif archiveBackend != "none":
-            print("Ignoring unsupported archive backend:", archiveBackend)
+    archiveHandler = getArchiver(recipes)
+    archiveHandler.wantUpload(config.get("upload", False))
+    archiveHandler.wantDownload(config.get("download", False))
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
     rootPackages = recipes.generatePackages(
         jenkinsNamePersister(jenkins, nameFormatter),
