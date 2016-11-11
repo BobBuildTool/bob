@@ -24,9 +24,10 @@ import stat
 import xml.etree.ElementTree
 from os.path import expanduser
 from os.path import join
-from bob.errors import ParseError
+from bob.errors import BuildError
 from bob.utils import summonMagic, hashFile
 from collections import OrderedDict, namedtuple
+from bob.tty import colorize
 from pipes import quote
 
 # scan package recursivelely with its dependencies and build a list of checkout dirs
@@ -187,10 +188,13 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
 
     # use default kit "Desktop" if no kit is given
     if kit is None:
-        kit = "Desktop"
+        _kit = re.compile(r".*Desktop.*")
+    else:
+        _kit = re.compile(r""+kit)
 
     id = None
     name = None
+    kits = []
     try:
         profiles = xml.etree.ElementTree.parse(os.path.join(expanduser('~'), ".config/QtProject/qtcreator/profiles.xml")).getroot()
         for profile in profiles:
@@ -202,17 +206,24 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
                         id = str(value.text)
                     if (value.attrib.get('key') == 'PE.Profile.Name'):
                         name = str(value.text)
-                    if (id is not None) and (name is not None) and (name == kit):
+                    if (id is not None) and (name is not None) and (_kit.match(name)):
+                        kits.append([name, id])
                         break
-                else:
-                    continue
-                break
-            else:
-                continue
-            break
     except FileNotFoundError:
-        # if kits are generared using sdk tool this is stored somewhere else...
+        # if kits are generared using sdk tool they are stored somewhere else... (/usr/share...)
         pass
+
+    if (len(kits) == 0):
+        if (kit is None):
+            raise BuildError("No kit found!",
+                help = "Run again with '--kit' and specify a kit or generate a Desktop kit, which is used by default.")
+        kitName = kit
+        kitId = kit
+    else:
+        if (len(kits) > 1):
+            print(colorize("Warning: {} kits found. Using '{}'.".format(len(kits), str(kits[0][0])), "33"))
+        kitName = kits[0][0]
+        kitId = kits[0][1]
 
     buildMeFile = os.path.join(destination, "buildme")
 
@@ -337,9 +348,9 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             sharedFile.write(' <data>\n')
             sharedFile.write('  <variable>ProjectExplorer.Project.Target.0</variable>\n')
             sharedFile.write('  <valuemap type="QVariantMap">\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">Bob</value>\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">Bob</value>\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">' + (id if id else kit) + '</value>\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">' + kitName + '</value>\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">' + kitName + '</value>\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">' + kitId + '</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveBuildConfiguration">0</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveDeployConfiguration">0</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveRunConfiguration">0</value>\n')

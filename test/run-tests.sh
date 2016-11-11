@@ -52,7 +52,7 @@ exec_generator_test()
 	diff -u <(grep '^PLUGIN' log.txt) output-plugin.txt
 
 	# run and generate
-	run_bob project qt-creator root > log.txt
+	run_bob project qt-creator root --kit 'dummy' > log.txt
 	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
 	diff -Nurp $RES output
 	
