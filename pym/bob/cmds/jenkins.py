@@ -1113,6 +1113,10 @@ def doJenkinsPush(recipes, argv):
                         help="Overwrite existing jobs")
     parser.add_argument("--no-trigger", action="store_true", default=False,
                         help="Do not trigger build for updated jobs")
+    parser.add_argument('-q', '--quiet', default=0, action='count',
+        help="Decrease verbosity (may be specified multiple times)")
+    parser.add_argument('-v', '--verbose', default=0, action='count',
+        help="Increase verbosity (may be specified multiple times)")
     args = parser.parse_args(argv)
 
     if args.name not in BobState().getAllJenkins():
@@ -1139,11 +1143,14 @@ def doJenkinsPush(recipes, argv):
     clean = config.get("clean", False)
     updatedJobs = {}
 
+    verbose = args.verbose - args.quiet
     try:
         # construct headers
         headers = getHeaders(connection, config)
 
         # verify plugin state
+        if verbose >= 2:
+            print("Check available plugins...")
         checkPlugins(connection, urlPath, headers)
 
         # push new jobs / reconfigure existing ones
@@ -1164,6 +1171,8 @@ def doJenkinsPush(recipes, argv):
             # get original XML if it exists
             origXML = None
             if name in existingJobs:
+                if verbose >= 2:
+                    print("Retrive configuration of '{}'...".format(name))
                 connection.request("GET", urlPath + "job/" + name + "/config.xml",
                                    headers=headers)
                 response = connection.getresponse()
@@ -1204,9 +1213,13 @@ def doJenkinsPush(recipes, argv):
 
             if name in existingJobs:
                 if BobState().getJenkinsJobConfig(args.name, name) == jobConfig:
+                    if verbose >= 1:
+                        print("Skip '{}' (unchanged)...".format(name))
                     # skip job if unchanged
                     continue
 
+                if verbose >= 0:
+                    print("Reconfigure '{}'...".format(name))
                 connection.request("POST", urlPath + "job/" + name + "/config.xml",
                     body=jobXML, headers=headers)
                 response = connection.getresponse()
@@ -1215,11 +1228,15 @@ def doJenkinsPush(recipes, argv):
                         .format(name, response.status, response.reason))
                 updatedJobs[name] = jobConfig
             else:
+                if verbose >= 0:
+                    print("Create '{}'...".format(name))
                 initialJobConfig = { 'hash' : b'\x00'*20 }
                 connection.request("POST", urlPath + "createItem?name=" + name,
                     body=jobXML, headers=headers)
                 response = connection.getresponse()
                 if response.status == 400 and args.force:
+                    if verbose >= 1:
+                        print("  Exists already. Trying to overwrite...")
                     response.read()
                     connection.request("POST", urlPath + "job/" + name + "/config.xml",
                         body=jobXML, headers=headers)
@@ -1238,7 +1255,8 @@ def doJenkinsPush(recipes, argv):
 
         # delete obsolete jobs
         for name in BobState().getJenkinsAllJobs(args.name) - set(jobs.keys()):
-            print("Delete", name, "...")
+            if verbose >= 0:
+                print("Delete '{}'...".format(name))
             connection.request("POST", urlPath + "job/" + name + "/doDelete",
                                headers=headers)
             response = connection.getresponse()
@@ -1250,8 +1268,11 @@ def doJenkinsPush(recipes, argv):
 
         # sort changed jobs and trigger them in leaf-to-root order
         if not args.no_trigger:
+            if updatedJobs and (verbose >= 0):
+                print("Schedule all modified/created jobs...")
             for name in [ j for j in buildOrder if j in updatedJobs ]:
-                print("Schedule {}...".format(name))
+                if verbose >= 1:
+                    print("Schedule '{}'...".format(name))
                 connection.request("POST", urlPath + "job/" + name + "/build",
                                    headers=headers)
                 response = connection.getresponse()
