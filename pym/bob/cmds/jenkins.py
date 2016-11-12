@@ -135,11 +135,14 @@ class JenkinsJob:
             deps.add(self.__getJobName(d.getPackage()))
         return deps
 
-    def getShebang(self, windows):
+    def getShebang(self, windows, errexit=True):
         if windows:
-            return "#!bash -ex"
+            ret = "#!bash -x"
         else:
-            return "#!/bin/bash -ex"
+            ret = "#!/bin/bash -x"
+        if errexit:
+            ret += "e"
+        return ret
 
     def dumpStep(self, d, windows, checkIfSkip):
         cmds = []
@@ -536,7 +539,8 @@ class JenkinsJob:
             if not cmd: continue
             downloadCmds.append(cmd)
         if downloadCmds:
-            downloadCmds.insert(0, self.getShebang(windows))
+            downloadCmds.insert(0, self.getShebang(windows, False))
+            downloadCmds.append("true # don't let downloads fail the build")
             download = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
