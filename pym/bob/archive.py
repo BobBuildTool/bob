@@ -14,12 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from ..errors import BuildError
-from ..tty import colorize
-from ..utils import asHexStr, removePath
-from tempfile import TemporaryFile
+from .errors import BuildError
+from .tty import colorize
+from .utils import asHexStr, removePath
+from tempfile import mkstemp, TemporaryFile
 from pipes import quote
 import os.path
+import subprocess
 import tarfile
 import textwrap
 import urllib.request, urllib.error
@@ -222,6 +223,124 @@ class SimpleHttpArchive:
             """.format(URL=self.__url, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
 
 
+class CustomArchive:
+    """Custom command archive"""
+
+    def __init__(self, spec, whiteList):
+        self.__downloadCmd = spec.get("download")
+        self.__uploadCmd = spec.get("upload")
+        self.__download = False
+        self.__upload = False
+        self.__whiteList = whiteList
+
+    def _makeUrl(self, buildId):
+        packageResultId = asHexStr(buildId)
+        return "/".join([packageResultId[0:2], packageResultId[2:4],
+            packageResultId[4:] + ".tgz"])
+
+    def wantDownload(self, enable):
+        self.__download = (self.__downloadCmd is not None) and enable
+
+    def wantUpload(self, enable):
+        self.__upload = (self.__uploadCmd is not None) and enable
+
+    def canDownload(self):
+        return self.__download
+
+    def canUpload(self):
+        return self.__upload
+
+    def uploadPackage(self, buildId, path):
+        if not self.__upload:
+            return
+
+        print(colorize("   UPLOAD    {}".format(path), "32"))
+        (tmpFd, tmpName) = mkstemp()
+        try:
+            os.close(tmpFd)
+            with tarfile.open(tmpName, mode="w:gz") as tar:
+                tar.add(path, arcname=".")
+
+            env = { k:v for (k,v) in os.environ.items() if k in self.__whiteList }
+            env["BOB_LOCAL_ARTIFACT"] = tmpName
+            env["BOB_REMOTE_ARTIFACT"] = self._makeUrl(buildId)
+            ret = subprocess.call(["/bin/bash", "-ec", self.__uploadCmd],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                cwd="/tmp", env=env)
+            if ret != 0:
+                raise BuildError("Upload failed: command return with status {}"
+                                    .format(ret))
+        except OSError as e:
+            raise BuildError("Upload failed: " + str(e))
+        finally:
+            os.unlink(tmpName)
+
+    def downloadPackage(self, buildId, path):
+        if not self.__download:
+            return False
+
+        success = False
+        print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
+        (tmpFd, tmpName) = mkstemp()
+        try:
+            os.close(tmpFd)
+            env = { k:v for (k,v) in os.environ.items() if k in self.__whiteList }
+            env["BOB_LOCAL_ARTIFACT"] = tmpName
+            env["BOB_REMOTE_ARTIFACT"] = self._makeUrl(buildId)
+            ret = subprocess.call(["/bin/bash", "-ec", self.__downloadCmd],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                cwd="/tmp", env=env)
+            if ret == 0:
+                removePath(path)
+                os.makedirs(path)
+                with tarfile.open(tmpName, "r:gz", errorlevel=1) as tar:
+                    tar.extractall(path)
+                print(colorize("ok", "32"))
+                success = True
+            else:
+                print(colorize("failed (exit {})".format(ret), "33"))
+        except OSError as e:
+            raise BuildError("Download failed: " + str(e))
+        finally:
+            os.unlink(tmpName)
+
+        return success
+
+    def upload(self, step, buildIdFile, tgzFile):
+        # only upload if requested
+        if not self.__upload:
+            return ""
+
+        # only upload tools if built in sandbox
+        if step.doesProvideTools() and (step.getSandbox() is None):
+            return ""
+
+        return "\n" + textwrap.dedent("""\
+            # upload artifact
+            cd $WORKSPACE
+            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
+            BOB_LOCAL_ARTIFACT={RESULT}
+            BOB_REMOTE_ARTIFACT="${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}.tgz"
+            {CMD}
+            """.format(CMD=self.__uploadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
+
+    def download(self, step, buildIdFile, tgzFile):
+        # only download if requested
+        if not self.__download:
+            return ""
+
+        # only download tools if built in sandbox
+        if step.doesProvideTools() and (step.getSandbox() is None):
+            return ""
+
+        return "\n" + textwrap.dedent("""\
+            BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
+            BOB_LOCAL_ARTIFACT={RESULT}
+            BOB_REMOTE_ARTIFACT="${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}.tgz"
+            {CMD}
+            """.format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
+
+
 def getArchiver(recipes):
     archiveSpec = recipes.archiveSpec()
     archiveBackend = archiveSpec.get("backend", "none")
@@ -229,6 +348,8 @@ def getArchiver(recipes):
         return LocalArchive(archiveSpec)
     elif archiveBackend == "http":
         return SimpleHttpArchive(archiveSpec)
+    elif archiveBackend == "shell":
+        return CustomArchive(archiveSpec, recipes.envWhiteList())
     elif archiveBackend == "none":
         return DummyArchive()
     else:

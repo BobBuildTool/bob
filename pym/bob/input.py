@@ -2408,12 +2408,17 @@ def funToolDefined(args, tools, **options):
 
 class ArchiveValidator:
     def __init__(self):
-        self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http')},
+        self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http', 'shell')},
             ignore_extra_keys=True)
         self.__backends = {
             'none' : schema.Schema({'backend' : 'none'}),
             'file' : schema.Schema({'backend' : 'file', 'path' : str}),
-            'http' : schema.Schema({'backend' : 'http', 'url' : str})
+            'http' : schema.Schema({'backend' : 'http', 'url' : str}),
+            'shell' : schema.Schema({
+                'backend' : 'shell',
+                schema.Optional('download') : str,
+                schema.Optional('upload') : str,
+            }),
         }
 
     def validate(self, data):
