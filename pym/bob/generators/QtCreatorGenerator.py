@@ -156,6 +156,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
 
     # regex for all source / header files
     source  = re.compile(r".*\.[ch](pp)?$")
+    include = re.compile(r".*\.[h](pp)?$")
     cmake = re.compile(r".*\.cmake$")
 
     if filter:
@@ -170,21 +171,27 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
         newPath = os.path.join(symlinkDir, name)
         if not updateOnly: os.symlink(os.path.join(os.getcwd(), path), newPath)
         for root, directories, filenames in os.walk(newPath):
+            hasInclude = False
+            if (((os.path.sep + '.git' + os.path.sep) in root) or
+                ((os.path.sep + '.svn' + os.path.sep) in root)):
+                continue
             for filename in filenames:
                 if source.match(filename) or cmake.match(filename) or filename == 'CMakeLists.txt':
                     sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
                 if filter and additionalFiles.match(filename):
                     sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
-            # it's faster to add all directories to includes and not to use regex, sort & remove duplicate entries
-            # this also helps qt-creator to resolve includes like <linux/bitops.h> which
-            # is not found in case there is no header in 'linux'
-            if not '.git' in root and not '.svn' in root:
-               hList.append(os.path.join(os.getcwd(),root))
-
-    for i in includeDirs:
-        if os.path.exists(i):
-            for root, directories, filenames in os.walk(i):
-                hList.append(os.path.join(i,root))
+                if not hasInclude and include.match(filename):
+                    hasInclude = True
+            if hasInclude:
+                oldPath = ""
+                # need to recursively add all directories from the include up to cwd to get includes like
+                # <a/b/c.h> resolved even if there is no include in 'a'
+                relativePath = root[len(newPath):]
+                for path in relativePath.split(os.path.sep):
+                    includePath = os.path.join(newPath, oldPath, path)
+                    if not includePath in hList:
+                        hList.append(includePath)
+                    oldPath = os.path.join(oldPath, path)
 
     # use default kit "Desktop" if no kit is given
     if kit is None:
@@ -239,6 +246,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
     generateFile(sorted(sList, key=lambda file: (os.path.dirname(file), os.path.basename(file))), filesFile + ".new")
     compareAndRenameFileIfNotEqual(filesFile, filesFile + ".new")
 
+
     if not updateOnly:
         # Generate Buildme.sh
         buildMe = []
@@ -253,10 +261,11 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             projectCmd += " --kit " + quote(kit)
 
         buildMe.append(projectCmd)
-
         generateFile(buildMe, buildMeFile)
         os.chmod(buildMeFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
+        # Generate a .config file
+        generateFile("", os.path.join(destination, projectName  + ".config"))
         # Generate creator file
         creatorFile = os.path.join(destination, projectName  + ".creator")
         generateFile([], creatorFile)
