@@ -50,7 +50,7 @@ import yaml
 # Therefore the follwing defintion must be incremented virtually with any
 # change that is done in this file. If in doubt, change it. It will invalidate
 # the cached results and make sure they are re-generated.
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 warnCheckoutConsume = WarnOnce("Usage of checkoutConsume is deprecated. Use checkoutVars instead.")
 warnBuildConsume = WarnOnce("Usage of buildConsume is deprecated. Use buildVars instead.")
@@ -2410,15 +2410,24 @@ class ArchiveValidator:
     def __init__(self):
         self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http', 'shell')},
             ignore_extra_keys=True)
+        baseArchive = {
+            'backend' : str,
+            schema.Optional('flags') : schema.Schema(["download", "upload"])
+        }
+        fileArchive = baseArchive.copy()
+        fileArchive["path"] = str
+        httpArchive = baseArchive.copy()
+        httpArchive["url"] = str
+        shellArchive = baseArchive.copy()
+        shellArchive.update({
+            schema.Optional('download') : str,
+            schema.Optional('upload') : str,
+        })
         self.__backends = {
-            'none' : schema.Schema({'backend' : 'none'}),
-            'file' : schema.Schema({'backend' : 'file', 'path' : str}),
-            'http' : schema.Schema({'backend' : 'http', 'url' : str}),
-            'shell' : schema.Schema({
-                'backend' : 'shell',
-                schema.Optional('download') : str,
-                schema.Optional('upload') : str,
-            }),
+            'none' : schema.Schema(baseArchive),
+            'file' : schema.Schema(fileArchive),
+            'http' : schema.Schema(httpArchive),
+            'shell' : schema.Schema(shellArchive),
         }
 
     def validate(self, data):
@@ -2460,7 +2469,10 @@ class RecipeSet:
             schema.Optional('whitelist') : schema.Schema([
                 schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
             ]),
-            schema.Optional('archive') : ArchiveValidator(),
+            schema.Optional('archive') : schema.Or(
+                ArchiveValidator(),
+                schema.Schema( [ArchiveValidator()] )
+            ),
             schema.Optional('include') : schema.Schema([str]),
             schema.Optional('scmOverrides') : [ schema.Schema({
                 schema.Optional('match') : schema.Schema({ str: str }),

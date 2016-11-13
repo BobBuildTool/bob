@@ -52,26 +52,34 @@ class DummyArchive:
     def download(self, step, buildIdFile, tgzFile):
         return ""
 
-class LocalArchive:
+class BaseArchive:
     def __init__(self, spec):
-        self.__basePath = os.path.abspath(spec["path"])
-        self.__download = False
-        self.__upload = False
+        use = spec.get("flags", ["upload", "download"])
+        self.__useDownload = "download" in use
+        self.__useUpload = "upload" in use
+        self.__wantDownload = False
+        self.__wantUpload = False
 
     def wantDownload(self, enable):
-        self.__download = enable
+        self.__wantDownload = enable
 
     def wantUpload(self, enable):
-        self.__upload = enable
+        self.__wantUpload = enable
 
     def canDownload(self):
-        return self.__download
+        return self.__wantDownload and self.__useDownload
 
     def canUpload(self):
-        return self.__upload
+        return self.__wantUpload and self.__useUpload
+
+
+class LocalArchive(BaseArchive):
+    def __init__(self, spec):
+        super().__init__(spec)
+        self.__basePath = os.path.abspath(spec["path"])
 
     def uploadPackage(self, buildId, path):
-        if not self.__upload:
+        if not self.canUpload():
             return
 
         packageResultId = asHexStr(buildId)
@@ -89,7 +97,7 @@ class LocalArchive:
             tar.add(path, arcname=".")
 
     def downloadPackage(self, buildId, path):
-        if not self.__download:
+        if not self.canDownload():
             return False
 
         print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
@@ -116,31 +124,18 @@ class LocalArchive:
         return ""
 
 
-class SimpleHttpArchive:
+class SimpleHttpArchive(BaseArchive):
     def __init__(self, spec):
+        super().__init__(spec)
         self.__url = spec["url"]
-        self.__download = False
-        self.__upload = False
 
     def _makeUrl(self, buildId):
         packageResultId = asHexStr(buildId)
         return "/".join([self.__url, packageResultId[0:2], packageResultId[2:4],
             packageResultId[4:] + ".tgz"])
 
-    def wantDownload(self, enable):
-        self.__download = enable
-
-    def wantUpload(self, enable):
-        self.__upload = enable
-
-    def canDownload(self):
-        return self.__download
-
-    def canUpload(self):
-        return self.__upload
-
     def uploadPackage(self, buildId, path):
-        if not self.__upload:
+        if not self.canUpload():
             return
 
         # check if already there
@@ -167,7 +162,7 @@ class SimpleHttpArchive:
             raise BuildError("Error uploading package: "+str(e.reason))
 
     def downloadPackage(self, buildId, path):
-        if not self.__download:
+        if not self.canDownload():
             return False
 
         ret = False
@@ -192,7 +187,7 @@ class SimpleHttpArchive:
 
     def upload(self, step, buildIdFile, tgzFile):
         # only upload if requested
-        if not self.__upload:
+        if not self.canUpload():
             return ""
 
         # only upload tools if built in sandbox
@@ -210,7 +205,7 @@ class SimpleHttpArchive:
 
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
-        if not self.__download:
+        if not self.canDownload():
             return ""
 
         # only download tools if built in sandbox
@@ -218,19 +213,20 @@ class SimpleHttpArchive:
             return ""
 
         return "\n" + textwrap.dedent("""\
-            BOB_DOWNLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
-            curl -sSg --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
+            if [[ ! -e {RESULT} ]] ; then
+                BOB_DOWNLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
+                curl -sSg --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
+            fi
             """.format(URL=self.__url, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
 
 
-class CustomArchive:
+class CustomArchive(BaseArchive):
     """Custom command archive"""
 
     def __init__(self, spec, whiteList):
+        super().__init__(spec)
         self.__downloadCmd = spec.get("download")
         self.__uploadCmd = spec.get("upload")
-        self.__download = False
-        self.__upload = False
         self.__whiteList = whiteList
 
     def _makeUrl(self, buildId):
@@ -238,20 +234,14 @@ class CustomArchive:
         return "/".join([packageResultId[0:2], packageResultId[2:4],
             packageResultId[4:] + ".tgz"])
 
-    def wantDownload(self, enable):
-        self.__download = (self.__downloadCmd is not None) and enable
-
-    def wantUpload(self, enable):
-        self.__upload = (self.__uploadCmd is not None) and enable
-
     def canDownload(self):
-        return self.__download
+        return super().canDownload() and (self.__downloadCmd is not None)
 
     def canUpload(self):
-        return self.__upload
+        return super().canUpload() and (self.__uploadCmd is not None)
 
     def uploadPackage(self, buildId, path):
-        if not self.__upload:
+        if not self.canUpload():
             return
 
         print(colorize("   UPLOAD    {}".format(path), "32"))
@@ -276,7 +266,7 @@ class CustomArchive:
             os.unlink(tmpName)
 
     def downloadPackage(self, buildId, path):
-        if not self.__download:
+        if not self.canDownload():
             return False
 
         success = False
@@ -308,7 +298,7 @@ class CustomArchive:
 
     def upload(self, step, buildIdFile, tgzFile):
         # only upload if requested
-        if not self.__upload:
+        if not self.canUpload():
             return ""
 
         # only upload tools if built in sandbox
@@ -326,7 +316,7 @@ class CustomArchive:
 
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
-        if not self.__download:
+        if not self.canDownload():
             return ""
 
         # only download tools if built in sandbox
@@ -334,15 +324,54 @@ class CustomArchive:
             return ""
 
         return "\n" + textwrap.dedent("""\
-            BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
-            BOB_LOCAL_ARTIFACT={RESULT}
-            BOB_REMOTE_ARTIFACT="${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}.tgz"
-            {CMD}
+            if [[ ! -e {RESULT} ]] ; then
+                BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
+                BOB_LOCAL_ARTIFACT={RESULT}
+                BOB_REMOTE_ARTIFACT="${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}.tgz"
+                {CMD}
+            fi
             """.format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
 
 
-def getArchiver(recipes):
-    archiveSpec = recipes.archiveSpec()
+class MultiArchive:
+    def __init__(self, archives):
+        self.__archives = archives
+
+    def wantDownload(self, enable):
+        for i in self.__archives: i.wantDownload(enable)
+
+    def wantUpload(self, enable):
+        for i in self.__archives: i.wantUpload(enable)
+
+    def canDownload(self):
+        return any(i.canDownload() for i in self.__archives)
+
+    def canUpload(self):
+        return any(i.canUpload() for i in self.__archives)
+
+    def uploadPackage(self, buildId, path):
+        for i in self.__archives:
+            if not i.canUpload(): continue
+            i.uploadPackage(buildId, path)
+
+    def downloadPackage(self, buildId, path):
+        for i in self.__archives:
+            if not i.canDownload(): continue
+            if i.downloadPackage(buildId, path): return True
+        return False
+
+    def upload(self, step, buildIdFile, tgzFile):
+        return "\n".join(
+            i.upload(step, buildIdFile, tgzFile) for i in self.__archives
+            if i.canUpload())
+
+    def download(self, step, buildIdFile, tgzFile):
+        return "\n".join(
+            i.download(step, buildIdFile, tgzFile) for i in self.__archives
+            if i.canDownload())
+
+
+def getSingleArchiver(recipes, archiveSpec):
     archiveBackend = archiveSpec.get("backend", "none")
     if archiveBackend == "file":
         return LocalArchive(archiveSpec)
@@ -354,4 +383,11 @@ def getArchiver(recipes):
         return DummyArchive()
     else:
         raise BuildError("Invalid archive backend: "+archiveBackend)
+
+def getArchiver(recipes):
+    archiveSpec = recipes.archiveSpec()
+    if isinstance(archiveSpec, list):
+        return MultiArchive([ getSingleArchiver(recipes, i) for i in archiveSpec ])
+    else:
+        return getSingleArchiver(recipes, archiveSpec)
 
