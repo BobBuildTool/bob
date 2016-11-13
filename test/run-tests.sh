@@ -101,6 +101,7 @@ run_test test/generator exec_generator_test
 run_test test/query-path exec_fancy_test
 
 run_test test/swap-deps exec_fancy_test
+run_test test/checkout-only exec_fancy_test
 
 # collect coverage
 if [[ $USE_COVERAGE -eq 1 ]]; then
