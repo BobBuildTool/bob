@@ -18,8 +18,9 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import Mock
 import os
+import textwrap
 
-from bob.input import RecipeSet
+from bob.input import RecipeSet, walkPackagePath
 from bob.errors import ParseError
 
 class TestUserConfig(TestCase):
@@ -135,4 +136,84 @@ class TestUserConfig(TestCase):
             recipeSet.parse()
 
             assert recipeSet.defaultEnv() == { "FOO":"USER"}
+
+class TestDependencies(TestCase):
+    def setUp(self):
+        self.cwd = os.getcwd()
+        self.tmpdir = TemporaryDirectory()
+        os.chdir(self.tmpdir.name)
+        os.mkdir("recipes")
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+        os.chdir(self.cwd)
+
+    def writeRecipe(self, name, content):
+        with open(os.path.join("recipes", name+".yaml"), "w") as f:
+            f.write(textwrap.dedent(content))
+
+    def testDuplicateRemoval(self):
+        """Test that provided dependencies do not replace real dependencies"""
+        self.writeRecipe("root", """\
+            root: True
+            depends: [a, b]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("a", """\
+            depends: [b]
+            provideDeps: [b]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("b", """\
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        roots = recipes.generatePackages(lambda x,y: "unused")
+
+        # make sure "b" is addressable
+        p = walkPackagePath(roots, "root/b")
+        self.assertEqual(p.getName(), "b")
+
+    def testIncompatible(self):
+        """Incompatible provided dependencies must raise an error"""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends: [a, b]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("a", """\
+            depends:
+                -
+                    name: c
+                    environment: { FOO: A }
+            provideDeps: [c]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("b", """\
+            depends:
+                -
+                    name: c
+                    environment: { FOO: B }
+            provideDeps: [c]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("c", """\
+            buildVars: [FOO]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        self.assertRaises(ParseError, recipes.generatePackages,
+            lambda x,y: "unused")
 
