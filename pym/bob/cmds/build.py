@@ -349,6 +349,7 @@ esac
                  envWhiteList, bobRoot, cleanBuild):
         self.__recipes = recipes
         self.__wasRun= Bijection()
+        self.__wasSkipped = {}
         self.__verbose = max(-2, min(3, verbose))
         self.__force = force
         self.__skipDeps = skipDeps
@@ -363,6 +364,8 @@ esac
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
+        self.__done = set()     # actual steps that have really been cooked
+        self.__skipped = set()  # steps that were visited but skipped due to checkoutOnly
 
     def setArchiveHandler(self, archive):
         self.__doDownload = True
@@ -384,19 +387,25 @@ esac
         self.__cleanCheckout = clean
 
     def saveBuildState(self):
-        # save as plain dict
-        BobState().setBuildState(dict(self.__wasRun))
+        # Save as plain dict. Skipped steps are dropped because they were not
+        # really executed. Either they are simply skipped again or, if the
+        # user changes his mind, they will finally be executed.
+        state = { k:v for (k,v) in self.__wasRun.items()
+                      if not self.__wasSkipped.get(k, False) }
+        BobState().setBuildState(state)
 
     def loadBuildState(self):
         self.__wasRun = Bijection(BobState().getBuildState())
 
-    def _wasAlreadyRun(self, step):
+    def _wasAlreadyRun(self, step, skippedOk=False):
         digest = step.getVariantId()
         if digest in self.__wasRun:
             path = self.__wasRun[digest]
             # invalidate invalid cached entries
             if path != step.getWorkspacePath():
                 del self.__wasRun[digest]
+                return False
+            elif (not skippedOk) and self.__wasSkipped.get(digest, False):
                 return False
             else:
                 return True
@@ -406,8 +415,9 @@ esac
     def _getAlreadyRun(self, step):
         return self.__wasRun[step.getVariantId()]
 
-    def _setAlreadyRun(self, step):
+    def _setAlreadyRun(self, step, skipped=False):
         self.__wasRun[step.getVariantId()] = step.getWorkspacePath()
+        self.__wasSkipped[step.getVariantId()] = skipped
 
     def _constructDir(self, step, label):
         created = False
@@ -546,7 +556,7 @@ esac
         if self.__verbose >= -1:
             print(*args, **kwargs)
 
-    def cook(self, steps, parentPackage, done=set(), depth=0):
+    def cook(self, steps, parentPackage, checkoutOnly, depth=0):
         currentPackage = self.__currentPackage
         ret = None
 
@@ -556,7 +566,9 @@ esac
 
         for step in reversed(steps):
             # skip if already processed steps
-            if step in done:
+            if step in self.__done:
+                continue
+            if checkoutOnly and (step in self.__skipped):
                 continue
 
             # update if package changes
@@ -569,19 +581,22 @@ esac
             try:
                 if step.isCheckoutStep():
                     if step.isValid():
-                        self._cookCheckoutStep(step, done, depth)
+                        self._cookCheckoutStep(step, depth)
                 elif step.isBuildStep():
                     if step.isValid():
-                        self._cookBuildStep(step, done, depth)
+                        self._cookBuildStep(step, checkoutOnly, depth)
                 else:
                     assert step.isPackageStep() and step.isValid()
-                    ret = self._cookPackageStep(step, done, depth)
+                    ret = self._cookPackageStep(step, checkoutOnly, depth)
             except BuildError as e:
                 e.pushFrame(step.getPackage().getName())
                 raise e
 
             # mark as done
-            done.add(step)
+            if checkoutOnly and (not step.isCheckoutStep()):
+                self.__skipped.add(step)
+            else:
+                self.__done.add(step)
 
         # back to original package
         if currentPackage != self.__currentPackage:
@@ -590,7 +605,7 @@ esac
                 print(">>", colorize("/".join(self.__currentPackage.getStack()), "32;1"))
         return ret
 
-    def _cookCheckoutStep(self, checkoutStep, done, depth):
+    def _cookCheckoutStep(self, checkoutStep, depth):
         checkoutDigest = checkoutStep.getVariantId()
         if self._wasAlreadyRun(checkoutStep):
             prettySrcPath = self._getAlreadyRun(checkoutStep)
@@ -598,7 +613,7 @@ esac
         else:
             # depth first
             self.cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
-                      done, depth+1)
+                      False, depth+1)
 
             # get directory into shape
             (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
@@ -667,7 +682,7 @@ esac
             BobState().setResultHash(prettySrcPath, hashWorkspace(checkoutStep))
             self._setAlreadyRun(checkoutStep)
 
-    def _cookBuildStep(self, buildStep, done, depth):
+    def _cookBuildStep(self, buildStep, checkoutOnly, depth):
         # Include actual directories of dependencies in buildDigest.
         # Directories are reused in develop build mode and thus might change
         # even though the variant id of this step is stable. As most tools rely
@@ -675,12 +690,13 @@ esac
         # the dependency directories change.
         buildDigest = [buildStep.getVariantId()] + [
             i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
-        if self._wasAlreadyRun(buildStep):
+        if self._wasAlreadyRun(buildStep, checkoutOnly):
             prettyBuildPath = self._getAlreadyRun(buildStep)
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
         else:
             # depth first
-            self.cook(buildStep.getAllDepSteps(), buildStep.getPackage(), done, depth+1)
+            self.cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
+                      checkoutOnly, depth+1)
 
             # get directory into shape
             (prettyBuildPath, created) = self._constructDir(buildStep, "build")
@@ -700,7 +716,9 @@ esac
             # run build if input has changed
             buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                 for i in buildStep.getArguments() if i.isValid() ]
-            if (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
+            if checkoutOnly:
+                self._info("   BUILD     skipped due to --checkout-only ({})".format(prettyBuildPath))
+            elif (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
                 self._info("   BUILD     skipped (unchanged input for {})".format(prettyBuildPath))
                 # We always rehash the directory in development mode as the
                 # user might have compiled the package manually.
@@ -716,11 +734,11 @@ esac
                                              if self.__cleanBuild
                                              else hashWorkspace(buildStep))
                 BobState().setInputHashes(prettyBuildPath, buildInputHashes)
-            self._setAlreadyRun(buildStep)
+            self._setAlreadyRun(buildStep, checkoutOnly)
 
-    def _cookPackageStep(self, packageStep, done, depth):
+    def _cookPackageStep(self, packageStep, checkoutOnly, depth):
         packageDigest = packageStep.getVariantId()
-        if self._wasAlreadyRun(packageStep):
+        if self._wasAlreadyRun(packageStep, checkoutOnly):
             prettyPackagePath = self._getAlreadyRun(packageStep)
             self._info("   PACKAGE   skipped (reuse {})".format(prettyPackagePath))
         else:
@@ -749,9 +767,15 @@ esac
             if packageStep.doesProvideTools() and (packageStep.getSandbox() is None):
                 # Exclude packages that provide host tools when not building in a sandbox
                 packageBuildId = None
+            elif checkoutOnly:
+                # Just the sources! Don't trigger a download dude...
+                packageBuildId = None
+            elif self.__doDownload or self.__doUpload:
+                # up- or download with valid package -> get BuildId
+                packageBuildId = self._getBuildId(packageStep, depth)
             else:
-                packageBuildId = self._getBuildId(packageStep, done, depth) \
-                    if (self.__doDownload or self.__doUpload) else None
+                packageBuildId = None
+
             if packageBuildId and (depth >= self.__downloadDepth):
                 oldInputHashes = BobState().getInputHashes(prettyPackagePath)
                 # prune directory if we previously downloaded something different
@@ -776,11 +800,14 @@ esac
             # package it if needed
             if not packageDone:
                 # depth first
-                self.cook(packageStep.getAllDepSteps(), packageStep.getPackage(), done, depth+1)
+                self.cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
+                          checkoutOnly, depth+1)
 
                 packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                     for i in packageStep.getArguments() if i.isValid() ]
-                if (not self.__force) and (BobState().getInputHashes(prettyPackagePath) == packageInputHashes):
+                if checkoutOnly:
+                    self._info("   PACKAGE   skipped due to --checkout-only ({})".format(prettyPackagePath))
+                elif (not self.__force) and (BobState().getInputHashes(prettyPackagePath) == packageInputHashes):
                     self._info("   PACKAGE   skipped (unchanged input for {})".format(prettyPackagePath))
                 else:
                     print(colorize("   PACKAGE   {}".format(prettyPackagePath), "32"))
@@ -797,21 +824,21 @@ esac
             if packageExecuted:
                 BobState().setResultHash(prettyPackagePath, hashWorkspace(packageStep))
                 BobState().setInputHashes(prettyPackagePath, packageInputHashes)
-            self._setAlreadyRun(packageStep)
+            self._setAlreadyRun(packageStep, checkoutOnly)
 
         return prettyPackagePath
 
-    def _getBuildId(self, step, done, depth):
+    def _getBuildId(self, step, depth):
         if step.isCheckoutStep():
             bid = step.getBuildId()
             if bid is None:
                 # do checkout
-                self.cook([step], step.getPackage(), done, depth)
+                self.cook([step], step.getPackage(), depth)
                 # return directory hash
                 bid = BobState().getResultHash(step.getWorkspacePath())
             return bid
         else:
-            return step.getDigest(lambda s: self._getBuildId(s, done, depth+1), True)
+            return step.getDigest(lambda s: self._getBuildId(s, depth+1), True)
 
 
 def touch(rootPackages):
@@ -836,8 +863,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Force execution of all build steps")
     parser.add_argument('-n', '--no-deps', default=False, action='store_true',
         help="Don't build dependencies")
-    parser.add_argument('-b', '--build-only', default=False, action='store_true',
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-b', '--build-only', default=False, action='store_true',
         help="Don't checkout, just build and package")
+    group.add_argument('-B', '--checkout-only', default=False, action='store_true',
+        help="Don't build, just check out sources")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--clean', action='store_true', default=not develop,
         help="Do clean builds (clear build directory)")
@@ -928,7 +958,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         if args.destination: backlog.extend(packageStep.getProvidedDeps())
     try:
         for p in backlog:
-            resultPath = builder.cook([p], p.getPackage())
+            resultPath = builder.cook([p], p.getPackage(), args.checkout_only)
             if resultPath is not None:
                 results.append(resultPath)
     finally:
