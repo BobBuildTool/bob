@@ -650,8 +650,8 @@ The following settings are supported:
 |             |                 | The following values are allowed:                   |
 |             |                 |                                                     |
 |             |                 | * ``deps``: provided dependencies of the recipe.    |
-|             |                 |   These dependencies will be added right after      |
-|             |                 |   the current dependency unless the dependency is   |
+|             |                 |   These dependencies will be added at the end of    |
+|             |                 |   the dependency list unless the dependency is      |
 |             |                 |   already on the list.                              |
 |             |                 | * ``environment``: exported environment variables   |
 |             |                 |   of the recipe.                                    |

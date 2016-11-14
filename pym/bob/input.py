@@ -2137,9 +2137,9 @@ class Recipe(object):
 
                 thisDeps[dep.recipe] = p
                 if dep.useDeps:
-                    # inject provided dependencies right after current one
+                    # add provided dependencies at the end
                     providedDeps = p.getProvidedDeps()
-                    allDeps[i:i] = ( Recipe.InjectedDep(d) for d in providedDeps )
+                    allDeps.extend(Recipe.InjectedDep(d) for d in providedDeps)
                 directPackages.append(p)
             else:
                 p = dep.packageStep
