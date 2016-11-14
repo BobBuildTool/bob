@@ -45,29 +45,6 @@ exec_blackbox_test()
 	run_bob clean
 }
 
-exec_generator_test()
-{
-	# just generate
-	run_bob project -n g1 root > log.txt
-	diff -u <(grep '^PLUGIN' log.txt) output-plugin.txt
-
-	# run and generate
-	run_bob project qt-creator root --kit 'dummy' > log.txt
-	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
-	diff -Nurp $RES output
-	
-   # run and generate
-	run_bob project eclipseCdt root > log.txt
-	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
-	diff -Nurp $RES output
-
-}
-
-exec_fancy_test()
-{
-	. run.sh > log.txt
-}
-
 declare -a RUN_TEST_DIRS
 
 run_test()
@@ -80,7 +57,7 @@ run_test()
 		set -e
 		cd $1
 		rm -rf work dev .bob-*
-		$2
+		. run.sh > log.txt
 	)
 
 	if [[ $? -ne 0 ]] ; then
@@ -90,18 +67,11 @@ run_test()
 }
 
 # run blackbox tests
-for i in test/blackbox/* ; do
-	run_test $i exec_blackbox_test
+for i in test/* ; do
+	if [[ -d $i && -e $i/run.sh ]] ; then
+		run_test $i
+	fi
 done
-
-# run generator test
-run_test test/generator exec_generator_test
-
-# run query-path test
-run_test test/query-path exec_fancy_test
-
-run_test test/swap-deps exec_fancy_test
-run_test test/checkout-only exec_fancy_test
 
 # collect coverage
 if [[ $USE_COVERAGE -eq 1 ]]; then
