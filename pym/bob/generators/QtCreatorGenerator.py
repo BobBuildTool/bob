@@ -24,9 +24,10 @@ import stat
 import xml.etree.ElementTree
 from os.path import expanduser
 from os.path import join
-from bob.errors import ParseError
+from bob.errors import BuildError
 from bob.utils import summonMagic, hashFile
 from collections import OrderedDict, namedtuple
+from bob.tty import colorize
 from pipes import quote
 
 # scan package recursivelely with its dependencies and build a list of checkout dirs
@@ -155,6 +156,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
 
     # regex for all source / header files
     source  = re.compile(r".*\.[ch](pp)?$")
+    include = re.compile(r".*\.[h](pp)?$")
     cmake = re.compile(r".*\.cmake$")
 
     if filter:
@@ -169,28 +171,37 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
         newPath = os.path.join(symlinkDir, name)
         if not updateOnly: os.symlink(os.path.join(os.getcwd(), path), newPath)
         for root, directories, filenames in os.walk(newPath):
+            hasInclude = False
+            if (((os.path.sep + '.git' + os.path.sep) in root) or
+                ((os.path.sep + '.svn' + os.path.sep) in root)):
+                continue
             for filename in filenames:
                 if source.match(filename) or cmake.match(filename) or filename == 'CMakeLists.txt':
                     sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
                 if filter and additionalFiles.match(filename):
                     sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
-            # it's faster to add all directories to includes and not to use regex, sort & remove duplicate entries
-            # this also helps qt-creator to resolve includes like <linux/bitops.h> which
-            # is not found in case there is no header in 'linux'
-            if not '.git' in root and not '.svn' in root:
-               hList.append(os.path.join(os.getcwd(),root))
-
-    for i in includeDirs:
-        if os.path.exists(i):
-            for root, directories, filenames in os.walk(i):
-                hList.append(os.path.join(i,root))
+                if not hasInclude and include.match(filename):
+                    hasInclude = True
+            if hasInclude:
+                oldPath = ""
+                # need to recursively add all directories from the include up to cwd to get includes like
+                # <a/b/c.h> resolved even if there is no include in 'a'
+                relativePath = root[len(newPath):]
+                for path in relativePath.split(os.path.sep):
+                    includePath = os.path.join(newPath, oldPath, path)
+                    if not includePath in hList:
+                        hList.append(includePath)
+                    oldPath = os.path.join(oldPath, path)
 
     # use default kit "Desktop" if no kit is given
     if kit is None:
-        kit = "Desktop"
+        _kit = re.compile(r".*Desktop.*")
+    else:
+        _kit = re.compile(r""+kit)
 
     id = None
     name = None
+    kits = []
     try:
         profiles = xml.etree.ElementTree.parse(os.path.join(expanduser('~'), ".config/QtProject/qtcreator/profiles.xml")).getroot()
         for profile in profiles:
@@ -202,17 +213,24 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
                         id = str(value.text)
                     if (value.attrib.get('key') == 'PE.Profile.Name'):
                         name = str(value.text)
-                    if (id is not None) and (name is not None) and (name == kit):
+                    if (id is not None) and (name is not None) and (_kit.match(name)):
+                        kits.append([name, id])
                         break
-                else:
-                    continue
-                break
-            else:
-                continue
-            break
     except FileNotFoundError:
-        # if kits are generared using sdk tool this is stored somewhere else...
+        # if kits are generared using sdk tool they are stored somewhere else... (/usr/share...)
         pass
+
+    if (len(kits) == 0):
+        if (kit is None):
+            raise BuildError("No kit found!",
+                help = "Run again with '--kit' and specify a kit or generate a Desktop kit, which is used by default.")
+        kitName = kit
+        kitId = kit
+    else:
+        if (len(kits) > 1):
+            print(colorize("Warning: {} kits found. Using '{}'.".format(len(kits), str(kits[0][0])), "33"))
+        kitName = kits[0][0]
+        kitId = kits[0][1]
 
     buildMeFile = os.path.join(destination, "buildme")
 
@@ -228,6 +246,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
     generateFile(sorted(sList, key=lambda file: (os.path.dirname(file), os.path.basename(file))), filesFile + ".new")
     compareAndRenameFileIfNotEqual(filesFile, filesFile + ".new")
 
+
     if not updateOnly:
         # Generate Buildme.sh
         buildMe = []
@@ -242,10 +261,11 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             projectCmd += " --kit " + quote(kit)
 
         buildMe.append(projectCmd)
-
         generateFile(buildMe, buildMeFile)
         os.chmod(buildMeFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
+        # Generate a .config file
+        generateFile("", os.path.join(destination, projectName  + ".config"))
         # Generate creator file
         creatorFile = os.path.join(destination, projectName  + ".creator")
         generateFile([], creatorFile)
@@ -337,9 +357,9 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             sharedFile.write(' <data>\n')
             sharedFile.write('  <variable>ProjectExplorer.Project.Target.0</variable>\n')
             sharedFile.write('  <valuemap type="QVariantMap">\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">Bob</value>\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">Bob</value>\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">' + (id if id else kit) + '</value>\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">' + kitName + '</value>\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">' + kitName + '</value>\n')
+            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">' + kitId + '</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveBuildConfiguration">0</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveDeployConfiguration">0</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveRunConfiguration">0</value>\n')
