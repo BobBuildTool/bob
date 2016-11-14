@@ -20,12 +20,13 @@ fi
 
 FAILED=0
 
-pushd test
+echo "Run unit tests..."
+pushd test > /dev/null
 if ! $RUN -m unittest discover . ; then
 	: $((FAILED++))
 	echo "Some unit test(s) failed"
 fi
-popd
+popd > /dev/null
 
 run_bob()
 {
@@ -51,7 +52,7 @@ run_test()
 {
 	RUN_TEST_DIRS+=( $1 )
 
-	echo "Run" $1
+	echo "   " $1
 	(
 		set -o pipefail
 		set -e
@@ -67,6 +68,7 @@ run_test()
 }
 
 # run blackbox tests
+echo "Run black box tests..."
 for i in test/* ; do
 	if [[ -d $i && -e $i/run.sh ]] ; then
 		run_test $i
