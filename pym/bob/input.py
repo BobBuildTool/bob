@@ -2713,9 +2713,11 @@ class RecipeSet:
 
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         result = {}
-        env = Env(os.environ).prune([
-            lambda prev, elem: True if elem == pred else prev
-            for pred in self.__whiteList ])
+
+        def makePred(p):
+            return lambda prev, elem: True if elem == p else prev
+
+        env = Env(os.environ).prune([ makePred(pred) for pred in self.__whiteList ])
         env.setLegacy(not self.__extStrings)
         env.setFuns(self.__stringFunctions)
         env.update(self.__defaultEnv)
