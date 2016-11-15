@@ -17,7 +17,7 @@
 from unittest import TestCase
 from unittest.mock import MagicMock
 
-from bob.parser import StringParser, substituteParseResult
+from bob.parser import IfConditionParser, StringParser, substituteParseResult
 from bob.input import funEqual, funNotEqual, funNot, funOr, \
     funAnd, funMatch, funIfThenElse, funSubst, funStrip, \
     funSandboxEnabled, funToolDefined
@@ -34,7 +34,9 @@ def echo(args, **options):
 class TestStringParser(TestCase):
 
     def setUp(self):
-        self.p = StringParser()
+        self.sp = StringParser()
+
+        self.icp = IfConditionParser()
 
         self.env = {
             "asdf": "qwer",
@@ -52,10 +54,15 @@ class TestStringParser(TestCase):
         self.funArgs = {}
 
     def tearDown(self):
-        self.p = None
+        self.sp = None
+        self.icp = None
 
-    def parse( self, input ):
-        text, tokens = self.p.parse( input )
+    def parse( self, input, isIfCondition = False ):
+        text, tokens = self.sp.parse( input )
+        return substituteParseResult( tokens, self.env, self.funs, self.funArgs )
+
+    def parseIfCondition( self, input ):
+        text, tokens = self.icp.parse( input )
         return substituteParseResult( tokens, self.env, self.funs, self.funArgs )
 
     def testNoSubst(self):
@@ -173,6 +180,26 @@ class TestStringParser(TestCase):
         self.assertEqual(self.parse("$(echo,\'foo ${asdf} bar)\' )"), "1:foo ${asdf} bar) ")
         self.assertEqual(self.parse("$(echo,a,${null})"), "1:a;2:")
         self.assertEqual(self.parse("$(echo,a \"${null}\" )"), "1:a  ")
+
+    def testIfConditions(self):
+        self.assertEqual(self.parseIfCondition("$(echo,foo,bar)"), "1:foo;2:bar")
+        self.assertEqual(self.parseIfCondition("$(echo,foo bar )"), "1:foo bar ")
+        self.assertEqual(self.parseIfCondition("$(echo,\"foo,bar\" )"), "1:foo,bar ")
+        self.assertEqual(self.parseIfCondition("$(echo,foo \"${asdf} bar\" )"), "1:foo qwer bar ")
+        self.assertEqual(self.parseIfCondition("$(echo,\'foo ${asdf} bar)\' )"), "1:foo ${asdf} bar) ")
+        self.assertEqual(self.parseIfCondition("$(echo,a,${null})"), "1:a;2:")
+        self.assertEqual(self.parseIfCondition("$(echo,a \"${null}\" )"), "1:a  ")
+        self.assertRaises(ParseError, self.parseIfCondition, " ");
+        self.assertRaises(ParseError, self.parseIfCondition, " leading and trailing spaces are forbidden in an if condition ")
+        self.assertRaises(ParseError, self.parseIfCondition, "	leading spaces are forbidden in an if condition")
+        self.assertRaises(ParseError, self.parseIfCondition, "trailing spaces are forbidden in an if condition    ")
+        self.assertRaises(ParseError, self.parseIfCondition, "'single quotes are forbidden'")
+        self.assertRaises(ParseError, self.parseIfCondition, "\"double qoutes are forbidden\"")
+        self.assertRaises(ParseError, self.parseIfCondition, "$(echo,$(echo,a,mistake,leads)),$(echo,$(echo,to,parse,error)))")
+        self.assertRaises(ParseError, self.parseIfCondition, "$(echo,no,concat,please)${asdf}")
+        self.assertEqual(self.parseIfCondition("true"), "true")
+        self.assertEqual(self.parseIfCondition("${asdf}"), "qwer")
+        self.assertEqual(self.parseIfCondition("$(echo, one,two )"), "1: one;2:two ")
 
     def testNesting(self):
         self.assertEqual(self.parse("${xyxx%${xyxx%y*}}"), "xyx")

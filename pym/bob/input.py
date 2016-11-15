@@ -19,7 +19,7 @@ from .errors import ParseError, BuildError
 from .state import BobState
 from .tty import colorize, WarnOnce
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binLstat
-from .parser import StringParser, substituteParseResult
+from .parser import IfConditionParser, StringParser, substituteParseResult
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
 from itertools import chain
@@ -127,7 +127,7 @@ class Env(dict):
                 if checkGlobList(key, allowed): ret[key] = value
             return ret
 
-    def substitute(self, value, prop):
+    def substitute(self, value, prop, parser = StringParser):
         if self.legacy:
             try:
                 return Template(value).substitute(self)
@@ -137,7 +137,7 @@ class Env(dict):
                 raise ParseError("Error substituting {}: {}".format(prop, str(e)))
         else:
             try:
-                detected, tokens = StringParser().parse( value )
+                detected, tokens = parser().parse( value )
                 return substituteParseResult( tokens, self, self.funs, self.funArgs )
             except ParseError as e:
                 raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
@@ -152,7 +152,7 @@ class Env(dict):
             except Exception as e:
                 raise ParseError("Error evaluating condition on {}: {}".format(prop, str(e)))
         else:
-            s = self.substitute(condition, "condition on "+prop)
+            s = self.substitute(condition, "condition on "+prop, IfConditionParser)
             return not _isFalse(s.lower())
 
 

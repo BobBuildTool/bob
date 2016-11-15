@@ -38,6 +38,7 @@ class TokenType:
     CMOD  = 'm'
     RMVL  = 'n'
     REPL  = 'o'
+    WHSP  = 'p'
 
     # virtual types
     TEXT  = '(' + '|'.join( [ REG, BS, ECH ] ) + ')'
@@ -59,6 +60,7 @@ TokenDesc = {
     TokenType.CMOD:  'CASE_MODIFICATION',
     TokenType.RMVL:  'REMOVAL_RULE',
     TokenType.REPL:  'REPLACEMENT_RULE',
+    TokenType.WHSP:  'WHITESPACE',
     }
 
 class Token:
@@ -344,6 +346,46 @@ class ReplacementParser( Parser ):
     def getGrammar( self ):
         return self.__grammar
 
+class IfConditionTokenizer( Tokenizer ):
+    __default = TokenType.REG
+
+    __tokens = []
+
+    def __init__( self ):
+        super().__init__()
+
+    def getDefault( self ):
+        return self.__default
+
+    def getTokens( self ):
+        return self.__tokens
+
+class IfConditionParser( Parser ):
+    __grammar = re.compile( r'^({var}|{cmd}|({text}(( {whsp}| {text})* {text})?))$'.format(
+            text = TokenType.TEXT,
+            var  = TokenType.VAR,
+            cmd  = TokenType.CMD,
+            whsp = TokenType.WHSP,
+            )
+        )
+
+    def __init__( self ):
+        super().__init__()
+        self.__tokenizer = IfConditionTokenizer()
+
+    def parse( self, text, offset = 0 ):
+        # Return text as is if no special chars were found.
+        if all( (c not in text[offset:]) for c in '\t \\\"\'$' ):
+            return text[offset:], [ Token( self.getTokenizer().getDefault(), text[offset:], [] ) ]
+        else:
+            return super().parse( text, offset )
+
+    def getTokenizer( self ):
+        return self.__tokenizer
+
+    def getGrammar( self ):
+        return self.__grammar
+
 
 # Set tokens here because of cross references to parsers.
 VariableTokenizer._VariableTokenizer__tokens = [
@@ -370,6 +412,16 @@ CommandTokenizer._CommandTokenizer__tokens = [
     ( TokenType.VAR,   Rule( re.compile( r'\$\{' ), VariableParser, False ) ),
     ( TokenType.CMD,   Rule( re.compile( r'\$\(' ), CommandParser, False ) ),
     ( TokenType.END_,  Rule( re.compile( r'\)' ), None, False ) ),
+    ]
+
+IfConditionTokenizer._IfConditionTokenizer__tokens = [
+    ( TokenType.WHSP,  Rule( re.compile( r'\s+' ), None, False ) ),
+    ( TokenType.ECH,   Rule( re.compile( r'\\[^\\]' ), None, False ) ),
+    ( TokenType.BS,    Rule( re.compile( r'\\\\' ), None, False ) ),
+    ( TokenType.SQUO,  Rule( re.compile( r"'" ), StringParserSingle, False ) ),
+    ( TokenType.DQUO,  Rule( re.compile( r'"' ), StringParserDouble, False ) ),
+    ( TokenType.VAR,   Rule( re.compile( r'\$\{' ), VariableParser, False ) ),
+    ( TokenType.CMD,   Rule( re.compile( r'\$\(' ), CommandParser, False ) ),
     ]
 
 StringTokenizer._StringTokenizer__tokens = {
