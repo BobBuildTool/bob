@@ -249,9 +249,12 @@ The main purpose of a generator is to generate project files for one or more IDE
 There is a build-in generator for QtCreator project files.
 
 A generator is called with 3 Arguments:
-    * ``package``: package to build project for. 
-    * ``argv``: Arguments not consumed by `bob project`
-    * ``extra``: Extra arguments to be passed back to bob dev when called from the IDE.
+
+* ``package``: the :class:`bob.input.Package` to build the project for.
+* ``argv``: Arguments not consumed by ``bob project``.
+* ``extra``: Extra arguments to be passed back to ``bob dev`` when called from
+  the IDE. These are the generic arguments that ``bob project`` parses for all
+  generators.
 
 A simple genertor may look like::
 

@@ -249,46 +249,48 @@ artifacts and run them locally.
 Using IDEs with Bob
 ===================
 
-You may want to use a IDE with Bob. At the moment QTCreator and Eclipse are supported. You
-can add more IDE's using :ref:`extending-generators` extension.
-To generate project files the basic call is: ::
+You may want to use a IDE with Bob. At the moment QTCreator and Eclipse are
+supported. You can add more IDE's using :ref:`extending-generators` extension.
+To generate project files the basic call is::
 
-    $ bob project <genericArgs> <generator> <specificArgs> <package>
+    $ bob project <genericArgs> <generator> <package> <specificArgs>
 
 with ``genericArgs``:
-    * ``-n``: Do not build. Usually bob project builds the given package first to
-      be able to collect binaries and add them to the IDEs run/debug targets.
-    * ``-D -c -e -E``: These arguments will be passed to bob dev and will also be
-      used when compiling from IDE.
+
+* ``-n``: Do not build. Usually bob project builds the given package first to
+  be able to collect binaries and add them to the IDEs run/debug targets.
+* ``-D -c -e -E``: These arguments will be passed to bob dev and will also be
+  used when compiling from IDE.
 
 with ``generator``:
-    * ``eclipseCdt``: Generate project files for eclipse. Tested with eclipse MARS.
-    * ``qt-creator``: Generate project files for QtCreator. Tested with 4.0 and 4.1.
 
-with ``specificArgs``: arguments used by the generator itself. They differ from generator to
-generator (see below).
+* ``eclipseCdt``: Generate project files for eclipse. Tested with eclipse MARS.
+* ``qt-creator``: Generate project files for QtCreator. Tested with 4.0 and 4.1.
 
-and ``package``: name of a package to generate the project for. Usually all dependencies for
-this package will be visible in the IDE
+and ``package`` which is the name of a package to generate the project for.
+Usually all dependencies for this package will be visible in the IDE. The
+``specificArgs`` arguments are used by the generator itself. They differ from
+generator to generator (see below).
 
 QTCreator
 ---------
 
-QtCreator specificArgs:
-    * ``--destination``: destination directory for the project files. Default is
-      <workingDir>/projects/package_stack.
-    * ``--name``: name of the project. Default is packageName.
-    * ``-I``: additional include directories. They will only be added for indexer and will not
-      change the buildresult.
-    * ``-f``: additional files. Normally only c[pp] and h[pp] files will be added. You can
-            add more files using a regex.
-    * ``--kit``: kit to use for this project. You may want to use a different sysroot for includes
-      and buildin preprocessor settings from your compiler. To tell QtCreator which toolchain to
-      use you need to specify a kit. There are at least two options to create a kit: using the GUI
-      or the sdkTools.
+QtCreator specific Arguments:
 
-    The following example shows how to create a cross compiling project for the sandbox-tutorial and
-    the included arm-toolchain: ::
+* ``--destination``: destination directory for the project files. Default is
+  <workingDir>/projects/package_stack.
+* ``--name``: name of the project. Default is packageName.
+* ``-I``: additional include directories. They will only be added for indexer
+  and will not change the buildresult.
+* ``-f``: additional files. Normally only c[pp] and h[pp] files will be added.
+  You can add more files using a regex.
+* ``--kit``: kit to use for this project. You may want to use a different
+  sysroot for includes and buildin preprocessor settings from your compiler. To
+  tell QtCreator which toolchain to use you need to specify a kit. There are at
+  least two options to create a kit: using the GUI or the sdkTools.
+
+The following example shows how to create a cross compiling project for the
+sandbox-tutorial and the included arm-toolchain: ::
 
         $ sdktool addTC \
             --id "ProjectExplorer.ToolChain.Gcc:arm" \
@@ -312,11 +314,14 @@ EclipseCdt
 ----------
 
 Eclipse specificArgs:
-    * ``--exclude``: eclipse indexer sometimes runs OutOfMemory on large sourcetrees.
-      You can specify package names (or use a regular expression) to define packages
-      excluded from build. This will stop indexer from indexing these packages.
-    * ``--destination``: destination directory for the project files. Default is
-      <workingDir>/projects/package_stack.
-    * ``--name``: name of the project. Default is packageName.
-    * ``-I``: additional include directories. They will only be added for indexer and will not
-      change the buildresult.
+
+* ``--destination``: destination directory for the project files. Default is
+  <workingDir>/projects/package_stack.
+* ``--exclude``: eclipse indexer sometimes runs OutOfMemory on large
+  sourcetrees.  You can specify package names (or use a regular expression) to
+  define packages excluded from build. This will stop indexer from indexing
+  these packages.
+* ``--name``: name of the project. Default is packageName.
+* ``-I``: additional include directories. They will only be added for indexer
+  and will not change the buildresult.
+
