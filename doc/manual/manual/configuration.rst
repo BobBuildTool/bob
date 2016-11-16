@@ -897,21 +897,43 @@ the host for consuming recipes.
 
 Optionally there can be a ``mount`` keyword. With ``mount`` it is possible to
 specify additional paths of the host that are mounted read only in the sandbox.
-The paths are specified as a list of either strings or lists of two elements.
-Use a simple string when host and sandbox path are the same. To specify
-distinct paths use a list with two entries where the host path is the first
-element and the second element is the path in the sandbox.  Variable
-substitution is possible for these paths. Example::
+The paths are specified as a list of either strings or lists of two or three
+elements. Use a simple string when host and sandbox path are the same without
+any special options. To specify distinct paths use a list with two entries
+where the host path is the first element and the second element is the path in
+the sandbox.
+
+The long format with three items additionally allows to specify a list of mount
+flags. The shorter formats described above have no flags set. The following
+flags are available:
+
+* ``nofail``: Don't fail the build if the host path is not available. Instead
+  drop the mount silently.
+* ``nolocal``: Do not use this mount in local builds.
+* ``nojenkins``: Do not use this mount in Jenkins builds.
+* ``rw``: Mount as read-writable instead of read-only.
+
+Variable substitution is possible for the paths. The paths are also subject to
+shell variable expansion when a step using the sandbox *is actually executed*.
+This can be usefull e.g. to expand variables that are only available on the
+build server. Example::
 
     provideSandbox:
         paths: ["/bin", "/usr/bin"]
         mount:
             - "/etc/resolv.conf"
-            - "$HOME/.ssh"
-            - ["/", "/mnt/host"]
+            - "${MYREPO}"
+            - "\\$HOME/.ssh"
+            - ["\\$SSH_AUTH_SOCK", "\\SSH_AUTH_SOCK", [nofail, nojenkins]]
 
-The example can use ``$HOME`` because it is whitelisted by default. Otherwise
-any used variable must be defined somewhere or explicitly whitelisted.
+The example assumes that the variable ``MYREPO`` was set somewhere in the
+recipes.  On the other hand ``$HOME`` is expanded later by the shell. This is
+quite usefull on Jenkins because the home directory there is certainly
+different from the one where Bob runs. The last entry shows two mount option
+being used. This line mounts the ssh-agent socket into the sandbox if
+available. This won't be done on Jenins at all and the build will proceed even
+if ``$SSH_AUTH_SOCK`` is unset or invalid. Note that such variables have to be
+in the :ref:`configuration-config-whitelist` to be available to the shell.
 
 .. note::
     The mount paths are considered invariants of the build. That is changing the
