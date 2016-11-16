@@ -1,7 +1,4 @@
-# Check environment
-if test "$(type -t run_bob)" != function; then
-  echo "Please run me via run-tests.sh" >&2
-  exit 1
-fi
+#!/bin/bash -e
+. ../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
 exec_blackbox_test

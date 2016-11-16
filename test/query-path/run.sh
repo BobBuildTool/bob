@@ -1,15 +1,12 @@
+#!/bin/bash -e
+. ../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+
 #
 #  Blackbox tests for "query-path" command
 #
 
-# Check environment
-if test "$(type -t run_bob)" != function; then
-  echo "Please run me via run-tests.sh" >&2
-  exit 1
-fi
-
 # Clean
-rm -rf work dev .bob-*
+cleanup
 
 #
 #  Test path generation in release mode

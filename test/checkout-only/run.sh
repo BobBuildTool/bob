@@ -1,11 +1,9 @@
+#!/bin/bash -e
+. ../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+cleanup
+
 # Test that --checkout-only does what it says. Additionally it checks that
 # tools that are used during a checkout step are still built.
-
-# Check environment
-if test "$(type -t run_bob)" != function; then
-  echo "Please run me via run-tests.sh" >&2
-  exit 1
-fi
 
 # checkout sources
 run_bob dev root --checkout-only

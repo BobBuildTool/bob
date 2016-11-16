@@ -1,10 +1,13 @@
 #!/bin/bash
 
 cd "${0%/*}/.."
-export PYTHONPATH="${PWD}/pym"
-BOB_ROOT="$PWD"
+. ./test/test-lib.sh
 
 USE_COVERAGE=0
+FAILED=0
+RUN_TEST_DIRS=( )
+
+# check if python coverage is installed
 if type -fp coverage3 >/dev/null; then
     # make sure coverage is installed in the current environment
     if python3 -c "import coverage" 2>/dev/null; then
@@ -12,14 +15,13 @@ if type -fp coverage3 >/dev/null; then
         USE_COVERAGE=1
     else
         RUN=python3
-        echo "coverage3 is installed but not in the current environment"
+        echo "coverage3 is installed but not in the current environment" >&2
     fi
 else
 	RUN=python3
 fi
 
-FAILED=0
-
+# run unit tests
 echo "Run unit tests..."
 pushd test > /dev/null
 if ! $RUN -m unittest discover . ; then
@@ -28,50 +30,24 @@ if ! $RUN -m unittest discover . ; then
 fi
 popd > /dev/null
 
-run_bob()
-{
-	$RUN -m bob.scripts bob "$BOB_ROOT" "$@"
-}
-
-exec_blackbox_test()
-{
-	run_bob dev root > log.txt
-	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
-	diff -Nurp $RES output
-
-	run_bob build root > log.txt
-	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
-	diff -Nurp $RES output
-
-	run_bob clean
-}
-
-declare -a RUN_TEST_DIRS
-
-run_test()
-{
-	RUN_TEST_DIRS+=( $1 )
-
-	echo "   " $1
-	(
-		set -o pipefail
-		set -e
-		cd $1
-		rm -rf work dev .bob-*
-		. run.sh > log.txt
-	)
-
-	if [[ $? -ne 0 ]] ; then
-		: $((FAILED++))
-		echo $1 failed
-	fi
-}
-
 # run blackbox tests
 echo "Run black box tests..."
 for i in test/* ; do
 	if [[ -d $i && -e $i/run.sh ]] ; then
-		run_test $i
+		RUN_TEST_DIRS+=( $i )
+
+		echo "   " $i
+		(
+			set -o pipefail
+			set -e
+			cd $i
+			. run.sh > log.txt
+		)
+
+		if [[ $? -ne 0 ]] ; then
+			: $((FAILED++))
+			echo $i failed
+		fi
 	fi
 done
 
