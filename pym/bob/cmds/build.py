@@ -449,12 +449,10 @@ esac
         runEnv.update(stepEnv)
 
         # sandbox
-        sandbox = []
-        sandboxSetup = ""
         if step.getSandbox() is not None:
             sandboxSetup = "\"$(mktemp -d)\""
-            sandbox.append(quote(os.path.join(self.__bobRoot,
-                                              "bin", "namespace-sandbox")))
+            sandboxMounts = [ "declare -a mounts=( )" ]
+            sandbox = [ quote(os.path.join(self.__bobRoot, "bin", "namespace-sandbox")) ]
             if self.__verbose >= 3:
                 sandbox.append('-D')
             sandbox.extend(["-S", "\"$_sandbox\""])
@@ -464,18 +462,31 @@ esac
             sandboxRootFs = os.path.abspath(
                 step.getSandbox().getStep().getWorkspacePath())
             for f in os.listdir(sandboxRootFs):
-                sandbox.extend(["-M", os.path.join(sandboxRootFs, f), "-m", "/"+f])
-            for (hostPath, sndbxPath) in step.getSandbox().getMounts():
-                sandbox.extend(["-M", hostPath ])
-                if hostPath != sndbxPath: sandbox.extend(["-m", sndbxPath])
-            sandbox.extend([
-                "-M", quote(os.path.abspath(os.path.join(
+                sandboxMounts.append("mounts+=( -M {} -m /{} )".format(
+                    quote(os.path.join(sandboxRootFs, f)), quote(f)))
+            for (hostPath, sndbxPath, options) in step.getSandbox().getMounts():
+                if "nolocal" in options: continue # skip for local builds?
+                line = "-M " + hostPath
+                if "rw" in options:
+                    line += " -w " + sndbxPath
+                elif hostPath != sndbxPath:
+                    line += " -m " + sndbxPath
+                line = "mounts+=( " + line + " )"
+                if "nofail" in options:
+                    sandboxMounts.append(
+                        """if [[ -e {HOST} ]] ; then {MOUNT} ; fi"""
+                            .format(HOST=hostPath, MOUNT=line)
+                        )
+                else:
+                    sandboxMounts.append(line)
+            sandboxMounts.append("mounts+=( -M {} -w {} )".format(
+                quote(os.path.abspath(os.path.join(
                     step.getWorkspacePath(), ".."))),
-                "-w", quote(os.path.normpath(os.path.join(
-                    step.getExecPath(), ".."))) ])
-            addDep = lambda s: (sandbox.extend([
-                    "-M", quote(os.path.abspath(s.getWorkspacePath())),
-                    "-m", quote(s.getExecPath()) ]) if s.isValid() else None)
+                quote(os.path.normpath(os.path.join(
+                    step.getExecPath(), ".."))) ))
+            addDep = lambda s: (sandboxMounts.append("mounts+=( -M {} -m {} )".format(
+                    quote(os.path.abspath(s.getWorkspacePath())),
+                    quote(s.getExecPath()) )) if s.isValid() else None)
             for s in step.getAllDepSteps(): addDep(s)
             # special handling to mount all previous steps of current package
             s = step
@@ -485,7 +496,12 @@ esac
                     addDep(s)
                 else:
                     break
+            sandbox.append('"${mounts[@]}"')
             sandbox.append("--")
+        else:
+            sandbox = []
+            sandboxMounts = []
+            sandboxSetup = ""
 
         # write scripts
         runFile = os.path.join("..", scriptName+".sh")
@@ -502,7 +518,7 @@ esac
                     ARGS=" ".join([
                         quote(a.getExecPath())
                         for a in step.getArguments() ]),
-                    SANDBOX_CMD=" ".join(sandbox),
+                    SANDBOX_CMD="\n    ".join(sandboxMounts + [" ".join(sandbox)]),
                     SANDBOX_SETUP=sandboxSetup
                 ), file=f)
         scriptFile = os.path.join(workspacePath, "..", "script")

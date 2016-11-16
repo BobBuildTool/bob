@@ -208,38 +208,8 @@ class JenkinsJob:
         if d.getJenkinsScript() is not None:
             cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
             if d.getSandbox() is not None:
-                sandbox = []
-                sandbox.extend(["-S", "\"$_sandbox\""])
-                sandbox.extend(["-W", quote(d.getExecPath())])
-                sandbox.extend(["-H", "bob"])
-                sandbox.extend(["-d", "/tmp"])
-                sandbox.append("\"${_image[@]}\"")
-                for (hostPath, sndbxPath) in d.getSandbox().getMounts():
-                    sandbox.extend(["-M", hostPath ])
-                    if hostPath != sndbxPath: sandbox.extend(["-m", sndbxPath])
-                sandbox.extend([
-                    "-M", "$WORKSPACE/"+d.getWorkspacePath(),
-                    "-w", d.getExecPath() ])
-                addDep = lambda s: (sandbox.extend([
-                        "-M", "$WORKSPACE/"+s.getWorkspacePath(),
-                        "-m", s.getExecPath() ]) if s.isValid() else None)
-                for s in d.getAllDepSteps(): addDep(s)
-                # special handling to mount all previous steps of current package
-                s = d
-                while s.isValid():
-                    if len(s.getArguments()) > 0:
-                        s = s.getArguments()[0]
-                        addDep(s)
-                    else:
-                        break
-                sandbox.append("--")
-
                 cmds.append("_sandbox=$(mktemp -d)")
                 cmds.append("trap 'rm -rf $_sandbox' EXIT")
-                cmds.append("_image=( )")
-                cmds.append("for i in {}/* ; do".format(d.getSandbox().getStep().getWorkspacePath()))
-                cmds.append("    _image+=(-M) ; _image+=($PWD/$i) ; _image+=(-m) ; _image+=(/${i##*/})")
-                cmds.append("done")
                 cmds.append("")
                 cmds.append("cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'")
             else:
@@ -292,8 +262,48 @@ class JenkinsJob:
 
             if d.getSandbox() is not None:
                 cmds.append("BOB_JENKINS_SANDBOXED_SCRIPT")
-                cmds.append("bob-namespace-sandbox {} /bin/bash -x -- /.script".format(" ".join(sandbox)))
                 cmds.append("")
+                cmds.append("# invoke above script through sandbox")
+                cmds.append("mounts=( )")
+                cmds.append("for i in {}/* ; do".format(d.getSandbox().getStep().getWorkspacePath()))
+                cmds.append("    mounts+=( -M \"$PWD/$i\" -m \"/${i##*/}\" )")
+                cmds.append("done")
+                for (hostPath, sndbxPath, options) in d.getSandbox().getMounts():
+                    if "nojenkins" in options: continue
+                    line = "-M " + hostPath
+                    if "rw" in options:
+                        line += " -w " + sndbxPath
+                    elif hostPath != sndbxPath:
+                        line += " -m " + sndbxPath
+                    line = "mounts+=( " + line + " )"
+                    if "nofail" in options:
+                        cmds.append(
+                            """if [[ -e {HOST} ]] ; then {MOUNT} ; fi"""
+                                .format(HOST=hostPath, MOUNT=line)
+                            )
+                    else:
+                        cmds.append(line)
+                cmds.append("mounts+=( -M \"$WORKSPACE/{}\" -w {} )".format(
+                    d.getWorkspacePath(), d.getExecPath()))
+                addDep = lambda s: (cmds.append("mounts+=( -M \"$WORKSPACE/{}\" -m {} )"
+                    .format(s.getWorkspacePath(), s.getExecPath())) if s.isValid() else None)
+                for s in d.getAllDepSteps(): addDep(s)
+                # special handling to mount all previous steps of current package
+                s = d
+                while s.isValid():
+                    if len(s.getArguments()) > 0:
+                        s = s.getArguments()[0]
+                        addDep(s)
+                    else:
+                        break
+                sandbox = []
+                sandbox.extend(["-S", "\"$_sandbox\""])
+                sandbox.extend(["-W", quote(d.getExecPath())])
+                sandbox.extend(["-H", "bob"])
+                sandbox.extend(["-d", "/tmp"])
+                sandbox.append("\"${mounts[@]}\"")
+                sandbox.append("--")
+                cmds.append("bob-namespace-sandbox {} /bin/bash -x -- /.script".format(" ".join(sandbox)))
 
         return "\n".join(cmds)
 

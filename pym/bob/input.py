@@ -1151,10 +1151,12 @@ class Sandbox:
         self.paths = spec['paths']
         self.mounts = []
         for mount in spec.get('mount', []):
-            m = (mount, mount) if isinstance(mount, str) else mount
-            self.mounts.append(
-                (env.substitute(m[0], "provideSandbox::mount-from"),
-                 env.substitute(m[1], "provideSandbox::mount-to")))
+            m = (env.substitute(mount[0], "provideSandbox::mount-from"),
+                 env.substitute(mount[1], "provideSandbox::mount-to"),
+                 mount[2])
+            # silently drop empty mount lines
+            if (m[0] != "") and (m[1] != ""):
+                self.mounts.append(m)
 
     def getStep(self):
         """Get the package step that yields the content of the sandbox image."""
@@ -1170,7 +1172,7 @@ class Sandbox:
         """Get custom mounts.
 
         This returns a list of tuples where each tuple has the format
-        (hostPath, sandboxPath).
+        (hostPath, sandboxPath, options).
         """
         return self.mounts
 
@@ -2348,6 +2350,27 @@ class ArchiveValidator:
         self.__validTypes.validate(data)
         return self.__backends[data['backend']].validate(data)
 
+class MountValidator:
+    def __init__(self):
+        self.__options = schema.Schema(
+            ["nolocal", "nojenkins", "nofail", "rw"],
+            error="Invalid mount option specified!")
+
+    def validate(self, data):
+        if isinstance(data, str):
+            return (data, data, [])
+        elif isinstance(data, list) and (len(data) in [2, 3]):
+            if not isinstance(data[0], str):
+                raise schema.SchemaError(None, "Expected string as first mount argument!")
+            if not isinstance(data[1], str):
+                raise schema.SchemaError(None, "Expected string as second mount argument!")
+            if len(data) == 3:
+                self.__options.validate(data[2])
+                return data
+            else:
+                return (data[0], data[1], [])
+
+        raise schema.SchemaError(None, "Mount entry must be a string or a two/three items list!")
 
 class RecipeSet:
 
@@ -2681,10 +2704,8 @@ class RecipeSet:
             }),
             schema.Optional('provideSandbox') : schema.Schema({
                 'paths' : [str],
-                schema.Optional('mount') : schema.Schema([
-                    str,
-                    schema.And([str], lambda x: len(x) == 2)
-                ], error="provideSandbox::mount must be a list of paths or tuples of two paths each!")
+                schema.Optional('mount') : schema.Schema([ MountValidator() ],
+                    error="provideSandbox: invalid 'mount' property")
             }),
             schema.Optional('root') : bool,
             schema.Optional('shared') : bool
