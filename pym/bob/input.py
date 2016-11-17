@@ -2628,6 +2628,7 @@ class RecipeSet:
         for p in cfg.get("include", []):
             self.__parseUserConfig(str(p) + ".yaml")
 
+    # YamlCache.CACHE_VERSION should be incremented if the schema is changed
     def __createSchemas(self):
         varNameSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
         varGlobSchema = schema.Regex(r'^[][A-Za-z_*?][][A-Za-z0-9_*?]*$')
@@ -2760,6 +2761,9 @@ class RecipeSet:
 
 
 class YamlCache:
+    # Increment if the cached values are not valid, e.g. due to schema changes
+    CACHE_VERSION = 1
+
     def open(self):
         self.__shelve = shelve.open(".bob-cache.shelve")
 
@@ -2770,7 +2774,9 @@ class YamlCache:
         binStat = binLstat(name)
         if name in self.__shelve:
             cached = self.__shelve[name]
-            if cached['lstat'] == binStat: return cached['data']
+            if ((cached['lstat'] == binStat) and
+                (cached.get('vsn') == YamlCache.CACHE_VERSION)):
+                return cached['data']
 
         with open(name, "r") as f:
             try:
@@ -2784,7 +2790,11 @@ class YamlCache:
         except schema.SchemaError as e:
             raise ParseError("Error while validating {}: {}".format(name, str(e)))
 
-        self.__shelve[name] = { 'lstat' : binStat, 'data' : data }
+        self.__shelve[name] = {
+            'lstat' : binStat,
+            'data' : data,
+            'vsn' : YamlCache.CACHE_VERSION,
+        }
         return data
 
 
