@@ -154,17 +154,18 @@ are used:
         formats[f[0]] = f[1]
 
     def showPackage(package, recurse, done=set()):
+        # show recipes only once for each checkout variant
         key = (package.getRecipe().getName(), package.getCheckoutStep().getVariantId())
-        if key in done: return
-        done.add(key)
+        if key not in done:
+            for scm in package.getCheckoutStep().getScmList():
+                for p in scm.getProperties():
+                    p = { k:v for (k,v) in p.items() if v is not None }
+                    p['package'] = "/".join(package.getStack())
+                    fmt = formats.get(p['scm'], "{scm} {dir}")
+                    print(fmt.format_map(Default(args.default, p)))
+            done.add(key)
 
-        for scm in package.getCheckoutStep().getScmList():
-            for p in scm.getProperties():
-                p = { k:v for (k,v) in p.items() if v is not None }
-                p['package'] = "/".join(package.getStack())
-                fmt = formats.get(p['scm'], "{scm} {dir}")
-                print(fmt.format_map(Default(args.default, p)))
-
+        # recurse package tree if requested
         if recurse:
             for ps in package.getDirectDepSteps():
                 showPackage(ps.getPackage(), recurse, done)
