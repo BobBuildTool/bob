@@ -991,46 +991,134 @@ def getUrl(config):
     return "{}://{}{}{}{}".format(url['scheme'], userPass, url['server'],
         ":{}".format(url['port']) if url.get('port') else "", url['path'])
 
-def getConnection(config):
-    if config["url"]["scheme"] == 'http':
-        connection = http.client.HTTPConnection(config["url"]["server"],
-                                                config["url"].get("port"))
-    elif config["url"]["scheme"] == 'https':
-        ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-        warnCertificate.warn()
-        connection = http.client.HTTPSConnection(config["url"]["server"],
-                                                config["url"].get("port"), context=ctx)
-    else:
-        raise BuildError("Unsupported Jenkins URL scheme: '{}'".format(
-            config["url"]["scheme"]))
-    return connection
+class JenkinsConnection:
+    """Connection to a Jenkins server abstracting the REST API"""
 
-def getHeaders(connection, config):
-    headers = { "Content-Type": "application/xml" }
+    def __init__(self, config):
+        # create connection
+        if config["url"]["scheme"] == 'http':
+            connection = http.client.HTTPConnection(config["url"]["server"],
+                                                    config["url"].get("port"))
+        elif config["url"]["scheme"] == 'https':
+            ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+            warnCertificate.warn()
+            connection = http.client.HTTPSConnection(config["url"]["server"],
+                                                    config["url"].get("port"), context=ctx)
+        else:
+            raise BuildError("Unsupported Jenkins URL scheme: '{}'".format(
+                config["url"]["scheme"]))
 
-    # authorization
-    if config["url"].get("username"):
-        passwd = config["url"].get("password")
-        if passwd is None:
-            passwd = getpass.getpass()
-        userPass = config["url"]["username"] + ":" + passwd
-        headers['Authorization'] = 'Basic ' + base64.b64encode(
-            userPass.encode("utf-8")).decode("ascii")
+        # remember basic settings
+        self.__config = config
+        self.__connection = connection
+        self.__headers = { "Content-Type": "application/xml" }
 
-    # get CSRF token
-    connection.request("GET", config["url"]["path"] + "crumbIssuer/api/xml",
-                       headers=headers)
-    response = connection.getresponse()
-    if response.status == 200:
-        resp = xml.etree.ElementTree.fromstring(response.read())
-        crumb = resp.find("crumb").text
-        field = resp.find("crumbRequestField").text
-        headers[field] = crumb
-    else:
-        # dump response
+        # handle authorization
+        if config["url"].get("username"):
+            passwd = config["url"].get("password")
+            if passwd is None:
+                passwd = getpass.getpass()
+            userPass = config["url"]["username"] + ":" + passwd
+            self.__headers['Authorization'] = 'Basic ' + base64.b64encode(
+                userPass.encode("utf-8")).decode("ascii")
+
+        # get CSRF token
+        connection.request("GET", config["url"]["path"] + "crumbIssuer/api/xml",
+                           headers=self.__headers)
+        response = connection.getresponse()
+        if response.status == 200:
+            resp = xml.etree.ElementTree.fromstring(response.read())
+            crumb = resp.find("crumb").text
+            field = resp.find("crumbRequestField").text
+            self.__headers[field] = crumb
+        else:
+            # dump response
+            response.read()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.__connection.close()
+        return False
+
+    def _send(self, method, path, body=None):
+        self.__connection.request(method, self.__config["url"]["path"] + path, body,
+                                  self.__headers)
+        return self.__connection.getresponse()
+
+    def checkPlugins(self):
+        response = self._send("GET", "pluginManager/api/python?depth=1")
+        if response.status != 200:
+            print("Warning: could not verify plugins: HTTP error: {} {}"
+                    .format(response.status, response.reason),
+                file=sys.stderr)
+            response.read()
+        else:
+            try:
+                plugins =  ast.literal_eval(response.read().decode("utf8"))["plugins"]
+                required = set(requiredPlugins.keys())
+                for p in plugins:
+                    if p["shortName"] not in required: continue
+                    if not p["active"] or not p["enabled"]:
+                        raise BuildError("Plugin not enabled: " + requiredPlugins[p["shortName"]])
+                    required.remove(p["shortName"])
+                if required:
+                    raise BuildError("Missing plugin(s): " + ", ".join(
+                        requiredPlugins[p] for p in required))
+            except BuildError:
+                raise
+            except:
+                raise BuildError("Malformed Jenkins response while checking plugins!")
+
+    def createJob(self, name, jobXML):
+        response = self._send("POST", "createItem?name=" + name, jobXML)
+        if response.status == 200:
+            response.read()
+            return True
+        if response.status == 400:
+            response.read()
+            return False
+        else:
+            raise BuildError("Error creating '{}': HTTP error: {} {}"
+                .format(name, response.status, response.reason))
+
+    def deleteJob(self, name):
+        response = self._send("POST", "job/" + name + "/doDelete")
+        if response.status != 302 and response.status != 404:
+            raise BuildError("Error deleting '{}': HTTP error: {} {}".format(
+                name, response.status, response.reason))
         response.read()
 
-    return headers
+    def fetchConfig(self, name):
+        response = self._send("GET", "job/" + name + "/config.xml")
+        if response.status == 200:
+            return response.read()
+        elif response.status == 404:
+            response.read()
+            return None
+        else:
+            raise BuildError("Warning: could not download '{}' job config: HTTP error: {} {}"
+                    .format(name, response.status, response.reason))
+
+    def updateConfig(self, name, jobXML):
+        response = self._send("POST", "job/" + name + "/config.xml", jobXML)
+        if response.status != 200:
+            raise BuildError("Error updating '{}': HTTP error: {} {}"
+                .format(name, response.status, response.reason))
+        response.read()
+
+    def schedule(self, name):
+        ret = True
+        response = self._send("POST", "job/" + name + "/build")
+        if response.status != 201:
+            print("Error scheduling '{}': HTTP error: {} {}"
+                    .format(name, response.status, response.reason),
+                file=sys.stderr)
+            ret = False
+        response.read()
+        return ret
+
 
 def doJenkinsPrune(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins prune")
@@ -1045,23 +1133,11 @@ def doJenkinsPrune(recipes, argv):
     existingJobs = BobState().getJenkinsAllJobs(args.name)
 
     # connect to server
-    connection = getConnection(config)
-    urlPath = config["url"]["path"]
-    try:
-        headers = getHeaders(connection, config)
+    with JenkinsConnection(config) as connection:
         for name in existingJobs:
             print("Delete", name, "...")
-            connection.request("POST", urlPath + "job/" + name + "/doDelete",
-                               headers=headers)
-            response = connection.getresponse()
-            if response.status != 302 and response.status != 404:
-                raise BuildError("Error deleting '{}': HTTP error: {} {}".format(
-                    name, response.status, response.reason))
-            response.read()
+            connection.deleteJob(name)
             BobState().delJenkinsJob(args.name, name)
-
-    finally:
-        connection.close()
 
 def doJenkinsRm(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins rm")
@@ -1090,32 +1166,6 @@ def applyHooks(hooks, job, info, reverse=False):
         job = h(job, **info)
     return job
 
-def checkPlugins(connection, urlPath, headers):
-    connection.request("GET", urlPath + "pluginManager/api/python?depth=1",
-                       headers=headers)
-    response = connection.getresponse()
-    if response.status != 200:
-        print("Warning: could not verify plugins: HTTP error: {} {}"
-                .format(response.status, response.reason),
-            file=sys.stderr)
-        response.read()
-    else:
-        try:
-            plugins =  ast.literal_eval(response.read().decode("utf8"))["plugins"]
-            required = set(requiredPlugins.keys())
-            for p in plugins:
-                if p["shortName"] not in required: continue
-                if not p["active"] or not p["enabled"]:
-                    raise BuildError("Plugin not enabled: " + requiredPlugins[p["shortName"]])
-                required.remove(p["shortName"])
-            if required:
-                raise BuildError("Missing plugin(s): " + ", ".join(
-                    requiredPlugins[p] for p in required))
-        except BuildError:
-            raise
-        except:
-            raise BuildError("Malformed Jenkins response while checking plugins!")
-
 def doJenkinsPush(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins push")
     parser.add_argument("name", help="Push jobs to Jenkins server")
@@ -1143,25 +1193,19 @@ def doJenkinsPush(recipes, argv):
     jenkinsJobPreUpdate = recipes.getHookStack('jenkinsJobPreUpdate')
     jenkinsJobPostUpdate = recipes.getHookStack('jenkinsJobPostUpdate')
 
-    # connect to server
-    connection = getConnection(config)
-    urlPath = config["url"]["path"]
-
     windows = config.get("windows", False)
     nodes = config.get("nodes", "")
     credentials = config.get("credentials")
     clean = config.get("clean", False)
     updatedJobs = {}
-
     verbose = args.verbose - args.quiet
-    try:
-        # construct headers
-        headers = getHeaders(connection, config)
 
+    # connect to server
+    with JenkinsConnection(config) as connection:
         # verify plugin state
         if verbose >= 2:
             print("Check available plugins...")
-        checkPlugins(connection, urlPath, headers)
+        connection.checkPlugins()
 
         # push new jobs / reconfigure existing ones
         for (name, job) in jobs.items():
@@ -1179,26 +1223,16 @@ def doJenkinsPush(recipes, argv):
             }
 
             # get original XML if it exists
-            origXML = None
             if name in existingJobs:
                 if verbose >= 2:
                     print("Retrive configuration of '{}'...".format(name))
-                connection.request("GET", urlPath + "job/" + name + "/config.xml",
-                                   headers=headers)
-                response = connection.getresponse()
-                if response.status != 200:
-                    print("Warning: could not download '{}' job config: HTTP error: {} {}"
-                            .format(name, response.status, response.reason),
-                        file=sys.stderr)
-                    response.read()
-
-                    if response.status == 404:
-                        # Job was deleted
-                        existingJobs.remove(name)
-                        BobState().delJenkinsJob(args.name, name)
-
-                else:
-                    origXML = response.read()
+                origXML = connection.fetchConfig(name)
+                if origXML is None:
+                    # Job was deleted
+                    existingJobs.remove(name)
+                    BobState().delJenkinsJob(args.name, name)
+            else:
+                origXML = None
 
             try:
                 if origXML is not None:
@@ -1230,50 +1264,26 @@ def doJenkinsPush(recipes, argv):
 
                 if verbose >= 0:
                     print("Reconfigure '{}'...".format(name))
-                connection.request("POST", urlPath + "job/" + name + "/config.xml",
-                    body=jobXML, headers=headers)
-                response = connection.getresponse()
-                if response.status != 200:
-                    raise BuildError("Error updating '{}': HTTP error: {} {}"
-                        .format(name, response.status, response.reason))
+                connection.updateConfig(name, jobXML)
                 updatedJobs[name] = jobConfig
             else:
                 if verbose >= 0:
                     print("Create '{}'...".format(name))
                 initialJobConfig = { 'hash' : b'\x00'*20 }
-                connection.request("POST", urlPath + "createItem?name=" + name,
-                    body=jobXML, headers=headers)
-                response = connection.getresponse()
-                if response.status == 400 and args.force:
-                    if verbose >= 1:
-                        print("  Exists already. Trying to overwrite...")
-                    response.read()
-                    connection.request("POST", urlPath + "job/" + name + "/config.xml",
-                        body=jobXML, headers=headers)
-                    response = connection.getresponse()
-                    if response.status != 200:
-                        raise BuildError("Error overwriting '{}': HTTP error: {} {}"
-                            .format(name, response.status, response.reason))
-                    BobState().addJenkinsJob(args.name, name, initialJobConfig)
-                elif response.status != 200:
-                    raise BuildError("Error creating '{}': HTTP error: {} {}"
-                        .format(name, response.status, response.reason))
-                else:
-                    BobState().addJenkinsJob(args.name, name, initialJobConfig)
+                if not connection.createJob(name, jobXML):
+                    if args.force:
+                        connection.updateConfig(name, jobXML)
+                    else:
+                        raise BuildError("Error creating '{}': already exists"
+                            .format(name))
+                BobState().addJenkinsJob(args.name, name, initialJobConfig)
                 updatedJobs[name] = jobConfig
-            response.read()
 
         # delete obsolete jobs
         for name in BobState().getJenkinsAllJobs(args.name) - set(jobs.keys()):
             if verbose >= 0:
                 print("Delete '{}'...".format(name))
-            connection.request("POST", urlPath + "job/" + name + "/doDelete",
-                               headers=headers)
-            response = connection.getresponse()
-            if response.status != 302 and response.status != 404:
-                raise BuildError("Error deleting '{}': HTTP error: {} {}"
-                    .format(name, response.status, response.reason))
-            response.read()
+            connection.deleteJob(name)
             BobState().delJenkinsJob(args.name, name)
 
         # sort changed jobs and trigger them in leaf-to-root order
@@ -1283,14 +1293,7 @@ def doJenkinsPush(recipes, argv):
             for name in [ j for j in buildOrder if j in updatedJobs ]:
                 if verbose >= 1:
                     print("Schedule '{}'...".format(name))
-                connection.request("POST", urlPath + "job/" + name + "/build",
-                                   headers=headers)
-                response = connection.getresponse()
-                if response.status != 201:
-                    print("Error scheduling '{}': HTTP error: {} {}"
-                            .format(name, response.status, response.reason),
-                        file=sys.stderr)
-                response.read()
+                connection.schedule(name)
 
         # Updated jobs should run. Now it's save to persist the new state of
         # these jobs...
@@ -1300,9 +1303,6 @@ def doJenkinsPush(recipes, argv):
                 BobState().setJenkinsJobConfig(args.name, name, jobConfig)
         finally:
             BobState().setSynchronous()
-
-    finally:
-        connection.close()
 
 def doJenkinsSetUrl(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins set-url")
