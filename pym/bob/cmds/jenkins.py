@@ -952,7 +952,7 @@ def doJenkinsLs(recipes, argv):
         help="Show additional information")
     args = parser.parse_args(argv)
 
-    for j in BobState().getAllJenkins():
+    for j in sorted(BobState().getAllJenkins()):
         print(j)
         cfg = BobState().getJenkinsConfig(j)
         if args.verbose >= 1:
