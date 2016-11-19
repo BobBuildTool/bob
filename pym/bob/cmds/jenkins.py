@@ -862,11 +862,6 @@ def doJenkinsAdd(recipes, argv):
         print("Jenkins '{}' already added.".format(args.name), file=sys.stderr)
         sys.exit(1)
 
-    roots = args.root
-    if not roots:
-        print("Must specify at least one root package.", file=sys.stderr)
-        sys.exit(1)
-
     url = urllib.parse.urlparse(args.url)
     urlPath = url.path
     if not urlPath.endswith("/"): urlPath = urlPath + "/"
