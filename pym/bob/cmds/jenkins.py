@@ -963,9 +963,8 @@ def doJenkinsLs(recipes, argv):
                 print(" Nodes:", cfg['nodes'])
             if cfg.get('defines'):
                 print(" Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
-            if recipes.archiveSpec().get("backend", "none") != "none":
-                print(" Download:", "enabled" if cfg.get('download', False) else "disabled")
-                print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
+            print(" Download:", "enabled" if cfg.get('download', False) else "disabled")
+            print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
             print(" Clean builds:", "enabled" if cfg.get('clean', False) else "disabled")
             print(" Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
             print(" Roots:", ", ".join(cfg['roots']))
