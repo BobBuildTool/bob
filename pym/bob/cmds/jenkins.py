@@ -986,35 +986,39 @@ class JenkinsConnection:
     """Connection to a Jenkins server abstracting the REST API"""
 
     def __init__(self, config):
+        self.__config = config
+        self.__init()
+
+    def __init(self):
         # create connection
-        if config["url"]["scheme"] == 'http':
-            connection = http.client.HTTPConnection(config["url"]["server"],
-                                                    config["url"].get("port"))
-        elif config["url"]["scheme"] == 'https':
+        url = self.__config["url"]
+        if url["scheme"] == 'http':
+            connection = http.client.HTTPConnection(url["server"],
+                                                    url.get("port"))
+        elif url["scheme"] == 'https':
             ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
             warnCertificate.warn()
-            connection = http.client.HTTPSConnection(config["url"]["server"],
-                                                    config["url"].get("port"), context=ctx)
+            connection = http.client.HTTPSConnection(url["server"],
+                                                     url.get("port"), context=ctx)
         else:
             raise BuildError("Unsupported Jenkins URL scheme: '{}'".format(
-                config["url"]["scheme"]))
+                url["scheme"]))
 
         # remember basic settings
-        self.__config = config
         self.__connection = connection
         self.__headers = { "Content-Type": "application/xml" }
 
         # handle authorization
-        if config["url"].get("username"):
-            passwd = config["url"].get("password")
+        if url.get("username"):
+            passwd = url.get("password")
             if passwd is None:
                 passwd = getpass.getpass()
-            userPass = config["url"]["username"] + ":" + passwd
+            userPass = url["username"] + ":" + passwd
             self.__headers['Authorization'] = 'Basic ' + base64.b64encode(
                 userPass.encode("utf-8")).decode("ascii")
 
         # get CSRF token
-        connection.request("GET", config["url"]["path"] + "crumbIssuer/api/xml",
+        connection.request("GET", url["path"] + "crumbIssuer/api/xml",
                            headers=self.__headers)
         response = connection.getresponse()
         if response.status == 200:
@@ -1034,9 +1038,21 @@ class JenkinsConnection:
         return False
 
     def _send(self, method, path, body=None):
-        self.__connection.request(method, self.__config["url"]["path"] + path, body,
-                                  self.__headers)
-        return self.__connection.getresponse()
+        # Retry in case of BadStatusLine or OSError (broken pipe). This happens
+        # sometimes if the server is under load. Running Bob again essentially
+        # does that anyway...
+        retries = 3
+        while True:
+            try:
+                self.__connection.request(method, self.__config["url"]["path"] + path, body,
+                                          self.__headers)
+                return self.__connection.getresponse()
+            except (http.client.BadStatusLine, OSError) as e:
+                retries -= 1
+                if retries <= 0: raise
+                print("Jenkins connection dropped ({}). Retrying...".format(str(e)),
+                      file=sys.stderr)
+                self.__init()
 
     def checkPlugins(self):
         response = self._send("GET", "pluginManager/api/python?depth=1")
