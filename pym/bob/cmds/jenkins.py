@@ -152,6 +152,9 @@ class JenkinsJob:
     def getName(self):
         return self.__name
 
+    def isRoot(self):
+        return self.__isRoot
+
     def addDependencies(self, deps):
         for dep in deps:
             self.__deps[dep.getVariantId()] = dep
@@ -1133,8 +1136,22 @@ class JenkinsConnection:
 
 
 def doJenkinsPrune(recipes, argv):
-    parser = argparse.ArgumentParser(prog="bob jenkins prune")
+    parser = argparse.ArgumentParser(prog="bob jenkins prune",
+                                     formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     description="""Prune jobs from Jenkins server.
+
+By default all jobs managed by the Jenkins alias will be deleted. If the 'keep'
+option is enabled for this alias you may use the '--obsolete' option to delete
+only currently disabled (obsolete) jobs. Alternatively you may delete all
+intermediate jobs and keep only the root jobs by using '--intermediate'. This
+will disable the root jobs because they cannot run anyawy without failing.
+""")
     parser.add_argument("name", help="Prune jobs from Jenkins server")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--obsolete', action='store_true', default=False,
+        help="Delete only obsolete jobs")
+    group.add_argument('--intermediate', action='store_true', default=False,
+        help="Delete everything except root jobs")
     args = parser.parse_args(argv)
 
     if args.name not in BobState().getAllJenkins():
@@ -1146,10 +1163,38 @@ def doJenkinsPrune(recipes, argv):
 
     # connect to server
     with JenkinsConnection(config) as connection:
-        for name in existingJobs:
-            print("Delete", name, "...")
-            connection.deleteJob(name)
-            BobState().delJenkinsJob(args.name, name)
+        if args.obsolete:
+            # delete all disabled jobs
+            for name in existingJobs:
+                jobConfig = BobState().getJenkinsJobConfig(args.name, name)
+                if jobConfig.get('enabled', True): continue
+                print("{}: Delete job...".format(name))
+                connection.deleteJob(name)
+                BobState().delJenkinsJob(args.name, name)
+        elif args.intermediate:
+            jobs = genJenkinsJobs(recipes, args.name)
+            roots = [ name for (name, job) in jobs.items() if job.isRoot() ]
+            # disable root jobs
+            for name in roots:
+                if name not in existingJobs: continue
+                jobConfig = BobState().getJenkinsJobConfig(args.name, name)
+                if not jobConfig.get('enabled', True): continue
+                print("{}: Disable root job...".format(name))
+                connection.disableJob(name)
+                jobConfig['enabled'] = False
+                BobState().setJenkinsJobConfig(args.name, name, jobConfig)
+            # delete everything except root jobs
+            for name in existingJobs:
+                if name in roots: continue
+                print("{}: Delete job...".format(name))
+                connection.deleteJob(name)
+                BobState().delJenkinsJob(args.name, name)
+        else:
+            # nuke all jobs
+            for name in existingJobs:
+                print("{}: Delete job...".format(name))
+                connection.deleteJob(name)
+                BobState().delJenkinsJob(args.name, name)
 
 def doJenkinsRm(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins rm")
