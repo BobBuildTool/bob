@@ -835,6 +835,8 @@ def doJenkinsAdd(recipes, argv):
                         help="Root package (may be specified multiple times)")
     parser.add_argument('-D', default=[], action='append', dest="defines",
                         help="Override default environment variable")
+    parser.add_argument('--keep', action='store_true', default=False,
+        help="Keep obsolete jobs by disabling them")
     parser.add_argument('--download', default=False, action='store_true',
         help="Download from binary archive")
     parser.add_argument('--upload', default=False, action='store_true',
@@ -875,7 +877,7 @@ def doJenkinsAdd(recipes, argv):
             "username" : url.username,
             "password" : url.password,
         },
-        "roots" : roots,
+        "roots" : args.root,
         "prefix" : args.prefix,
         "nodes" : args.nodes,
         "defines" : defines,
@@ -885,6 +887,7 @@ def doJenkinsAdd(recipes, argv):
         "windows" : args.windows,
         "credentials" : args.credentials,
         "clean" : args.clean,
+        "keep" : args.keep,
     }
     BobState().addJenkins(args.name, config)
 
@@ -963,6 +966,7 @@ def doJenkinsLs(recipes, argv):
                 print(" Nodes:", cfg['nodes'])
             if cfg.get('defines'):
                 print(" Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
+            print(" Obsolete jobs:", "keep" if cfg.get('keep', False) else "delete")
             print(" Download:", "enabled" if cfg.get('download', False) else "disabled")
             print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
             print(" Clean builds:", "enabled" if cfg.get('clean', False) else "disabled")
@@ -1113,6 +1117,20 @@ class JenkinsConnection:
         response.read()
         return ret
 
+    def enableJob(self, name):
+        response = self._send("POST", "job/" + name + "/enable")
+        if response.status != 200 and response.status != 302:
+            raise BuildError("Error enabling '{}': HTTP error: {} {}"
+                .format(name, response.status, response.reason))
+        response.read()
+
+    def disableJob(self, name):
+        response = self._send("POST", "job/" + name + "/disable")
+        if response.status != 200 and response.status != 302:
+            raise BuildError("Error disabling '{}': HTTP error: {} {}"
+                .format(name, response.status, response.reason))
+        response.read()
+
 
 def doJenkinsPrune(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins prune")
@@ -1191,14 +1209,25 @@ def doJenkinsPush(recipes, argv):
     nodes = config.get("nodes", "")
     credentials = config.get("credentials")
     clean = config.get("clean", False)
+    keep = config.get("keep", False)
     updatedJobs = {}
     verbose = args.verbose - args.quiet
+
+    def printLine(level, job, *args):
+        if level <= verbose:
+            if job:
+                print(job + ":", *args)
+            else:
+                print(*args)
+
+    def printNormal(job, *args): printLine(0, job, *args)
+    def printInfo(job, *args): printLine(1, job, *args)
+    def printDebug(job, *args): printLine(2, job, *args)
 
     # connect to server
     with JenkinsConnection(config) as connection:
         # verify plugin state
-        if verbose >= 2:
-            print("Check available plugins...")
+        printDebug(None, "Check available plugins...")
         connection.checkPlugins()
 
         # push new jobs / reconfigure existing ones
@@ -1218,16 +1247,19 @@ def doJenkinsPush(recipes, argv):
 
             # get original XML if it exists
             if name in existingJobs:
-                if verbose >= 2:
-                    print("Retrive configuration of '{}'...".format(name))
+                printDebug(name, "Retrieve configuration...")
                 origXML = connection.fetchConfig(name)
                 if origXML is None:
                     # Job was deleted
+                    printDebug(name, "Forget job. Has been deleted on the server!")
                     existingJobs.remove(name)
                     BobState().delJenkinsJob(args.name, name)
+                else:
+                    oldJobConfig = BobState().getJenkinsJobConfig(args.name, name)
             else:
                 origXML = None
 
+            # calculate new job configuration
             try:
                 if origXML is not None:
                     jobXML = applyHooks(jenkinsJobPreUpdate, origXML, info, True)
@@ -1243,60 +1275,85 @@ def doJenkinsPush(recipes, argv):
             except xml.etree.ElementTree.ParseError as e:
                 raise BuildError("Cannot parse XML of job '{}': {}".format(
                     name, str(e)))
-            jobConfig = {
-                # hash is based on unmerged config to detect just our changes
-                'hash' : hashlib.sha1(applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes,
-                    windows, credentials, clean), info)).digest()
+
+            # hash is based on unmerged config to detect just our changes
+            newJobHash = hashlib.sha1(applyHooks(jenkinsJobCreate,
+                job.dumpXML(None, nodes, windows, credentials, clean),
+                info)).digest()
+            newJobConfig = {
+                'hash' : newJobHash,
+                'scheduledHash' : newJobHash,
+                'enabled' : True,
             }
 
+            # configure or create job
             if name in existingJobs:
-                if BobState().getJenkinsJobConfig(args.name, name) == jobConfig:
-                    if verbose >= 1:
-                        print("Skip '{}' (unchanged)...".format(name))
-                    # skip job if unchanged
+                # skip job if completely unchanged
+                if oldJobConfig == newJobConfig:
+                    printInfo(name, "Unchanged. Skipping...")
                     continue
 
-                if verbose >= 0:
-                    print("Reconfigure '{}'...".format(name))
-                connection.updateConfig(name, jobXML)
-                updatedJobs[name] = jobConfig
+                # updated config.xml?
+                if oldJobConfig.get('hash') != newJobConfig['hash']:
+                    printNormal(name, "Set new configuration...")
+                    connection.updateConfig(name, jobXML)
+                    oldJobConfig['hash'] = newJobConfig['hash']
+                    BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
+                else:
+                    printDebug(name, "Not reconfigured. Unchanged configuration.")
             else:
-                if verbose >= 0:
-                    print("Create '{}'...".format(name))
-                initialJobConfig = { 'hash' : b'\x00'*20 }
+                printNormal(name, "Initial creation...")
+                oldJobConfig = {
+                    'hash' : newJobConfig['hash'],
+                    'enabled' : True
+                }
                 if not connection.createJob(name, jobXML):
                     if args.force:
                         connection.updateConfig(name, jobXML)
                     else:
                         raise BuildError("Error creating '{}': already exists"
                             .format(name))
-                BobState().addJenkinsJob(args.name, name, initialJobConfig)
-                updatedJobs[name] = jobConfig
+                BobState().addJenkinsJob(args.name, name, oldJobConfig)
+            updatedJobs[name] = (oldJobConfig, newJobConfig)
 
-        # delete obsolete jobs
+        # process obsolete jobs
         for name in BobState().getJenkinsAllJobs(args.name) - set(jobs.keys()):
-            if verbose >= 0:
-                print("Delete '{}'...".format(name))
-            connection.deleteJob(name)
-            BobState().delJenkinsJob(args.name, name)
+            if keep:
+                oldJobConfig = BobState().getJenkinsJobConfig(args.name, name)
+                if oldJobConfig.get('enabled', True):
+                    # disable obsolete jobs
+                    printNormal(name, "Disabling job...")
+                    connection.disableJob(name)
+                    oldJobConfig['enabled'] = False
+                    BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
+                else:
+                    printDebug(name, "Already disabled.")
+            else:
+                # delete obsolete jobs
+                printNormal(name, "Delete job...")
+                connection.deleteJob(name)
+                BobState().delJenkinsJob(args.name, name)
 
-        # sort changed jobs and trigger them in leaf-to-root order
+        # enable previously disabled jobs in root-to-leaf order
+        for name in reversed([ j for j in buildOrder if j in updatedJobs ]):
+            oldJobConfig = updatedJobs[name][0]
+            if oldJobConfig.get('enabled', True): continue # already enabled
+            printNormal(name, "Enabling job...")
+            connection.enableJob(name)
+            oldJobConfig['enabled'] = True
+            BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
+
+        # trigger changed jobs them in leaf-to-root order
         if not args.no_trigger:
-            if updatedJobs and (verbose >= 0):
-                print("Schedule all modified/created jobs...")
+            printNormal(None, "Schedule all modified/created jobs...")
             for name in [ j for j in buildOrder if j in updatedJobs ]:
-                if verbose >= 1:
-                    print("Schedule '{}'...".format(name))
+                (oldJobConfig, newJobConfig) = updatedJobs[name]
+                if oldJobConfig.get('scheduledHash') == newJobConfig['scheduledHash']:
+                    printDebug(name, "Not scheduled. Last triggered with same configuation.")
+                    continue # no need to reschedule
+                printInfo(name, "Scheduling...")
                 connection.schedule(name)
-
-        # Updated jobs should run. Now it's save to persist the new state of
-        # these jobs...
-        BobState().setAsynchronous()
-        try:
-            for (name, jobConfig) in updatedJobs.items():
-                BobState().setJenkinsJobConfig(args.name, name, jobConfig)
-        finally:
-            BobState().setSynchronous()
+                BobState().setJenkinsJobConfig(args.name, name, newJobConfig)
 
 def doJenkinsSetUrl(recipes, argv):
     parser = argparse.ArgumentParser(prog="bob jenkins set-url")
@@ -1339,6 +1396,11 @@ def doJenkinsSetOptions(recipes, argv):
     parser.add_argument('-U', default=[], action='append', dest="undefines",
                         help="Undefine environment variable override")
     parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--keep', action='store_true', default=None,
+        help="Keep obsolete jobs by disabling them")
+    group.add_argument('--no-keep', action='store_false', dest='keep',
+        help="Delete obsolete jobs")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--download', action='store_true', default=None,
         help="Enable binary archive download")
@@ -1388,6 +1450,7 @@ def doJenkinsSetOptions(recipes, argv):
             "windows" : False,
             "credentials" : None,
             "clean" : False,
+            "keep" : False,
         })
 
     if args.nodes is not None:
@@ -1418,6 +1481,8 @@ def doJenkinsSetOptions(recipes, argv):
         config['credentials'] = args.credentials
     if args.clean is not None:
         config['clean'] = args.clean
+    if args.keep is not None:
+        config['keep'] = args.keep
 
     BobState().setJenkinsConfig(args.name, config)
 
