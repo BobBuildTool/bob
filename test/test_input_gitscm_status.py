@@ -72,6 +72,11 @@ class TestGitScmStatus(TestCase):
             'commit' : '0123456789012345678901234567890123456789', 'recipe' : "foo.yaml#0" })
         self.assertEqual(s.status(self.repodir_local, '', 0), 'unclean')
 
+    def testEmpty(self):
+        removePath(self.repodir_local)
+        s = GitScm({ 'scm' : "git", 'url' : self.repodir, 'recipe' : "foo.yaml#0" })
+        self.assertEqual(s.status(self.repodir_local, '', 0), 'empty')
+
     def testModified(self):
         f = open(os.path.join(self.repodir_local, "test.txt"), "w")
         f.write("test modified")
