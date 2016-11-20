@@ -587,6 +587,17 @@ fi
                 os.path.join(workspacePath, self.__dir), " ".join(cmdLine), e.output.rstrip()))
         return output
 
+    # Get GitSCM status. The purpose of this function is to return the status of the given directory
+    # and if verbose is not zero print additional informations about it.
+    #
+    # return values:
+    #  - error: the scm is in a error state. Use this if git returned a error code.
+    #  - unclean: SCM is unclean. Could be: modified files, switched to another branch/tag/commit/repo, unpushed commits
+    #  - clean: same branch/tag/commit as specified in the recipe and no local changes.
+    #  - empty: directory is not existing
+    #
+    # This function is called when build with --clean-checkou. 'error' and 'unclean' scm's are moved to attic,
+    # while empty and clean directories are not.
     def status(self, workspacePath, dir, verbose=0):
         scmdir = os.path.join(workspacePath, dir)
         if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
@@ -773,13 +784,25 @@ fi
             output = subprocess.check_output(cmdLine, cwd=workspacePath,
                 universal_newlines=True, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
-            raise BuildError("svn error: '{}' '{}'".format(" ".join(cmdLine), e.output))
+            raise BuildError("svn error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
+                os.path.join(workspacePath, self.__dir), " ".join(cmdLine), e.output.rstrip()))
         return output
 
+    # Get SvnSCM status. The purpose of this function is to return the status of the given directory
+    # and if verbose is not zero print additional informations about it.
+    #
+    # return values:
+    #  - error: the scm is in a error state. Use this if svn call returns a error code.
+    #  - unclean: SCM is unclean. Could be: modified files, switched to another URL or revision
+    #  - clean: same URL and revision as specified in the recipe and no local changes.
+    #  - empty: directory is not existing
+    #
+    # This function is called when build with --clean-checkout. 'error' and 'unclean' scm's are moved to attic,
+    # while empty and clean directories are not.
     def status(self, workspacePath, dir, verbose=0):
         scmdir = os.path.join(workspacePath, dir)
         if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
-            return 'error'
+            return 'empty'
 
         for m in self.__modules:
             if m['dir'] == dir:
@@ -787,37 +810,43 @@ fi
 
         status = ""
         longStatus = ""
-        svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, m['dir']), 'status')
-        if len(svnoutput):
-            status += "M"
-            longStatus += colorize("    > modified:\n", "33")
-            if verbose >= 2:
-                for line in svnoutput.split('\n'):
-                    longStatus += '       '+line.rstrip()
+        try:
+            svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, dir), 'status')
+            if len(svnoutput):
+                status += "M"
+                longStatus += colorize("    > modified:\n", "33")
+                if verbose >= 2:
+                    for line in svnoutput.split('\n'):
+                        longStatus += '       '+line.rstrip()
 
-        svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, m['dir']), 'info', '--xml')
-        info = xml.etree.ElementTree.fromstring(svnoutput)
-        entry = info.find('entry')
-        url = entry.find('url').text
-        revision = entry.attrib['revision']
+            svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, dir), 'info', '--xml')
+            info = xml.etree.ElementTree.fromstring(svnoutput)
+            entry = info.find('entry')
+            url = entry.find('url').text
+            revision = entry.attrib['revision']
 
-        if m['url'] != url:
-            status += "S"
-            longStatus += colorize("     > URLs do not match!\n     recipe:\t{}\n     svn info:\t{}".format(m['url'], url), "33")
-        if m['revision'] is not None and int(revision) != int(m['revision']):
-            status += "S"
-            longStatus += colorize("    ! wrong revision: recipe: {} svn info: {}".format(m['revision'], revision), "33")
+            if m['url'] != url:
+                status += "S"
+                longStatus += colorize("     > URLs do not match!\n     recipe:\t{}\n     svn info:\t{}".format(m['url'], url), "33")
+            if m['revision'] is not None and int(revision) != int(m['revision']):
+                status += "S"
+                longStatus += colorize("    ! wrong revision: recipe: {} svn info: {}".format(m['revision'], revision), "33")
 
-        if status == "":
-            if verbose >= 3:
-                print(colorize("   STATUS   {}".format(scmdir), "32"))
-            return 'clean'
-        else:
-            if verbose != 0:
-                print(colorize("   STATUS {0: <4} {1}".format(status, scmdir), "33"))
-            if (verbose >= 2) and (longStatus != ""):
-                print(longStatus)
-            return 'unclean'
+            if status == "":
+                if verbose >= 3:
+                    print(colorize("   STATUS   {}".format(scmdir), "32"))
+                return 'clean'
+            else:
+                if verbose != 0:
+                    print(colorize("   STATUS {0: <4} {1}".format(status, scmdir), "33"))
+                if (verbose >= 2) and (longStatus != ""):
+                    print(longStatus)
+                return 'unclean'
+        except BuildError as e:
+            print(e)
+            ret = 'error'
+
+        return ret
 
 class CvsScm:
 
