@@ -117,6 +117,9 @@ def bob(bobRoot):
         else:
             doHelp(False, sys.stderr)
 
+    except BrokenPipeError:
+        # explicitly close stderr to suppress further error messages
+        sys.stderr.close()
     except BobError as e:
         print(e, file=sys.stderr)
         ret = 1
