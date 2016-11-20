@@ -29,6 +29,7 @@ import copy
 import hashlib
 import fnmatch
 import os, os.path
+import pickle
 import re
 import schema
 import shelve
@@ -37,6 +38,19 @@ import struct
 import sys
 import xml.etree.ElementTree
 import yaml
+
+# PLEASE TAKE YOUR TIME READING THE FOLLOWING PARAGRAPH CAREFULLY...
+#
+# Bob will cache almost all internally generated objects if possible. The
+# parsed and validated yaml files are always cached. The generated Packages are
+# reused if the recipes (including plugins) and the environment did not change
+# since the last run. This implies that the classes must stay compatible
+# because the 'pickle' module does not persist the actual code!
+#
+# Therefore the follwing defintion must be incremented virtually with any
+# change that is done in this file. If in doubt, change it. It will invalidate
+# the cached results and make sure they are re-generated.
+CACHE_VERSION = 2
 
 warnCheckoutConsume = WarnOnce("Usage of checkoutConsume is deprecated. Use checkoutVars instead.")
 warnBuildConsume = WarnOnce("Usage of buildConsume is deprecated. Use buildVars instead.")
@@ -1084,8 +1098,19 @@ class ScmOverride:
         self.__match = override.get("match", {})
         self.__del = override.get("del", [])
         self.__set = override.get("set", {})
+        self.__replaceRaw = override.get("replace", {})
+        self.__init()
+
+    def __init(self):
         self.__replace = { key : (re.compile(subst["pattern"]), subst["replacement"])
-            for (key, subst) in override.get("replace", {}).items() }
+            for (key, subst) in self.__replaceRaw.items() }
+
+    def __getstate__(self):
+        return (self.__match, self.__del, self.__set, self.__replaceRaw)
+
+    def __setstate__(self, s):
+        (self.__match, self.__del, self.__set, self.__replaceRaw) = s
+        self.__init()
 
     def __doesMatch(self, scm):
         for (key, value) in self.__match.items():
@@ -1749,7 +1774,8 @@ class Package(object):
 class IncludeHelper:
 
     class Resolver:
-        def __init__(self, baseDir, varBase, origText):
+        def __init__(self, fileLoader, baseDir, varBase, origText):
+            self.fileLoader = fileLoader
             self.baseDir = baseDir
             self.varBase = varBase
             self.prolog = []
@@ -1766,8 +1792,7 @@ class IncludeHelper:
                     raise ParseError("No files matched in include pattern '{}'!"
                         .format(item))
                 for path in paths:
-                    with open(path, "rb") as f:
-                        content.append(f.read(-1))
+                    content.append(self.fileLoader(path))
             except OSError as e:
                 raise ParseError("Error including '"+item+"': " + str(e))
             content = b''.join(content)
@@ -1789,7 +1814,7 @@ class IncludeHelper:
 
             return ret
 
-    def __init__(self, baseDir, varBase):
+    def __init__(self, fileLoader, baseDir, varBase):
         self.__pattern = re.compile(r"""
             \$<(?:
                 (?P<escaped>\$)     |
@@ -1800,10 +1825,11 @@ class IncludeHelper:
             """, re.VERBOSE)
         self.__baseDir = baseDir
         self.__varBase = re.sub(r'[^a-zA-Z0-9_]', '_', varBase, flags=re.DOTALL)
+        self.__fileLoader = fileLoader
 
     def resolve(self, text):
         if isinstance(text, str):
-            resolver = IncludeHelper.Resolver(self.__baseDir, self.__varBase, text)
+            resolver = IncludeHelper.Resolver(self.__fileLoader, self.__baseDir, self.__varBase, text)
             t = Template(text)
             t.delimiter = '$<'
             t.pattern = self.__pattern
@@ -1980,7 +2006,7 @@ class Recipe(object):
             for (n, p) in properties.items()
         }
 
-        incHelper = IncludeHelper(baseDir, packageName)
+        incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName)
 
         (checkoutScript, checkoutDigestScript) = incHelper.resolve(recipe.get("checkoutScript"))
         checkoutSCMs = recipe.get("checkoutSCM", [])
@@ -2465,6 +2491,7 @@ class RecipeSet:
             "subst" : funSubst,
             "match" : funMatch,
         }
+        self.__plugins = {}
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -2483,14 +2510,16 @@ class RecipeSet:
             name = os.path.join("plugins", p+".py")
             if not os.path.exists(name):
                 raise ParseError("Plugin '"+name+"' not found!")
-            self.__loadPlugin(name)
+            mangledName = "__bob_plugin_"+p
+            self.__plugins[mangledName] = self.__loadPlugin(mangledName, name)
 
-    def __loadPlugin(self, name):
+    def __loadPlugin(self, mangledName, name):
+        # dummy load file to hash state
+        self.loadBinary(name)
         try:
-            with open(name) as f:
-                code = compile(f.read(), name, 'exec')
-                g = { }
-                exec(code, g)
+            from importlib.machinery import SourceFileLoader
+            loader = SourceFileLoader(mangledName, name)
+            mod = loader.load_module()
         except SyntaxError as e:
             import traceback
             raise ParseError("Error loading plugin "+name+": "+str(e),
@@ -2498,9 +2527,10 @@ class RecipeSet:
         except Exception as e:
             raise ParseError("Error loading plugin "+name+": "+str(e))
 
-        if 'manifest' not in g:
+        try:
+            manifest = mod.manifest
+        except AttributeError:
             raise ParseError("Plugin '"+name+"' did not define 'manifest'!")
-        manifest = g['manifest']
         apiVersion = manifest.get('apiVersion')
         if apiVersion is None:
             raise ParseError("Plugin '"+name+"' did not define 'apiVersion'!")
@@ -2558,6 +2588,8 @@ class RecipeSet:
                 raise ParseError("Plugin '"+name+"': string function '" +i+"' already defined by other plugin!")
         self.__stringFunctions.update(funs)
 
+        return mod
+
     def defineHook(self, name, value):
         self.__hooks[name] = [value]
 
@@ -2584,6 +2616,9 @@ class RecipeSet:
 
     def scmOverrides(self):
         return self.__scmOverrides
+
+    def loadBinary(self, path):
+        return self.__cache.loadBinary(path)
 
     def loadYaml(self, path, schema, default={}):
         if os.path.exists(path):
@@ -2662,7 +2697,6 @@ class RecipeSet:
         for p in cfg.get("include", []):
             self.__parseUserConfig(str(p) + ".yaml")
 
-    # YamlCache.CACHE_VERSION should be incremented if the schema is changed
     def __createSchemas(self):
         varNameSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
         varGlobSchema = schema.Regex(r'^[][A-Za-z_*?][][A-Za-z0-9_*?]*$')
@@ -2768,16 +2802,39 @@ class RecipeSet:
         return self.__classes[className]
 
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
-        result = {}
-
         def makePred(p):
             return lambda prev, elem: True if elem == p else prev
 
+        # calculate start environment
         env = Env(os.environ).prune([ makePred(pred) for pred in self.__whiteList ])
         env.setLegacy(not self.__extStrings)
         env.setFuns(self.__stringFunctions)
         env.update(self.__defaultEnv)
         env.update(envOverrides)
+
+        # calculate cache key for persisted packages
+        h = hashlib.sha1()
+        h.update(struct.pack("<I", CACHE_VERSION))
+        h.update(self.__cache.getDigest())
+        h.update(struct.pack("<I", len(env)))
+        for (key, val) in sorted(env.items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
+        h.update(b'\x01' if sandboxEnabled else b'\x00')
+        cacheKey = h.digest()
+
+        # try to load the persisted packages
+        try:
+            with open(".bob-packages.pickle", "rb") as f:
+                persistedCacheKey = f.read(len(cacheKey))
+                if cacheKey == persistedCacheKey:
+                    return PackageUnpickler(f, self.getRecipe, self.__plugins,
+                                            nameFormatter).load()
+        except (EOFError, OSError, pickle.UnpicklingError):
+            pass
+
+        # not cached -> calculate packages
+        result = {}
         states = { n:s() for (n,s) in self.__states.items() }
         try:
             BobState().setAsynchronous()
@@ -2798,30 +2855,50 @@ class RecipeSet:
                     print(colorize("Bad alias '{}': {}".format(i, str(e)), "33"), file=sys.stderr)
         finally:
             BobState().setSynchronous()
+
+        # save package tree for next invocation
+        try:
+            with open(".bob-packages.pickle", "wb") as f:
+                f.write(cacheKey)
+                PackagePickler(f, nameFormatter).dump(result)
+        except OSError as e:
+            print("Error saving internal state:", str(e), file=sys.stderr)
+
         return result
 
 
 class YamlCache:
-    # Increment if the cached values are not valid, e.g. due to schema changes
-    CACHE_VERSION = 1
 
     def open(self):
         self.__shelve = shelve.open(".bob-cache.shelve")
+        self.__files = {}
 
     def close(self):
         self.__shelve.close()
+        h = hashlib.sha1()
+        for (name, data) in sorted(self.__files.items()):
+            h.update(struct.pack("<I", len(name)))
+            h.update(name.encode('utf8'))
+            h.update(data)
+        self.__digest = h.digest()
+
+    def getDigest(self):
+        return self.__digest
 
     def loadYaml(self, name, yamlSchema, default):
         binStat = binLstat(name)
         if name in self.__shelve:
             cached = self.__shelve[name]
             if ((cached['lstat'] == binStat) and
-                (cached.get('vsn') == YamlCache.CACHE_VERSION)):
+                (cached.get('vsn') == CACHE_VERSION)):
+                self.__files[name] = cached['digest']
                 return cached['data']
 
         with open(name, "r") as f:
             try:
-                data = yaml.safe_load(f.read())
+                rawData = f.read()
+                data = yaml.safe_load(rawData)
+                digest = hashlib.sha1(rawData.encode('utf8')).digest()
             except Exception as e:
                 raise ParseError("Error while parsing {}: {}".format(name, str(e)))
 
@@ -2831,12 +2908,56 @@ class YamlCache:
         except schema.SchemaError as e:
             raise ParseError("Error while validating {}: {}".format(name, str(e)))
 
+        self.__files[name] = digest
         self.__shelve[name] = {
             'lstat' : binStat,
             'data' : data,
-            'vsn' : YamlCache.CACHE_VERSION,
+            'vsn' : CACHE_VERSION,
+            'digest' : digest
         }
         return data
+
+    def loadBinary(self, name):
+        with open(name, "rb") as f:
+            result = f.read()
+        self.__files[name] = hashlib.sha1(result).digest()
+        return result
+
+
+class PackagePickler(pickle.Pickler):
+    def __init__(self, file, pathFormatter):
+        super().__init__(file, -1, fix_imports=False)
+        self.__pathFormatter = pathFormatter
+
+    def persistent_id(self, obj):
+        if obj is self.__pathFormatter:
+            return ("pathfmt", None)
+        elif isinstance(obj, Recipe):
+            return ("recipe", obj.getPackageName())
+        else:
+            return None
+
+class PackageUnpickler(pickle.Unpickler):
+    def __init__(self, file, recipeGetter, plugins, pathFormatter):
+        super().__init__(file)
+        self.__recipeGetter = recipeGetter
+        self.__plugins = plugins
+        self.__pathFormatter = pathFormatter
+
+    def persistent_load(self, pid):
+        (tag, key) = pid
+        if tag == "pathfmt":
+            return self.__pathFormatter
+        elif tag == "recipe":
+            return self.__recipeGetter(key)
+        else:
+            raise pickle.UnpicklingError("unsupported object")
+
+    def find_class(self, module, name):
+        if module.startswith("__bob_plugin_"):
+            return getattr(self.__plugins[module], name)
+        else:
+            return super().find_class(module, name)
 
 
 def walkPackagePath(rootPackages, path):
