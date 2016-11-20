@@ -1120,3 +1120,12 @@ If an override is matching the actions are then applied in the following order:
    ``replacement``. Each occurrence of ``pattern`` is replaced by
    ``replacement``.
 
+alias
+~~~~~
+
+Type: Dictionary (String -> String)
+
+Specifies alias names for packages::
+
+   alias:
+      myApp: "host/files/group/app42"
