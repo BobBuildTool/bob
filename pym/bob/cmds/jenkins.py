@@ -921,8 +921,12 @@ def doJenkinsExport(recipes, argv):
             'buildSteps' : job.getBuildSteps(),
             'packageSteps' : job.getPackageSteps()
         }
-        xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes, windows,
-            credentials, clean), info)
+        BobState().setAsynchronous()
+        try:
+            xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes, windows,
+                credentials, clean), info)
+        finally:
+            BobState().setSynchronous()
         with open(os.path.join(args.dir, job.getName()+".xml"), "wb") as f:
             f.write(xml)
 
@@ -1311,6 +1315,7 @@ def doJenkinsPush(recipes, argv):
                 origXML = None
 
             # calculate new job configuration
+            BobState().setAsynchronous()
             try:
                 if origXML is not None:
                     jobXML = applyHooks(jenkinsJobPreUpdate, origXML, info, True)
@@ -1323,19 +1328,21 @@ def doJenkinsPush(recipes, argv):
                     jobXML = applyHooks(jenkinsJobPostUpdate, jobXML, info)
                 else:
                     jobXML = applyHooks(jenkinsJobCreate, jobXML, info)
+
+                # hash is based on unmerged config to detect just our changes
+                newJobHash = hashlib.sha1(applyHooks(jenkinsJobCreate,
+                    job.dumpXML(None, nodes, windows, credentials, clean),
+                    info)).digest()
+                newJobConfig = {
+                    'hash' : newJobHash,
+                    'scheduledHash' : newJobHash,
+                    'enabled' : True,
+                }
             except xml.etree.ElementTree.ParseError as e:
                 raise BuildError("Cannot parse XML of job '{}': {}".format(
                     name, str(e)))
-
-            # hash is based on unmerged config to detect just our changes
-            newJobHash = hashlib.sha1(applyHooks(jenkinsJobCreate,
-                job.dumpXML(None, nodes, windows, credentials, clean),
-                info)).digest()
-            newJobConfig = {
-                'hash' : newJobHash,
-                'scheduledHash' : newJobHash,
-                'enabled' : True,
-            }
+            finally:
+                BobState().setSynchronous()
 
             # configure or create job
             if name in existingJobs:
