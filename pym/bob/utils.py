@@ -62,19 +62,24 @@ def emptyDirectory(path):
     except OSError as e:
         raise BuildError("Error cleaning '"+path+"': " + str(e))
 
+# Compare versions. Not strictly according to semver but enough for us.
 def compareVersion(left, right):
-     def cmp(l, r):
-          if (len(l) == 0) and (len(r) == 0): return 0
-          if len(l) == 0: l = ["0"]
-          if len(r) == 0: r = ["0"]
-          if int(l[0]) < int(r[0]):
-                return -1
-          elif int(l[0]) > int(r[0]):
-                return 1
-          else:
-                return cmp(l[1:], r[1:])
+    # Strip any suffix
+    left = left.partition("-")[0]
+    right = right.partition("-")[0]
 
-     return cmp(left.split("."), right.split("."))
+    def cmp(l, r):
+        if (len(l) == 0) and (len(r) == 0): return 0
+        if len(l) == 0: l = ["0"]
+        if len(r) == 0: r = ["0"]
+        if int(l[0]) < int(r[0]):
+            return -1
+        elif int(l[0]) > int(r[0]):
+            return 1
+        else:
+            return cmp(l[1:], r[1:])
+
+    return cmp(left.split("."), right.split("."))
 
 ### directory hashing ###
 
