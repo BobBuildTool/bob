@@ -745,15 +745,6 @@ def _genJenkinsJobs(p, jobs, nameCalculator, archiveBackend):
     for d in allDeps:
         _genJenkinsJobs(d.getPackage(), jobs, nameCalculator, archiveBackend)
 
-def checkRecipeCycles(p, stack=[]):
-    name = p.getRecipe().getName()
-    if name in stack:
-        ParseError("Job cycle found in '{}': {}".format(name, stack))
-    else:
-        stack = [name] + stack
-        for d in p.getAllDepSteps():
-            checkRecipeCycles(d.getPackage(), stack)
-
 def jenkinsNameFormatter(step, props):
     return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
 
@@ -798,7 +789,6 @@ def genJenkinsJobs(recipes, jenkins):
     nameCalculator = JobNameCalculator(prefix)
     rootPackages = [ walkPackagePath(rootPackages, r) for r in config["roots"] ]
     for root in rootPackages:
-        checkRecipeCycles(root)
         nameCalculator.addPackage(root)
 
     nameCalculator.sanitize()
