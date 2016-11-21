@@ -15,4 +15,4 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # See http://semver.org/ and adjust accordingly
-BOB_VERSION = "0.8.0"
+BOB_VERSION = "0.9-dev"
