@@ -16,6 +16,7 @@
 
 from .errors import ParseError
 import copy
+import errno
 import os
 import pickle
 
@@ -40,6 +41,25 @@ class _BobState():
         self.__dirty = False
         self.__dirStates = {}
         self.__buildState = {}
+        self.__lock = None
+
+        # lock state
+        lockFile = ".bob-state.lock"
+        try:
+            fd = os.open(lockFile, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+        except OSError as e:
+            if e.errno == errno.EEXIST:
+                raise ParseError("Workspace state locked by other Bob instance!",
+                    help="You probably execute Bob concurrently in the same workspace. "
+                         "Delete '"+lockFile+"' if Bob crashed or was killed previously "
+                         "to get rid of this error.")
+            else:
+                print("Warning: cannot lock workspace:", str(e))
+        else:
+            self.__lock = lockFile
+            os.close(fd)
+
+        # load state if it exists
         if os.path.exists(self.__path):
             with open(self.__path, 'rb') as f:
                 state = pickle.load(f)
@@ -81,6 +101,11 @@ class _BobState():
             self.__dirty = False
         else:
             self.__dirty = True
+
+    def finalize(self):
+        assert self.__synchronous and not self.__dirty
+        if self.__lock:
+            os.unlink(self.__lock)
 
     def setAsynchronous(self):
         self.__synchronous = False
@@ -207,4 +232,8 @@ def BobState():
     if _BobState.instance is None:
         _BobState.instance = _BobState()
     return _BobState.instance
+
+def finalize():
+    if _BobState.instance is not None:
+        _BobState.instance.finalize()
 

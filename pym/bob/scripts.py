@@ -16,6 +16,7 @@
 
 from . import BOB_VERSION
 from .errors import BobError
+from .state import finalize
 from .tty import colorize, Unbuffered
 from .utils import asHexStr, hashDirectory
 import argparse
@@ -138,6 +139,7 @@ Please open an issue at https://github.com/BobBuildTool/bob with the following b
     finally:
         sys.stdout = origSysStdOut
         sys.stderr = origSysStdErr
+        finalize()
 
     return ret
 
