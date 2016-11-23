@@ -20,34 +20,47 @@ DIR=src/namespace-sandbox
 SOURCE=namespace-sandbox.c network-tools.c process-tools.c
 HEADERS=network-tools.h process-tools.h
 
-.PHONY: all install pym check
+# check if we can build manpages
+SPHINX := $(shell command -v sphinx-build 2>/dev/null)
 
-all: bin/namespace-sandbox pym check
+.PHONY: all install pym check doc
+
+all: bin/namespace-sandbox pym check doc
 
 bin/namespace-sandbox: $(patsubst %,$(DIR)/%,$(SOURCE) $(HEADERS))
-	gcc -o $@ -std=c99 $^ -lm
+	@gcc -o $@ -std=c99 $^ -lm
 
 pym:
-	python3 -m compileall pym
+	@python3 -m compileall pym
 
 install: all
-	mkdir -p $(DESTDIR)/bin $(DESTDIR)/lib/bob/bin
-	cp bin/namespace-sandbox $(DESTDIR)/lib/bob/bin
-	cp bin/namespace-sandbox $(DESTDIR)/bin/bob-namespace-sandbox
-	cp -r bob bob-hash-engine bob-hash-tree contrib pym $(DESTDIR)/lib/bob
-	ln -sf ../lib/bob/bob $(DESTDIR)/bin
-	ln -sf ../lib/bob/bob-hash-engine $(DESTDIR)/bin
-	if [ -d $(DESTDIR)/share/bash-completion ] ; then \
+	@mkdir -p $(DESTDIR)/bin $(DESTDIR)/lib/bob/bin
+	@cp bin/namespace-sandbox $(DESTDIR)/lib/bob/bin
+	@cp bin/namespace-sandbox $(DESTDIR)/bin/bob-namespace-sandbox
+	@cp -r bob bob-hash-engine bob-hash-tree contrib pym $(DESTDIR)/lib/bob
+	@ln -sf ../lib/bob/bob $(DESTDIR)/bin
+	@ln -sf ../lib/bob/bob-hash-engine $(DESTDIR)/bin
+	@if [ -d $(DESTDIR)/share/bash-completion ] ; then \
 		ln -s $(DESTDIR)/lib/bob/contrib/bash-completion $(DESTDIR)/share/bash-completion/bob ; \
 	fi
-	if [ -d .git ] ; then \
+	@if [ -d .git ] ; then \
 		git describe --tags --dirty --always > $(DESTDIR)/lib/bob/version ; \
 	else \
 		rm -rf $(DESTDIR)/lib/bob/version ; \
 	fi
+ifdef SPHINX
+	@mkdir -p $(DESTDIR)/share/man/man1
+	@cp doc/_build/man/*.1 $(DESTDIR)/share/man/man1/
+endif
 
 check:
 	@python3 -c 'import schema' || { echo "Module 'schema' missing. Please install: 'pip3 install --user schema'..." ; exit 1 ; }
 	@python3 -c 'import yaml' || { echo "Module 'yaml' missing. Please install: 'pip3 install --user PyYAML'..." ; exit 1 ; }
 	@python3 -c 'import magic' || { echo "Module 'magic' missing. Please install: 'pip3 install --user python-magic'..." ; exit 1 ; }
 
+doc:
+ifdef SPHINX
+	@make -C doc man
+else
+	$(warning "sphinx-build is not available. Manpages will not be built!")
+endif
