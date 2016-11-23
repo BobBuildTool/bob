@@ -18,6 +18,7 @@ Contents
 
    tutorial/index
    manual/index
+   manpages/index
 
 Copyright
 ---------

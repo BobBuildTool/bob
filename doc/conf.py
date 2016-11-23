@@ -240,8 +240,20 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'bob', 'Bob Documentation',
-     ['TechniSat Digital GmbH'], 1)
+    # does not work :(
+    #('manual/configuration.rst', 'bobconfig', 'Bob configuration', ['Jan Klötzke'], 1),
+    #('manual/extending.rst', 'bobplugins', 'Bob plugin extensions', ['Jan Klötzke'], 1),
+
+    ('manpages/bob-build', 'bob-build', 'Bob release mode build', ['Jan Klötzke'], 1),
+    ('manpages/bob-clean', 'bob-clean', 'Delete unused src/build/dist paths of release builds', ['Jan Klötzke'], 1),
+    ('manpages/bob-dev', 'bob-dev', 'Bob develop mode build', ['Jan Klötzke'], 1),
+    ('manpages/bob-jenkins', 'bob-jenkins', 'Configure Jenkins server', ['Jan Klötzke'], 1),
+    ('manpages/bob-ls', 'bob-ls', 'List package hierarchy', ['Jan Klötzke'], 1),
+    ('manpages/bob-project', 'bob-project', 'Create IDE project files', ['Jan Klötzke'], 1),
+    ('manpages/bob-query-path', 'bob-query-path', 'Query path information', ['Jan Klötzke'], 1),
+    ('manpages/bob-query-recipe', 'bob-query-recipe', 'Query package sources', ['Jan Klötzke'], 1),
+    ('manpages/bob-query-scm', 'bob-query-scm', 'Query SCM information', ['Jan Klötzke'], 1),
+    ('manpages/bob-status', 'bob-status', 'Show SCM status', ['Jan Klötzke'], 1),
 ]
 
 # If true, show URL addresses after external links.
