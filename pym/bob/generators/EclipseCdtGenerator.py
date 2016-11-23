@@ -24,7 +24,7 @@ import stat
 import uuid
 from os.path import expanduser
 from os.path import join
-from bob.utils import summonMagic
+from bob.utils import summonMagic, removePath
 from collections import OrderedDict
 from pipes import quote
 
@@ -152,7 +152,29 @@ def addCConfig(cProjectFile, excludePackages, includeDirs, buildName, id, buildA
     cProjectFile.write('<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>\n')
     cProjectFile.write('</cconfiguration>\n')
 
-def generateEclipseProject(package, destination, updateOnly, projectName, excludes, additional_includes, args):
+def eclipseCdtGenerator(package, argv, extra):
+    parser = argparse.ArgumentParser(prog="bob project eclipse-cdt", description='Generate Eclipse CDT Project Files')
+    parser.add_argument('-u', '--update', default=False, action='store_true',
+                        help="Update project files (.project)")
+    parser.add_argument('--buildCfg', action='append', default=[], type=lambda a: a.split("::"),
+         help="Adds a new buildconfiguration. Format: <Name>::<flags>")
+    parser.add_argument('--overwrite', action='store_true',
+        help="Remove destination folder before generating.")
+    parser.add_argument('--destination', metavar="DEST",
+        help="Destination of project files")
+    parser.add_argument('--name', metavar="NAME",
+        help="Name of project. Default is complete_path_to_package")
+    parser.add_argument('--exclude', default=[], action='append', dest="excludes",
+            help="Packages will be marked as 'exclude from build' in eclipse. Usefull if indexer runs OOM.")
+    parser.add_argument('-I', dest="additional_includes", default=[], action='append',
+        help="Additional include directories. (added recursive starting from this directory)")
+
+    args = parser.parse_args(argv)
+    extra = " ".join(quote(e) for e in extra)
+
+    destination = args.destination
+    projectName = args.name
+
     project = "/".join(package.getStack())
 
     dirs = []
@@ -166,6 +188,8 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
         # use package stack for project directory
         destination = os.path.join(os.getcwd(), "projects", "_".join(package.getStack()))
     destination = destination.replace(':', '_')
+    if args.overwrite:
+        removePath(destination)
     if not os.path.exists(destination):
         os.makedirs(destination)
 
@@ -200,14 +224,14 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
 
     # setup list of exclude packages
     excludePackages = []
-    for e in excludes:
+    for e in args.excludes:
         exp = re.compile(e)
         for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
             if exp.match(name):
                 excludePackages.append(name)
     includeDirs = []
     # find additional include dirs
-    for i in additional_includes:
+    for i in args.additional_includes:
         if os.path.exists(i):
             for root, directories, filenames in os.walk(i):
                 includeDirs.append(os.path.join(i,root))
@@ -219,6 +243,10 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
         addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no checkout)",id + "." + getId(), "-b", buildMeFile)
         addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no deps)",id + "." + getId(), "-n", buildMeFile)
         addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no checkout, no deps)",id + "." + getId(), "-bn", buildMeFile)
+
+        for name,flags in args.buildCfg:
+            addCConfig(cProjectFile, excludePackages, includeDirs, name, id + "." + getId(), flags, buildMeFile)
+
         cProjectFile.write(cProjectFooter)
 
     projectFileHeader = """<?xml version="1.0" encoding="UTF-8"?>
@@ -254,20 +282,20 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
     with open(os.path.join(destination, ".project"), 'w') as cProjectFile:
         cProjectFile.write(projectFileHeader)
         for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
-            cProjectFile.write('<link>')
-            cProjectFile.write(' <name>' + name + '</name>')
-            cProjectFile.write(' <type>2</type>')
-            cProjectFile.write(' <location>' + os.path.join(os.getcwd(), path) + '</location>')
-            cProjectFile.write('</link>')
+            cProjectFile.write('<link>\n')
+            cProjectFile.write(' <name>' + name + '</name>\n')
+            cProjectFile.write(' <type>2</type>\n')
+            cProjectFile.write(' <location>' + os.path.join(os.getcwd(), path) + '</location>\n')
+            cProjectFile.write('</link>\n')
         cProjectFile.write(projectFileFooter)
 
-    if not updateOnly:
+    if not args.update:
         # Generate buildme
         buildMe = []
         buildMe.append("#!/bin/sh")
-        buildMe.append('bob dev "$@" ' + quote(args) + ' ' + quote(project))
+        buildMe.append('bob dev "$@" ' + quote(extra) + ' ' + quote(project))
         projectCmd = "bob project -n eclipseCdt " + quote(project) + " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
-        for i in additional_includes:
+        for i in args.additional_includes:
             projectCmd += " -I " + quote(i)
         buildMe.append(projectCmd)
         generateFile(buildMe, buildMeFile)
@@ -286,20 +314,4 @@ def generateEclipseProject(package, destination, updateOnly, projectName, exclud
                         createLaunchFile(open(os.path.join(destination, filename + ".launch"), 'w'),
                                 os.path.join(os.getcwd(), root, filename), projectName)
 
-def eclipseCdtGenerator(package, argv, extra):
-    parser = argparse.ArgumentParser(prog="bob project eclipse-cdt", description='Generate Eclipse CDT Project Files')
-    parser.add_argument('-u', '--update', default=False, action='store_true',
-                        help="Update project files (.project)")
-    parser.add_argument('--destination', metavar="DEST",
-        help="Destination of project files")
-    parser.add_argument('--name', metavar="NAME",
-        help="Name of project. Default is complete_path_to_package")
-    parser.add_argument('--exclude', default=[], action='append', dest="excludes",
-            help="Packages will be marked as 'exclude from build' in eclipse. Usefull if indexer runs OOM.")
-    parser.add_argument('-I', dest="additional_includes", default=[], action='append',
-        help="Additional include directories. (added recursive starting from this directory)")
 
-    args = parser.parse_args(argv)
-    extra = " ".join(quote(e) for e in extra)
-    generateEclipseProject(package, args.destination, args.update, args.name,
-            args.excludes, args.additional_includes, extra)
