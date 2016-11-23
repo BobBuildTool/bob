@@ -14,5 +14,19 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+def getVersion():
+    import os
+    import subprocess
+    version=""
+    try:
+       root = os.path.dirname(os.path.realpath(__file__))
+       _cwd = os.path.join(root, '..', '..')
+       version = subprocess.check_output("git describe --tags --dirty --always".split(" "), cwd=_cwd,
+                universal_newlines=True, stderr=subprocess.STDOUT).rstrip()
+    except subprocess.CalledProcessError as e:
+        pass
+
+    return version
+
 # See http://semver.org/ and adjust accordingly
-BOB_VERSION = "0.9-dev"
+BOB_VERSION = "0.9-dev-"+getVersion()
