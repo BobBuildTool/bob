@@ -40,6 +40,11 @@ install: all
 	if [ -d $(DESTDIR)/share/bash-completion ] ; then \
 		ln -s $(DESTDIR)/lib/bob/contrib/bash-completion $(DESTDIR)/share/bash-completion/bob ; \
 	fi
+	if [ -d .git ] ; then \
+		git describe --tags --dirty --always > $(DESTDIR)/lib/bob/version ; \
+	else \
+		rm -rf $(DESTDIR)/lib/bob/version ; \
+	fi
 
 check:
 	@python3 -c 'import schema' || { echo "Module 'schema' missing. Please install: 'pip3 install --user schema'..." ; exit 1 ; }

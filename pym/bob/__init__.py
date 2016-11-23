@@ -14,5 +14,35 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# See http://semver.org/ and adjust accordingly
-BOB_VERSION = "0.9-dev"
+def getVersion():
+    import os
+    import subprocess
+
+    version = ""
+    root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
+
+    # try to read extra version if installed by the Makefile
+    vsnFile = os.path.join(root, "version")
+    if os.path.isfile(vsnFile):
+        try:
+            with open(vsnFile) as f:
+                version = f.read()
+        except OSError:
+            pass
+    elif os.path.isdir(os.path.join(root, ".git")):
+        try:
+            version = subprocess.check_output("git describe --tags --dirty --always".split(" "),
+                cwd=root, universal_newlines=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            pass
+
+    if version:
+        # strip white spaces and leading 'v' from tag name
+        version = version.strip().lstrip("v")
+    else:
+        # See http://semver.org/ and adjust accordingly
+        version = "0.9-dev"
+
+    return version
+
+BOB_VERSION = getVersion()
