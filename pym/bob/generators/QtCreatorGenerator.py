@@ -24,6 +24,7 @@ import stat
 import xml.etree.ElementTree
 from os.path import expanduser
 from os.path import join
+from bob.utils import removePath
 from bob.errors import BuildError
 from bob.utils import summonMagic, hashFile
 from collections import OrderedDict, namedtuple
@@ -103,14 +104,19 @@ def addBuildConfig(outFile, num, name, buildArgs, buildMeFile):
     outFile.write('</valuelist>\n')
     outFile.write('</valuemap>\n')
 
-def addBuildSteps(outFile, buildMeFile):
+def addBuildSteps(outFile, buildMeFile, buildConfigs):
     addBuildConfig(outFile, 0, "Bob dev ", "" , buildMeFile)
     addBuildConfig(outFile, 1, "Bob dev (force)", "-f", buildMeFile)
     addBuildConfig(outFile, 2, "Bob dev (no checkout)", "-b", buildMeFile)
     addBuildConfig(outFile, 3, "Bob dev (no deps)", "-n", buildMeFile)
     addBuildConfig(outFile, 4, "Bob dev (no checkout, no deps)", "-nb", buildMeFile)
 
-    outFile.write('<value type="int" key="ProjectExplorer.Target.BuildConfigurationCount">5</value>\n')
+    count = 5
+    for name,flags in buildConfigs:
+        addBuildConfig(outFile, count, name, flags, buildMeFile)
+        count += 1
+
+    outFile.write('<value type="int" key="ProjectExplorer.Target.BuildConfigurationCount">' + str(count) + '</value>\n')
     outFile.write('<valuelist type="QVariantList" key="UserStickyKeys">\n')
     outFile.write(' <value type="QString">ProjectExplorer.BuildConfiguration.BuildStepListCount</value>\n')
     outFile.write(' <value type="QString">ProjectExplorer.BuildConfiguration.UserEnvironmentChanges</value>\n')
@@ -126,7 +132,31 @@ def compareAndRenameFileIfNotEqual(orig, new):
             return
     os.rename(new, orig)
 
-def generateQtProject(package, destination, updateOnly, projectName, includeDirs, filter, kit, args):
+def qtProjectGenerator(package, argv, extra):
+    parser = argparse.ArgumentParser(prog="bob project qt-project", description='Generate QTCreator Project Files')
+    parser.add_argument('-u', '--update', default=False, action='store_true',
+                        help="Update project files (.files, .includes)")
+    parser.add_argument('--buildCfg', action='append', default=[], type=lambda a: a.split("::"),
+         help="Adds a new buildconfiguration. Format: <Name>::<flags>")
+    parser.add_argument('--overwrite', action='store_true',
+        help="Remove destination folder before generating.")
+    parser.add_argument('--destination', metavar="DEST",
+        help="Destination of project files")
+    parser.add_argument('--name', metavar="NAME",
+        help="Name of project. Default is complete_path_to_package")
+    parser.add_argument('-I', dest="additional_includes", default=[], action='append',
+        help="Additional include directories. (added recursive starting from this directory)")
+    parser.add_argument('-f', '--filter', metavar="Filter",
+        help="File filter. A regex for matching additional files.")
+    parser.add_argument('--kit',
+        help="Kit to use for this project")
+
+    args = parser.parse_args(argv)
+    extra = " ".join(quote(e) for e in extra)
+
+    destination = args.destination
+    projectName = args.name
+
     project = "/".join(package.getStack())
 
     dirs = []
@@ -138,6 +168,8 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
         # use package stack for project directory
         destination = os.path.join(os.getcwd(), "projects", "_".join(package.getStack()))
         destination = destination.replace(':', '_')
+    if args.overwrite:
+        removePath(destination)
     if not os.path.exists(destination):
         os.makedirs(destination)
 
@@ -149,7 +181,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
 
     # create a 'flat' source tree
     symlinkDir = os.path.join(destination, projectName)
-    if not updateOnly:
+    if not args.update:
        if os.path.exists(symlinkDir):
           shutil.rmtree(symlinkDir)
        os.makedirs(symlinkDir)
@@ -159,8 +191,8 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
     include = re.compile(r".*\.[h](pp)?$")
     cmake = re.compile(r".*\.cmake$")
 
-    if filter:
-       additionalFiles = re.compile(filter)
+    if args.filter:
+       additionalFiles = re.compile(args.filter)
 
     # lists for storing all found sources files / include directories
     sList = []
@@ -169,7 +201,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
     # now go through all checkout dirs to find all header / include files
     for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
         newPath = os.path.join(symlinkDir, name)
-        if not updateOnly: os.symlink(os.path.join(os.getcwd(), path), newPath)
+        if not args.update: os.symlink(os.path.join(os.getcwd(), path), newPath)
         for root, directories, filenames in os.walk(newPath):
             hasInclude = False
             if (((os.path.sep + '.git' + os.path.sep) in root) or
@@ -178,7 +210,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             for filename in filenames:
                 if source.match(filename) or cmake.match(filename) or filename == 'CMakeLists.txt':
                     sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
-                if filter and additionalFiles.match(filename):
+                if args.filter and additionalFiles.match(filename):
                     sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
                 if not hasInclude and include.match(filename):
                     hasInclude = True
@@ -193,11 +225,16 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
                         hList.append(includePath)
                     oldPath = os.path.join(oldPath, path)
 
+    for i in args.additional_includes:
+        if os.path.exists(i):
+            for root, directories, filenames in os.walk(i):
+                hList.append(os.path.join(i,root))
+
     # use default kit "Desktop" if no kit is given
-    if kit is None:
+    if args.kit is None:
         _kit = re.compile(r".*Desktop.*")
     else:
-        _kit = re.compile(r""+kit)
+        _kit = re.compile(r""+args.kit)
 
     id = None
     name = None
@@ -221,11 +258,11 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
         pass
 
     if (len(kits) == 0):
-        if (kit is None):
+        if (args.kit is None):
             raise BuildError("No kit found!",
                 help = "Run again with '--kit' and specify a kit or generate a Desktop kit, which is used by default.")
-        kitName = kit
-        kitId = kit
+        kitName = args.kit
+        kitId = args.kit
     else:
         if (len(kits) > 1):
             print(colorize("Warning: {} kits found. Using '{}'.".format(len(kits), str(kits[0][0])), "33"))
@@ -247,18 +284,18 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
     compareAndRenameFileIfNotEqual(filesFile, filesFile + ".new")
 
 
-    if not updateOnly:
+    if not args.update:
         # Generate Buildme.sh
         buildMe = []
         buildMe.append("#!/bin/sh")
-        buildMe.append('bob dev "$@" ' + args + ' ' + quote(project))
+        buildMe.append('bob dev "$@" ' + extra + ' ' + quote(project))
         projectCmd = "bob project -n qt-creator " + quote(project) + " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
-        for i in includeDirs:
+        # only add arguments which are relevant for .files or .includes. All other files are only modified if not build with
+        # update only.
+        for i in args.additional_includes:
             projectCmd += " -I " + quote(i)
-        if filter:
-            projectCmd += " --filter " + quote(filter)
-        if kit:
-            projectCmd += " --kit " + quote(kit)
+        if args.filter:
+            projectCmd += " --filter " + quote(args.filter)
 
         buildMe.append(projectCmd)
         generateFile(buildMe, buildMeFile)
@@ -363,7 +400,7 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveBuildConfiguration">0</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveDeployConfiguration">0</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveRunConfiguration">0</value>\n')
-            addBuildSteps(sharedFile, buildMeFile)
+            addBuildSteps(sharedFile, buildMeFile, args.buildCfg)
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.DeployConfigurationCount">0</value>\n')
             sharedFile.write('   <valuemap type="QVariantMap" key="ProjectExplorer.Target.PluginSettings"/>\n')
             addRunSteps(sharedFile, runTargets)
@@ -371,22 +408,4 @@ def generateQtProject(package, destination, updateOnly, projectName, includeDirs
             sharedFile.write(' </data>\n')
             sharedFile.write(template_foot)
 
-def qtProjectGenerator(package, argv, extra):
-    parser = argparse.ArgumentParser(prog="bob project qt-project", description='Generate QTCreator Project Files')
-    parser.add_argument('-u', '--update', default=False, action='store_true',
-                        help="Update project files (.files, .includes)")
-    parser.add_argument('--destination', metavar="DEST",
-        help="Destination of project files")
-    parser.add_argument('--name', metavar="NAME",
-        help="Name of project. Default is complete_path_to_package")
-    parser.add_argument('-I', dest="additional_includes", default=[], action='append',
-        help="Additional include directories. (added recursive starting from this directory)")
-    parser.add_argument('-f', '--filter', metavar="Filter",
-        help="File filter. A regex for matching additional files.")
-    parser.add_argument('--kit',
-        help="Kit to use for this project")
-
-    args = parser.parse_args(argv)
-    extra = " ".join(quote(e) for e in extra)
-    generateQtProject(package, args.destination, args.update, args.name, args.additional_includes, args.filter, args.kit, extra)
 
