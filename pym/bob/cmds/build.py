@@ -538,6 +538,10 @@ esac
                 [ "[{}]={}".format(quote(a.getPackage().getName()),
                                    quote(a.getExecPath()))
                     for a in step.getArguments() if a.isValid() ] ))), file=f)
+            print("declare -A BOB_DIRECT_DEP_PATHS=( {} )".format(" ".join(sorted(
+                [ "[{}]={}".format(quote(a.getPackage().getName()),
+                                   quote(a.getExecPath()))
+                    for a in step.getPackage().getDirectDepSteps() ] ))), file=f)
             print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(t), quote(p))
                     for (t,p) in step.getTools().items()] ))), file=f)
