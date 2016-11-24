@@ -35,6 +35,10 @@ def __clean(*args, **kwargs):
      from .cmds.build import doClean
      doClean(*args, **kwargs)
 
+def __help(*args, **kwargs):
+    from .cmds.help import doHelp
+    doHelp(availableCommands.keys(), *args, **kwargs)
+
 def __jenkins(*args, **kwargs):
      from .cmds.jenkins import doJenkins
      doJenkins(*args, **kwargs)
@@ -67,6 +71,7 @@ availableCommands = {
     "build"         : (True, __build, "Build (sub-)packages in release mode"),
     "dev"           : (True, __develop, "Build (sub-)packages in development mode"),
     "clean"         : (True, __clean, "Delete unused src/build/dist paths of release builds"),
+    "help"          : (True, __help, "Display help information about command"),
     "jenkins"       : (True, __jenkins, "Configure Jenkins server"),
     "ls"            : (True, __ls, "List package hierarchy"),
     "project"       : (True, __project, "Create project files"),
