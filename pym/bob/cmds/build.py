@@ -574,7 +574,6 @@ esac
 
     def cook(self, steps, parentPackage, checkoutOnly, depth=0):
         currentPackage = self.__currentPackage
-        ret = None
 
         # skip everything except the current package
         if self.__skipDeps:
@@ -593,7 +592,6 @@ esac
                 print(">>", colorize("/".join(self.__currentPackage.getStack()), "32;1"))
 
             # execute step
-            ret = None
             try:
                 if step.isCheckoutStep():
                     if step.isValid():
@@ -603,7 +601,7 @@ esac
                         self._cookBuildStep(step, checkoutOnly, depth)
                 else:
                     assert step.isPackageStep() and step.isValid()
-                    ret = self._cookPackageStep(step, checkoutOnly, depth)
+                    self._cookPackageStep(step, checkoutOnly, depth)
             except BuildError as e:
                 e.pushFrame(step.getPackage().getName())
                 raise e
@@ -619,7 +617,6 @@ esac
             self.__currentPackage = currentPackage
             if currentPackage:
                 print(">>", colorize("/".join(self.__currentPackage.getStack()), "32;1"))
-        return ret
 
     def _cookCheckoutStep(self, checkoutStep, depth):
         checkoutDigest = checkoutStep.getVariantId()
@@ -842,8 +839,6 @@ esac
                 BobState().setInputHashes(prettyPackagePath, packageInputHashes)
             self._setAlreadyRun(packageStep, checkoutOnly)
 
-        return prettyPackagePath
-
     def _getBuildId(self, step, depth):
         if step.isCheckoutStep():
             bid = step.getBuildId()
@@ -974,8 +969,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         if args.destination: backlog.extend(packageStep.getProvidedDeps())
     try:
         for p in backlog:
-            resultPath = builder.cook([p], p.getPackage(), args.checkout_only)
-            if resultPath is not None:
+            builder.cook([p], p.getPackage(), args.checkout_only)
+            resultPath = p.getWorkspacePath()
+            if resultPath not in results:
                 results.append(resultPath)
     finally:
         builder.saveBuildState()
