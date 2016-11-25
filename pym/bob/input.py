@@ -575,6 +575,21 @@ fi
         # remove untracked files
         xml.etree.ElementTree.SubElement(extensions,
             "hudson.plugins.git.extensions.impl.CleanCheckout")
+        shallow = options.get("scm.git.shallow")
+        if shallow is not None:
+            try:
+                shallow = int(shallow)
+                if shallow < 0: raise ValueError()
+            except ValueError:
+                raise BuildError("Invalid 'git.shallow' option: " + str(shallow))
+            if shallow > 0:
+                co = xml.etree.ElementTree.SubElement(extensions,
+                    "hudson.plugins.git.extensions.impl.CloneOption")
+                xml.etree.ElementTree.SubElement(co, "shallow").text = "true"
+                xml.etree.ElementTree.SubElement(co, "noTags").text = "false"
+                xml.etree.ElementTree.SubElement(co, "reference").text = ""
+                xml.etree.ElementTree.SubElement(co, "depth").text = str(shallow)
+                xml.etree.ElementTree.SubElement(co, "honorRefspec").text = "false"
 
         return scm
 
