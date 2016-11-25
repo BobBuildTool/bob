@@ -151,13 +151,13 @@ class TestGitScm(TestCase):
         """Test Jenins XML generation"""
         # TODO: validate XML
         s = createGitScm()
-        s.asJenkins("workspace/sub/dir", "uuid")
+        s.asJenkins("workspace/sub/dir", "uuid", {})
         s = createGitScm({'branch' : "foobar", 'dir' : "sub/dir"})
-        s.asJenkins("workspace/sub/dir", "uuid")
+        s.asJenkins("workspace/sub/dir", "uuid", {})
         s = createGitScm({'tag' : "asdf"})
-        s.asJenkins("workspace/sub/dir", "uuid")
+        s.asJenkins("workspace/sub/dir", "uuid", {})
         s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
-        s.asJenkins("workspace/sub/dir", "uuid")
+        s.asJenkins("workspace/sub/dir", "uuid", {})
 
     def testMisc(self):
         s1 = createGitScm()
