@@ -31,7 +31,7 @@ def getVersion():
             pass
     elif os.path.isdir(os.path.join(root, ".git")):
         try:
-            version = subprocess.check_output("git describe --tags --dirty --always".split(" "),
+            version = subprocess.check_output("git describe --tags --dirty".split(" "),
                 cwd=root, universal_newlines=True, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
             pass
