@@ -956,23 +956,23 @@ def doJenkinsLs(recipes, argv):
         print(j)
         cfg = BobState().getJenkinsConfig(j)
         if args.verbose >= 1:
-            print(" URL:", getUrl(cfg))
+            print("    URL:", getUrl(cfg))
+            print("    Roots:", ", ".join(cfg['roots']))
             if cfg.get('prefix'):
-                print(" Prefix:", cfg['prefix'])
+                print("    Prefix:", cfg['prefix'])
             if cfg.get('nodes'):
-                print(" Nodes:", cfg['nodes'])
+                print("    Nodes:", cfg['nodes'])
             if cfg.get('defines'):
-                print(" Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
-            print(" Obsolete jobs:", "keep" if cfg.get('keep', False) else "delete")
-            print(" Download:", "enabled" if cfg.get('download', False) else "disabled")
-            print(" Upload:", "enabled" if cfg.get('upload', False) else "disabled")
-            print(" Clean builds:", "enabled" if cfg.get('clean', False) else "disabled")
-            print(" Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
-            print(" Roots:", ", ".join(cfg['roots']))
+                print("    Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
+            print("    Obsolete jobs:", "keep" if cfg.get('keep', False) else "delete")
+            print("    Download:", "enabled" if cfg.get('download', False) else "disabled")
+            print("    Upload:", "enabled" if cfg.get('upload', False) else "disabled")
+            print("    Clean builds:", "enabled" if cfg.get('clean', False) else "disabled")
+            print("    Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
             if cfg.get('credentials'):
-                print(" Credentials:", cfg['credentials'])
+                print("    Credentials:", cfg['credentials'])
         if args.verbose >= 2:
-            print(" Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
+            print("    Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
 
 def getUrl(config):
     url = config["url"]
