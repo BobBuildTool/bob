@@ -21,9 +21,9 @@ Available sub-commands:
 
 ::
 
-    bob jenkins add [-h] [-n NODES] [-w] [-p PREFIX] [-r ROOT] [-D DEFINES]
-                    [--keep] [--download] [--upload] [--no-sandbox]
-                    [--credentials CREDENTIALS] [--clean]
+    bob jenkins add [-h] [-n NODES] [-o OPTIONS] [-w] [-p PREFIX] [-r ROOT]
+                    [-D DEFINES] [--keep] [--download] [--upload]
+                    [--no-sandbox] [--credentials CREDENTIALS] [--clean]
                     name url
     bob jenkins export [-h] name dir
     bob jenkins graph [-h] name
@@ -31,14 +31,11 @@ Available sub-commands:
     bob jenkins prune [-h] [--obsolete | --intermediate] name
     bob jenkins push [-h] [-f] [--no-trigger] [-q] [-v] name
     bob jenkins rm [-h] [-f] name
-    bob jenkins set-options [-h] [--reset] [-n NODES] [-p PREFIX]
+    bob jenkins set-options [-h] [--reset] [-n NODES] [-o OPTIONS] [-p PREFIX]
                             [--add-root ADD_ROOT] [--del-root DEL_ROOT]
-                            [-D DEFINES] [-U UNDEFINES]
-                            [--credentials CREDENTIALS]
-                            [--keep | --no-keep]
-                            [--download | --no-download]
-                            [--upload | --no-upload]
-                            [--sandbox | --no-sandbox]
+                            [-D DEFINES] [-U UNDEFINES] [--credentials CREDENTIALS]
+                            [--keep | --no-keep] [--download | --no-download]
+                            [--upload | --no-upload] [--sandbox | --no-sandbox]
                             [--clean | --incremental]
                             name
     bob jenkins set-url [-h] name url
@@ -98,8 +95,15 @@ Options
 ``--no-upload``
     Disable binary archive upload
 
+``-o OPTIONS``
+    Set extended Jenkins options. This option expects a ``key=value`` pair to
+    set one particular extended configuration parameter. May be specified
+    multiple times. See :ref:`bob-jenkins-extended-options` for the list of
+    available options. Setting an empty value deletes the option.
+
 ``--obsolete``
-    Delete only obsolete jobs
+    Delete obsolete jobs that are currently not needed according to the
+    recipes.
 
 ``-p PREFIX, --prefix PREFIX``
     Prefix for jobs
@@ -140,4 +144,22 @@ prune
     delete all intermediate jobs and keep only the root jobs by using
     '--intermediate'. This will disable the root jobs because they cannot run
     anyawy without failing.
+
+.. _bob-jenkins-extended-options:
+
+Extended Options
+----------------
+
+The following Jenkins plugin options are available. Any unrecognized options
+are ignored.
+
+scm.git.shallow
+    Instruct the Jenkins git plugin to create shallow clones with a history
+    truncated to the specified number of commits. If the parameter is unset
+    or "0" the full history will be cloned.
+
+    .. warning::
+       Setting this parameter too small may prevent the creation of a proper
+       change log. Jenkins will not be able to find the reference commit of
+       the last run if the branch advanced by more commits than were cloned.
 
