@@ -331,6 +331,8 @@ class JenkinsJob:
             triggers = root.find("triggers")
             revBuild = triggers.find("jenkins.triggers.ReverseBuildTrigger")
             if revBuild is not None: triggers.remove(revBuild)
+            scmTrigger = triggers.find("hudson.triggers.SCMTrigger")
+            if scmTrigger is not None: triggers.remove(scmTrigger)
             publishers = root.find("publishers")
             archiver = publishers.find("hudson.tasks.ArtifactArchiver")
             if archiver is None:
@@ -379,15 +381,16 @@ class JenkinsJob:
                 root, "concurrentBuild").text = "false"
             builders = xml.etree.ElementTree.SubElement(root, "builders")
             triggers = xml.etree.ElementTree.SubElement(root, "triggers")
-            scmTrigger = xml.etree.ElementTree.SubElement(
-                triggers, "hudson.triggers.SCMTrigger")
-            xml.etree.ElementTree.SubElement(scmTrigger, "spec").text = ""
-            xml.etree.ElementTree.SubElement(
-                scmTrigger, "ignorePostCommitHooks").text = "false"
             publishers = xml.etree.ElementTree.SubElement(root, "publishers")
             archiver = xml.etree.ElementTree.SubElement(
                 publishers, "hudson.tasks.ArtifactArchiver")
             buildWrappers = xml.etree.ElementTree.SubElement(root, "buildWrappers")
+
+        scmTrigger = xml.etree.ElementTree.SubElement(
+            triggers, "hudson.triggers.SCMTrigger")
+        xml.etree.ElementTree.SubElement(scmTrigger, "spec").text = options.get("scm.poll")
+        xml.etree.ElementTree.SubElement(
+            scmTrigger, "ignorePostCommitHooks").text = "false"
 
         prepareCmds = []
         prepareCmds.append(self.getShebang(windows))
