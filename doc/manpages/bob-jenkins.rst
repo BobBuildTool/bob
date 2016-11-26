@@ -163,3 +163,10 @@ scm.git.shallow
        change log. Jenkins will not be able to find the reference commit of
        the last run if the branch advanced by more commits than were cloned.
 
+scm.poll
+    Without this option the Jenkins server is dependent on external commit
+    hooks to be notified of changes in the source code repositories. While this
+    is the preferred solution it might be necessary to fall back to polling in
+    some setups. Set this option to a Jenkins flavoured cron line, e.g.
+    ``H/15 * * * *``.
+
