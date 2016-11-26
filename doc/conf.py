@@ -17,6 +17,9 @@ import sys
 import os
 from unittest.mock import MagicMock
 
+# Verify that we're running on Python 3
+assert sys.version_info.major >= 3, "You must use the Python 3 version of sphinx"
+
 # Generic mocking class to hide missing modules
 class Mock(MagicMock):
     @classmethod
