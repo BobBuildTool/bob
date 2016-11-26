@@ -392,6 +392,8 @@ class JenkinsJob:
         xml.etree.ElementTree.SubElement(
             scmTrigger, "ignorePostCommitHooks").text = "false"
 
+        sharedDir = options.get("shared.dir", "${JENKINS_HOME}/bob")
+
         prepareCmds = []
         prepareCmds.append(self.getShebang(windows))
         prepareCmds.append("mkdir -p .state")
@@ -470,7 +472,7 @@ class JenkinsJob:
                             "class" : "org.jenkins_ci.plugins.run_condition.core.FileExistsCondition"
                         })
                     xml.etree.ElementTree.SubElement(
-                        fileCond, "file").text = "${JENKINS_HOME}/bob/"+vid[0:2]+"/"+vid[2:]
+                        fileCond, "file").text = sharedDir+"/"+vid[0:2]+"/"+vid[2:]
                     xml.etree.ElementTree.SubElement(
                         fileCond, "baseDir", attrib={
                             "class" : "org.jenkins_ci.plugins.run_condition.common.BaseDirectory$Workspace"
@@ -511,17 +513,19 @@ class JenkinsJob:
                 if d.isShared():
                     vid = asHexStr(d.getVariantId())
                     prepareCmds.append(textwrap.dedent("""\
-                        if [ ! -d ${{JENKINS_HOME}}/bob/{VID1}/{VID2} ] ; then
-                            T=$(mktemp -d -p ${{JENKINS_HOME}})
+                        if [ ! -d {SHARED}/{VID1}/{VID2} ] ; then
+                            mkdir -p {SHARED}
+                            T=$(mktemp -d -p {SHARED})
                             tar xf {TGZ} -C $T
-                            mkdir -p ${{JENKINS_HOME}}/bob/{VID1}
-                            mv -T $T ${{JENKINS_HOME}}/bob/{VID1}/{VID2} || rm -rf $T
+                            mkdir -p {SHARED}/{VID1}
+                            mv -T $T {SHARED}/{VID1}/{VID2} || rm -rf $T
                         fi
                         mkdir -p {WSP_DIR}
-                        ln -sfT ${{JENKINS_HOME}}/bob/{VID1}/{VID2} {WSP_PATH}
+                        ln -sfT {SHARED}/{VID1}/{VID2} {WSP_PATH}
                         """.format(VID1=vid[0:2], VID2=vid[2:], TGZ=JenkinsJob._tgzName(d),
                                    WSP_DIR=os.path.dirname(d.getWorkspacePath()),
-                                   WSP_PATH=d.getWorkspacePath())))
+                                   WSP_PATH=d.getWorkspacePath(),
+                                   SHARED=sharedDir)))
                 else:
                     prepareCmds.append("mkdir -p " + d.getWorkspacePath())
                     prepareCmds.append("tar zxf {} -C {}".format(
@@ -615,12 +619,14 @@ class JenkinsJob:
                 vid = asHexStr(d.getVariantId())
                 installCmds.append(textwrap.dedent("""\
                 # install shared package atomically
-                if [ ! -d ${{JENKINS_HOME}}/bob/{VID1}/{VID2} ] ; then
-                    T=$(mktemp -d -p ${{JENKINS_HOME}})
+                if [ ! -d {SHARED}/{VID1}/{VID2} ] ; then
+                    mkdir -p {SHARED}
+                    T=$(mktemp -d -p {SHARED})
                     tar xf {TGZ} -C $T
-                    mkdir -p ${{JENKINS_HOME}}/bob/{VID1}
-                    mv -T $T ${{JENKINS_HOME}}/bob/{VID1}/{VID2} || rm -rf $T
-                fi""".format(TGZ=JenkinsJob._tgzName(d), VID1=vid[0:2], VID2=vid[2:])))
+                    mkdir -p {SHARED}/{VID1}
+                    mv -T $T {SHARED}/{VID1}/{VID2} || rm -rf $T
+                fi""".format(TGZ=JenkinsJob._tgzName(d), VID1=vid[0:2], VID2=vid[2:],
+                             SHARED=sharedDir)))
         if installCmds:
             installCmds.insert(0, self.getShebang(windows))
             install = xml.etree.ElementTree.SubElement(
