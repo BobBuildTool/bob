@@ -949,6 +949,8 @@ Recipe attribute which defaults to False. If set to True the recipe is declared
 a root recipe and becomes a top level package. There must be at least one root
 package in a project.
 
+.. _configuration-recipes-shared:
+
 shared
 ~~~~~~
 

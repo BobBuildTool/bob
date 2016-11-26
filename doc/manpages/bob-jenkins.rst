@@ -170,3 +170,11 @@ scm.poll
     some setups. Set this option to a Jenkins flavoured cron line, e.g.
     ``H/15 * * * *``.
 
+shared.dir
+    Any packages that are marked as :ref:`shared <configuration-recipes-shared>`
+    (``shared: True``) are installed upon usage on a Jenkins slave in a shared
+    location. By default this is ``${JENKINS_HOME}/bob``. To use another
+    directory set this option to an absolute path. If you expand Jenkins
+    environment variables make sure that they follow the syntax of the default
+    value because the path is also expanded by the Token Macro plugin.
+
