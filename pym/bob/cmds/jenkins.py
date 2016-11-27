@@ -535,6 +535,9 @@ class JenkinsJob:
         # download if possible
         downloadCmds = []
         for d in sorted(self.__packageSteps.values()):
+            # only download tools if built in sandbox
+            if d.doesProvideTools() and (d.getSandbox() is None):
+                continue
             cmd = self.__archive.download(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             if not cmd: continue
             downloadCmds.append(cmd)
@@ -563,7 +566,8 @@ class JenkinsJob:
                 "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
                 "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getWorkspacePath()),
-                self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
+                "" if d.doesProvideTools() and (d.getSandbox() is None)
+                    else self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             ])
             publish.append(JenkinsJob._tgzName(d))
             publish.append(JenkinsJob._buildIdName(d))

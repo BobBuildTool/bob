@@ -190,10 +190,6 @@ class SimpleHttpArchive(BaseArchive):
         if not self.canUpload():
             return ""
 
-        # only upload tools if built in sandbox
-        if step.doesProvideTools() and (step.getSandbox() is None):
-            return ""
-
         # upload with curl if file does not exist yet on server
         return "\n" + textwrap.dedent("""\
             # upload artifact
@@ -206,10 +202,6 @@ class SimpleHttpArchive(BaseArchive):
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
         if not self.canDownload():
-            return ""
-
-        # only download tools if built in sandbox
-        if step.doesProvideTools() and (step.getSandbox() is None):
             return ""
 
         return "\n" + textwrap.dedent("""\
@@ -301,10 +293,6 @@ class CustomArchive(BaseArchive):
         if not self.canUpload():
             return ""
 
-        # only upload tools if built in sandbox
-        if step.doesProvideTools() and (step.getSandbox() is None):
-            return ""
-
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
@@ -317,10 +305,6 @@ class CustomArchive(BaseArchive):
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
         if not self.canDownload():
-            return ""
-
-        # only download tools if built in sandbox
-        if step.doesProvideTools() and (step.getSandbox() is None):
             return ""
 
         return "\n" + textwrap.dedent("""\
