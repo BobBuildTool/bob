@@ -118,10 +118,28 @@ class LocalArchive(BaseArchive):
             return False
 
     def upload(self, step, buildIdFile, tgzFile):
-        return ""
+        if self.canUpload():
+            return ""
+
+        return "\n" + textwrap.dedent("""\
+            # upload artifact
+            cd $WORKSPACE
+            BOB_UPLOAD_FILE="{DIR}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
+            if [[ ! -e ${{BOB_UPLOAD_FILE}} ]] ; then
+                mkdir -p "${{BOB_UPLOAD_FILE%/*}}"
+                cp {RESULT} "$BOB_UPLOAD_FILE"
+            fi""".format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
 
     def download(self, step, buildIdFile, tgzFile):
-        return ""
+        if not self.canDownload():
+            return ""
+
+        return "\n" + textwrap.dedent("""\
+            if [[ ! -e {RESULT} ]] ; then
+                BOB_DOWNLOAD_FILE="{DIR}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
+                cp "$BOB_DOWNLOAD_FILE" {RESULT} || echo Download failed: $?
+            fi
+            """.format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
 
 
 class SimpleHttpArchive(BaseArchive):
