@@ -270,11 +270,11 @@ esac
         self.__downloadDepth = 0xffff
         if mode == 'yes':
             self.__archive.wantDownload(True)
-            if self.__archive.canDownload():
+            if self.__archive.canDownloadLocal():
                 self.__downloadDepth = 0
         elif mode == 'deps':
             self.__archive.wantDownload(True)
-            if self.__archive.canDownload():
+            if self.__archive.canDownloadLocal():
                 self.__downloadDepth = 1
         else:
             assert mode == 'no'
@@ -683,7 +683,7 @@ esac
             elif checkoutOnly:
                 # Just the sources! Don't trigger a download dude...
                 packageBuildId = None
-            elif self.__archive.canDownload() or self.__archive.canUpload():
+            elif self.__archive.canDownloadLocal() or self.__archive.canUploadLocal():
                 # up- or download with valid package -> get BuildId
                 packageBuildId = self._getBuildId(packageStep, depth)
             else:
@@ -727,7 +727,7 @@ esac
                     emptyDirectory(prettyPackagePath)
                     self._runShell(packageStep, "package")
                     packageExecuted = True
-                    if packageBuildId and self.__archive.canUpload():
+                    if packageBuildId and self.__archive.canUploadLocal():
                         self.__archive.uploadPackage(packageBuildId, prettyPackagePath)
             else:
                 # do not change input hashes

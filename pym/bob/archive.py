@@ -34,10 +34,16 @@ class DummyArchive:
     def wantUpload(self, enable):
         pass
 
-    def canDownload(self):
+    def canDownloadLocal(self):
         return False
 
-    def canUpload(self):
+    def canUploadLocal(self):
+        return False
+
+    def canDownloadJenkins(self):
+        return False
+
+    def canUploadJenkins(self):
         return False
 
     def uploadPackage(self, buildId, path):
@@ -54,11 +60,17 @@ class DummyArchive:
 
 class BaseArchive:
     def __init__(self, spec):
-        use = spec.get("flags", ["upload", "download"])
-        self.__useDownload = "download" in use
-        self.__useUpload = "upload" in use
+        flags = spec.get("flags", ["upload", "download"])
+        self.__useDownload = "download" in flags
+        self.__useUpload = "upload" in flags
+        self.__ignoreErrors = "nofail" in flags
+        self.__useLocal = "nolocal" not in flags
+        self.__useJenkins = "nojenkins" not in flags
         self.__wantDownload = False
         self.__wantUpload = False
+
+    def _ignoreErrors(self):
+        return self.__ignoreErrors
 
     def wantDownload(self, enable):
         self.__wantDownload = enable
@@ -66,11 +78,17 @@ class BaseArchive:
     def wantUpload(self, enable):
         self.__wantUpload = enable
 
-    def canDownload(self):
-        return self.__wantDownload and self.__useDownload
+    def canDownloadLocal(self):
+        return self.__wantDownload and self.__useDownload and self.__useLocal
 
-    def canUpload(self):
-        return self.__wantUpload and self.__useUpload
+    def canUploadLocal(self):
+        return self.__wantUpload and self.__useUpload and self.__useLocal
+
+    def canDownloadJenkins(self):
+        return self.__wantDownload and self.__useDownload and self.__useJenkins
+
+    def canUploadJenkins(self):
+        return self.__wantUpload and self.__useUpload and self.__useJenkins
 
 
 class LocalArchive(BaseArchive):
@@ -79,7 +97,7 @@ class LocalArchive(BaseArchive):
         self.__basePath = os.path.abspath(spec["path"])
 
     def uploadPackage(self, buildId, path):
-        if not self.canUpload():
+        if not self.canUploadLocal():
             return
 
         packageResultId = asHexStr(buildId)
@@ -97,7 +115,7 @@ class LocalArchive(BaseArchive):
             tar.add(path, arcname=".")
 
     def downloadPackage(self, buildId, path):
-        if not self.canDownload():
+        if not self.canDownloadLocal():
             return False
 
         print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
@@ -118,7 +136,7 @@ class LocalArchive(BaseArchive):
             return False
 
     def upload(self, step, buildIdFile, tgzFile):
-        if self.canUpload():
+        if self.canUploadJenkins():
             return ""
 
         return "\n" + textwrap.dedent("""\
@@ -126,12 +144,13 @@ class LocalArchive(BaseArchive):
             cd $WORKSPACE
             BOB_UPLOAD_FILE="{DIR}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
             if [[ ! -e ${{BOB_UPLOAD_FILE}} ]] ; then
-                mkdir -p "${{BOB_UPLOAD_FILE%/*}}"
-                cp {RESULT} "$BOB_UPLOAD_FILE"
-            fi""".format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
+                mkdir -p "${{BOB_UPLOAD_FILE%/*}}"{FIXUP}
+                cp {RESULT} "$BOB_UPLOAD_FILE"{FIXUP}
+            fi""".format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
+                         FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else ""))
 
     def download(self, step, buildIdFile, tgzFile):
-        if not self.canDownload():
+        if not self.canDownloadJenkins():
             return ""
 
         return "\n" + textwrap.dedent("""\
@@ -153,7 +172,7 @@ class SimpleHttpArchive(BaseArchive):
             packageResultId[4:] + ".tgz"])
 
     def uploadPackage(self, buildId, path):
-        if not self.canUpload():
+        if not self.canUploadLocal():
             return
 
         # check if already there
@@ -165,7 +184,7 @@ class SimpleHttpArchive(BaseArchive):
                 print("   UPLOAD    skipped ({} exists in archive)".format(path))
                 return
             except urllib.error.HTTPError as e:
-                if e.code != 404:
+                if e.code != 404 and not self._ignoreErrors():
                     raise BuildError("Error for HEAD on "+url+": "+e.reason)
 
             print(colorize("   UPLOAD    {}".format(path), "32"))
@@ -177,10 +196,11 @@ class SimpleHttpArchive(BaseArchive):
                                              method='PUT')
                 f = urllib.request.urlopen(req)
         except urllib.error.URLError as e:
-            raise BuildError("Error uploading package: "+str(e.reason))
+            if not self._ignoreErrors():
+                raise BuildError("Error uploading package: "+str(e.reason))
 
     def downloadPackage(self, buildId, path):
-        if not self.canDownload():
+        if not self.canDownloadLocal():
             return False
 
         ret = False
@@ -205,7 +225,7 @@ class SimpleHttpArchive(BaseArchive):
 
     def upload(self, step, buildIdFile, tgzFile):
         # only upload if requested
-        if not self.canUpload():
+        if not self.canUploadJenkins():
             return ""
 
         # upload with curl if file does not exist yet on server
@@ -214,12 +234,13 @@ class SimpleHttpArchive(BaseArchive):
             cd $WORKSPACE
             BOB_UPLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
             if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
-                curl -sSg -T {RESULT} "$BOB_UPLOAD_URL"
-            fi""".format(URL=self.__url, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
+                curl -sSg -T {RESULT} "$BOB_UPLOAD_URL"{FIXUP}
+            fi""".format(URL=self.__url, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
+                         FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else ""))
 
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
-        if not self.canDownload():
+        if not self.canDownloadJenkins():
             return ""
 
         return "\n" + textwrap.dedent("""\
@@ -244,14 +265,20 @@ class CustomArchive(BaseArchive):
         return "/".join([packageResultId[0:2], packageResultId[2:4],
             packageResultId[4:] + ".tgz"])
 
-    def canDownload(self):
-        return super().canDownload() and (self.__downloadCmd is not None)
+    def canDownloadLocal(self):
+        return super().canDownloadLocal() and (self.__downloadCmd is not None)
 
-    def canUpload(self):
-        return super().canUpload() and (self.__uploadCmd is not None)
+    def canUploadLocal(self):
+        return super().canUploadLocal() and (self.__uploadCmd is not None)
+
+    def canDownloadJenkins(self):
+        return super().canDownloadJenkins() and (self.__downloadCmd is not None)
+
+    def canUploadJenkins(self):
+        return super().canUploadJenkins() and (self.__uploadCmd is not None)
 
     def uploadPackage(self, buildId, path):
-        if not self.canUpload():
+        if not self.canUploadLocal():
             return
 
         print(colorize("   UPLOAD    {}".format(path), "32"))
@@ -267,7 +294,7 @@ class CustomArchive(BaseArchive):
             ret = subprocess.call(["/bin/bash", "-ec", self.__uploadCmd],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 cwd="/tmp", env=env)
-            if ret != 0:
+            if ret != 0 and not self._ignoreErrors():
                 raise BuildError("Upload failed: command return with status {}"
                                     .format(ret))
         except OSError as e:
@@ -276,7 +303,7 @@ class CustomArchive(BaseArchive):
             os.unlink(tmpName)
 
     def downloadPackage(self, buildId, path):
-        if not self.canDownload():
+        if not self.canDownloadLocal():
             return False
 
         success = False
@@ -308,8 +335,13 @@ class CustomArchive(BaseArchive):
 
     def upload(self, step, buildIdFile, tgzFile):
         # only upload if requested
-        if not self.canUpload():
+        if not self.canUploadJenkins():
             return ""
+
+        cmd = self.__uploadCmd
+        if self._ignoreErrors():
+            # wrap in subshell
+            cmd = "( " + cmd + " ) || Upload failed: $?"
 
         return "\n" + textwrap.dedent("""\
             # upload artifact
@@ -317,22 +349,21 @@ class CustomArchive(BaseArchive):
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
             BOB_LOCAL_ARTIFACT={RESULT}
             BOB_REMOTE_ARTIFACT="${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}.tgz"
-            {CMD}
-            """.format(CMD=self.__uploadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
+            """.format(BUILDID=quote(buildIdFile), RESULT=quote(tgzFile))) + cmd
 
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
-        if not self.canDownload():
+        if not self.canDownloadJenkins():
             return ""
 
-        return "\n" + textwrap.dedent("""\
-            if [[ ! -e {RESULT} ]] ; then
-                BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
-                BOB_LOCAL_ARTIFACT={RESULT}
-                BOB_REMOTE_ARTIFACT="${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}.tgz"
-                {CMD}
-            fi
-            """.format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
+        return """
+if [[ ! -e {RESULT} ]] ; then
+    BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID})"
+    BOB_LOCAL_ARTIFACT={RESULT}
+    BOB_REMOTE_ARTIFACT="${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}.tgz"
+    {CMD}
+fi
+""".format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile))
 
 
 class MultiArchive:
@@ -345,32 +376,38 @@ class MultiArchive:
     def wantUpload(self, enable):
         for i in self.__archives: i.wantUpload(enable)
 
-    def canDownload(self):
-        return any(i.canDownload() for i in self.__archives)
+    def canDownloadLocal(self):
+        return any(i.canDownloadLocal() for i in self.__archives)
 
-    def canUpload(self):
-        return any(i.canUpload() for i in self.__archives)
+    def canUploadLocal(self):
+        return any(i.canUploadLocal() for i in self.__archives)
+
+    def canDownloadJenkins(self):
+        return any(i.canDownloadJenkins() for i in self.__archives)
+
+    def canUploadJenkins(self):
+        return any(i.canUploadJenkins() for i in self.__archives)
 
     def uploadPackage(self, buildId, path):
         for i in self.__archives:
-            if not i.canUpload(): continue
+            if not i.canUploadLocal(): continue
             i.uploadPackage(buildId, path)
 
     def downloadPackage(self, buildId, path):
         for i in self.__archives:
-            if not i.canDownload(): continue
+            if not i.canDownloadLocal(): continue
             if i.downloadPackage(buildId, path): return True
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
         return "\n".join(
             i.upload(step, buildIdFile, tgzFile) for i in self.__archives
-            if i.canUpload())
+            if i.canUploadJenkins())
 
     def download(self, step, buildIdFile, tgzFile):
         return "\n".join(
             i.download(step, buildIdFile, tgzFile) for i in self.__archives
-            if i.canDownload())
+            if i.canDownloadJenkins())
 
 
 def getSingleArchiver(recipes, archiveSpec):
