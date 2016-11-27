@@ -214,7 +214,7 @@ class SimpleHttpArchive(BaseArchive):
             cd $WORKSPACE
             BOB_UPLOAD_URL="{URL}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}).tgz"
             if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
-                curl -sSg -T {RESULT} "$BOB_UPLOAD_URL" || echo Upload failed: $?
+                curl -sSg -T {RESULT} "$BOB_UPLOAD_URL"
             fi""".format(URL=self.__url, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)))
 
     def download(self, step, buildIdFile, tgzFile):
