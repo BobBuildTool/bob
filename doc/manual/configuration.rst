@@ -1072,6 +1072,18 @@ the following list for possible flags. The default is ``[download, upload]``.
     Use this archive to upload artifacts. To actually upload to the archive the
     build must be performed with uploads enabled (``--upload``).
 
+``nofail``
+    Don't fail the build if the upload or download from this archive fails. In
+    any case it is never an error if a download does not find the requested
+    archive on the backend. This option additionally suppresses other errors
+    such as unknown hosts or interrupted transfers.
+
+``nolocal``
+    Do not use this archive in local builds.
+
+``nojenkins``
+    Do not use this archive in Jenkins builds.
+
 Depending on the backend further specific keys are available or required. See
 the following table for supported backends and their configuration.
 
