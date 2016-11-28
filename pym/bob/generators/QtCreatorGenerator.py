@@ -110,8 +110,9 @@ def addBuildSteps(outFile, buildMeFile, buildConfigs):
     addBuildConfig(outFile, 2, "Bob dev (no checkout)", "-b", buildMeFile)
     addBuildConfig(outFile, 3, "Bob dev (no deps)", "-n", buildMeFile)
     addBuildConfig(outFile, 4, "Bob dev (no checkout, no deps)", "-nb", buildMeFile)
+    addBuildConfig(outFile, 5, "Bob dev (no checkout, clean)", "-b --clean", buildMeFile)
 
-    count = 5
+    count = 6
     for name,flags in buildConfigs:
         addBuildConfig(outFile, count, name, flags, buildMeFile)
         count += 1
