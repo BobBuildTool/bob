@@ -14,7 +14,7 @@ Synopsis
 ::
 
     bob project [-h] [--list] [-D DEFINES] [-c CONFIGFILE] [-e NAME] [-E]
-                [--resume] [-n]
+                [--resume] [-n] [-b]
                 [projectGenerator] [package] ...
 
 
@@ -44,6 +44,9 @@ Options
 ``-n``
     Do not build (bob dev) before generate project Files. RunTargets may not
     work
+
+``-b``
+    Do build only (bob dev -b) before generate project Files. No checkout
 
 ``--resume``
     Resume build where it was previously interrupted
