@@ -1076,7 +1076,7 @@ def doProject(argv, bobRoot):
         extra.append('-c')
         extra.append(c)
     for e in args.white_list:
-        extra.append('e')
+        extra.append('-e')
         extra.append(e)
     if args.preserve_env: extra.append('-E')
 
