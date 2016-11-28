@@ -91,7 +91,7 @@ def checkGlobList(name, allowed):
     return ok
 
 def _isFalse(val):
-    return val in [ "", "0", "false" ]
+    return val.strip().lower() in [ "", "0", "false" ]
 
 class StringParser:
     """Utility class for complex string parsing/manipulation"""
@@ -302,7 +302,7 @@ class Env(dict):
                 raise ParseError("Error evaluating condition on {}: {}".format(prop, str(e)))
         else:
             s = self.substitute(condition, "condition on "+prop)
-            return not _isFalse(s.lower())
+            return not _isFalse(s)
 
 
 class PluginProperty:
@@ -1659,7 +1659,7 @@ def funNotEqual(args, **options):
 
 def funNot(args, **options):
     if len(args) != 1: raise ParseError("not expects one argument")
-    return "true" if _isFalse(args[0].strip().lower()) else "false"
+    return "true" if _isFalse(args[0]) else "false"
 
 def funOr(args, **options):
     for arg in args:
@@ -1693,7 +1693,7 @@ def funMatch(args, **options):
 
 def funIfThenElse(args, **options):
     if len(args) != 3: raise ParseError("if-then-else expects three arguments")
-    if _isFalse(args[0].strip().lower()):
+    if _isFalse(args[0]):
         return args[2]
     else:
         return args[1]
