@@ -25,6 +25,11 @@ import stat
 import struct
 import sys
 
+def hashString(string):
+    h = hashlib.md5()
+    h.update(string.encode("utf8"))
+    return h.digest()
+
 def asHexStr(binary):
     return hexlify(binary).decode("ascii")
 
