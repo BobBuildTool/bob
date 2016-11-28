@@ -243,6 +243,7 @@ def eclipseCdtGenerator(package, argv, extra):
         addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no checkout)",id + "." + getId(), "-b", buildMeFile)
         addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no deps)",id + "." + getId(), "-n", buildMeFile)
         addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no checkout, no deps)",id + "." + getId(), "-bn", buildMeFile)
+        addCConfig(cProjectFile, excludePackages, includeDirs, "Bob dev (no checkout, clean)",id + "." + getId(), "-b --clean", buildMeFile)
 
         for name,flags in args.buildCfg:
             addCConfig(cProjectFile, excludePackages, includeDirs, name, id + "." + getId(), flags, buildMeFile)
