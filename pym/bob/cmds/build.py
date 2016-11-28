@@ -1018,6 +1018,8 @@ def doProject(argv, bobRoot):
         help="Resume build where it was previously interrupted")
     parser.add_argument('-n', dest="execute_prebuild", default=True, action='store_false',
         help="Do not build (bob dev) before generate project Files. RunTargets may not work")
+    parser.add_argument('-b', dest="execute_buildonly", default=False, action='store_true',
+        help="Do build only (bob dev -b) before generate project Files. No checkout")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -1085,6 +1087,7 @@ def doProject(argv, bobRoot):
     if args.execute_prebuild:
         devArgs = extra.copy()
         if args.resume: devArgs.append('--resume')
+        if args.execute_buildonly: devArgs.append('-b')
         devArgs.append(args.package)
         doDevelop(devArgs, bobRoot)
 
