@@ -54,6 +54,17 @@ def genHexSlice(data, i = 0):
         i += 96
         r = data[i:i+96]
 
+def wrapCommandArguments(cmd, arguments):
+    ret = []
+    line = cmd
+    for arg in arguments:
+        if len(line) + len(arg) > 96:
+            ret.append(line + " \\")
+            line = "  "
+        line = line + " " + arg
+    ret.append(line)
+    return ret
+
 class SpecHasher:
     """Track digest calculation and output as spec for bob-hash-engine"""
 
@@ -158,15 +169,8 @@ class JenkinsJob:
 
         if d.getJenkinsScript() is not None:
             cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
-            if d.getSandbox() is not None:
-                cmds.append("_sandbox=$(mktemp -d)")
-                cmds.append("trap 'rm -rf $_sandbox' EXIT")
-                cmds.append("")
-                cmds.append("cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'")
-            else:
-                cmds.append("cd {}".format(d.getWorkspacePath()))
-                cmds.append("")
-
+            cmds.append("_sandbox=$(mktemp -d)")
+            cmds.append("trap 'rm -rf $_sandbox' EXIT")
             if windows:
                 cmds.append("if [ ! -z ${JENKINS_HOME} ]; then")
                 cmds.append("    export JENKINS_HOME=$(echo ${JENKINS_HOME} | sed 's/\\\\/\\//g' | sed 's/://' | sed 's/^/\\//' )")
@@ -174,6 +178,8 @@ class JenkinsJob:
                 cmds.append("if [ ! -z ${WORKSPACE} ]; then")
                 cmds.append("    export WORKSPACE=$(echo ${WORKSPACE} | sed 's/\\\\/\\//g' | sed 's/://' | sed 's/^/\\//')")
                 cmds.append("fi")
+            cmds.append("")
+            cmds.append("cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'")
 
             cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
                 [ "    [{}]={}".format(quote(a.getPackage().getName()),
@@ -206,15 +212,23 @@ class JenkinsJob:
             cmds.append("set -o pipefail")
             cmds.append("trap 'RET=$? ; echo \"Step failed on line ${LINENO}: Exit status ${RET}; Command: ${BASH_COMMAND}\" >&2 ; exit $RET' ERR")
             cmds.append("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do rm -f \"$i\" ; done' EXIT")
+            cmds.append("cd \"${BOB_CWD}\"")
             cmds.append("")
             cmds.append("# BEGIN BUILD SCRIPT")
             cmds.append(d.getJenkinsScript())
             cmds.append("# END BUILD SCRIPT")
+            cmds.append("BOB_JENKINS_SANDBOXED_SCRIPT")
+            cmds.append("")
 
+            # Add PATH into the environment whitelist so that env will still
+            # find bash or bob-namespace-sandbox. PATH will always be set to
+            # the correct value in the preamble.
+            envWhiteList = d.getPackage().getRecipe().getRecipeSet().envWhiteList()
+            envWhiteList |= set(['PATH'])
+            sandbox = ["-i"]
+            sandbox.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
             if d.getSandbox() is not None:
-                cmds.append("BOB_JENKINS_SANDBOXED_SCRIPT")
-                cmds.append("")
-                cmds.append("# invoke above script through sandbox")
+                cmds.append("# invoke above script through sandbox in controlled environment")
                 cmds.append("mounts=( )")
                 cmds.append("for i in {}/* ; do".format(d.getSandbox().getStep().getWorkspacePath()))
                 cmds.append("    mounts+=( -M \"$PWD/$i\" -m \"/${i##*/}\" )")
@@ -247,14 +261,18 @@ class JenkinsJob:
                         addDep(s)
                     else:
                         break
-                sandbox = []
+                sandbox.append("bob-namespace-sandbox")
                 sandbox.extend(["-S", "\"$_sandbox\""])
                 sandbox.extend(["-W", quote(d.getExecPath())])
                 sandbox.extend(["-H", "bob"])
                 sandbox.extend(["-d", "/tmp"])
                 sandbox.append("\"${mounts[@]}\"")
                 sandbox.append("--")
-                cmds.append("bob-namespace-sandbox {} /bin/bash -x -- /.script".format(" ".join(sandbox)))
+                sandbox.extend(["/bin/bash", "-x", "--", "/.script"])
+            else:
+                cmds.append("# invoke above script in controlled environment")
+                sandbox.extend(["bash", "-x", "$_sandbox/.script"])
+            cmds.extend(wrapCommandArguments("env", sandbox))
 
         return "\n".join(cmds)
 
@@ -386,13 +404,7 @@ class JenkinsJob:
         whiteList.extend([ JenkinsJob._buildIdName(d) for d in self.__deps.values()])
         whiteList.extend([ d.getWorkspacePath() for d in self.__checkoutSteps.values() ])
         whiteList.extend([ d.getWorkspacePath() for d in self.__buildSteps.values() ])
-        line = "pruneUnused "
-        for w in sorted(whiteList):
-            if len(line) + len(w) > 96:
-                prepareCmds.append(line + " \\")
-                line = "  "
-            line = line + " " + w
-        prepareCmds.append(line)
+        prepareCmds.extend(wrapCommandArguments("pruneUnused", sorted(whiteList)))
         prepareCmds.append("set -x")
 
         deps = sorted(self.__deps.values())
@@ -729,7 +741,7 @@ def jenkinsNamePersister(jenkins, wrapFmt):
         else:
             assert mode == 'exec'
             if step.getSandbox() is None:
-                return os.path.join("$WORKSPACE", quote(persist(step, props)))
+                return os.path.join("$PWD", quote(persist(step, props)))
             else:
                 return os.path.join("/bob", asHexStr(step.getVariantId()), "workspace")
 
