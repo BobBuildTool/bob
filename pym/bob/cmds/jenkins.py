@@ -148,13 +148,6 @@ class JenkinsJob:
         cmds = []
 
         cmds.append(self.getShebang(windows))
-        if not windows:
-            # Verify umask for predictable file modes. Can be set outside of
-            # Jenkins but Bob requires that umask is everywhere the same for
-            # stable Build-IDs. Mask 0022 is enforced on local builds and in
-            # the sandbox. Check it and bail out if different.
-            cmds.append("[[ $(umask) == 0022 ]] || exit 1")
-
         if checkIfSkip:
             cmds.append("if [[ -e {} ]] ; then"
                             .format(JenkinsJob._tgzName(d.getPackage().getPackageStep())))
@@ -352,6 +345,13 @@ class JenkinsJob:
         prepareCmds = []
         prepareCmds.append(self.getShebang(windows))
         prepareCmds.append("mkdir -p .state")
+        if not windows:
+            # Verify umask for predictable file modes. Can be set outside of
+            # Jenkins but Bob requires that umask is everywhere the same for
+            # stable Build-IDs. Mask 0022 is enforced on local builds and in
+            # the sandbox. Check it and bail out if different.
+            prepareCmds.append("[[ $(umask) == 0022 ]] || exit 1")
+
         prepareCmds.append("")
         prepareCmds.append("# delete unused files and directories from workspace")
         prepareCmds.append("pruneUnused()")
