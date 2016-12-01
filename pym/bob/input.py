@@ -1834,6 +1834,7 @@ class RecipeSet:
             "match" : funMatch,
         }
         self.__plugins = {}
+        self.__recipeScmStatus = None
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -1958,6 +1959,22 @@ class RecipeSet:
 
     def scmOverrides(self):
         return self.__scmOverrides
+
+    def getScmStatus(self):
+        if self.__recipeScmStatus is not None:
+            return self.__recipeScmStatus
+
+        self.__recipeScmStatus = "unknown"
+        if os.path.isdir(".git"):
+            import subprocess
+            try:
+                self.__recipeScmStatus = "git:" + subprocess.check_output(
+                    ["git", "describe", "--always", "--long", "--dirty", "--abbrev=16"],
+                    universal_newlines=True).strip()
+            except subprocess.CalledProcessError:
+                pass
+
+        return self.__recipeScmStatus
 
     def loadBinary(self, path):
         return self.__cache.loadBinary(path)
