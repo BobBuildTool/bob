@@ -24,6 +24,7 @@ from pipes import quote
 import argparse
 import ast
 import base64
+import datetime
 import getpass
 import hashlib
 import http.client
@@ -107,6 +108,7 @@ class JenkinsJob:
         self.__checkoutSteps = {}
         self.__buildSteps = {}
         self.__packageSteps = {}
+        self.__allPackages = []
         self.__deps = {}
 
     def __getJobName(self, p):
@@ -117,6 +119,40 @@ class JenkinsJob:
 
     def isRoot(self):
         return self.__isRoot
+
+    def getDescription(self, date):
+        namesPerVariant = {}
+        packagesPerVariant = {}
+
+        for p in self.__allPackages:
+            vid = p.getPackageStep().getVariantId()
+            namesPerVariant.setdefault(vid, set()).add(p.getName())
+            packagesPerVariant.setdefault(vid, set()).add("/".join(p.getStack()))
+
+        recipe = self.__allPackages[0].getRecipe()
+        description = [
+            "<h2>Recipe</h2>",
+            "<p>Name: " + recipe.getName()
+                + "<br/>Source: " + recipe.getRecipeSet().getScmStatus()
+                + "<br/>Configured: " + date + "</p>",
+            "<h2>Packages</h2>", "<ul>"
+        ]
+        namesPerVariant = { vid : ", ".join(sorted(names)) for (vid, names)
+            in namesPerVariant.items() }
+        for (vid, names) in sorted(namesPerVariant.items(), key=lambda x: x[1]):
+            description.append("<li>" + names + "<ul>")
+            i = 0
+            allPackages = packagesPerVariant[vid]
+            for p in sorted(allPackages):
+                if i > 5:
+                    description.append("<li>... ({} more)</li>".format(len(allPackages)-i))
+                    break
+                description.append("<li>" + p + "</li>")
+                i += 1
+            description.append("</ul></li>")
+        description.append("</ul>")
+
+        return "\n".join(description)
 
     def addDependencies(self, deps):
         for dep in deps:
@@ -136,6 +172,7 @@ class JenkinsJob:
 
     def addPackageStep(self, step):
         self.__packageSteps[step.getVariantId()] = step
+        self.__allPackages.append(step.getPackage())
 
     def getPackageSteps(self):
         return self.__packageSteps.values()
@@ -289,7 +326,7 @@ class JenkinsJob:
     def _buildIdName(d):
         return d.getWorkspacePath().replace('/', '_') + ".buildid"
 
-    def dumpXML(self, orig, nodes, windows, credentials, clean, options):
+    def dumpXML(self, orig, nodes, windows, credentials, clean, options, date):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
             builders = root.find("builders")
@@ -315,7 +352,7 @@ class JenkinsJob:
         else:
             root = xml.etree.ElementTree.Element("project")
             xml.etree.ElementTree.SubElement(root, "actions")
-            xml.etree.ElementTree.SubElement(root, "description").text = ""
+            xml.etree.ElementTree.SubElement(root, "description")
             if self.__name != self.__displayName:
                 xml.etree.ElementTree.SubElement(
                     root, "displayName").text = self.__displayName
@@ -352,6 +389,7 @@ class JenkinsJob:
                 publishers, "hudson.tasks.ArtifactArchiver")
             buildWrappers = xml.etree.ElementTree.SubElement(root, "buildWrappers")
 
+        root.find("description").text = self.getDescription(date)
         scmTrigger = xml.etree.ElementTree.SubElement(
             triggers, "hudson.triggers.SCMTrigger")
         xml.etree.ElementTree.SubElement(scmTrigger, "spec").text = options.get("scm.poll")
@@ -910,7 +948,7 @@ def doJenkinsExport(recipes, argv):
         BobState().setAsynchronous()
         try:
             xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes, windows,
-                credentials, clean, options), info)
+                credentials, clean, options, "now"), info)
         finally:
             BobState().setSynchronous()
         with open(os.path.join(args.dir, job.getName()+".xml"), "wb") as f:
@@ -1030,7 +1068,10 @@ class JenkinsConnection:
         self.__connection.close()
         return False
 
-    def _send(self, method, path, body=None):
+    def _send(self, method, path, body=None, headers=None):
+        if headers is None:
+            headers = self.__headers
+
         # Retry in case of BadStatusLine or OSError (broken pipe). This happens
         # sometimes if the server is under load. Running Bob again essentially
         # does that anyway...
@@ -1038,7 +1079,7 @@ class JenkinsConnection:
         while True:
             try:
                 self.__connection.request(method, self.__config["url"]["path"] + path, body,
-                                          self.__headers)
+                                          headers)
                 return self.__connection.getresponse()
             except (http.client.BadStatusLine, OSError) as e:
                 retries -= 1
@@ -1130,6 +1171,21 @@ class JenkinsConnection:
         response = self._send("POST", "job/" + name + "/disable")
         if response.status != 200 and response.status != 302:
             raise BuildError("Error disabling '{}': HTTP error: {} {}"
+                .format(name, response.status, response.reason))
+        response.read()
+
+    def setDescription(self, name, description):
+        body = urllib.parse.urlencode({"description" : description})
+        headers = self.__headers.copy()
+        headers.update({
+            "Content-Type" : "application/x-www-form-urlencoded",
+            "Accept" : "text/plain"
+        })
+        response = self._send("POST", "job/" + name + "/description", body,
+                              headers)
+        if response.status >= 400:
+            print(name, description, headers, body)
+            raise BuildError("Error setting description of '{}': HTTP error: {} {}"
                 .format(name, response.status, response.reason))
         response.read()
 
@@ -1257,6 +1313,7 @@ def doJenkinsPush(recipes, argv):
     options = config.get("options", {})
     updatedJobs = {}
     verbose = args.verbose - args.quiet
+    date = str(datetime.datetime.now())
 
     def printLine(level, job, *args):
         if level <= verbose:
@@ -1312,20 +1369,29 @@ def doJenkinsPush(recipes, argv):
                 else:
                     jobXML = None
 
-                jobXML = job.dumpXML(jobXML, nodes, windows, credentials, clean, options)
+                jobXML = job.dumpXML(jobXML, nodes, windows, credentials, clean, options, date)
 
                 if origXML is not None:
                     jobXML = applyHooks(jenkinsJobPostUpdate, jobXML, info)
+                    # job hash is based on unmerged config to detect just our changes
+                    hashXML = applyHooks(jenkinsJobCreate,
+                        job.dumpXML(None, nodes, windows, credentials, clean, options, date),
+                        info)
                 else:
                     jobXML = applyHooks(jenkinsJobCreate, jobXML, info)
+                    hashXML = jobXML
 
-                # hash is based on unmerged config to detect just our changes
-                newJobHash = hashlib.sha1(applyHooks(jenkinsJobCreate,
-                    job.dumpXML(None, nodes, windows, credentials, clean, options),
-                    info)).digest()
+                # remove description from job hash
+                root = xml.etree.ElementTree.fromstring(hashXML)
+                description = root.find("description").text
+                newDescrHash = hashlib.sha1(description.encode('utf8')).digest()
+                root.find("description").text = ""
+                hashXML = xml.etree.ElementTree.tostring(root, encoding="UTF-8")
+                newJobHash = hashlib.sha1(hashXML).digest()
                 newJobConfig = {
                     'hash' : newJobHash,
                     'scheduledHash' : newJobHash,
+                    'descrHash' : newDescrHash,
                     'enabled' : True,
                 }
             except xml.etree.ElementTree.ParseError as e:
@@ -1346,6 +1412,13 @@ def doJenkinsPush(recipes, argv):
                     printNormal(name, "Set new configuration...")
                     connection.updateConfig(name, jobXML)
                     oldJobConfig['hash'] = newJobConfig['hash']
+                    oldJobConfig['descrHash'] = newJobConfig['descrHash']
+                    BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
+                elif oldJobConfig.get('descrHash') != newJobConfig['descrHash']:
+                    # just set description
+                    printInfo(name, "Update description...")
+                    connection.setDescription(name, description)
+                    oldJobConfig['descrHash'] = newJobConfig['descrHash']
                     BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
                 else:
                     printDebug(name, "Not reconfigured. Unchanged configuration.")
@@ -1353,6 +1426,7 @@ def doJenkinsPush(recipes, argv):
                 printNormal(name, "Initial creation...")
                 oldJobConfig = {
                     'hash' : newJobConfig['hash'],
+                    'descrHash' : newJobConfig['descrHash'],
                     'enabled' : True
                 }
                 if not connection.createJob(name, jobXML):
