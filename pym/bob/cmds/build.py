@@ -26,9 +26,13 @@ from pipes import quote
 import argparse
 import datetime
 import os
+import pty
+import re
+import select
 import shutil
 import stat
 import subprocess
+import sys
 
 # Output verbosity:
 #    <= -2: package name
@@ -135,27 +139,7 @@ case "${{1:-run}}" in
         ;;
     __run)
         cd "${{0%/*}}/workspace"
-        case "$_verbose" in
-            0)
-                run_script >> ../log.txt 2>&1
-                ;;
-            1)
-                set -o pipefail
-                {{
-                    {{
-                        run_script | tee -a ../log.txt
-                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
-                }} 1>&2- 2>/dev/null
-                ;;
-            *)
-                set -o pipefail
-                {{
-                    {{
-                        run_script | tee -a ../log.txt
-                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
-                }} 3>&1 1>&2- 2>&3-
-                ;;
-        esac
+        run_script
         ;;
     shell)
         if [[ $_keep_env = 1 ]] ; then
@@ -458,15 +442,43 @@ esac
         elif self.__verbose >= 2:
             cmdLine.append('-vv')
 
-        proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv)
+        oup = pty.openpty()
+        erp = pty.openpty()
+
+        logFile = open(os.path.join(step.getWorkspacePath(), '..', 'log.txt'), 'a')
+        proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv,
+                universal_newlines=True, stdout=oup[1], stderr=erp[1])
+
+        ansi_escape = re.compile(r'\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]')
+
         try:
-            if proc.wait() != 0:
+            while 1:
+                timeout = .1
+                ready, _, _ = select.select([oup[0], erp[0]], [], [], timeout)
+                if ready:
+                    for r in ready:
+                        data = os.read(r, 1024)
+                        if ((r == erp[0]) and (self.__verbose >= 0)) or ((r == oup[0]) and (self.__verbose >= 1)):
+                            sys.stdout.buffer.write(data)
+                        logFile.write(ansi_escape.sub('', data.decode(sys.stdout.encoding)).replace('\r\n', '\n'))
+                else: # select timeout
+                    if proc.poll() is not None:
+                        break # proc exited
+            if proc.returncode != 0:
+                sys.stdout.flush()
                 raise BuildError("Build script {} returned with {}"
                                     .format(absRunFile, proc.returncode),
                                  help="You may resume at this point with '--resume' after fixing the error.")
         except KeyboardInterrupt:
+            sys.stdout.flush()
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
+        finally:
+            os.close(erp[0])
+            os.close(erp[1])
+            os.close(oup[0])
+            os.close(oup[1])
+            logFile.close()
 
     def _info(self, *args, **kwargs):
         if self.__verbose >= -1:
