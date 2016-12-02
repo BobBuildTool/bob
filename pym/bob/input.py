@@ -51,9 +51,6 @@ import yaml
 # the cached results and make sure they are re-generated.
 CACHE_VERSION = 3
 
-warnCheckoutConsume = WarnOnce("Usage of checkoutConsume is deprecated. Use checkoutVars instead.")
-warnBuildConsume = WarnOnce("Usage of buildConsume is deprecated. Use buildVars instead.")
-warnPackageConsume = WarnOnce("Usage of packageConsume is deprecated. Use packageVars instead.")
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 
 def overlappingPaths(p1, p2):
@@ -1301,21 +1298,12 @@ class Recipe(object):
         self.__varSelf = recipe.get("environment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
         self.__checkoutVars = set(maybeGlob(recipe.get("checkoutVars", [])))
-        if "checkoutConsume" in recipe:
-            warnCheckoutConsume.warn(baseName)
-            self.__checkoutVars |= set(maybeGlob(recipe["checkoutConsume"]))
         self.__checkoutVarsWeak = set(maybeGlob(recipe.get("checkoutVarsWeak", [])))
         self.__buildVars = set(maybeGlob(recipe.get("buildVars", [])))
-        if "buildConsume" in recipe:
-            warnBuildConsume.warn(baseName)
-            self.__buildVars |= set(maybeGlob(recipe["buildConsume"]))
         self.__buildVars |= self.__checkoutVars
         self.__buildVarsWeak = set(maybeGlob(recipe.get("buildVarsWeak", [])))
         self.__buildVarsWeak |= self.__checkoutVarsWeak
         self.__packageVars = set(maybeGlob(recipe.get("packageVars", [])))
-        if "packageConsume" in recipe:
-            warnPackageConsume.warn(baseName)
-            self.__packageVars |= set(maybeGlob(recipe["packageConsume"]))
         self.__packageVars |= self.__buildVars
         self.__packageVarsWeak = set(maybeGlob(recipe.get("packageVarsWeak", [])))
         self.__packageVarsWeak |= self.__buildVarsWeak
