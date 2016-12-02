@@ -93,7 +93,7 @@ if [[ -z $(git remote) ]] ; then
 fi
 # checkout only if HEAD is invalid
 if ! git rev-parse --verify -q HEAD >/dev/null ; then
-    git fetch -t origin
+    git fetch -q -t origin
     git checkout -q {REF}
 fi
 """.format(URL=self.__url, REF=self.__commit if self.__commit else "tags/"+self.__tag, DIR=self.__dir)
@@ -108,7 +108,7 @@ if [ -d {DIR}/.git ] ; then
         echo "Warning: not updating {DIR} because branch was changed manually..." >&2
     fi
 else
-    if ! git clone -b {BRANCH} {URL} {DIR} ; then
+    if ! git clone -q -b {BRANCH} {URL} {DIR} ; then
         rm -rf {DIR}/.git {DIR}/*
         exit 1
     fi
