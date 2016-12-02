@@ -239,17 +239,12 @@ class Env(dict):
         super().__init__(*args, **kwargs)
         self.funs = []
         self.funArgs = {}
-        self.legacy = False
 
     def copy(self):
         ret = Env(self)
         ret.funs = self.funs
         ret.funArgs = self.funArgs
-        ret.legacy = self.legacy
         return ret
-
-    def setLegacy(self, enable):
-        self.legacy = enable
 
     def setFuns(self, funs):
         self.funs = funs
@@ -269,37 +264,22 @@ class Env(dict):
             ret = Env()
             ret.funs = self.funs
             ret.funArgs = self.funArgs
-            ret.legacy = self.legacy
             for (key, value) in self.items():
                 if checkGlobList(key, allowed): ret[key] = value
             return ret
 
     def substitute(self, value, prop):
-        if self.legacy:
-            try:
-                return Template(value).substitute(self)
-            except KeyError as e:
-                raise ParseError("Error substituting {}: {}".format(prop, str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting {}: {}".format(prop, str(e)))
-        else:
-            try:
-                return StringParser(self, self.funs, self.funArgs).parse(value)
-            except ParseError as e:
-                raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
+        try:
+            return StringParser(self, self.funs, self.funArgs).parse(value)
+        except ParseError as e:
+            raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
 
     def evaluate(self, condition, prop):
         if condition is None:
             return True
 
-        if self.legacy:
-            try:
-                return eval(condition, self.derive({'__builtins__':{}}))
-            except Exception as e:
-                raise ParseError("Error evaluating condition on {}: {}".format(prop, str(e)))
-        else:
-            s = self.substitute(condition, "condition on "+prop)
-            return not _isFalse(s)
+        s = self.substitute(condition, "condition on "+prop)
+        return not _isFalse(s)
 
 
 class PluginProperty:
@@ -1994,7 +1974,6 @@ class RecipeSet:
         minVer = config.get("bobMinimumVersion", "0.1")
         if compareVersion(BOB_VERSION, minVer) < 0:
             raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
-        self.__extStrings = compareVersion(minVer, "0.3") >= 0
         self.__loadPlugins(config.get("plugins", []))
         self.__createSchemas()
 
@@ -2154,7 +2133,6 @@ class RecipeSet:
 
         # calculate start environment
         env = Env(os.environ).prune([ makePred(pred) for pred in self.__whiteList ])
-        env.setLegacy(not self.__extStrings)
         env.setFuns(self.__stringFunctions)
         env.update(self.__defaultEnv)
         env.update(envOverrides)
