@@ -49,7 +49,7 @@ import yaml
 # Therefore the follwing defintion must be incremented virtually with any
 # change that is done in this file. If in doubt, change it. It will invalidate
 # the cached results and make sure they are re-generated.
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 
