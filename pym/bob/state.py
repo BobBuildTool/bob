@@ -37,7 +37,7 @@ class _BobState():
         self.__results = {}
         self.__inputs = {}
         self.__jenkins = {}
-        self.__synchronous = True
+        self.__asynchronous = 0
         self.__dirty = False
         self.__dirStates = {}
         self.__buildState = {}
@@ -82,7 +82,7 @@ class _BobState():
                 }
 
     def __save(self):
-        if self.__synchronous:
+        if self.__asynchronous == 0:
             state = {
                 "version" : _BobState.CUR_VERSION,
                 "byNameDirs" : self.__byNameDirs,
@@ -103,16 +103,17 @@ class _BobState():
             self.__dirty = True
 
     def finalize(self):
-        assert self.__synchronous and not self.__dirty
+        assert (self.__asynchronous == 0) and not self.__dirty
         if self.__lock:
             os.unlink(self.__lock)
 
     def setAsynchronous(self):
-        self.__synchronous = False
+        self.__asynchronous += 1
 
     def setSynchronous(self):
-        self.__synchronous = True
-        if self.__dirty:
+        self.__asynchronous -= 1
+        assert self.__asynchronous >= 0
+        if (self.__asynchronous == 0) and self.__dirty:
             self.__save()
 
     def getByNameDirectory(self, baseDir, digest, isSourceDir):
