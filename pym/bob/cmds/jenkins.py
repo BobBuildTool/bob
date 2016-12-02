@@ -945,12 +945,8 @@ def doJenkinsExport(recipes, argv):
             'buildSteps' : job.getBuildSteps(),
             'packageSteps' : job.getPackageSteps()
         }
-        BobState().setAsynchronous()
-        try:
-            xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes, windows,
-                credentials, clean, options, "now"), info)
-        finally:
-            BobState().setSynchronous()
+        xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes, windows,
+            credentials, clean, options, "now"), info)
         with open(os.path.join(args.dir, job.getName()+".xml"), "wb") as f:
             f.write(xml)
 
@@ -1362,7 +1358,6 @@ def doJenkinsPush(recipes, argv):
                 origXML = None
 
             # calculate new job configuration
-            BobState().setAsynchronous()
             try:
                 if origXML is not None:
                     jobXML = applyHooks(jenkinsJobPreUpdate, origXML, info, True)
@@ -1397,8 +1392,6 @@ def doJenkinsPush(recipes, argv):
             except xml.etree.ElementTree.ParseError as e:
                 raise BuildError("Cannot parse XML of job '{}': {}".format(
                     name, str(e)))
-            finally:
-                BobState().setSynchronous()
 
             # configure or create job
             if name in existingJobs:
@@ -1655,12 +1648,15 @@ def doJenkins(argv, bobRoot):
     recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:
+        BobState().setAsynchronous()
         try:
             availableJenkinsCmds[args.subcommand][0](recipes, args.args)
         except http.client.HTTPException as e:
             raise BuildError("HTTP error: " + str(e))
         except OSError as e:
             raise BuildError("OS error: " + str(e))
+        finally:
+            BobState().setSynchronous()
     else:
         parser.error("Unknown subcommand '{}'".format(args.subcommand))
 
