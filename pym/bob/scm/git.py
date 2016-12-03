@@ -23,8 +23,6 @@ import schema
 import subprocess
 import xml.etree.ElementTree
 
-warnCredentials = WarnOnce("JENKINS_GIT_CREDENTIALS_ID is deprecated. Use '--credentials' instead.")
-
 class GitScm:
 
     SCHEMA = schema.Schema({
@@ -144,10 +142,6 @@ fi
             "url")
         url.text = self.__url
 
-        if "JENKINS_GIT_CREDENTIALS_ID" in os.environ:
-            warnCredentials.warn()
-            if not credentials:
-                credentials = os.environ["JENKINS_GIT_CREDENTIALS_ID"]
         if credentials:
             credentialsId = xml.etree.ElementTree.SubElement(userconfigs,
                          "credentialsId")

@@ -49,11 +49,8 @@ import yaml
 # Therefore the follwing defintion must be incremented virtually with any
 # change that is done in this file. If in doubt, change it. It will invalidate
 # the cached results and make sure they are re-generated.
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
-warnCheckoutConsume = WarnOnce("Usage of checkoutConsume is deprecated. Use checkoutVars instead.")
-warnBuildConsume = WarnOnce("Usage of buildConsume is deprecated. Use buildVars instead.")
-warnPackageConsume = WarnOnce("Usage of packageConsume is deprecated. Use packageVars instead.")
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 
 def overlappingPaths(p1, p2):
@@ -242,17 +239,12 @@ class Env(dict):
         super().__init__(*args, **kwargs)
         self.funs = []
         self.funArgs = {}
-        self.legacy = False
 
     def copy(self):
         ret = Env(self)
         ret.funs = self.funs
         ret.funArgs = self.funArgs
-        ret.legacy = self.legacy
         return ret
-
-    def setLegacy(self, enable):
-        self.legacy = enable
 
     def setFuns(self, funs):
         self.funs = funs
@@ -272,37 +264,22 @@ class Env(dict):
             ret = Env()
             ret.funs = self.funs
             ret.funArgs = self.funArgs
-            ret.legacy = self.legacy
             for (key, value) in self.items():
                 if checkGlobList(key, allowed): ret[key] = value
             return ret
 
     def substitute(self, value, prop):
-        if self.legacy:
-            try:
-                return Template(value).substitute(self)
-            except KeyError as e:
-                raise ParseError("Error substituting {}: {}".format(prop, str(e)))
-            except ValueError as e:
-                raise ParseError("Error substituting {}: {}".format(prop, str(e)))
-        else:
-            try:
-                return StringParser(self, self.funs, self.funArgs).parse(value)
-            except ParseError as e:
-                raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
+        try:
+            return StringParser(self, self.funs, self.funArgs).parse(value)
+        except ParseError as e:
+            raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
 
     def evaluate(self, condition, prop):
         if condition is None:
             return True
 
-        if self.legacy:
-            try:
-                return eval(condition, self.derive({'__builtins__':{}}))
-            except Exception as e:
-                raise ParseError("Error evaluating condition on {}: {}".format(prop, str(e)))
-        else:
-            s = self.substitute(condition, "condition on "+prop)
-            return not _isFalse(s)
+        s = self.substitute(condition, "condition on "+prop)
+        return not _isFalse(s)
 
 
 class PluginProperty:
@@ -1301,21 +1278,12 @@ class Recipe(object):
         self.__varSelf = recipe.get("environment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
         self.__checkoutVars = set(maybeGlob(recipe.get("checkoutVars", [])))
-        if "checkoutConsume" in recipe:
-            warnCheckoutConsume.warn(baseName)
-            self.__checkoutVars |= set(maybeGlob(recipe["checkoutConsume"]))
         self.__checkoutVarsWeak = set(maybeGlob(recipe.get("checkoutVarsWeak", [])))
         self.__buildVars = set(maybeGlob(recipe.get("buildVars", [])))
-        if "buildConsume" in recipe:
-            warnBuildConsume.warn(baseName)
-            self.__buildVars |= set(maybeGlob(recipe["buildConsume"]))
         self.__buildVars |= self.__checkoutVars
         self.__buildVarsWeak = set(maybeGlob(recipe.get("buildVarsWeak", [])))
         self.__buildVarsWeak |= self.__checkoutVarsWeak
         self.__packageVars = set(maybeGlob(recipe.get("packageVars", [])))
-        if "packageConsume" in recipe:
-            warnPackageConsume.warn(baseName)
-            self.__packageVars |= set(maybeGlob(recipe["packageConsume"]))
         self.__packageVars |= self.__buildVars
         self.__packageVarsWeak = set(maybeGlob(recipe.get("packageVarsWeak", [])))
         self.__packageVarsWeak |= self.__buildVarsWeak
@@ -2006,7 +1974,6 @@ class RecipeSet:
         minVer = config.get("bobMinimumVersion", "0.1")
         if compareVersion(BOB_VERSION, minVer) < 0:
             raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
-        self.__extStrings = compareVersion(minVer, "0.3") >= 0
         self.__loadPlugins(config.get("plugins", []))
         self.__createSchemas()
 
@@ -2166,7 +2133,6 @@ class RecipeSet:
 
         # calculate start environment
         env = Env(os.environ).prune([ makePred(pred) for pred in self.__whiteList ])
-        env.setLegacy(not self.__extStrings)
         env.setFuns(self.__stringFunctions)
         env.update(self.__defaultEnv)
         env.update(envOverrides)
