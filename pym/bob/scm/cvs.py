@@ -15,8 +15,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ..utils import hashString
+from ..tty import colorize
 import re
 import schema
+import os
+import subprocess
 
 class CvsScm:
 
@@ -109,7 +112,99 @@ fi
     def hasJenkinsPlugin(self):
         return False
 
+    # CvsScm status.
+    #
+    # Return values:
+    # - empty: workspace does not exist
+    # - error: workspace does not contain CVS checkout, or other bad things happen
+    # - clean: no local and no remote changes
+    # - unclean: local or remote changes (cannot easily distinguish between both with CVS)
     def status(self, workspacePath, dir, verbose = 0):
-        print("CVS SCM status not implemented!")
-        return 'error'
+        # Check directories
+        workDir = os.path.join(workspacePath, dir)
+        cvsDir = os.path.join(workDir, 'CVS')
+        if not os.path.exists(workDir):
+            return 'empty'
+        if not os.path.exists(cvsDir):
+            return 'error'
 
+        # Prepare an environment
+        environment = os.environ.copy()
+        m = re.match('^:ssh:(.*)', self.__cvsroot)
+        if m:
+            expectedRoot = ":ext:" + m.group(1)
+            environment['CVS_RSH'] = 'ssh'
+        else:
+            expectedRoot = self.__cvsroot
+
+        # Validate root and module
+        status=""
+        longStatus=""
+
+        actualRoot = CvsScm._loadFile(os.path.join(cvsDir, 'Root'))
+        actualModule = CvsScm._loadFile(os.path.join(cvsDir, 'Repository'))
+        if actualRoot != expectedRoot:
+            # Root mismatch counts as switch.
+            status += "S"
+            longStatus += colorize("     > Root does not match!\n     recipe:\t{}\n     actual:\t{}\n".format(self.__cvsroot, expectedRoot), "33")
+        elif actualModule != self.__module:
+            # Module mismatch counts as switch.
+            status += "S"
+            longStatus += colorize("     > Module does not match!\n     recipe:\t{}\n     actual:\t{}\n".format(self.__module, actualModule), "33")
+        else:
+            # Repository matches.
+            # There is no (easy) local-only way to determine just local changes AND match it against the requested revision.
+            # We therefore just call 'cvs update' in "don't modify" mode and look what it would change.
+            # This will contain switched files, local and remote modifications.
+            try:
+                commandLine = ['cvs', '-Rnq', 'update', '-dP']
+                if self.__rev is None:
+                    commandLine += ['-A']
+                else:
+                    commandLine += ['-r', self.__rev]
+                output = subprocess.check_output(commandLine,
+                                                 cwd=workDir,
+                                                 universal_newlines=True,
+                                                 env=environment,
+                                                 stderr=subprocess.DEVNULL,
+                                                 stdin=subprocess.DEVNULL)
+            except subprocess.CalledProcessError as e:
+                print ("cvs error: '{}' '{}'".format(" ".join(cmdLine), e.output))
+                return 'error'
+
+            modified = False
+            #   U = updated remotely, clean or missing locally (but can also mean local is on wrong branch)
+            #   P = same, but transferring patch instead of file
+            #   A = added locally
+            #   R = removed locally
+            #   M = modified locally, possibly modified remotely
+            #   C = modified locally and remotely, conflict
+            #   ? = untracked (could be file forgotten to add)
+            # We therefore interpret every nonempty output as a modification
+            # (ignoring spurious extra output such as "cvs update: Updating...").
+            for i in output.split('\n'):
+                if (re.match('^[^ ] ', i)):
+                    if not modified: longStatus += colorize("    > modified:\n", "33")
+                    modified = True
+                    longStatus += '      ' + i + '\n'
+            if modified:
+                status += "M"
+
+        if status == "":
+            if verbose >= 3:
+                print(colorize("   STATUS   {}".format(workDir), "32"))
+            return 'clean'
+        else:
+            if verbose != 0:
+                print(colorize("   STATUS {0: <4} {1}".format(status, workDir), "33"))
+            if (verbose >= 2) and (longStatus != ""):
+                print(longStatus)
+            return 'unclean'
+
+    @staticmethod
+    def _loadFile(name):
+        try:
+            with open(name) as f:
+                return f.read().rstrip('\r\n')
+        except OSError:
+            return ''
