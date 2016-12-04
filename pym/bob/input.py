@@ -49,7 +49,7 @@ import yaml
 # Therefore the follwing defintion must be incremented virtually with any
 # change that is done in this file. If in doubt, change it. It will invalidate
 # the cached results and make sure they are re-generated.
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 
@@ -2148,9 +2148,15 @@ class RecipeSet:
         h.update(b'\x01' if sandboxEnabled else b'\x00')
         cacheKey = h.digest()
 
+        # use separate caches with and without sandbox
+        if sandboxEnabled:
+            cacheName = ".bob-packages-sb.pickle"
+        else:
+            cacheName = ".bob-packages.pickle"
+
         # try to load the persisted packages
         try:
-            with open(".bob-packages.pickle", "rb") as f:
+            with open(cacheName, "rb") as f:
                 persistedCacheKey = f.read(len(cacheKey))
                 if cacheKey == persistedCacheKey:
                     return PackageUnpickler(f, self.getRecipe, self.__plugins,
@@ -2183,9 +2189,11 @@ class RecipeSet:
 
         # save package tree for next invocation
         try:
-            with open(".bob-packages.pickle", "wb") as f:
+            newCacheName = cacheName + ".new"
+            with open(newCacheName, "wb") as f:
                 f.write(cacheKey)
                 PackagePickler(f, nameFormatter).dump(result)
+            os.replace(newCacheName, cacheName)
         except OSError as e:
             print("Error saving internal state:", str(e), file=sys.stderr)
 
