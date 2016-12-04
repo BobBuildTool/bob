@@ -501,12 +501,19 @@ esac
                             os.read(pipe[0], 1)
                             done = True
                         else:
-                            data = os.read(r, 1024)
+                            oldLen = 0
+                            data = bytearray(b'')
+                            # read all available data from fd
+                            blockSize = 1024
+                            while True:
+                                data = data + os.read(r, blockSize)
+                                if len(data) != oldLen + blockSize:
+                                    break
                             if ((r == erp[0]) and (self.__verbose >= 0)):
                                 sys.stderr.buffer.write(data)
                             if ((r == oup[0]) and (self.__verbose >= 1)):
                                 sys.stdout.buffer.write(data)
-                            logFile.write(ansi_escape.sub('', data.decode(sys.stdout.encoding)).replace('\r\n', '\n'))
+                            logFile.write(ansi_escape.sub('', data.decode(sys.stdout.encoding, errors='replace')).replace('\r\n', '\n'))
                 except InterruptedError:
                     # select is interrupted by SIGCHLD...
                     pass
