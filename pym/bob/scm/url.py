@@ -61,12 +61,12 @@ class UrlScm:
         self.__digestSha1 = spec.get("digestSHA1")
         if self.__digestSha1:
             # validate digest
-            if re.fullmatch("[0-9a-f]{40}", self.__digestSha1) is None:
+            if re.match("^[0-9a-f]{40}$", self.__digestSha1) is None:
                 raise ParseError("Invalid SHA1 digest: " + str(self.__digestSha1))
         self.__digestSha256 = spec.get("digestSHA256")
         if self.__digestSha256:
             # validate digest
-            if re.fullmatch("[0-9a-f]{64}", self.__digestSha256) is None:
+            if re.match("^[0-9a-f]{64}$", self.__digestSha256) is None:
                 raise ParseError("Invalid SHA256 digest: " + str(self.__digestSha256))
         self.__dir = spec.get("dir", ".")
         self.__fn = spec.get("fileName")
