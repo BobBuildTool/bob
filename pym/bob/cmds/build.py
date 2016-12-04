@@ -25,11 +25,13 @@ from glob import glob
 from pipes import quote
 import argparse
 import datetime
+import fcntl
 import os
 import pty
 import re
 import select
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -139,6 +141,29 @@ case "${{1:-run}}" in
         ;;
     __run)
         cd "${{0%/*}}/workspace"
+        case "$_verbose" in
+            0)
+                run_script >> ../log.txt 2>&1
+                ;;
+            1)
+                set -o pipefail
+                {{
+                    {{
+                        run_script | tee -a ../log.txt
+                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
+                }} 1>&2- 2>/dev/null
+                ;;
+            *)
+                set -o pipefail
+                {{
+                    {{
+                        run_script | tee -a ../log.txt
+                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
+                }} 3>&1 1>&2- 2>&3-
+                ;;
+        esac
+        ;;
+    __runNoLog)
         run_script
         ;;
     shell)
@@ -434,7 +459,7 @@ esac
             print("# END BUILD SCRIPT", file=f)
         os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
-        cmdLine = ["/bin/bash", runFile, "__run"]
+        cmdLine = ["/bin/bash", runFile, "__runNoLog"]
         if self.__verbose < 0:
             cmdLine.append('-q')
         elif self.__verbose == 1:
@@ -442,35 +467,54 @@ esac
         elif self.__verbose >= 2:
             cmdLine.append('-vv')
 
+        logFile = open(os.path.join(step.getWorkspacePath(), '..', 'log.txt'), 'a')
+
         oup = pty.openpty()
         erp = pty.openpty()
+        pipe = os.pipe()
 
-        logFile = open(os.path.join(step.getWorkspacePath(), '..', 'log.txt'), 'a')
+        for p in pipe:
+            flag = fcntl.fcntl(p, fcntl.F_GETFL)
+            fcntl.fcntl(p, fcntl.F_SETFL, flag | os.O_NONBLOCK)
+
+        def child_exit(signum, frame):
+            try:
+                os.write(pipe[1], b"1")
+            except IOError as e:
+                if e.errno not in [errno.EAGAIN, errno.EINTR]:
+                    raise
+
+        signal.signal(signal.SIGCHLD, child_exit)
+
         proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv,
-                universal_newlines=True, stdout=oup[1], stderr=erp[1])
+                stdout=oup[1], stderr=erp[1])
 
         ansi_escape = re.compile(r'\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]')
 
         try:
-            while 1:
-                timeout = .1
-                ready, _, _ = select.select([oup[0], erp[0]], [], [], timeout)
-                if ready:
+            done = False
+            while not done:
+                try:
+                    ready, _, _ = select.select([oup[0], erp[0], pipe[0]], [], [])
                     for r in ready:
-                        data = os.read(r, 1024)
-                        if ((r == erp[0]) and (self.__verbose >= 0)) or ((r == oup[0]) and (self.__verbose >= 1)):
-                            sys.stdout.buffer.write(data)
-                        logFile.write(ansi_escape.sub('', data.decode(sys.stdout.encoding)).replace('\r\n', '\n'))
-                else: # select timeout
-                    if proc.poll() is not None:
-                        break # proc exited
-            if proc.returncode != 0:
-                sys.stdout.flush()
+                        if r == pipe[0]:
+                            os.read(pipe[0], 1)
+                            done = True
+                        else:
+                            data = os.read(r, 1024)
+                            if ((r == erp[0]) and (self.__verbose >= 0)):
+                                sys.stderr.buffer.write(data)
+                            if ((r == oup[0]) and (self.__verbose >= 1)):
+                                sys.stdout.buffer.write(data)
+                            logFile.write(ansi_escape.sub('', data.decode(sys.stdout.encoding)).replace('\r\n', '\n'))
+                except InterruptedError:
+                    # select is interrupted by SIGCHLD...
+                    pass
+            if proc.wait() != 0:
                 raise BuildError("Build script {} returned with {}"
                                     .format(absRunFile, proc.returncode),
                                  help="You may resume at this point with '--resume' after fixing the error.")
         except KeyboardInterrupt:
-            sys.stdout.flush()
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
         finally:
@@ -478,7 +522,13 @@ esac
             os.close(erp[1])
             os.close(oup[0])
             os.close(oup[1])
+            os.close(pipe[0])
+            os.close(pipe[1])
             logFile.close()
+            # need to flush at least stderr. Otherwise the next output of bob may get mixed into stderr output..
+            sys.stdout.flush()
+            sys.stderr.flush()
+            signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 
     def _info(self, *args, **kwargs):
         if self.__verbose >= -1:
