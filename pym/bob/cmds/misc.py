@@ -67,7 +67,7 @@ def doLS(argv, bobRoot):
     parser.add_argument('-p', '--prefixed', default=False, action='store_true',
                         help="Prints the full path prefix for each package")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=True,
+    group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
