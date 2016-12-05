@@ -469,11 +469,11 @@ esac
 
         logFile = open(os.path.join(step.getWorkspacePath(), '..', 'log.txt'), 'a')
 
-        oup = pty.openpty()
-        erp = pty.openpty()
-        pipe = os.pipe()
-
-        for p in pipe:
+        outpty = pty.openpty()
+        errpty = pty.openpty()
+        pipe   = os.pipe()
+        filefds = [outpty[0], outpty[1], errpty[0], errpty[1], pipe[0], pipe[1]]
+        for p in filefds:
             flag = fcntl.fcntl(p, fcntl.F_GETFL)
             fcntl.fcntl(p, fcntl.F_SETFL, flag | os.O_NONBLOCK)
 
@@ -487,15 +487,14 @@ esac
         signal.signal(signal.SIGCHLD, child_exit)
 
         proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv,
-                stdout=oup[1], stderr=erp[1])
+                stdout=outpty[1], stderr=errpty[1])
 
         ansi_escape = re.compile(r'\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]')
-
         try:
             done = False
             while not done:
                 try:
-                    ready, _, _ = select.select([oup[0], erp[0], pipe[0]], [], [])
+                    ready, _, _ = select.select([outpty[0], errpty[0], pipe[0]], [], [])
                     for r in ready:
                         if r == pipe[0]:
                             os.read(pipe[0], 1)
@@ -509,9 +508,9 @@ esac
                                 data = data + os.read(r, blockSize)
                                 if len(data) != oldLen + blockSize:
                                     break
-                            if ((r == erp[0]) and (self.__verbose >= 0)):
+                            if ((r == errpty[0]) and (self.__verbose >= 0)):
                                 sys.stderr.buffer.write(data)
-                            if ((r == oup[0]) and (self.__verbose >= 1)):
+                            if ((r == outpty[0]) and (self.__verbose >= 1)):
                                 sys.stdout.buffer.write(data)
                             logFile.write(ansi_escape.sub('', data.decode(sys.stdout.encoding, errors='replace')).replace('\r\n', '\n'))
                 except InterruptedError:
@@ -525,12 +524,8 @@ esac
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
         finally:
-            os.close(erp[0])
-            os.close(erp[1])
-            os.close(oup[0])
-            os.close(oup[1])
-            os.close(pipe[0])
-            os.close(pipe[1])
+            for f in filefds:
+                os.close(f)
             logFile.close()
             # need to flush at least stderr. Otherwise the next output of bob may get mixed into stderr output..
             sys.stdout.flush()
