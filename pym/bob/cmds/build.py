@@ -86,7 +86,11 @@ run_script()
     if [[ $_verbose -ge 3 ]] ; then trace="-x" ; fi
 
     echo "### START: `date`"
-    run /bin/bash $trace -- ../script {ARGS}
+    if [[ $_verbose -ge 1 ]] ; then
+        LD_PRELOAD={ISATTY} run /bin/bash $trace -- ../script {ARGS}
+    else
+        run /bin/bash $trace -- ../script {ARGS}
+    fi
     ret=$?
     echo "### END($ret): `date`"
 
@@ -143,17 +147,21 @@ case "${{1:-run}}" in
                 set -o pipefail
                 {{
                     {{
-                        run_script | tee -a ../log.txt
-                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
+                        run_script | tee -a ../_log.txt
+                    }} 3>&1 1>&2- 2>&3- | tee -a ../_log.txt
                 }} 1>&2- 2>/dev/null
+                sed -r 's/{ANSI_ESCAPE}//g' ../_log.txt >> ../log.txt
+                rm ../_log.txt
                 ;;
             *)
                 set -o pipefail
                 {{
                     {{
-                        run_script | tee -a ../log.txt
-                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
+                        run_script | tee -a ../_log.txt
+                    }} 3>&1 1>&2- 2>&3- | tee -a ../_log.txt
                 }} 3>&1 1>&2- 2>&3-
+                sed -r 's/{ANSI_ESCAPE}//g' ../_log.txt >> ../log.txt
+                rm ../_log.txt
                 ;;
         esac
         ;;
@@ -419,7 +427,9 @@ esac
                         quote(a.getExecPath())
                         for a in step.getArguments() ]),
                     SANDBOX_CMD="\n    ".join(sandboxMounts + [" ".join(sandbox)]),
-                    SANDBOX_SETUP=sandboxSetup
+                    SANDBOX_SETUP=sandboxSetup,
+                    ISATTY=os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', '..', 'bin', 'isatty.so'),
+                    ANSI_ESCAPE='\\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]'
                 ), file=f)
         scriptFile = os.path.join(workspacePath, "..", "script")
         with open(scriptFile, "w") as f:

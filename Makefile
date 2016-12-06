@@ -25,10 +25,13 @@ SPHINX := $(shell command -v sphinx-build 2>/dev/null)
 
 .PHONY: all install pym check doc
 
-all: bin/namespace-sandbox pym check doc
+all: bin/namespace-sandbox pym check doc isatty
 
 bin/namespace-sandbox: $(patsubst %,$(DIR)/%,$(SOURCE) $(HEADERS))
 	@gcc -o $@ -std=c99 $^ -lm
+
+isatty:
+	@echo "int isatty(int fd) { return 1; }" | gcc -O2 -fpic -shared -ldl -o bin/isatty.so -xc -
 
 pym:
 	@python3 -m compileall pym
@@ -36,6 +39,7 @@ pym:
 install: all
 	@mkdir -p $(DESTDIR)/bin $(DESTDIR)/lib/bob/bin
 	@cp bin/namespace-sandbox $(DESTDIR)/lib/bob/bin
+	@cp bin/isatty.so $(DESTDIR)/lib/bob/bin
 	@cp bin/namespace-sandbox $(DESTDIR)/bin/bob-namespace-sandbox
 	@cp -r bob bob-hash-engine bob-hash-tree contrib pym $(DESTDIR)/lib/bob
 	@ln -sf ../lib/bob/bob $(DESTDIR)/bin
