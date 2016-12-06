@@ -473,7 +473,8 @@ esac
         errpty = pty.openpty()
         pipe   = os.pipe()
         filefds = [outpty[0], outpty[1], errpty[0], errpty[1], pipe[0], pipe[1]]
-        for p in filefds:
+
+        for p in [outpty[0], errpty[0], pipe[0]]:
             flag = fcntl.fcntl(p, fcntl.F_GETFL)
             fcntl.fcntl(p, fcntl.F_SETFL, flag | os.O_NONBLOCK)
 
