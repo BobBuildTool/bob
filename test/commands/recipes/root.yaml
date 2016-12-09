@@ -1,0 +1,12 @@
+root: True
+
+buildVars: [FOO, BAR]
+buildScript: |
+    if [[ $FOO != 1 ]]; then
+        exit 1
+    fi
+    if [[ $BAR != 1 ]]; then
+        exit 1
+    fi
+
+packageScript: "true"

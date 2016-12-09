@@ -66,6 +66,10 @@ def doLS(argv, bobRoot):
                         help="Recursively display dependencies")
     parser.add_argument('-p', '--prefixed', default=False, action='store_true',
                         help="Prints the full path prefix for each package")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
@@ -73,11 +77,22 @@ def doLS(argv, bobRoot):
         help="Disable sandboxing")
     args = parser.parse_args(argv)
 
+    defines = {}
+    for define in args.defines:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+
     recipes = RecipeSet()
+    recipes.setConfigFiles(args.configFile)
     recipes.parse()
 
     showAll = args.all
-    roots = recipes.generatePackages(lambda s,m: "unused", sandboxEnabled=args.sandbox)
+    roots = recipes.generatePackages(lambda s,m: "unused", defines, sandboxEnabled=args.sandbox)
     stack = []
     if args.package:
         package = walkPackagePath(roots, args.package)
@@ -119,6 +134,10 @@ are used:
 """)
     parser.add_argument('package', help="(Sub-)package to query")
 
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
     parser.add_argument('-f', default=[], action='append', dest="formats",
         help="Output format for scm (syntax: scm=format). Can be specified multiple times.")
     parser.add_argument('--default', default="", help='Default for missing attributes (default: "")')
@@ -134,9 +153,20 @@ are used:
 
     args = parser.parse_args(argv)
 
+    defines = {}
+    for define in args.defines:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+
     recipes = RecipeSet()
+    recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    rootPackages = recipes.generatePackages(lambda s,m: "unused")
+    rootPackages = recipes.generatePackages(lambda s,m: "unused", defines)
     package = walkPackagePath(rootPackages, args.package)
 
     # update formats
@@ -168,12 +198,27 @@ def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
         description="Query recipe and class files of package.")
     parser.add_argument('package', help="(Sub-)package to query")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
 
     args = parser.parse_args(argv)
 
+    defines = {}
+    for define in args.defines:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+
     recipes = RecipeSet()
+    recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    rootPackages = recipes.generatePackages(lambda s,m: "unused")
+    rootPackages = recipes.generatePackages(lambda s,m: "unused", defines)
     package = walkPackagePath(rootPackages, args.package)
 
     for fn in package.getRecipe().getSources():
