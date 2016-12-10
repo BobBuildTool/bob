@@ -13,7 +13,7 @@ Synopsis
 
 ::
 
-    bob query-scm [-h] [-f FORMATS] [--default DEFAULT] [-r] package
+    bob query-scm [-h] [-c CONFIGFILE] [-D DEFINES] [-f FORMATS] [--default DEFAULT] [-r] package
 
 Description
 -----------
@@ -31,6 +31,12 @@ are used:
 
 Options
 -------
+
+``-c CONFIGFILE``
+    Use config File
+
+``-D DEFINES``
+    Override default environment variable
 
 ``--default DEFAULT``
     Default for missing attributes (default: "")

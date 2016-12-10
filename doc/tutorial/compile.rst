@@ -177,10 +177,12 @@ have touched to commit them to a SCM. Bob offers ``bob status <options> <package
 to show a list of SCM which are unclean. SCMs are unclean in case they have modified files,
 unpushed commits, switched URLs or non matching tags or commit ids.
 
-The output looks like the following line: ::
-       STATUS <status code> <scm path> 
+The output looks like the following line::
+
+    STATUS <status code> <scm path> 
 
 Status codes:
+
 * ``U`` : Unpushed commits (Git only)
 * ``u`` : unpushed commits on local branch (Git only)
 * ``M`` : Modified sources.
