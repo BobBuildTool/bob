@@ -774,6 +774,8 @@ packages that are built from a library: a ``-target`` packet that has the
 shared libraries needed during runtime and a ``-dev`` packet that has the
 header files and other needed files to link with this library.
 
+Bob does not support multiple or nested multiPackages in a single recipe, yet.
+
 .. _configuration-recipes-privateenv:
 
 privateEnvironment
