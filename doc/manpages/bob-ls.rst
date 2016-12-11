@@ -13,7 +13,8 @@ Synopsis
 
 ::
 
-    bob ls [-h] [-a] [-r] [-p] [--sandbox | --no-sandbox] [package]
+    bob ls [-h] [-a] [-r] [-p] [-D DEFINES] [-c CONFIGFILE] 
+           [--sandbox | --no-sandbox] [package]
 
 
 Description
@@ -26,6 +27,12 @@ Options
 
 ``-a, --all``
     Show indirect dependencies too
+
+``-c CONFIGFILE``
+    Use config File
+
+``-D DEFINES``
+    Override default environment variable
 
 ``--no-sandbox``
     Disable sandboxing

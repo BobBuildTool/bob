@@ -56,7 +56,7 @@ Eclipse CDT project generator
 
 ::
 
-    bob project eclipse-cdt <package> [-h] [-u] [--buildCfg BUILDCFG] [--overwrite]
+    bob project eclipseCdt <package> [-h] [-u] [--buildCfg BUILDCFG] [--overwrite]
                             [--destination DEST] [--name NAME]
                             [--exclude EXCLUDES] [-I ADDITIONAL_INCLUDES]
 
@@ -64,10 +64,11 @@ The Eclipse CDT generator has the following specific options. They have to be
 passed on the command line *after* the package name.
 
 ``--buildCfg BUILDCFG``
-    Adds a new buildconfiguration. Format: <Name>::<flags>
+    Adds a new buildconfiguration. Format: <Name>::<flags>. Flags are passed
+    to bob dev. See bob dev for a list of availabe flags.
 
 ``--destination DEST``
-    Destination of project files
+    Destination of project files.
 
 ``--exclude EXCLUDES``
     Packages will be marked as 'exclude from build' in eclipse. Usefull if indexer runs OOM.
@@ -82,7 +83,7 @@ passed on the command line *after* the package name.
     Remove destination folder before generating.
 
 ``-u, --update``
-    Update project files (.project)
+    Update project files (.project).
 
 
 QtCreator project generator
