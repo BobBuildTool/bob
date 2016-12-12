@@ -16,7 +16,7 @@
 
 from ..errors import BuildError
 from ..tty import colorize
-from ..utils import hashString
+from ..utils import hashString, joinScripts
 import os, os.path
 import schema
 import subprocess
