@@ -1121,12 +1121,12 @@ It is also possible to use separate methods for upload and download::
         -
             backend: http
             url: "http://localhost:8001/archive"
-            use: [download]
+            flags: [download]
         -
             backend: shell
             upload: "scp -q ${BOB_LOCAL_ARTIFACT} localhost:archive/${BOB_REMOTE_ARTIFACT}"
             download: "scp -q localhost:archive/${BOB_REMOTE_ARTIFACT} ${BOB_LOCAL_ARTIFACT}"
-            use: [upload]
+            flags: [upload]
 
 scmOverrides
 ~~~~~~~~~~~~
