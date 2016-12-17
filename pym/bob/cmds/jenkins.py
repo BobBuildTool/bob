@@ -761,7 +761,7 @@ def _genJenkinsJobs(p, jobs, nameCalculator, archiveBackend):
 
     allDeps = p.getAllDepSteps()
     jj.addDependencies(allDeps)
-    for d in allDeps:
+    for d in sorted(allDeps, key=lambda d: d.getPackage().getName()):
         _genJenkinsJobs(d.getPackage(), jobs, nameCalculator, archiveBackend)
 
 def jenkinsNameFormatter(step, props):
@@ -804,7 +804,7 @@ def genJenkinsJobs(recipes, jenkins):
         nameCalculator.addPackage(root)
 
     nameCalculator.sanitize()
-    for root in rootPackages:
+    for root in sorted(rootPackages, key=lambda root: root.getName()):
         _genJenkinsJobs(root, jobs, nameCalculator, archiveHandler)
 
     return jobs
