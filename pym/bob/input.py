@@ -968,17 +968,13 @@ class Package(object):
     the responsibility of the build backend to detect this and build only one
     package.
     """
-    def __init__(self, name, stack, pathFormatter, recipe, sandbox,
+    def __init__(self, name, stack, pathFormatter, recipe,
                  directDepSteps, indirectDepSteps, states):
         self.__name = name
         self.__stack = stack
-        self.__pathFormatter = pathFormatter
         self.__recipe = recipe
-        self.__sandbox = sandbox
-        self.__directDepSteps = directDepSteps[:]
-        tmp = set(indirectDepSteps)
-        if sandbox and sandbox.isEnabled(): tmp.add(sandbox.getStep())
-        self.__indirectDepSteps = sorted(tmp)
+        self.__directDepSteps = directDepSteps
+        self.__indirectDepSteps = indirectDepSteps
         self.__states = states
         self.__checkoutStep = CheckoutStep(self, pathFormatter)
         self.__buildStep = BuildStep(self, pathFormatter)
@@ -1023,31 +1019,22 @@ class Package(object):
         This list includes all direct and indirect dependencies."""
         return sorted(set(self.__directDepSteps) | set(self.__indirectDepSteps))
 
-    def _setCheckoutStep(self, script, fullEnv, digestEnv, env, tools, deterministic):
-        self.__checkoutStep = CheckoutStep(
-            self, self.__pathFormatter, self.__sandbox, script, fullEnv,
-            digestEnv, env, tools, deterministic)
-        return self.__checkoutStep
+    def _setCheckoutStep(self, checkoutStep):
+        self.__checkoutStep = checkoutStep
 
     def getCheckoutStep(self):
         """Return the checkout step of this package."""
         return self.__checkoutStep
 
-    def _setBuildStep(self, script, digestEnv, env, tools, args):
-        self.__buildStep = BuildStep(
-            self, self.__pathFormatter, self.__sandbox, script, digestEnv, env,
-            tools, args)
-        return self.__buildStep
+    def _setBuildStep(self, buildStep):
+        self.__buildStep = buildStep
 
     def getBuildStep(self):
         """Return the build step of this package."""
         return self.__buildStep
 
-    def _setPackageStep(self, script, digestEnv, env, tools, args):
-        self.__packageStep = PackageStep(
-            self, self.__pathFormatter, self.__sandbox, script, digestEnv, env,
-            tools, args)
-        return self.__packageStep
+    def _setPackageStep(self, packageStep):
+        self.__packageStep = packageStep
 
     def getPackageStep(self):
         """Return the package step of this package."""
@@ -1550,8 +1537,10 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
 
         # create package
         directPackages = [ p for p in directPackages if p.isUsed() ]
-        indirectPackages = [ p for p in indirectPackages if p.isUsed() ]
-        p = Package(self.__packageName, stack, pathFormatter, self, sandbox,
+        indirectPackages = set( p for p in indirectPackages if p.isUsed() )
+        if sandbox and sandbox.isEnabled(): indirectPackages.add(sandbox.getStep())
+        indirectPackages = sorted(indirectPackages)
+        p = Package(self.__packageName, stack, pathFormatter, self,
                     directPackages, indirectPackages, states)
 
         # optional checkout step
@@ -1559,9 +1548,10 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
-            srcStep = p._setCheckoutStep(self.__checkout, env, checkoutDigestEnv,
-                checkoutEnv, tools.prune(self.__toolDepCheckout),
-                self.__checkoutDeterministic)
+            srcStep = CheckoutStep(p, pathFormatter, sandbox, self.__checkout,
+                env, checkoutDigestEnv, checkoutEnv,
+                tools.prune(self.__toolDepCheckout), self.__checkoutDeterministic)
+            p._setCheckoutStep(srcStep)
         else:
             srcStep = p.getCheckoutStep() # return invalid step
 
@@ -1570,8 +1560,10 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             buildDigestEnv = env.prune(self.__buildVars)
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
-            buildStep = p._setBuildStep(self.__build, buildDigestEnv,
-                buildEnv, tools.prune(self.__toolDepBuild), [srcStep] + results)
+            buildStep = BuildStep(p, pathFormatter, sandbox, self.__build,
+                buildDigestEnv, buildEnv, tools.prune(self.__toolDepBuild),
+                [srcStep] + results)
+            p._setBuildStep(buildStep)
         else:
             buildStep = p.getBuildStep() # return invalid step
 
@@ -1579,9 +1571,10 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
         packageDigestEnv = env.prune(self.__packageVars)
         packageEnv = ( env.prune(self.__packageVars | self.__packageVarsWeak)
             if self.__packageVarsWeak else packageDigestEnv )
-        p._setPackageStep(self.__package, packageDigestEnv, packageEnv,
-            tools.prune(self.__toolDepPackage), [buildStep])
-        packageStep = p.getPackageStep()
+        packageStep = PackageStep(p, pathFormatter, sandbox, self.__package,
+            packageDigestEnv, packageEnv, tools.prune(self.__toolDepPackage),
+            [buildStep])
+        p._setPackageStep(packageStep)
 
         # provide environment
         provideEnv = {}
