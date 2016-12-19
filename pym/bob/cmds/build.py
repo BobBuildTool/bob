@@ -870,7 +870,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         packageStep = walkPackagePath(rootPackages, p).getPackageStep()
         backlog.append(packageStep)
         # automatically include provided deps when exporting
-        if args.destination: backlog.extend(packageStep.getProvidedDeps())
+        if args.destination: backlog.extend(packageStep._getProvidedDeps())
     try:
         for p in backlog:
             builder.cook([p], p.getPackage(), args.checkout_only)

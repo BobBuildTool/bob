@@ -791,36 +791,32 @@ class Step(metaclass=ABCMeta):
         """Return dict of environment variables."""
         return self.__env
 
+    def doesProvideTools(self):
+        """Return True if this step provides at least one tool."""
+        return self.__providedTools != {}
+
     def _setProvidedEnv(self, provides):
         self.__providedEnv = provides
 
-    def getProvidedEnv(self):
-        """Return provided environemt variables for upstream packages."""
+    def _getProvidedEnv(self):
         return self.__providedEnv
 
     def _setProvidedTools(self, provides):
         self.__providedTools = provides
 
-    def getProvidedTools(self):
-        """Return provided tools for upstream recipes."""
+    def _getProvidedTools(self):
         return self.__providedTools
-
-    def doesProvideTools(self):
-        """Return True if this step provides at least one tool."""
-        return self.__providedTools != {}
 
     def _setProvidedDeps(self, deps):
         self.__providedDeps = deps
 
-    def getProvidedDeps(self):
-        """Get provided dependencies for upstream recipes."""
+    def _getProvidedDeps(self):
         return self.__providedDeps
 
     def _setProvidedSandbox(self, sandbox):
         self.__providedSandbox = sandbox
 
-    def getProvidedSandbox(self):
-        """Get provided sandbox for upstream recipes."""
+    def _getProvidedSandbox(self):
         return self.__providedSandbox
 
     def _setShared(self, shared):
@@ -1477,7 +1473,7 @@ class Recipe(object):
                 thisDeps[dep.recipe] = p
                 if dep.useDeps:
                     # add provided dependencies at the end
-                    providedDeps = p.getProvidedDeps()
+                    providedDeps = p._getProvidedDeps()
                     allDeps.extend(Recipe.InjectedDep(d) for d in providedDeps)
                 directPackages.append(p)
             else:
@@ -1491,14 +1487,14 @@ class Recipe(object):
             if dep.useBuildResult:
                 results.append(p)
             if dep.useTools:
-                tools.update(p.getProvidedTools())
-                if dep.provideGlobal: depTools.update(p.getProvidedTools())
+                tools.update(p._getProvidedTools())
+                if dep.provideGlobal: depTools.update(p._getProvidedTools())
             if dep.useEnv:
-                env.update(p.getProvidedEnv())
-                if dep.provideGlobal: depEnv.update(p.getProvidedEnv())
+                env.update(p._getProvidedEnv())
+                if dep.provideGlobal: depEnv.update(p._getProvidedEnv())
             if dep.useSandbox:
-                sandbox = p.getProvidedSandbox()
-                if dep.provideGlobal: depSandbox = p.getProvidedSandbox()
+                sandbox = p._getProvidedSandbox()
+                if dep.provideGlobal: depSandbox = p._getProvidedSandbox()
 
         # apply private environment
         env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
@@ -1594,7 +1590,7 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             subDep = thisDeps.get(dep.recipe)
             if subDep is not None:
                 provideDeps.append(subDep)
-                for d in subDep.getProvidedDeps(): provideDeps.append(d)
+                for d in subDep._getProvidedDeps(): provideDeps.append(d)
         packageStep._setProvidedDeps(provideDeps)
 
         # provide Sandbox
