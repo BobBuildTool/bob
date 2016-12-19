@@ -1429,7 +1429,7 @@ class Recipe(object):
         tools = inputTools.prune(self.__filterTools)
         inputEnv = inputEnv.derive()
         inputEnv.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
-            "tools" : inputTools, "stack" : stack })
+            "tools" : inputTools })
         varSelf = {}
         for (key, value) in self.__varSelf.items():
             varSelf[key] = inputEnv.substitute(value, "environment::"+key)
@@ -1457,7 +1457,7 @@ class Recipe(object):
             dep = allDeps[i]
             i += 1
             env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
-                "tools" : tools, "stack" : stack })
+                "tools" : tools })
 
             if isinstance(dep, Recipe.Dependency):
                 if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
@@ -1498,7 +1498,7 @@ class Recipe(object):
 
         # apply private environment
         env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
-            "tools" : tools, "stack" : stack })
+            "tools" : tools })
         varPrivate = {}
         for (key, value) in self.__varPrivate.items():
             varPrivate[key] = env.substitute(value, "privateEnvironment::"+key)

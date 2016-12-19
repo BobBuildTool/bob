@@ -172,7 +172,6 @@ passed:
 * ``sandbox``: an instance of :class:`bob.input.Sandbox` of the current context
   or ``None`` if no sandbox was configured
 * ``tools``: dict of all available tools (see :class:`bob.input.Tool`)
-* ``stack``: list of package names that lead to the currently processed package
 
 In the future additional keyword args may be added without notice. Such string
 functions should therefore have a catch-all ``**kwargs`` parameter. A sample implementation
