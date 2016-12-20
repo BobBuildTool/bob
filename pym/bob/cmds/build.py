@@ -441,8 +441,8 @@ esac
                                    quote(a.getExecPath()))
                     for a in step.getArguments() if a.isValid() ] ))), file=f)
             print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(t), quote(p))
-                    for (t,p) in step.getTools().items()] ))), file=f)
+                [ "[{}]={}".format(quote(n), quote(os.path.join(t.getStep().getExecPath(), t.getPath())))
+                    for (n,t) in step.getTools().items()] ))), file=f)
             print("# Environment:", file=f)
             for (k,v) in sorted(stepEnv.items()):
                 print("export {}={}".format(k, quote(v)), file=f)

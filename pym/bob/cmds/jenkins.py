@@ -229,8 +229,8 @@ class JenkinsJob:
                                        a.getExecPath())
                     for a in d.getArguments() if a.isValid() ] ))))
             cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
-                [ "    [{}]={}".format(quote(t), p)
-                    for (t,p) in d.getTools().items()] ))))
+                [ "    [{}]={}".format(quote(n), os.path.join(t.getStep().getExecPath(), t.getPath()))
+                    for (n,t) in d.getTools().items()] ))))
             env = { key: quote(value) for (key, value) in d.getEnv().items() }
             env.update({
                 "PATH": ":".join(d.getPaths() + (

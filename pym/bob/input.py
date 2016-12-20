@@ -766,10 +766,9 @@ class Step(metaclass=ABCMeta):
     def getTools(self):
         """Get dictionary of tools.
 
-        The dict maps the tool name to the respective execution path.
+        The dict maps the tool name to a :class:`bob.input.Tool`.
         """
-        return { name : os.path.join(tool.step.getExecPath(), tool.path)
-            for (name, tool) in self.__tools.items() }
+        return self.__tools
 
     def getArguments(self):
         """Get list of all inputs for this Step.
