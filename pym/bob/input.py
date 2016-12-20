@@ -1170,6 +1170,7 @@ class ScmValidator:
 
 
 RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]+$')
+RECIPE_MULTIPACKAGE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]*$')
 
 class Recipe(object):
     """Representation of a single recipe
@@ -1249,9 +1250,20 @@ class Recipe(object):
         baseDir = os.path.dirname(fileName)
         if "multiPackage" in recipe:
             anonBaseClass = Recipe(recipeSet, recipe, fileName, baseDir, baseName, baseName, properties)
-            return [
-                Recipe(recipeSet, subSpec, fileName, baseDir, baseName+"-"+subName, baseName, properties, anonBaseClass)
-                for (subName, subSpec) in recipe["multiPackage"].items() ]
+            recipes = []
+
+            def collectRecipes(subName, subSpec, baseName, baseClass):
+                newBaseName = baseName + ("-"+subName if subName != '' else '')
+                baseClass = Recipe(recipeSet, subSpec, fileName, baseDir, newBaseName, baseName, properties, baseClass)
+                recipes.append(baseClass)
+                if "multiPackage" in subSpec:
+                    for (subName, subSubSpec) in subSpec["multiPackage"].items():
+                        collectRecipes(subName, subSubSpec, newBaseName, baseClass)
+
+            for (subName, subSpec) in recipe["multiPackage"].items():
+                collectRecipes(subName, subSpec, baseName, anonBaseClass)
+
+            return recipes
         else:
             return [ Recipe(recipeSet, recipe, fileName, baseDir, baseName, baseName, properties) ]
 
@@ -2002,7 +2014,7 @@ class RecipeSet:
                     raise
 
         # resolve recipes and their classes
-        for recipe in self.__recipes.values():
+        for recipe in sorted(self.__recipes.values(), key=lambda recipe: recipe.getPackageName()):
             try:
                 recipe.resolveClasses()
             except ParseError as e:
@@ -2113,7 +2125,7 @@ class RecipeSet:
 
         recipeSchemaSpec = classSchemaSpec.copy()
         recipeSchemaSpec[schema.Optional('multiPackage')] = schema.Schema({
-            RECIPE_NAME_SCHEMA : self.__classSchema
+            RECIPE_MULTIPACKAGE_NAME_SCHEMA : recipeSchemaSpec,
         })
         self.__recipeSchema = schema.Schema(recipeSchemaSpec)
 
