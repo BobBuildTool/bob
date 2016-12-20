@@ -999,20 +999,25 @@ class Package(object):
         """
         return self.__directDepSteps
 
-    def getIndictectDepSteps(self):
+    def getIndirectDepSteps(self):
         """Return list of indirect dependencies of the package.
 
-        Indirect dependencies are the package steps of tools or the sandbox
-        that were forwarded or inheried from other recipes. They are not
-        directly named in the recipe.
+        Indirect dependencies are dependencies that were provided by downstream
+        recipes. They are not directly named in the recipe.
         """
         return self.__indirectDepSteps
 
     def getAllDepSteps(self):
         """Return list of all dependencies of the package.
 
-        This list includes all direct and indirect dependencies."""
-        return sorted(set(self.__directDepSteps) | set(self.__indirectDepSteps))
+        This list includes all direct and indirect dependencies. Additionally
+        the used sandbox and tools are included too."""
+        allDeps = set(self.__directDepSteps)
+        allDeps |= set(self.__indirectDepSteps)
+        sandbox = self.__packageStep.getSandbox()
+        if sandbox is not None: allDeps.add(sandbox)
+        for i in allDeps.getTools.values(): allDeps.add(i.getStep())
+        return sorted(allDeps)
 
     def _setCheckoutStep(self, checkoutStep):
         self.__checkoutStep = checkoutStep
@@ -1525,16 +1530,13 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
 
         # mark actually used steps as such
         if sandbox and sandbox.isEnabled(): sandbox.getStep().markUsed()
-        toolPackages = [ t.step for t in tools.prune(self.__toolDepPackage).values() ]
-        for p in toolPackages: p.markUsed()
+        packageTools = tools.prune(self.__toolDepPackage)
+        for t in packageTools.values(): t.step.markUsed()
         for p in results: p.markUsed()
-        indirectPackages.extend(toolPackages)
 
         # create package
         directPackages = [ p for p in directPackages if p.isUsed() ]
-        indirectPackages = set( p for p in indirectPackages if p.isUsed() )
-        if sandbox and sandbox.isEnabled(): indirectPackages.add(sandbox.getStep())
-        indirectPackages = sorted(indirectPackages)
+        indirectPackages = [ p for p in indirectPackages if p.isUsed() ]
         p = Package(self.__packageName, stack, pathFormatter, self,
                     directPackages, indirectPackages, states)
 
@@ -1567,7 +1569,7 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
         packageEnv = ( env.prune(self.__packageVars | self.__packageVarsWeak)
             if self.__packageVarsWeak else packageDigestEnv )
         packageStep = PackageStep(p, pathFormatter, sandbox, self.__package,
-            packageDigestEnv, packageEnv, tools.prune(self.__toolDepPackage),
+            packageDigestEnv, packageEnv, packageTools,
             [buildStep])
         p._setPackageStep(packageStep)
 
