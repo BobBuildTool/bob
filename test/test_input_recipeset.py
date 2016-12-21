@@ -16,7 +16,7 @@
 
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import os
 import textwrap
 
@@ -217,3 +217,94 @@ class TestDependencies(TestCase):
         self.assertRaises(ParseError, recipes.generatePackages,
             lambda x,y: "unused")
 
+class TestMultiPackage(TestCase):
+    def setUp(self):
+        self.cwd = os.getcwd()
+        self.tmpdir = TemporaryDirectory()
+        os.chdir(self.tmpdir.name)
+        os.mkdir("recipes")
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+        os.chdir(self.cwd)
+
+    def writeRecipe(self, name, content):
+        with open(os.path.join("recipes", name+".yaml"), "w") as f:
+            f.write(textwrap.dedent(content))
+
+    def testEmptyMultiPackageName(self):
+        self.writeRecipe("root", """\
+            root: True
+            depends: [a, a-b]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("a", """\
+            buildScript: "true"
+            multiPackage:
+                "":
+                    packageScript: "true"
+                b:
+                    packageScript: "true"
+            """)
+        recipes = RecipeSet()
+        recipes.parse()
+        roots = recipes.generatePackages(lambda x,y: "unused")
+
+        package = walkPackagePath(roots, "root")
+        needed = ['a', 'a-b' ]
+        for p in package.getDirectDepSteps():
+            if p.getPackage().getName() in needed:
+                needed.remove(p.getPackage().getName())
+        assert(len(needed) == 0)
+
+    def myJoinScripts(scripts, glue=""):
+        scripts = [ s for s in scripts if ((s is not None) and (s != "")) ]
+        if scripts != []:
+            return "".join(scripts)
+        else:
+            return None
+
+    @patch('bob.input.joinScripts', side_effect=myJoinScripts)
+    @patch('bob.input.PackagePickler.dump')
+    def testNestedMultiPackage(self, join, pickler):
+        pickler.return_value = 0
+        self.writeRecipe("root", """\
+            root: True
+            depends: [a-a, a-b, a-b-a, a-b-b, a-b-b-a, a-b-b-b]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("a", """\
+            buildScript: 'a'
+            packageScript: "true"
+            multiPackage:
+                a:
+                    buildScript: -a
+                b:
+                    buildScript: -b
+                    multiPackage:
+                        a:
+                            buildScript: -a
+                        b:
+                            buildScript: -b
+                            multiPackage:
+                                a:
+                                    buildScript: -a
+                                b:
+                                    buildScript: -b
+            """)
+
+        pickler = patch('bob.input.PackagePickler.dump')
+
+        recipes = RecipeSet()
+        recipes.parse()
+        roots = recipes.generatePackages(lambda x,y: "unused")
+
+        package = walkPackagePath(roots, "root")
+        needed = ['a-a', 'a-b', 'a-b-a', 'a-b-b', 'a-b-b-a', 'a-b-b-b' ]
+        for p in package.getDirectDepSteps():
+            assert( p.getPackage().getBuildStep().getScript() == p.getPackage().getName() )
+            if p.getPackage().getName() in needed:
+                needed.remove(p.getPackage().getName())
+        assert(len(needed) == 0)
