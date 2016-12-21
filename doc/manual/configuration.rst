@@ -756,12 +756,20 @@ Type: Dictionary (String -> Recipe)
 
 By utilizing the ``multiPackage`` keyword it is possible to unify multiple
 recipes into one. The final package name is derived from the current recipe
-name by appending the key under multiPackage separated by a "-". The following
-example recipe foo.yaml declares the two packages foo-bar and foo-baz::
+name by appending the key under multiPackage separated by a "-". If a empty
+string is given as key the separator is not inserted. The name of the multiPackage
+is equal to the recipe name in this case. Nested multiPackages are also supported.
+The following example recipe foo.yaml declares four packages: foo, foo-bar, foo-baz
+and foo-bar-qux::
 
    multiPackage:
+      "":
+         ...
       bar:
          packageScript: ...
+         multiPackage:
+            qux:
+                buildScript: ...
       baz:
          ...
 
