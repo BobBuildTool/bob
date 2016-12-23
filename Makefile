@@ -44,7 +44,8 @@ install: all
 		ln -s $(DESTDIR)/lib/bob/contrib/bash-completion $(DESTDIR)/share/bash-completion/bob ; \
 	fi
 	@if [ -d .git ] ; then \
-		git describe --tags --dirty --always > $(DESTDIR)/lib/bob/version ; \
+		git describe --tags --dirty > $(DESTDIR)/lib/bob/version 2> /dev/null \
+		|| rm -rf $(DESTDIR)/lib/bob/version ; \
 	else \
 		rm -rf $(DESTDIR)/lib/bob/version ; \
 	fi
