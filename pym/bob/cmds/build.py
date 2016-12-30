@@ -487,9 +487,10 @@ esac
                 continue
 
             # update if package changes
-            if step.getPackage() != self.__currentPackage:
-                self.__currentPackage = step.getPackage()
-                print(">>", colorize("/".join(self.__currentPackage.getStack()), "32;1"))
+            newPackage = "/".join(step.getPackage().getStack())
+            if newPackage != self.__currentPackage:
+                self.__currentPackage = newPackage
+                print(">>", colorize(self.__currentPackage, "32;1"))
 
             # execute step
             try:
@@ -510,7 +511,7 @@ esac
         if currentPackage != self.__currentPackage:
             self.__currentPackage = currentPackage
             if currentPackage:
-                print(">>", colorize("/".join(self.__currentPackage.getStack()), "32;1"))
+                print(">>", colorize(self.__currentPackage, "32;1"))
 
     def _cookCheckoutStep(self, checkoutStep, depth):
         checkoutDigest = checkoutStep.getVariantId()
