@@ -256,7 +256,7 @@ A generator is called with 3 Arguments:
   the IDE. These are the generic arguments that ``bob project`` parses for all
   generators.
 
-A simple genertor may look like::
+A simple generator may look like::
 
     def nullGenerator(package, argv, extra):
         return 0
