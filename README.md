@@ -1,3 +1,5 @@
+![Bob Logo](/doc/BOB_Logo.png?raw=true)
+
 Bob Build Tool
 ==============
 
