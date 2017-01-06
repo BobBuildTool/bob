@@ -404,9 +404,12 @@ def qtProjectGenerator(package, argv, extra):
             packageDir = package.getPackageStep().getWorkspacePath()
             for root, directory, filenames in os.walk(packageDir):
                 for filename in filenames:
-                    ftype = magic.from_file(os.path.join(root, filename))
-                    if 'executable' in ftype and 'x86' in ftype:
-                        runTargets.append(RunStep(os.path.join(os.getcwd(), root), filename))
+                    try:
+                        ftype = magic.from_file(os.path.join(root, filename))
+                        if 'executable' in ftype and 'x86' in ftype:
+                            runTargets.append(RunStep(os.path.join(os.getcwd(), root), filename))
+                    except OSError:
+                        pass
 
         with open(sharedFile, 'w') as sharedFile:
             sharedFile.write(template_head)
