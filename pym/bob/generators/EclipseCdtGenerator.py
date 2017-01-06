@@ -310,9 +310,11 @@ def eclipseCdtGenerator(package, argv, extra):
             packageDir = package.getPackageStep().getWorkspacePath()
             for root, directory, filenames in os.walk(packageDir):
                 for filename in filenames:
-                    ftype = magic.from_file(os.path.join(root, filename))
-                    if 'executable' in ftype and 'x86' in ftype:
-                        createLaunchFile(open(os.path.join(destination, filename + ".launch"), 'w'),
+                    try:
+                        ftype = magic.from_file(os.path.join(root, filename))
+                        if 'executable' in ftype and 'x86' in ftype:
+                            createLaunchFile(open(os.path.join(destination, filename + ".launch"), 'w'),
                                 os.path.join(os.getcwd(), root, filename), projectName)
-
+                    except OSError:
+                        pass
 
