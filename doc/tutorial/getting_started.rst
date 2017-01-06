@@ -14,6 +14,7 @@ Python modules that are not in the standard library:
 * `python-magic` Either install via pip (``pip3 install python-magic``) or the package
   that comes with your distribution.
 * gcc
+* `python3-sphinx` Only needed for generating man pages.
 
 Python 3.3 or later should work. For the basic usage there is no installation
 needed. Just clone the repository and compile::

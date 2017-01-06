@@ -1563,7 +1563,7 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             srcStep = p.getCheckoutStep() # return invalid step
 
         # optional build step
-        if self.__build:
+        if self.__build != (None, None):
             buildDigestEnv = env.prune(self.__buildVars)
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
