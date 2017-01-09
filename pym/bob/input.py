@@ -1170,6 +1170,7 @@ class ScmValidator:
 
 
 RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]+$')
+MULTIPACKAGE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]*$')
 
 class Recipe(object):
     """Representation of a single recipe
@@ -1238,8 +1239,6 @@ class Recipe(object):
 
     @staticmethod
     def loadFromFile(recipeSet, fileName, properties, schema):
-        recipe = recipeSet.loadYaml(fileName, schema)
-
         # MultiPackages are handled as separate recipes with an anonymous base
         # class. Ignore first dir in path, which is 'recipes' by default.
         # Following dirs are treated as categories separated by '::'.
@@ -1247,13 +1246,28 @@ class Recipe(object):
         for n in baseName: RECIPE_NAME_SCHEMA.validate(n)
         baseName = "::".join( baseName )
         baseDir = os.path.dirname(fileName)
-        if "multiPackage" in recipe:
-            anonBaseClass = Recipe(recipeSet, recipe, fileName, baseDir, baseName, baseName, properties)
-            return [
-                Recipe(recipeSet, subSpec, fileName, baseDir, baseName+"-"+subName, baseName, properties, anonBaseClass)
-                for (subName, subSpec) in recipe["multiPackage"].items() ]
-        else:
-            return [ Recipe(recipeSet, recipe, fileName, baseDir, baseName, baseName, properties) ]
+
+        nameMap = {}
+        def anonNameCalculator(suffix):
+            num = nameMap.setdefault(suffix, 0)
+            nameMap[suffix] = num+1
+            return baseName + "$" + suffix + (("$"+str(num)) if num > 0 else "")
+
+        def collect(recipe, suffix, anonBaseClass):
+            if "multiPackage" in recipe:
+                anonBaseClass = Recipe(recipeSet, recipe, fileName, baseDir,
+                    anonNameCalculator(suffix), baseName, properties,
+                    anonBaseClass)
+                return chain.from_iterable(
+                    collect(subSpec, suffix + ("-"+subName if subName else ""),
+                            anonBaseClass)
+                    for (subName, subSpec) in recipe["multiPackage"].items() )
+            else:
+                packageName = baseName + suffix
+                return [ Recipe(recipeSet, recipe, fileName, baseDir, packageName,
+                                baseName, properties, anonBaseClass) ]
+
+        return list(collect(recipeSet.loadYaml(fileName, schema), "", None))
 
     def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName, properties, anonBaseClass=None):
         self.__recipeSet = recipeSet
@@ -1330,14 +1344,16 @@ class Recipe(object):
         inherit = []
         while backlog:
             next = backlog.pop(0)
-            if next.getName() in visited: continue
+            if next.__packageName in visited: continue
             subInherit = [ self.__recipeSet.getClass(c) for c in next.__inherit if c not in visited ]
+            if next.__anonBaseClass and (next.__anonBaseClass.__packageName not in visited):
+                subInherit.insert(0, next.__anonBaseClass)
             if subInherit:
                 # prepend and re-insert current class
                 backlog[0:0] = subInherit + [next]
             else:
                 inherit.append(next)
-                visited.add(next.getName())
+                visited.add(next.__packageName)
 
         # inherit classes
         inherit.reverse()
@@ -2113,7 +2129,7 @@ class RecipeSet:
 
         recipeSchemaSpec = classSchemaSpec.copy()
         recipeSchemaSpec[schema.Optional('multiPackage')] = schema.Schema({
-            RECIPE_NAME_SCHEMA : self.__classSchema
+            MULTIPACKAGE_NAME_SCHEMA : recipeSchemaSpec
         })
         self.__recipeSchema = schema.Schema(recipeSchemaSpec)
 
