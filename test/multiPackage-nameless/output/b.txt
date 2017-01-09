@@ -1,0 +1,7 @@
+print
+foo
+bravo
+b
+alpha
+x-ray
+b

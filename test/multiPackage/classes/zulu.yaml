@@ -1,0 +1,2 @@
+inherit: [print]
+buildScript: "p zulu"

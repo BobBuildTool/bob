@@ -1,0 +1,9 @@
+foo-a
+foo-b-x
+foo-b-y
+foo-b-z-q
+root
+root/foo-a
+root/foo-b-x
+root/foo-b-y
+root/foo-b-z-q

@@ -1,0 +1,6 @@
+print
+foo
+alpha
+intermediate
+bravo
+nameless

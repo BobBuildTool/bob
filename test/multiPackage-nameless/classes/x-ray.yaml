@@ -1,0 +1,2 @@
+inherit: [print, alpha]
+buildScript: "p x-ray"

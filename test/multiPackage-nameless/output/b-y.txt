@@ -1,0 +1,6 @@
+print
+foo
+bravo
+b
+yankee
+b-y

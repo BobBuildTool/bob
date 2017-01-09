@@ -1,0 +1,8 @@
+print
+foo
+bravo
+id-y
+yankee
+alpha
+x-ray
+y
