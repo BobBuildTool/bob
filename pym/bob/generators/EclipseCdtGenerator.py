@@ -294,7 +294,7 @@ def eclipseCdtGenerator(package, argv, extra):
         # Generate buildme
         buildMe = []
         buildMe.append("#!/bin/sh")
-        buildMe.append('bob dev "$@" ' + quote(extra) + ' ' + quote(project))
+        buildMe.append('bob dev "$@" ' + extra + ' ' + quote(project))
         projectCmd = "bob project -n " + extra + " eclipseCdt " + quote(project) + \
             " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
         for i in args.additional_includes:
