@@ -305,7 +305,8 @@ def qtProjectGenerator(package, argv, extra):
         buildMe = []
         buildMe.append("#!/bin/sh")
         buildMe.append('bob dev "$@" ' + extra + ' ' + quote(project))
-        projectCmd = "bob project -n qt-creator " + quote(project) + " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
+        projectCmd = "bob project -n " + extra + " qt-creator " + quote(project) + \
+            " -u --destination " + quote(destination) + ' --name ' + quote(projectName)
         # only add arguments which are relevant for .files or .includes. All other files are only modified if not build with
         # update only.
         for i in args.additional_includes:
