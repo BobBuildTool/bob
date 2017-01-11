@@ -1,0 +1,36 @@
+# 1. Check nameless multiPackage of nameless multiPackage
+# 2. Check interleaved names/nameless multiPackages
+
+inherit: [print]
+
+buildScript: |
+    p foo
+
+packageScript: |
+    cp $1/${RESULT_NAME}.txt .
+
+multiPackage:
+    "":
+        inherit: [alpha]
+        buildScript: "p intermediate nameless"
+        multiPackage:
+            "":
+                inherit: [bravo]
+                environment:
+                    RESULT_NAME: "nameless"
+                buildScript: "p nameless"
+    b:
+        inherit: [bravo]
+        buildScript: "p b"
+        multiPackage:
+            "":
+                inherit: [x-ray]
+                environment:
+                    RESULT_NAME: "b"
+                buildScript: "p b"
+            y:
+                inherit: [yankee]
+                environment:
+                    RESULT_NAME: "b-y"
+                buildScript: "p b-y"
+

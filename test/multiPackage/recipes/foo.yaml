@@ -1,0 +1,42 @@
+inherit: [print]
+root: true
+
+buildScript: |
+    p foo
+
+packageScript: |
+    cp $1/${RESULT_NAME}.txt .
+
+multiPackage:
+    a:
+        inherit: [alpha]
+        environment:
+            RESULT_NAME: "a"
+        buildScript: "p a"
+    b:
+        inherit: [bravo]
+        environment:
+            ID: "b"
+            RESULT_NAME: "b" # always overridden
+        buildVars: [ID]
+        buildScript: "p $ID"
+        multiPackage:
+            x:
+                inherit: [x-ray]
+                environment:
+                    RESULT_NAME: "x"
+                buildScript: "p x"
+            y:
+                inherit: [yankee, x-ray]
+                environment:
+                    ID: "id-y"
+                    RESULT_NAME: "y"
+                buildScript: "p y"
+            z:
+                inherit: [zulu, yankee, x-ray]
+                multiPackage:
+                    q:
+                        inherit: [quebec]
+                        environment:
+                            RESULT_NAME: "z"
+

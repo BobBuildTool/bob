@@ -1,0 +1,7 @@
+inherit: [lib]
+packageScript: |
+    echo "recipe" >> result.txt
+multiPackage:
+    foo:
+        packageScript: |
+            echo "multiPackage" >> result.txt

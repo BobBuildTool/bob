@@ -1,0 +1,9 @@
+print
+foo
+bravo
+b
+zulu
+yankee
+alpha
+x-ray
+quebec

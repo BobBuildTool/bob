@@ -1,0 +1,9 @@
+buildVars: [RESULT_NAME]
+buildScript: |
+    p()
+    {
+        echo "$1" >> ${RESULT_NAME}.txt
+    }
+
+    p print
+

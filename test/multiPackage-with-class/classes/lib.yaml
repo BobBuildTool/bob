@@ -1,0 +1,2 @@
+packageScript: |
+    echo "class" >> result.txt
