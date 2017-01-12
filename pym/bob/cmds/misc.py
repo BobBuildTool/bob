@@ -36,15 +36,23 @@ except UnicodeEncodeError:
     LS_SEP_4 = "|   "
 
 
+def getNextDeps(p, showAll):
+    deps = { d.getPackage().getName() : d.getPackage()
+             for d in p.getDirectDepSteps() }
+    if showAll:
+        for d in p.getIndirectDepSteps():
+            d = d.getPackage()
+            deps.setdefault(d.getName(), d)
+    return deps
+
 def doLS(argv, bobRoot):
     def showTree(packages, showAll, prefix=""):
         i = 0
         for n,p in sorted(packages.items()):
             last = (i >= len(packages)-1)
             print("{}{}{}".format(prefix, LS_SEP_1 if last else LS_SEP_2, n))
-            deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
-            showTree({ d.getPackage().getName():d.getPackage() for d in deps }, showAll,
-                     prefix + (LS_SEP_3 if last else LS_SEP_4))
+            deps = getNextDeps(p, showAll)
+            showTree(deps, showAll, prefix + (LS_SEP_3 if last else LS_SEP_4))
             i += 1
 
     def showPrefixed(packages, recurse, showAll, stack, level=0):
@@ -53,9 +61,8 @@ def doLS(argv, bobRoot):
             newStack.append(n)
             print("/".join(newStack))
             if recurse:
-                deps = p.getAllDepSteps() if showAll else p.getDirectDepSteps()
-                showPrefixed({ d.getPackage().getName():d.getPackage() for d in deps }, recurse, showAll,
-                             newStack, level+1)
+                deps = getNextDeps(p, showAll)
+                showPrefixed(deps, recurse, showAll, newStack, level+1)
 
     parser = argparse.ArgumentParser(prog="bob ls", description='List packages.')
     parser.add_argument('package', type=str, nargs='?',
@@ -97,8 +104,7 @@ def doLS(argv, bobRoot):
     if args.package:
         package = walkPackagePath(roots, args.package)
         stack = steps = [ s for s in args.package.split("/") if s != "" ]
-        deps = package.getAllDepSteps() if showAll else package.getDirectDepSteps()
-        roots = { d.getPackage().getName():d.getPackage() for d in deps }
+        roots = getNextDeps(package, showAll)
     else:
         steps = ["/"]
 
