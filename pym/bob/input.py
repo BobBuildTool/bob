@@ -839,6 +839,10 @@ class Step(metaclass=ABCMeta):
     def _setShared(self, shared):
         self.__shared = shared
 
+    def setEnv(self, env):
+        """Set dict of environment variables."""
+        self.__env = env
+
     def isShared(self):
         """Returns True if the result of the Step should be shared globally.
 
