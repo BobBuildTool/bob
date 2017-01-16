@@ -210,11 +210,17 @@ esac
 
     @staticmethod
     def developNamePersister(wrapFmt):
+        """Creates a separate directory for every recipe and step variant.
+
+        Only identical steps of the same recipe are put into the same
+        directory. In contrast to the releaseNamePersister() identical steps of
+        different recipes are put into distinct directories.
+        """
         dirs = {}
 
         def fmt(step, props):
             baseDir = wrapFmt(step, props)
-            digest = step.getVariantId()
+            digest = (step.getPackage().getRecipe().getName(), step.getVariantId())
             if digest in dirs:
                 res = dirs[digest]
             else:
