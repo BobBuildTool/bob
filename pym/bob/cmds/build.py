@@ -913,6 +913,8 @@ def doProject(argv, bobRoot):
         help="Preserve environment variable")
     parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
         help="Preserve whole environment")
+    parser.add_argument('--download', metavar="MODE", default="no",
+        help="Download from binary archive (yes, no, deps)", choices=['yes', 'no', 'deps'])
     parser.add_argument('--resume', default=False, action='store_true',
         help="Resume build where it was previously interrupted")
     parser.add_argument('-n', dest="execute_prebuild", default=True, action='store_false',
@@ -967,7 +969,7 @@ def doProject(argv, bobRoot):
         print("Generator {} not found!".format(args.projectGenerator))
         return 1
 
-    extra = [ "--download=no" ]
+    extra = [ "--download=" + args.download ]
     for d in args.defines:
         extra.append('-D')
         extra.append(d)
