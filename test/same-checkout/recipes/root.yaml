@@ -1,0 +1,14 @@
+root: true
+
+depends:
+   - lib1
+   - lib2
+
+buildScript: |
+   for i in "${BOB_DEP_PATHS[@]}"; do
+      cp $i/* .
+   done
+
+packageScript: |
+   cp $1/* .
+

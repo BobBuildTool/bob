@@ -1,0 +1,10 @@
+checkoutDeterministic: True
+checkoutScript: |
+   echo "identical" > lib.txt
+
+buildScript: |
+   cp $1/lib.txt lib2.txt
+
+packageScript: |
+   cp $1/* .
+
