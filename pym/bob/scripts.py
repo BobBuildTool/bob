@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import BOB_VERSION
+from . import BOB_VERSION, _enableDebug
 from .errors import BobError
 from .state import finalize
 from .tty import colorize, Unbuffered
@@ -107,7 +107,7 @@ def bob(bobRoot):
         sys.stderr = Unbuffered(sys.stderr)
 
     try:
-        if len(sys.argv) > 1:
+        while len(sys.argv) > 1:
             verb = sys.argv[1]
             argv = sys.argv[2:]
             if verb in availableCommands:
@@ -116,10 +116,15 @@ def bob(bobRoot):
                 doHelp(True, sys.stdout)
             elif (verb == '--version'):
                 print("Bob version", BOB_VERSION)
+            elif verb == "--debug":
+                _enableDebug()
+                del sys.argv[1]
+                continue
             else:
                 print("Don't know what to do for '{}'.".format(verb), file=sys.stderr)
                 ret = 2
                 doHelp(True, sys.stderr)
+            break
         else:
             doHelp(False, sys.stderr)
 

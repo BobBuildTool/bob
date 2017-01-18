@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import BOB_VERSION, BOB_INPUT_HASH
+from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError, BuildError
 from .scm import CvsScm, GitScm, SvnScm, UrlScm
 from .state import BobState
@@ -1863,8 +1863,8 @@ class Recipe(object):
                 p.reconstruct(m.corePackage, pathFormatter, stack,
                     inputTools.detach(), inputSandbox)
                 m.touch(inputEnv, inputTools)
+                if DEBUG: break
                 return p, m.subTreePackages
-                break
         else:
             reusedPackage = None
 
@@ -2058,6 +2058,9 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             #print("original", sorted(packageStep.getEnv()))
             #print("reused", sorted(reusedPackage.getPackageStep().getEnv()))
             raise AssertionError("Wrong reusage for " + "/".join(stack))
+        else:
+            # drop calculated package to keep memory consumption low
+            p = reusedPackage
 
         return p, subTreePackages
 

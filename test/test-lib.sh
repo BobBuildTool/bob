@@ -24,7 +24,7 @@ cleanup()
 
 run_bob()
 {
-	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" "$@"
+	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" --debug "$@"
 }
 
 exec_blackbox_test()
