@@ -266,8 +266,6 @@ esac
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
-        self.__done = set()     # actual steps that have really been cooked
-        self.__skipped = set()  # steps that were visited but skipped due to checkoutOnly
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -304,26 +302,24 @@ esac
         self.__wasRun = Bijection(BobState().getBuildState())
 
     def _wasAlreadyRun(self, step, skippedOk=False):
-        digest = step.getVariantId()
-        if digest in self.__wasRun:
-            path = self.__wasRun[digest]
+        path = step.getWorkspacePath()
+        if path in self.__wasRun:
+            digest = self.__wasRun[path]
             # invalidate invalid cached entries
-            if path != step.getWorkspacePath():
-                del self.__wasRun[digest]
+            if digest != step.getVariantId():
+                del self.__wasRun[path]
                 return False
-            elif (not skippedOk) and self.__wasSkipped.get(digest, False):
+            elif (not skippedOk) and self.__wasSkipped.get(path, False):
                 return False
             else:
                 return True
         else:
             return False
 
-    def _getAlreadyRun(self, step):
-        return self.__wasRun[step.getVariantId()]
-
     def _setAlreadyRun(self, step, skipped=False):
-        self.__wasRun[step.getVariantId()] = step.getWorkspacePath()
-        self.__wasSkipped[step.getVariantId()] = skipped
+        path = step.getWorkspacePath()
+        self.__wasRun[path] = step.getVariantId()
+        self.__wasSkipped[path] = skipped
 
     def _constructDir(self, step, label):
         created = False
@@ -487,9 +483,7 @@ esac
 
         for step in reversed(steps):
             # skip if already processed steps
-            if step in self.__done:
-                continue
-            if checkoutOnly and (step in self.__skipped):
+            if self._wasAlreadyRun(step):
                 continue
 
             # update if package changes
@@ -512,12 +506,6 @@ esac
                 e.pushFrame(step.getPackage().getName())
                 raise e
 
-            # mark as done
-            if checkoutOnly and (not step.isCheckoutStep()):
-                self.__skipped.add(step)
-            else:
-                self.__done.add(step)
-
         # back to original package
         if currentPackage != self.__currentPackage:
             self.__currentPackage = currentPackage
@@ -527,7 +515,7 @@ esac
     def _cookCheckoutStep(self, checkoutStep, depth):
         checkoutDigest = checkoutStep.getVariantId()
         if self._wasAlreadyRun(checkoutStep):
-            prettySrcPath = self._getAlreadyRun(checkoutStep)
+            prettySrcPath = checkoutStep.getWorkspacePath()
             self._info("   CHECKOUT  skipped (reuse {})".format(prettySrcPath))
         else:
             # depth first
@@ -610,7 +598,7 @@ esac
         buildDigest = [buildStep.getVariantId()] + [
             i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
         if self._wasAlreadyRun(buildStep, checkoutOnly):
-            prettyBuildPath = self._getAlreadyRun(buildStep)
+            prettyBuildPath = buildStep.getWorkspacePath()
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
         else:
             # depth first
@@ -658,7 +646,7 @@ esac
     def _cookPackageStep(self, packageStep, checkoutOnly, depth):
         packageDigest = packageStep.getVariantId()
         if self._wasAlreadyRun(packageStep, checkoutOnly):
-            prettyPackagePath = self._getAlreadyRun(packageStep)
+            prettyPackagePath = packageStep.getWorkspacePath()
             self._info("   PACKAGE   skipped (reuse {})".format(prettyPackagePath))
         else:
             # get directory into shape
