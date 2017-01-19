@@ -17,6 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ..input import RecipeSet, walkPackagePath
+from ..errors import BuildError
 import argparse
 import codecs
 import sys
@@ -36,33 +37,30 @@ except UnicodeEncodeError:
     LS_SEP_4 = "|   "
 
 
-def getNextDeps(p, showAll):
-    deps = { d.getPackage().getName() : d.getPackage()
-             for d in p.getDirectDepSteps() }
-    if showAll:
-        for d in p.getIndirectDepSteps():
-            d = d.getPackage()
-            deps.setdefault(d.getName(), d)
-    return deps
-
 def doLS(argv, bobRoot):
     def showTree(packages, showAll, prefix=""):
         i = 0
+        if showAll:
+            packages = { name : pkg for (name, (pkg, direct)) in packages.items() }
+        else:
+            packages = { name : pkg for (name, (pkg, direct)) in packages.items() if direct }
         for n,p in sorted(packages.items()):
             last = (i >= len(packages)-1)
             print("{}{}{}".format(prefix, LS_SEP_1 if last else LS_SEP_2, n))
-            deps = getNextDeps(p, showAll)
-            showTree(deps, showAll, prefix + (LS_SEP_3 if last else LS_SEP_4))
+            showTree(p, showAll, prefix + (LS_SEP_3 if last else LS_SEP_4))
             i += 1
 
     def showPrefixed(packages, recurse, showAll, stack, level=0):
+        if showAll:
+            packages = { name : pkg for (name, (pkg, direct)) in packages.items() }
+        else:
+            packages = { name : pkg for (name, (pkg, direct)) in packages.items() if direct }
         for n,p in sorted(packages.items()):
             newStack = stack[:]
             newStack.append(n)
             print("/".join(newStack))
             if recurse:
-                deps = getNextDeps(p, showAll)
-                showPrefixed(deps, recurse, showAll, newStack, level+1)
+                showPrefixed(p, recurse, showAll, newStack, level+1)
 
     parser = argparse.ArgumentParser(prog="bob ls", description='List packages.')
     parser.add_argument('package', type=str, nargs='?',
@@ -99,12 +97,16 @@ def doLS(argv, bobRoot):
     recipes.parse()
 
     showAll = args.all
-    roots = recipes.generatePackages(lambda s,m: "unused", defines, sandboxEnabled=args.sandbox)
+    roots = recipes.generateTree(defines, args.sandbox)
     stack = []
     if args.package:
-        package = walkPackagePath(roots, args.package)
         stack = steps = [ s for s in args.package.split("/") if s != "" ]
-        roots = getNextDeps(package, showAll)
+        trail = []
+        for step in steps:
+            if step not in roots:
+                raise BuildError("Package '{}' not found under '{}'".format(step, "/".join(trail)))
+            trail.append(step)
+            roots = roots[step][0]
     else:
         steps = ["/"]
 
@@ -114,7 +116,7 @@ def doLS(argv, bobRoot):
         print("/".join(steps))
         showTree(roots, showAll)
     else:
-        for n,p in sorted(roots.items()): print(n)
+        for n in sorted(roots.keys()): print(n)
 
 class Default(dict):
     def __init__(self, default, *args, **kwargs):
