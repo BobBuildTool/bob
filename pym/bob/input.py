@@ -28,6 +28,7 @@ from glob import glob
 from pipes import quote
 from string import Template
 import copy
+import dbm
 import hashlib
 import fnmatch
 import os, os.path
@@ -2603,16 +2604,12 @@ class RecipeSet:
             raise ParseError("Class {} requested but not found.".format(className))
         return self.__classes[className]
 
-    def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
+    def __getEnvWithCacheKey(self, envOverrides, sandboxEnabled):
         # calculate start environment
         env = Env(os.environ).prune(self.__whiteList)
         env.setFuns(self.__stringFunctions)
         env.update(self.__defaultEnv)
         env.update(envOverrides)
-        states = { n:s() for (n,s) in self.__states.items() }
-        rootPkg = Package()
-        rootPkg.construct("<root>", [], nameFormatter, None, [], [], states,
-            {}, {}, None, None)
 
         # calculate cache key for persisted packages
         h = hashlib.sha1()
@@ -2623,8 +2620,9 @@ class RecipeSet:
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
         h.update(b'\x01' if sandboxEnabled else b'\x00')
-        cacheKey = h.digest()
+        return (env, h.digest())
 
+    def __generatePackages(self, nameFormatter, env, cacheKey, sandboxEnabled):
         # use separate caches with and without sandbox
         if sandboxEnabled:
             cacheName = ".bob-packages-sb.pickle"
@@ -2632,6 +2630,10 @@ class RecipeSet:
             cacheName = ".bob-packages.pickle"
 
         # try to load the persisted packages
+        states = { n:s() for (n,s) in self.__states.items() }
+        rootPkg = Package()
+        rootPkg.construct("<root>", [], nameFormatter, None, [], [], states,
+            {}, {}, None, None)
         try:
             with open(cacheName, "rb") as f:
                 persistedCacheKey = f.read(len(cacheKey))
@@ -2679,6 +2681,108 @@ class RecipeSet:
             print("Error saving internal state:", str(e), file=sys.stderr)
 
         return result
+
+    def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
+        (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
+        return self.__generatePackages(nameFormatter, env, cacheKey, sandboxEnabled)
+
+    def generateTree(self, envOverrides={}, sandboxEnabled=False):
+        (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
+        cacheName = ".bob-tree.dbm"
+
+        # try to load persisted tree
+        roots = TreeStorage.load(cacheName, cacheKey)
+        if roots is not None:
+            return roots
+
+        # generate and convert
+        roots = self.__generatePackages(lambda p, m: "unused", env, cacheKey, sandboxEnabled)
+
+        # save tree cache
+        return TreeStorage.create(cacheName, cacheKey, roots)
+
+
+class TreeStorage:
+    def __init__(self, db, key=b''):
+        self.__db = db
+        self.__content = pickle.loads(db[key])
+
+    def __contains__(self, key):
+        return key in self.__content
+
+    def __getitem__(self, key):
+        data = self.__content[key]
+        return (TreeStorage(self.__db, data[0]), data[1])
+
+    def __iter__(self):
+        return iter(self.__content)
+
+    def keys(self):
+        return self.__content.keys()
+
+    def items(self):
+        return iter( (name, (TreeStorage(self.__db, data[0]), data[1]))
+                     for name, data in self.__content.items() )
+
+    def __len__(self):
+        return len(self.__content)
+
+    @classmethod
+    def load(cls, cacheName, cacheKey):
+        try:
+            db = dbm.open(cacheName, "r")
+            persistedCacheKey = db.get('vsn')
+            if cacheKey == persistedCacheKey:
+                return cls(db)
+            else:
+                db.close()
+        except OSError:
+            pass
+        except dbm.error:
+            pass
+        return None
+
+    @classmethod
+    def create(cls, cacheName, cacheKey, roots):
+        try:
+            db = dbm.open(cacheName, 'n')
+            try:
+                TreeStorage.__convertRootToTree(db, roots)
+                db['vsn'] = cacheKey
+            finally:
+                db.close()
+            return cls(dbm.open(cacheName, 'r'))
+        except OSError as e:
+            raise ParseError("Error saving internal state: " + str(e))
+
+    @staticmethod
+    def __convertRootToTree(db, roots):
+        root = {}
+        for (name, pkg) in roots.items():
+            pkgId = pkg.getPackageStep()._getResultId()
+            root[name] = (pkgId, True)
+            if pkgId not in db:
+                TreeStorage.__convertPackageToTree(db, pkgId, pkg)
+        db[b''] = pickle.dumps(root, -1)
+
+    @staticmethod
+    def __convertPackageToTree(db, pkgId, pkg):
+        node = {}
+        for d in pkg.getDirectDepSteps():
+            subPkgId = d._getResultId()
+            subPkg = d.getPackage()
+            node[subPkg.getName()] = (subPkgId, True)
+            if subPkgId not in db:
+                TreeStorage.__convertPackageToTree(db, subPkgId, subPkg)
+        for d in pkg.getIndirectDepSteps():
+            subPkg = d.getPackage()
+            name = subPkg.getName()
+            if name in node: continue
+            subPkgId = d._getResultId()
+            node[name] = (subPkgId, False)
+            if subPkgId not in db:
+                TreeStorage.__convertPackageToTree(db, subPkgId, subPkg)
+        db[pkgId] = pickle.dumps(node, -1)
 
 
 class YamlCache:
