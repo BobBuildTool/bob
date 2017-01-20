@@ -1,0 +1,12 @@
+root: True
+
+checkoutScript: |
+    [ -e foo.c ] || cp $<<foo.c>> foo.c
+
+buildScript: |
+    rm -rf *
+    gcc -o foo $1/foo.c
+
+packageVars: [FOO]
+packageScript: |
+    cp -a $1/foo .
