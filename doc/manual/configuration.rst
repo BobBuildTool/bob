@@ -108,7 +108,7 @@ Package
     Typically the build step will produce a lot of intermediate files (e.g.
     object files). The package step has the responsibility to distill a clean
     result of the package. The ``packageScript`` will receive a single argument
-    with the patch to the build step.
+    with the path to the build step.
 
 Each step of a recipe is executed separately and always in the above order. The
 scripts working directory is already where the result is expected. The scripts
