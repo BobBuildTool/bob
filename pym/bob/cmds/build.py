@@ -576,6 +576,14 @@ esac
                     BobState().setDirectoryState(prettySrcPath,
                         { d:s for (d,s) in checkoutState.items() if d is not None })
 
+                    # Forge checkout result before we run the step again.
+                    # Normally the correct result is set directly after the
+                    # checkout finished. But if the step fails and the user
+                    # re-runs with "build-only" the dependent steps should
+                    # trigger.
+                    if BobState().getResultHash(prettySrcPath) is not None:
+                        BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
+
                     print(colorize("   CHECKOUT  {}".format(prettySrcPath), "32"))
                     self._runShell(checkoutStep, "checkout")
 
@@ -634,6 +642,12 @@ esac
             else:
                 print(colorize("   BUILD     {}".format(prettyBuildPath), "32"))
                 if self.__cleanBuild: emptyDirectory(prettyBuildPath)
+                # Squash state because running the step will change the
+                # content. If the execution fails we have nothing reliable
+                # left and we _must_ run it again.
+                BobState().delInputHashes(prettyBuildPath)
+                BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
+                # build it
                 self._runShell(buildStep, "build")
                 # Use timestamp in release mode and only hash in development mode
                 BobState().setResultHash(prettyBuildPath,
@@ -719,6 +733,9 @@ esac
                 else:
                     print(colorize("   PACKAGE   {}".format(prettyPackagePath), "32"))
                     emptyDirectory(prettyPackagePath)
+                    # invalidate result because folder was cleared
+                    BobState().delInputHashes(prettyPackagePath)
+                    BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
                     self._runShell(packageStep, "package")
                     packageExecuted = True
                     if packageBuildId and self.__archive.canUploadLocal():
