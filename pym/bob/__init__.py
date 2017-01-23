@@ -41,7 +41,7 @@ def getVersion():
         version = version.strip().lstrip("v")
     else:
         # See http://semver.org/ and adjust accordingly
-        version = "0.10.1"
+        version = "0.11-dev"
 
     return version
 
