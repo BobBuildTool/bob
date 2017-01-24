@@ -1203,11 +1203,24 @@ will disable the root jobs because they cannot run anyawy without failing.
         help="Delete only obsolete jobs")
     group.add_argument('--intermediate', action='store_true', default=False,
         help="Delete everything except root jobs")
+    parser.add_argument('-q', '--quiet', default=0, action='count',
+        help="Decrease verbosity (may be specified multiple times)")
+    parser.add_argument('-v', '--verbose', default=0, action='count',
+        help="Increase verbosity (may be specified multiple times)")
     args = parser.parse_args(argv)
 
     if args.name not in BobState().getAllJenkins():
         print("Jenkins '{}' not known.".format(args.name), file=sys.stderr)
         sys.exit(1)
+
+    verbose = args.verbose - args.quiet
+
+    def printLine(level, job, *args):
+        if level <= verbose:
+            if job:
+                print(job + ":", *args)
+            else:
+                print(*args)
 
     config = BobState().getJenkinsConfig(args.name)
     existingJobs = BobState().getJenkinsAllJobs(args.name)
@@ -1219,7 +1232,7 @@ will disable the root jobs because they cannot run anyawy without failing.
             for name in existingJobs:
                 jobConfig = BobState().getJenkinsJobConfig(args.name, name)
                 if jobConfig.get('enabled', True): continue
-                print("{}: Delete job...".format(name))
+                printLine(0, name, "Delete job...")
                 connection.deleteJob(name)
                 BobState().delJenkinsJob(args.name, name)
         elif args.intermediate:
@@ -1230,20 +1243,20 @@ will disable the root jobs because they cannot run anyawy without failing.
                 if name not in existingJobs: continue
                 jobConfig = BobState().getJenkinsJobConfig(args.name, name)
                 if not jobConfig.get('enabled', True): continue
-                print("{}: Disable root job...".format(name))
+                printLine(0, name, "Disable root job...")
                 connection.disableJob(name)
                 jobConfig['enabled'] = False
                 BobState().setJenkinsJobConfig(args.name, name, jobConfig)
             # delete everything except root jobs
             for name in existingJobs:
                 if name in roots: continue
-                print("{}: Delete job...".format(name))
+                printLine(0, name, "Delete job...")
                 connection.deleteJob(name)
                 BobState().delJenkinsJob(args.name, name)
         else:
             # nuke all jobs
             for name in existingJobs:
-                print("{}: Delete job...".format(name))
+                printLine(0, name, "Delete job...")
                 connection.deleteJob(name)
                 BobState().delJenkinsJob(args.name, name)
 
