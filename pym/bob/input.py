@@ -1957,24 +1957,7 @@ class Recipe(object):
         env.update(varPrivate)
 
         # filter duplicate results, fail on different variants of same package
-        i = 0
-        while i < len(results):
-            j = i+1
-            r = results[i]
-            while j < len(results):
-                if r.getPackage().getName() == results[j].getPackage().getName():
-                    if r.getVariantId() != results[j].getVariantId():
-                        raise ParseError("Incompatibe variants of package: {} vs. {}"
-                            .format("/".join(r.getPackage().getStack()),
-                                    "/".join(results[j].getPackage().getStack())),
-                            help=
-"""This error is caused by '{PKG}' that is passed upwards via 'provideDeps' from multiple dependencies of '{CUR}'.
-These dependencies constitute different variants of '{PKG}' and can therefore not be used in '{CUR}'."""
-    .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
-                    del results[j]
-                else:
-                    j += 1
-            i += 1
+        self.__filterDuplicateSteps(results)
 
         # create package
         p = Package().construct(self.__packageName, stack, pathFormatter, self,
@@ -2037,6 +2020,7 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             if subDep is not None:
                 provideDeps.append(subDep)
                 for d in subDep._getProvidedDeps(): provideDeps.append(d)
+        self.__filterDuplicateSteps(provideDeps)
         packageStep._setProvidedDeps(provideDeps)
 
         # provide Sandbox
@@ -2064,6 +2048,26 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             p = reusedPackage
 
         return p, subTreePackages
+
+    def __filterDuplicateSteps(self, results):
+        i = 0
+        while i < len(results):
+            j = i+1
+            r = results[i]
+            while j < len(results):
+                if r.getPackage().getName() == results[j].getPackage().getName():
+                    if r.getVariantId() != results[j].getVariantId():
+                        raise ParseError("Incompatibe variants of package: {} vs. {}"
+                            .format("/".join(r.getPackage().getStack()),
+                                    "/".join(results[j].getPackage().getStack())),
+                            help=
+"""This error is caused by '{PKG}' that is passed upwards via 'provideDeps' from multiple dependencies of '{CUR}'.
+These dependencies constitute different variants of '{PKG}' and can therefore not be used in '{CUR}'."""
+    .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
+                    del results[j]
+                else:
+                    j += 1
+            i += 1
 
 class PackageMatcher:
     def __init__(self, package, env, tools, states, sandbox, subTreePackages):
