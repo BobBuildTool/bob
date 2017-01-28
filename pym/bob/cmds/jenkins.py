@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from .. import BOB_VERSION
 from ..archive import getArchiver
 from ..errors import ParseError, BuildError
 from ..input import RecipeSet, walkPackagePath
@@ -134,7 +135,8 @@ class JenkinsJob:
             "<h2>Recipe</h2>",
             "<p>Name: " + recipe.getName()
                 + "<br/>Source: " + recipe.getRecipeSet().getScmStatus()
-                + "<br/>Configured: " + date + "</p>",
+                + "<br/>Configured: " + date
+                + "<br/>Bob version: " + BOB_VERSION + "</p>",
             "<h2>Packages</h2>", "<ul>"
         ]
         namesPerVariant = { vid : ", ".join(sorted(names)) for (vid, names)
