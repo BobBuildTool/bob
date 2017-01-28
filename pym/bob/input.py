@@ -528,6 +528,8 @@ def Scm(spec, env, overrides):
         raise ParseError("Unknown SCM '{}'".format(scm))
 
 class AbstractTool:
+    __slots__ = ("path", "libs")
+
     def __init__(self, spec):
         if isinstance(spec, str):
             self.path = spec
@@ -543,6 +545,8 @@ class AbstractTool:
         return Tool(step, path, libs)
 
 class CoreTool:
+    __slots__ = ("step", "path", "libs")
+
     def __init__(self, tool, upperPackage):
         self.step = CoreStepRef(upperPackage, tool.step)
         self.path = tool.path
@@ -558,6 +562,9 @@ class Tool:
     A tool is made of the result of a package, a relative path into this result
     and some optional relative library paths.
     """
+
+    __slots__ = ("step", "path", "libs")
+
     def __init__(self, step, path, libs):
         self.step = step
         self.path = path
@@ -593,6 +600,8 @@ class Tool:
         return self.libs
 
 class CoreSandbox:
+    __slots__ = ("step", "enabled", "paths", "mounts")
+
     def __init__(self, sandbox, upperPackage):
         self.step = CoreStepRef(upperPackage, sandbox.step)
         self.enabled = sandbox.enabled
@@ -607,6 +616,8 @@ class CoreSandbox:
 
 class Sandbox:
     """Represents a sandbox that is used when executing a step."""
+
+    __slots__ = ("step", "enabled", "paths", "mounts")
 
     def __eq__(self, other):
         return isinstance(other, Sandbox) and (self.step == other.step) and (self.enabled == other.enabled) and \
@@ -700,6 +711,8 @@ def patchSandbox(inputSandbox, patch, pathFormatter, upperPackage):
         return patch.toSandbox(pathFormatter, upperPackage)
 
 class CoreStepRef:
+    __slots__ = ("step", "stackAdder", "inputTools", "inputSandbox")
+
     def __init__(self, upperPackage, argStep):
         self.step = argStep._getCoreStep()
         argPackage = argStep.getPackage()
@@ -721,6 +734,10 @@ class CoreStepRef:
             packageInputTools, packageInputSandbox)
 
 class CoreStep(metaclass=ABCMeta):
+    __slots__ = ( "package", "label", "tools", "digestEnv", "env", "args",
+        "shared", "doesProvideTools", "providedEnv", "providedTools",
+        "providedDeps", "providedSandbox", "variantId" )
+
     def __init__(self, step, label, tools, digestEnv, env, args, shared):
         package = step.getPackage()
         self.package = package._getCorePackage()
@@ -1139,6 +1156,8 @@ class Step(metaclass=ABCMeta):
         return ret
 
 class CoreCheckoutStep(CoreStep):
+    __slots__ = ( "script", "digestScript", "scmList", "deterministic" )
+
     def _createStep(self, package):
         ret = CheckoutStep()
         package._reconstructCheckoutStep(ret)
@@ -1247,6 +1266,8 @@ class RegularStep(Step):
         return True
 
 class CoreBuildStep(CoreStep):
+    __slots__ = [ "script", "digestScript" ]
+
     def _createStep(self, package):
         ret = BuildStep()
         package._reconstructBuildStep(ret)
@@ -1266,6 +1287,8 @@ class BuildStep(RegularStep):
         return True
 
 class CorePackageStep(CoreStep):
+    __slots__ = [ "script", "digestScript" ]
+
     def _createStep(self, package):
         ret = PackageStep()
         package._reconstructPackageStep(ret)
@@ -1286,6 +1309,9 @@ class PackageStep(RegularStep):
 
 
 class CorePackage:
+    __slots__ = ("name", "recipe", "directDepSteps", "indirectDepSteps",
+        "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep")
+
     def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps, states):
         self.name = name
         self.recipe = recipe
