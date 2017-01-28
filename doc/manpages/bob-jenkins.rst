@@ -28,7 +28,7 @@ Available sub-commands:
     bob jenkins export [-h] name dir
     bob jenkins graph [-h] name
     bob jenkins ls [-h] [-v]
-    bob jenkins prune [-h] [--obsolete | --intermediate] name
+    bob jenkins prune [-h] [--obsolete | --intermediate] [-q] [-v] name
     bob jenkins push [-h] [-f] [--no-trigger] [-q] [-v] name
     bob jenkins rm [-h] [-f] name
     bob jenkins set-options [-h] [--reset] [-n NODES] [-o OPTIONS] [-p PREFIX]
