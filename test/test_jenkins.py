@@ -138,6 +138,8 @@ depends:
     - app1
     - app2
     - app3
+buildScript: |
+    true
         """
 
         with TemporaryDirectory() as tmp:
@@ -162,7 +164,7 @@ depends:
 
             self.executeBobJenkinsCmd("push -q myTestJenkins", tmp)
             send = self.jenkinsMock.getServerData()
-            assert(len(send) == 10) # 5 jobs, create + schedule
+            self.assertEqual(len(send), 10) # 5 jobs, create + schedule
 
             # bob will try to receive the old job config. Put it on the server...
             for data in send:
