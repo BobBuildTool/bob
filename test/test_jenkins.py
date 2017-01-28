@@ -38,8 +38,10 @@ class TestJenkinsPush(TestCase):
     def tearDown(self):
         # do bob jenkins prune & remove
         self.jenkinsMock.stop_mock_server(8080)
+        os.chdir(self.oldCwd)
 
     def setUp(self):
+        self.oldCwd = os.getcwd()
         self.jenkinsMock = JenkinsMock()
         self.jenkinsMock.start_mock_server(8080)
         self.jenkinsMock.getServerData()

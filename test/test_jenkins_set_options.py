@@ -41,6 +41,7 @@ class TestJenkinsSetOptions(TestCase):
         # do bob jenkins prune & remove
         self.jenkinsMock.stop_mock_server(8080)
 
+        os.chdir(self.oldCwd)
         removePath(self.cwd)
 
     def setUp(self):
@@ -58,6 +59,7 @@ buildScript: |
 packageScript: |
     echo 'package'
         """
+        self.oldCwd = os.getcwd()
         self.cwd = tempfile.mkdtemp()
         self.jenkinsMock = JenkinsMock()
         self.jenkinsMock.start_mock_server(8080)
