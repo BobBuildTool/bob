@@ -46,3 +46,13 @@ def getVersion():
     return version
 
 BOB_VERSION = getVersion()
+
+def getBobInputHash():
+    from .utils import hashDirectory
+    import os
+    # we need the source hash to invalidate the cache in case of source code changes.
+    # therefore it's enough to hash the pym directory without the entries of cmds-Dir
+    root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
+    return hashDirectory(root, ignoreDirs=['__pycache__', 'cmds'])
+
+BOB_INPUT_HASH = getBobInputHash()
