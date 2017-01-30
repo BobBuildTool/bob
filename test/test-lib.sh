@@ -27,6 +27,11 @@ run_bob()
 	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" --debug "$@"
 }
 
+run_bob_plain()
+{
+	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" "$@"
+}
+
 exec_blackbox_test()
 {
 	cleanup

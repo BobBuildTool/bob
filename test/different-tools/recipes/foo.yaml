@@ -1,0 +1,9 @@
+packageScript: |
+    {
+        echo "#!/bin/sh"
+        echo "echo 42"
+    } > foo.sh
+    chmod +x foo.sh
+
+provideTools:
+    foo: .
