@@ -1,0 +1,6 @@
+root
+root/a
+root/a/c
+root/b
+root/b/c
+root/c

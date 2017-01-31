@@ -1,0 +1,6 @@
+depends:
+    - c
+provideDeps:
+    - c
+buildScript: "true"
+packageScript: "true"
