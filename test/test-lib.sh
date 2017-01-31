@@ -46,3 +46,15 @@ exec_blackbox_test()
 
 	run_bob clean
 }
+
+expect_fail()
+{
+	"$@" 2>&1 || if [[ $? -ne 1 ]] ; then
+		echo "Unexpected return code: $*" >&2
+		return 1
+	else
+		return 0
+	fi
+	echo "Expected command to fail: $*" >&2
+	return 1
+}
