@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import BOB_VERSION
+from . import BOB_VERSION, BOB_INPUT_HASH
 from .errors import ParseError, BuildError
 from .scm import CvsScm, GitScm, SvnScm, UrlScm
 from .state import BobState
@@ -37,19 +37,6 @@ import shelve
 import struct
 import sys
 import yaml
-
-# PLEASE TAKE YOUR TIME READING THE FOLLOWING PARAGRAPH CAREFULLY...
-#
-# Bob will cache almost all internally generated objects if possible. The
-# parsed and validated yaml files are always cached. The generated Packages are
-# reused if the recipes (including plugins) and the environment did not change
-# since the last run. This implies that the classes must stay compatible
-# because the 'pickle' module does not persist the actual code!
-#
-# Therefore the follwing defintion must be incremented virtually with any
-# change that is done in this file. If in doubt, change it. It will invalidate
-# the cached results and make sure they are re-generated.
-CACHE_VERSION = 5
 
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 
@@ -2155,7 +2142,7 @@ class RecipeSet:
 
         # calculate cache key for persisted packages
         h = hashlib.sha1()
-        h.update(struct.pack("<I", CACHE_VERSION))
+        h.update(BOB_INPUT_HASH)
         h.update(self.__cache.getDigest())
         h.update(struct.pack("<I", len(env)))
         for (key, val) in sorted(env.items()):
@@ -2239,7 +2226,7 @@ class YamlCache:
         if name in self.__shelve:
             cached = self.__shelve[name]
             if ((cached['lstat'] == binStat) and
-                (cached.get('vsn') == CACHE_VERSION)):
+                (cached.get('vsn') == BOB_INPUT_HASH)):
                 self.__files[name] = cached['digest']
                 return cached['data']
 
@@ -2261,7 +2248,7 @@ class YamlCache:
         self.__shelve[name] = {
             'lstat' : binStat,
             'data' : data,
-            'vsn' : CACHE_VERSION,
+            'vsn' : BOB_INPUT_HASH,
             'digest' : digest
         }
         return data
