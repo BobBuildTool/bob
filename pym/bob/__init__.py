@@ -15,8 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 def getVersion():
-    import os
-    import subprocess
+    import os, re
 
     version = ""
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
@@ -30,6 +29,7 @@ def getVersion():
         except OSError:
             pass
     elif os.path.isdir(os.path.join(root, ".git")):
+        import subprocess
         try:
             version = subprocess.check_output("git describe --tags --dirty".split(" "),
                 cwd=root, universal_newlines=True, stderr=subprocess.STDOUT)
@@ -37,10 +37,17 @@ def getVersion():
             pass
 
     if version:
-        # strip white spaces and leading 'v' from tag name
-        version = version.strip().lstrip("v")
-    else:
-        # See http://semver.org/ and adjust accordingly
+        if re.match(r"^v[0-9]+(\.[0-9]+){2}(-.*)?$", version):
+            # strip white spaces and leading 'v' from tag name
+            version = version.strip().lstrip("v")
+        else:
+            import sys
+            print("Warning: inferred version of Bob does not match schema:",
+                version, file=sys.stderr)
+            version = ""
+
+    if not version:
+        # Last fallback. See http://semver.org/ and adjust accordingly.
         version = "0.11-dev"
 
     return version

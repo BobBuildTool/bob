@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from .errors import BuildError
+from .errors import BuildError, ParseError
 from binascii import hexlify
 from tempfile import NamedTemporaryFile
 import hashlib
@@ -68,10 +68,10 @@ def emptyDirectory(path):
         raise BuildError("Error cleaning '"+path+"': " + str(e))
 
 # Compare versions. Not strictly according to semver but enough for us.
-def compareVersion(left, right):
+def compareVersion(origLeft, origRight):
     # Strip any suffix
-    left = left.partition("-")[0]
-    right = right.partition("-")[0]
+    left = origLeft.partition("-")[0]
+    right = origRight.partition("-")[0]
 
     def cmp(l, r):
         if (len(l) == 0) and (len(r) == 0): return 0
@@ -84,7 +84,11 @@ def compareVersion(left, right):
         else:
             return cmp(l[1:], r[1:])
 
-    return cmp(left.split("."), right.split("."))
+    try:
+        return cmp(left.split("."), right.split("."))
+    except ValueError:
+        raise ParseError("Cannot compare version numbers ('{}' vs. '{}'): bad format!"
+                            .format(origLeft, origRight))
 
 ### directory hashing ###
 
