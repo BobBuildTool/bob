@@ -441,8 +441,8 @@ esac
                                    quote(a.getExecPath()))
                     for a in step.getArguments() if a.isValid() ] ))), file=f)
             print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(t), quote(p))
-                    for (t,p) in step.getTools().items()] ))), file=f)
+                [ "[{}]={}".format(quote(n), quote(os.path.join(t.getStep().getExecPath(), t.getPath())))
+                    for (n,t) in step.getTools().items()] ))), file=f)
             print("# Environment:", file=f)
             for (k,v) in sorted(stepEnv.items()):
                 print("export {}={}".format(k, quote(v)), file=f)
@@ -487,9 +487,10 @@ esac
                 continue
 
             # update if package changes
-            if step.getPackage() != self.__currentPackage:
-                self.__currentPackage = step.getPackage()
-                print(">>", colorize("/".join(self.__currentPackage.getStack()), "32;1"))
+            newPackage = "/".join(step.getPackage().getStack())
+            if newPackage != self.__currentPackage:
+                self.__currentPackage = newPackage
+                print(">>", colorize(self.__currentPackage, "32;1"))
 
             # execute step
             try:
@@ -510,7 +511,7 @@ esac
         if currentPackage != self.__currentPackage:
             self.__currentPackage = currentPackage
             if currentPackage:
-                print(">>", colorize("/".join(self.__currentPackage.getStack()), "32;1"))
+                print(">>", colorize(self.__currentPackage, "32;1"))
 
     def _cookCheckoutStep(self, checkoutStep, depth):
         checkoutDigest = checkoutStep.getVariantId()
@@ -870,7 +871,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         packageStep = walkPackagePath(rootPackages, p).getPackageStep()
         backlog.append(packageStep)
         # automatically include provided deps when exporting
-        if args.destination: backlog.extend(packageStep.getProvidedDeps())
+        if args.destination: backlog.extend(packageStep._getProvidedDeps())
     try:
         for p in backlog:
             builder.cook([p], p.getPackage(), args.checkout_only)

@@ -217,3 +217,61 @@ class TestDependencies(TestCase):
         self.assertRaises(ParseError, recipes.generatePackages,
             lambda x,y: "unused")
 
+    def testCyclic(self):
+        """Cyclic dependencies must be detected during parsing"""
+        self.writeRecipe("a", """\
+            root: True
+            depends: [b]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("b", """\
+            depends: [c]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("c", """\
+            depends: [a]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        self.assertRaises(ParseError, recipes.generatePackages,
+            lambda x,y: "unused")
+
+    def testCyclicSpecial(self):
+        """Make sure cycles are detected on common sub-trees too"""
+        self.writeRecipe("root1", """\
+            root: True
+            depends: [b]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("root2", """\
+            root: True
+            depends:
+                -   name: b
+                    if: "${TERMINATE:-1}"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+        self.writeRecipe("b", """\
+            environment:
+                TERMINATE: "0"
+            depends: [c]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("c", """\
+            depends: [root2]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        self.assertRaises(ParseError, recipes.generatePackages,
+            lambda x,y: "unused")

@@ -1,0 +1,6 @@
+root: True
+depends:
+    - a
+    - b
+buildScript: "true"
+packageScript: "true"

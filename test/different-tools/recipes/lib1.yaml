@@ -1,0 +1,12 @@
+depends:
+    - lib2
+
+buildScript: |
+    echo "lib1" > lib1.txt
+
+packageScript: |
+    cp $1/* .
+
+provideDeps:
+    - lib2
+

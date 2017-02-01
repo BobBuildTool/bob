@@ -24,6 +24,11 @@ cleanup()
 
 run_bob()
 {
+	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" --debug "$@"
+}
+
+run_bob_plain()
+{
 	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" "$@"
 }
 
@@ -31,13 +36,25 @@ exec_blackbox_test()
 {
 	cleanup
 
-	run_bob dev root > log.txt
-	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
+	run_bob dev root > log-cmd.txt
+	RES=$(sed -ne '/^Build result is in/s/.* //p' log-cmd.txt)
 	diff -Nurp $RES output
 
-	run_bob build root > log.txt
-	RES=$(sed -ne '/^Build result is in/s/.* //p' log.txt)
+	run_bob build root > log-cmd.txt
+	RES=$(sed -ne '/^Build result is in/s/.* //p' log-cmd.txt)
 	diff -Nurp $RES output
 
 	run_bob clean
+}
+
+expect_fail()
+{
+	"$@" 2>&1 || if [[ $? -ne 1 ]] ; then
+		echo "Unexpected return code: $*" >&2
+		return 1
+	else
+		return 0
+	fi
+	echo "Expected command to fail: $*" >&2
+	return 1
 }

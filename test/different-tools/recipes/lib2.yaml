@@ -1,0 +1,3 @@
+packageTools: [foo]
+packageScript: |
+    { foo.sh 2>/dev/null || echo "lib2" ; } > lib2.txt

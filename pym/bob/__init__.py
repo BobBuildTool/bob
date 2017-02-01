@@ -56,3 +56,10 @@ def getBobInputHash():
     return hashDirectory(root, ignoreDirs=['__pycache__', 'cmds'])
 
 BOB_INPUT_HASH = getBobInputHash()
+
+# global debug switch
+DEBUG = False
+
+def _enableDebug():
+    global DEBUG
+    DEBUG = True

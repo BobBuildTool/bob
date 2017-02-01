@@ -32,13 +32,11 @@ __bob_complete_words()
    done
 }
 
-__bob_path_hash="invalid"
-__bob_path_content=( )
 __bob_commands="build dev clean help jenkins ls project status  query-scm query-recipe query-path"
 
 __bob_complete_path()
 {
-   local i prefix result=( )
+   local i prefix result
 
    for i in "${COMP_WORDS[@]}"; do
       case "$i" in
@@ -61,19 +59,8 @@ __bob_complete_path()
          else
             prefix=""
          fi
-         local hash="$sandox $(find classes/ recipes/ *.yaml -name '*.yaml' 2>/dev/null | xargs md5sum | md5sum)"
-         if [[ "$hash" != "$__bob_path_hash" ]] ; then
-            __bob_path_content=( $($bob ls -rp $sandbox 2>/dev/null) )
-            __bob_path_hash="$hash"
-         fi
-         for i in "${__bob_path_content[@]}" ; do
-            if [[ $i == "$prefix"* ]] ; then
-               i="${i#$prefix}"
-               i="${i%%/*}"
-               result+=( "$i" )
-            fi
-         done
-         __bob_complete_words "${result[*]}" "$prefix" "/"
+         result="$($bob ls $sandbox $prefix 2>/dev/null)"
+         __bob_complete_words "$result" "$prefix" "/"
          ;;
    esac
 }

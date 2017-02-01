@@ -100,20 +100,23 @@ def getBuildIdSpec(step):
 
 
 class JenkinsJob:
-    def __init__(self, name, displayName, nameCalculator, root, archiveBackend):
+    def __init__(self, name, displayName, nameCalculator, recipe, archiveBackend):
         self.__name = name
         self.__displayName = displayName
         self.__nameCalculator = nameCalculator
-        self.__isRoot = root
+        self.__recipe = recipe
+        self.__isRoot = recipe.isRoot()
         self.__archive = archiveBackend
         self.__checkoutSteps = {}
         self.__buildSteps = {}
         self.__packageSteps = {}
-        self.__allPackages = []
+        self.__steps = set()
         self.__deps = {}
+        self.__namesPerVariant = {}
+        self.__packagesPerVariant = {}
 
-    def __getJobName(self, p):
-        return self.__nameCalculator.getJobInternalName(p)
+    def __getJobName(self, step):
+        return self.__nameCalculator.getJobInternalName(step)
 
     def getName(self):
         return self.__name
@@ -122,29 +125,20 @@ class JenkinsJob:
         return self.__isRoot
 
     def getDescription(self, date):
-        namesPerVariant = {}
-        packagesPerVariant = {}
-
-        for p in self.__allPackages:
-            vid = p.getPackageStep().getVariantId()
-            namesPerVariant.setdefault(vid, set()).add(p.getName())
-            packagesPerVariant.setdefault(vid, set()).add("/".join(p.getStack()))
-
-        recipe = self.__allPackages[0].getRecipe()
         description = [
             "<h2>Recipe</h2>",
-            "<p>Name: " + recipe.getName()
-                + "<br/>Source: " + recipe.getRecipeSet().getScmStatus()
+            "<p>Name: " + self.__recipe.getName()
+                + "<br/>Source: " + self.__recipe.getRecipeSet().getScmStatus()
                 + "<br/>Configured: " + date
                 + "<br/>Bob version: " + BOB_VERSION + "</p>",
             "<h2>Packages</h2>", "<ul>"
         ]
         namesPerVariant = { vid : ", ".join(sorted(names)) for (vid, names)
-            in namesPerVariant.items() }
+            in self.__namesPerVariant.items() }
         for (vid, names) in sorted(namesPerVariant.items(), key=lambda x: x[1]):
             description.append("<li>" + names + "<ul>")
             i = 0
-            allPackages = packagesPerVariant[vid]
+            allPackages = self.__packagesPerVariant[vid]
             for p in sorted(allPackages):
                 if i > 5:
                     description.append("<li>... ({} more)</li>".format(len(allPackages)-i))
@@ -156,25 +150,35 @@ class JenkinsJob:
 
         return "\n".join(description)
 
-    def addDependencies(self, deps):
-        for dep in deps:
-            self.__deps[dep.getVariantId()] = dep
+    def addStep(self, step):
+        vid = step.getVariantId()
+        if step.isCheckoutStep():
+            self.__checkoutSteps.setdefault(vid, step)
+        elif step.isBuildStep():
+            self.__buildSteps.setdefault(vid, step)
+        else:
+            assert step.isPackageStep()
+            package = step.getPackage()
+            self.__packageSteps.setdefault(vid, step)
+            self.__namesPerVariant.setdefault(vid, set()).add(package.getName())
+            self.__packagesPerVariant.setdefault(vid, set()).add("/".join(package.getStack()))
 
-    def addCheckoutStep(self, step):
-        self.__checkoutSteps[step.getVariantId()] = step
+        # filter dependencies that are built in this job
+        self.__steps.add(vid)
+        if vid in self.__deps: del self.__deps[vid]
+
+        # add dependencies unless they are built by this job or invalid
+        for dep in step.getAllDepSteps():
+            if not dep.isValid(): continue
+            vid = dep.getVariantId()
+            if vid in self.__steps: continue
+            self.__deps.setdefault(vid, dep)
 
     def getCheckoutSteps(self):
         return self.__checkoutSteps.values()
 
-    def addBuildStep(self, step):
-        self.__buildSteps[step.getVariantId()] = step
-
     def getBuildSteps(self):
         return self.__buildSteps.values()
-
-    def addPackageStep(self, step):
-        self.__packageSteps[step.getVariantId()] = step
-        self.__allPackages.append(step.getPackage())
 
     def getPackageSteps(self):
         return self.__packageSteps.values()
@@ -182,7 +186,7 @@ class JenkinsJob:
     def getDependentJobs(self):
         deps = set()
         for d in self.__deps.values():
-            deps.add(self.__getJobName(d.getPackage()))
+            deps.add(self.__getJobName(d))
         return deps
 
     def getShebang(self, windows, errexit=True):
@@ -229,8 +233,8 @@ class JenkinsJob:
                                        a.getExecPath())
                     for a in d.getArguments() if a.isValid() ] ))))
             cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
-                [ "    [{}]={}".format(quote(t), p)
-                    for (t,p) in d.getTools().items()] ))))
+                [ "    [{}]={}".format(quote(n), os.path.join(t.getStep().getExecPath(), t.getPath()))
+                    for (n,t) in d.getTools().items()] ))))
             env = { key: quote(value) for (key, value) in d.getEnv().items() }
             env.update({
                 "PATH": ":".join(d.getPaths() + (
@@ -454,7 +458,7 @@ class JenkinsJob:
             xml.etree.ElementTree.SubElement(revBuild, "spec").text = ""
             xml.etree.ElementTree.SubElement(
                 revBuild, "upstreamProjects").text = ", ".join(
-                    [ self.__getJobName(d.getPackage()) for d in deps ])
+                    [ self.__getJobName(d) for d in deps ])
             threshold = xml.etree.ElementTree.SubElement(revBuild, "threshold")
             xml.etree.ElementTree.SubElement(threshold, "name").text = "SUCCESS"
             xml.etree.ElementTree.SubElement(threshold, "ordinal").text = "0"
@@ -500,7 +504,7 @@ class JenkinsJob:
                             "plugin" : "copyartifact@1.32.1"
                         })
                 xml.etree.ElementTree.SubElement(
-                    cp, "project").text = self.__getJobName(d.getPackage())
+                    cp, "project").text = self.__getJobName(d)
                 xml.etree.ElementTree.SubElement(
                     cp, "filter").text = JenkinsJob._tgzName(d)+","+JenkinsJob._buildIdName(d)
                 xml.etree.ElementTree.SubElement(
@@ -667,7 +671,7 @@ class JenkinsJob:
 
     def dumpGraph(self, done):
         for d in self.__deps.values():
-            depName = self.__getJobName(d.getPackage())
+            depName = self.__getJobName(d)
             key = (self.__name, depName)
             if key not in done:
                 print(" \"{}\" -> \"{}\";".format(self.__name, depName))
@@ -736,35 +740,32 @@ class JobNameCalculator:
             self.__packages[p.getPackageStep().getVariantId()] = (p, name)
             self.__names.setdefault(name, []).append(p)
 
-    def getJobDisplayName(self, p):
-        (_p, name) = self.__packages[p.getPackageStep().getVariantId()]
+    def getJobDisplayName(self, step):
+        if step.isPackageStep():
+            vid = step.getVariantId()
+        else:
+            vid = step.getPackage().getPackageStep().getVariantId()
+        (_p, name) = self.__packages[vid]
         return self.__prefix + name
 
-    def getJobInternalName(self, p):
-        return self.__regexJobName.sub('_', self.getJobDisplayName(p))
+    def getJobInternalName(self, step):
+        return self.__regexJobName.sub('_', self.getJobDisplayName(step))
 
 
-def _genJenkinsJobs(p, jobs, nameCalculator, archiveBackend):
-    name = nameCalculator.getJobInternalName(p)
+def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend):
+    name = nameCalculator.getJobInternalName(step)
     if name in jobs:
         jj = jobs[name]
     else:
-        jj = JenkinsJob(name, nameCalculator.getJobDisplayName(p), nameCalculator,
-                        p.getRecipe().isRoot(), archiveBackend)
+        recipe = step.getPackage().getRecipe()
+        jj = JenkinsJob(name, nameCalculator.getJobDisplayName(step), nameCalculator,
+                        recipe, archiveBackend)
         jobs[name] = jj
 
-    checkout = p.getCheckoutStep()
-    if checkout.isValid():
-        jj.addCheckoutStep(checkout)
-    build = p.getBuildStep()
-    if build.isValid():
-        jj.addBuildStep(build)
-    jj.addPackageStep(p.getPackageStep())
-
-    allDeps = p.getAllDepSteps()
-    jj.addDependencies(allDeps)
-    for d in sorted(allDeps, key=lambda d: d.getPackage().getName()):
-        _genJenkinsJobs(d.getPackage(), jobs, nameCalculator, archiveBackend)
+    if step.isValid():
+        jj.addStep(step)
+        for d in sorted(step.getAllDepSteps(), key=lambda d: d.getPackage().getName()):
+            _genJenkinsJobs(d, jobs, nameCalculator, archiveBackend)
 
 def jenkinsNameFormatter(step, props):
     return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
@@ -807,7 +808,7 @@ def genJenkinsJobs(recipes, jenkins):
 
     nameCalculator.sanitize()
     for root in sorted(rootPackages, key=lambda root: root.getName()):
-        _genJenkinsJobs(root, jobs, nameCalculator, archiveHandler)
+        _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler)
 
     return jobs
 
@@ -927,13 +928,14 @@ def doJenkinsExport(recipes, argv):
     jenkinsJobCreate = recipes.getHookStack('jenkinsJobCreate')
 
     jobs = genJenkinsJobs(recipes, args.name)
+    buildOrder = genJenkinsBuildOrder(jobs)
     config = BobState().getJenkinsConfig(args.name)
     windows = config.get("windows", False)
     nodes = config.get("nodes", "")
     credentials = config.get("credentials")
     clean = config.get("clean", False)
     options = config.get("options", {})
-    for j in sorted(jobs.keys()):
+    for j in buildOrder:
         job = jobs[j]
         info = {
             'alias' : args.name,
