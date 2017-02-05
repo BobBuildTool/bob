@@ -14,7 +14,7 @@ Synopsis
 ::
 
     bob status [-h] [--develop | --release] [-r] [-D DEFINES]
-               [-c CONFIGFILE] [-e NAME] [-E] [-v]
+               [-c CONFIGFILE] [-e NAME] [-E] [-v] [--show-overrides]
                packages [packages ...]
 
 Description
@@ -46,6 +46,9 @@ Options
 ``--release``
     Use release mode
 
+``--show-overrides``
+    Print informations about active scmOverrides.
+
 ``-v, --verbose``
     Increase verbosity (may be specified multiple times)
 
@@ -62,4 +65,5 @@ Status codes can be interpreted as follows:
     - ``S`` = switched. The commit/tag/branch/url is different from the recipe.
     - ``U`` = unpushed. Git only. Some commits are made locally and not yet pushed to the SCM.
     - ``u`` = unpushed on a local branch. Git only. A local branch exists with unpushed commits. This branch differs from the branch specified in the recipe.
+    - ``O`` = overridden. This SCM is overridden by an scmOverride. This information is only shown if ``--show-overrides`` is passed.
 

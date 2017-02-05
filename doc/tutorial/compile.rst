@@ -173,13 +173,13 @@ Query SCM status
 ================
 
 After you have developed a great new feature you may want to know which sources you
-have touched to commit them to a SCM. Bob offers ``bob status <options> <package>`` 
+have touched to commit them to a SCM. Bob offers ``bob status <options> <package>``
 to show a list of SCM which are unclean. SCMs are unclean in case they have modified files,
 unpushed commits, switched URLs or non matching tags or commit ids.
 
 The output looks like the following line::
 
-    STATUS <status code> <scm path> 
+    STATUS <status code> <scm path>
 
 Status codes:
 
@@ -187,6 +187,7 @@ Status codes:
 * ``u`` : unpushed commits on local branch (Git only)
 * ``M`` : Modified sources.
 * ``S`` : Switched. Could be different tag, commitId, branch or URL.
+* ``O`` : Overridden. This Scm is overridden (:ref:`configuration-config-scmOverrides`). Depends on `--show-overrides`.
 
 
 Firing up a Jenkins

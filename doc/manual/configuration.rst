@@ -1136,6 +1136,8 @@ It is also possible to use separate methods for upload and download::
             download: "scp -q localhost:archive/${BOB_REMOTE_ARTIFACT} ${BOB_LOCAL_ARTIFACT}"
             flags: [upload]
 
+.. _configuration-config-scmOverrides:
+
 scmOverrides
 ~~~~~~~~~~~~
 
