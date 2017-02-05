@@ -16,12 +16,13 @@
 
 from ..utils import hashString
 from ..tty import colorize
+from .scm import Scm
 import re
 import schema
 import os
 import subprocess
 
-class CvsScm:
+class CvsScm(Scm):
 
     SCHEMA = schema.Schema({
         'scm' : 'cvs',
@@ -35,7 +36,8 @@ class CvsScm:
     # Checkout using CVS
     # - mandatory parameters: cvsroot, module
     # - optional parameters: rev, dir (dir is required if there are multiple checkouts)
-    def __init__(self, spec):
+    def __init__(self, spec, overrides=[]):
+        super().__init__(spec, overrides)
         self.__recipe = spec['recipe']
         self.__cvsroot = spec["cvsroot"]
         self.__module = spec["module"]

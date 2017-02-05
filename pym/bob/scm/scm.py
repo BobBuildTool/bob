@@ -43,7 +43,9 @@ class ScmOverride:
         return True
 
     def mangle(self, scm):
+        ret = False
         if self.__doesMatch(scm):
+            ret = True
             scm = scm.copy()
             for d in self.__del:
                 if d in scm: del scm[d]
@@ -51,4 +53,13 @@ class ScmOverride:
             for (key, (pat, repl)) in self.__replace.items():
                 if key in scm:
                     scm[key] = re.sub(pat, repl, scm[key])
-        return scm
+        return ret, scm
+
+
+class Scm(object):
+    def __init__(self, overrides=[]):
+        self.__overrides = overrides
+
+    def getActiveOverrides(self):
+        return self.__overrides
+

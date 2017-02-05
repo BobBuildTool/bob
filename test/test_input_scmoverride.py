@@ -30,7 +30,8 @@ class TestScmOverride(TestCase):
     def testDel(self):
         """Test to delete a key"""
         o = ScmOverride({ 'del' : [ 'branch' ] })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
         })
@@ -38,7 +39,8 @@ class TestScmOverride(TestCase):
     def testAdd(self):
         """Test to add a new key"""
         o = ScmOverride({ 'set' : { 'commit' : '1234' } })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
             'branch' : "develop",
@@ -48,7 +50,8 @@ class TestScmOverride(TestCase):
     def testOverwrite(self):
         """Test to overwrite existing key"""
         o = ScmOverride({ 'set' : { 'branch' : "master" } })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
             'branch' : "master"
@@ -64,7 +67,8 @@ class TestScmOverride(TestCase):
                 }
             }
         })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@acme.test:foo/bar.git",
             'branch' : "develop"
@@ -78,7 +82,8 @@ class TestScmOverride(TestCase):
             'match' : { 'branch' : "develop" },
             'set' : { 'branch' : "master" }
         })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
             'branch' : "master"
@@ -89,7 +94,8 @@ class TestScmOverride(TestCase):
             'match' : { 'branch' : "upstream" },
             'set' : { 'branch' : "master" }
         })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
             'branch' : "develop"
@@ -103,7 +109,8 @@ class TestScmOverride(TestCase):
             },
             'set' : { 'branch' : "master" }
         })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
             'branch' : "master"
@@ -117,7 +124,8 @@ class TestScmOverride(TestCase):
             },
             'set' : { 'branch' : "master" }
         })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
             'branch' : "develop"
@@ -129,7 +137,8 @@ class TestScmOverride(TestCase):
             'match' : { 'url' : "*git.com*" },
             'set' : { 'url' : "mirror" }
         })
-        self.assertEqual(o.mangle(self.scm), {
+        match, scm = o.mangle(self.scm)
+        self.assertEqual(scm, {
             'scm' : "git",
             'url' : "mirror",
             'branch' : "develop"

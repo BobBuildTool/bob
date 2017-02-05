@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from .scm import ScmOverride
+from .scm import Scm, ScmOverride
 from .cvs import CvsScm
 from .git import GitScm
 from .svn import SvnScm

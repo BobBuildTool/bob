@@ -17,13 +17,14 @@
 from ..errors import ParseError, BuildError
 from ..tty import colorize, WarnOnce
 from ..utils import hashString
+from .scm import Scm
 import os, os.path
 import re
 import schema
 import subprocess
 import xml.etree.ElementTree
 
-class GitScm:
+class GitScm(Scm):
 
     SCHEMA = schema.Schema({
         'scm' : 'git',
@@ -36,7 +37,8 @@ class GitScm:
         schema.Optional('rev') : str,
     })
 
-    def __init__(self, spec):
+    def __init__(self, spec, overrides=[]):
+        super().__init__(overrides)
         self.__recipe = spec['recipe']
         self.__url = spec["url"]
         self.__branch = None

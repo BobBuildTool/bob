@@ -474,20 +474,23 @@ def Scm(spec, env, overrides):
     spec = { k : ( env.substitute(v, "checkoutSCM::"+k) if isinstance(v, str) else v)
         for (k, v) in spec.items() }
 
-    # apply overrides
+    # apply overrides before creating scm instances. It's possible to switch the Scm type with an override..
+    matchedOverrides = []
     for override in overrides:
-        spec = override.mangle(spec)
+        matched, spec = override.mangle(spec)
+        if matched:
+            matchedOverrides.append(override)
 
     # create scm instance
     scm = spec["scm"]
     if scm == "git":
-        return GitScm(spec)
+        return GitScm(spec, matchedOverrides)
     elif scm == "svn":
-        return SvnScm(spec)
+        return SvnScm(spec, matchedOverrides)
     elif scm == "cvs":
-        return CvsScm(spec)
+        return CvsScm(spec, matchedOverrides)
     elif scm == "url":
-        return UrlScm(spec)
+        return UrlScm(spec, matchedOverrides)
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))
 

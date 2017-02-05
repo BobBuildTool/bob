@@ -17,12 +17,13 @@
 from ..errors import BuildError
 from ..tty import colorize
 from ..utils import hashString, joinScripts
+from .scm import Scm
 import os, os.path
 import schema
 import subprocess
 import xml.etree.ElementTree
 
-class SvnScm:
+class SvnScm(Scm):
 
     SCHEMA = schema.Schema({
         'scm' : 'svn',
@@ -32,7 +33,8 @@ class SvnScm:
         schema.Optional('revision') : schema.Or(int, str)
     })
 
-    def __init__(self, spec):
+    def __init__(self, spec, overrides=[]):
+        super().__init__(overrides)
         self.__modules = [{
             "recipe" : spec['recipe'],
             "url" : spec["url"],

@@ -16,12 +16,13 @@
 
 from ..errors import ParseError
 from ..utils import hashString
+from .scm import Scm
 from pipes import quote
 import os.path
 import re
 import schema
 
-class UrlScm:
+class UrlScm(Scm):
 
     SCHEMA = schema.Schema({
         'scm' : 'url',
@@ -55,7 +56,8 @@ class UrlScm:
         "zip"  : "unzip -o",
     }
 
-    def __init__(self, spec):
+    def __init__(self, spec, overrides=[]):
+        super().__init__(overrides)
         self.__recipe = spec['recipe']
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
