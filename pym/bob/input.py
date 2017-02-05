@@ -2065,7 +2065,7 @@ class Recipe(object):
         for s in states.values(): s.onFinish(env, tools, self.__properties, p)
 
         if self.__shared:
-            if packageStep.getBuildId() is None:
+            if not packageStep.isDeterministic():
                 raise ParseError("Shared packages must be deterministic!")
 
         # remember calculated package
