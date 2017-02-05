@@ -989,19 +989,6 @@ class Step(metaclass=ABCMeta):
 
         return h.digest()
 
-    def getBuildId(self):
-        """Return static Build-Id of this Step.
-
-        The Build-Id represents the expected result of the Step. This method
-        will return None if the Build-Id cannot be determined in advance.
-        """
-        try:
-            ret = self.__buildId
-        except AttributeError:
-            ret = self.__buildId = self.getDigest(lambda step: step.getBuildId(), True) \
-                                    if self.isDeterministic() else None
-        return ret
-
     def getSandbox(self):
         """Return Sandbox used in this Step.
 
