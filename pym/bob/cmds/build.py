@@ -504,7 +504,7 @@ esac
                     assert step.isPackageStep() and step.isValid()
                     self._cookPackageStep(step, checkoutOnly, depth)
             except BuildError as e:
-                e.pushFrame(step.getPackage().getName())
+                e.setStack(step.getPackage().getStack())
                 raise e
 
         # back to original package
