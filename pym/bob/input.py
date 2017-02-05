@@ -2694,7 +2694,7 @@ class RecipeSet:
                     p = walkPackagePath(tmp, self.__aliases[i])
                     result[i] = p
                 except ParseError as e:
-                    print(colorize("Bad alias '{}': {}".format(i, str(e)), "33"), file=sys.stderr)
+                    print(colorize("Bad alias '{}': {}".format(i, e.slogan), "33"), file=sys.stderr)
         finally:
             BobState().setSynchronous()
 
