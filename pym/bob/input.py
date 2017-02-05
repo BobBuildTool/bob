@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
-from .errors import ParseError, BuildError
+from .errors import ParseError
 from .scm import CvsScm, GitScm, SvnScm, UrlScm
 from .state import BobState
 from .tty import colorize, WarnOnce
@@ -2693,7 +2693,7 @@ class RecipeSet:
                 try:
                     p = walkPackagePath(tmp, self.__aliases[i])
                     result[i] = p
-                except BuildError as e:
+                except ParseError as e:
                     print(colorize("Bad alias '{}': {}".format(i, str(e)), "33"), file=sys.stderr)
         finally:
             BobState().setSynchronous()
@@ -2915,7 +2915,7 @@ def walkPackagePath(rootPackages, path):
     trail = []
     for step in steps:
         if step not in nextPackages:
-            raise BuildError("Package '{}' not found under '{}'".format(step, "/".join(trail)))
+            raise ParseError("Package '{}' not found under '{}'".format(step, "/".join(trail)))
         thisPackage = nextPackages[step]
         trail.append(step)
         nextPackages = { s.getPackage().getName() : s.getPackage()
@@ -2925,7 +2925,7 @@ def walkPackagePath(rootPackages, path):
             nextPackages.setdefault(p.getName(), p)
 
     if not thisPackage:
-        raise BuildError("Must specify a valid package to build")
+        raise ParseError("Must specify a valid package to build")
 
     return thisPackage
 
