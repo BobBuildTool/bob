@@ -866,17 +866,19 @@ class Step(metaclass=ABCMeta):
         """
         pass
 
-    @abstractmethod
     def isDeterministic(self):
         """Return whether the step is deterministic.
 
         Checkout steps that have a script are considered indeterministic unless
         the recipe declares it otherwise (checkoutDeterministic). Then the SCMs
-        are checked if they all consider themselves deterministic.
+        are checked if they all consider themselves deterministic. Build and
+        package steps are always deterministic.
 
-        Build and package steps are always deterministic.
+        The determinism is defined recursively for all arguments, tools and the
+        sandbox of the step too. That is, the step is only deterministic if all
+        its dependencies and this step itself is deterministic.
         """
-        pass
+        return all(arg.isDeterministic() for arg in self.getAllDepSteps())
 
     def isValid(self):
         """Returns True if this step is valid, False otherwise."""
@@ -1244,7 +1246,9 @@ class CheckoutStep(Step):
         return dirs
 
     def isDeterministic(self):
-        return self._coreStep.deterministic and all([ s.isDeterministic() for s in self._coreStep.scmList ])
+        return ( self._coreStep.deterministic and
+                 all([ s.isDeterministic() for s in self._coreStep.scmList ]) and
+                 super().isDeterministic() )
 
 class RegularStep(Step):
     def construct(self, package, pathFormatter, sandbox, label, script=(None, None),
@@ -1262,10 +1266,6 @@ class RegularStep(Step):
 
     def getDigestScript(self):
         return self._coreStep.digestScript
-
-    def isDeterministic(self):
-        """Regular steps are assumed to be deterministic."""
-        return True
 
 class CoreBuildStep(CoreStep):
     __slots__ = [ "script", "digestScript" ]
