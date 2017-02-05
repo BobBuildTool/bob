@@ -1053,6 +1053,8 @@ def doStatus(argv, bobRoot):
         help="Preserve whole environment")
     parser.add_argument('-v', '--verbose', default=1, action='count',
         help="Increase verbosity (may be specified multiple times)")
+    parser.add_argument('--show-overrides', default=False, action='store_true', dest='show_overrides',
+        help="Show scm override status")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -1115,6 +1117,14 @@ def doStatus(argv, bobRoot):
                         if (verbose >= 2) and (longStatus != ""):
                             for line in longStatus.splitlines():
                                 print('   ' + line)
+                    if args.show_overrides:
+                        overridden, shortStatus, longStatus = stats[scmDir].statusOverrides(checkoutStep.getWorkspacePath(), scmDir)
+                        if overridden:
+                            print(colorize("   STATUS {0: <4} {1}".format(shortStatus, os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "32"))
+                            if (verbose >= 2) and (longStatus != ""):
+                                for line in longStatus.splitlines():
+                                    print('   ' + line)
+
         if recurse:
             for d in package.getDirectDepSteps():
                 showStatus(d.getPackage(), recurse, verbose, done)

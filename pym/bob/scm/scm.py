@@ -55,6 +55,11 @@ class ScmOverride:
                     scm[key] = re.sub(pat, repl, scm[key])
         return ret, scm
 
+    def __str__(self):
+        return str("match: " + str(self.__match)  + "\n"
+                + (("del: " + str(self.__del) + "\n") if self.__del else "")
+                + (("set: " + str(self.__set)+ "\n") if self.__set else "")
+                + (("replace: " + str(self.__replaceRaw)) if self.__replaceRaw else "")).rstrip()
 
 class Scm(object):
     def __init__(self, overrides=[]):
@@ -63,3 +68,13 @@ class Scm(object):
     def getActiveOverrides(self):
         return self.__overrides
 
+    def statusOverrides(self, workspacePath, dir):
+        overrides = self.getActiveOverrides()
+        if len(overrides):
+            status = "O"
+            longStatus = ""
+            for o in overrides:
+                overrideText = str(o).rstrip().replace('\n', '\n       ')
+                longStatus += "    > Overridden by:\n       {}\n".format(overrideText)
+            return True, status, longStatus
+        return False, '', ''
