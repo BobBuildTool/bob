@@ -42,6 +42,14 @@ class ScmOverride:
             if not fnmatch.fnmatchcase(scm[key], value): return False
         return True
 
+    def __hash__(self):
+        return hash((frozenset(self.__match.items()), frozenset(self.__del),
+            frozenset(self.__set.items()), frozenset(self.__replaceRaw.items())))
+
+    def __eq__(self, other):
+        return ((self.__match, self.__del, self.__set, self.__replaceRaw) ==
+            (other.__match, other.__del, other.__set, other.__replaceRaw))
+
     def mangle(self, scm):
         ret = False
         if self.__doesMatch(scm):

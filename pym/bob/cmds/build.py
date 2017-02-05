@@ -29,6 +29,7 @@ import os
 import shutil
 import stat
 import subprocess
+import time
 
 # Output verbosity:
 #    <= -2: package name
@@ -40,6 +41,19 @@ import subprocess
 def hashWorkspace(step):
     return hashDirectory(step.getWorkspacePath(),
         os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
+
+class LocalBuilderStatistic:
+    def __init__(self):
+        self.__activeOverrides = set()
+        self.checkouts = 0
+        self.packagesBuilt = 0
+        self.packagesDownloaded = 0
+
+    def addOverrides(self, overrides):
+        self.__activeOverrides.update(overrides)
+
+    def getActiveOverrides(self):
+        return self.__activeOverrides
 
 class LocalBuilder:
 
@@ -248,6 +262,7 @@ esac
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
         self.__buildIds = {}
+        self.__statistic = LocalBuilderStatistic()
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -458,6 +473,9 @@ esac
         if self.__verbose >= -1:
             print(*args, **kwargs)
 
+    def getStatistic(self):
+        return self.__statistic
+
     def cook(self, steps, parentPackage, checkoutOnly, depth=0):
         currentPackage = self.__currentPackage
 
@@ -498,10 +516,18 @@ esac
                 print(">>", colorize(self.__currentPackage, "32;1"))
 
     def _cookCheckoutStep(self, checkoutStep, depth):
+        overrides = set()
+        scmList = checkoutStep.getScmList()
+        for scm in scmList:
+            overrides.update(scm.getActiveOverrides())
+        self.__statistic.addOverrides(overrides)
+        overrides = len(overrides)
+        overridesString = ("(" + str(overrides) + " scm " + ("overrides" if overrides > 1 else "override") +")") if overrides else ""
+
         checkoutDigest = checkoutStep.getVariantId()
         if self._wasAlreadyRun(checkoutStep):
             prettySrcPath = checkoutStep.getWorkspacePath()
-            self._info("   CHECKOUT  skipped (reuse {})".format(prettySrcPath))
+            self._info("   CHECKOUT  skipped (reuse {}) {}".format(prettySrcPath, overridesString))
         else:
             # depth first
             self.cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
@@ -523,7 +549,7 @@ esac
                     print(colorize("   CHECKOUT  WARNING: recipe changed but skipped due to --build-only ({})"
                         .format(prettySrcPath), "33"))
                 else:
-                    self._info("   CHECKOUT  skipped due to --build-only ({})".format(prettySrcPath))
+                    self._info("   CHECKOUT  skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString))
             else:
                 if self.__cleanCheckout:
                     # check state of SCMs and invalidate if the directory is unclean
@@ -578,9 +604,10 @@ esac
                     if BobState().getResultHash(prettySrcPath) is not None:
                         BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
 
-                    print(colorize("   CHECKOUT  {}".format(prettySrcPath), "32"))
+                    print(colorize("   CHECKOUT  {} {}".format(prettySrcPath, overridesString)
+                        , "32"))
                     self._runShell(checkoutStep, "checkout")
-
+                    self.__statistic.checkouts += 1
                     # reflect new checkout state
                     BobState().setDirectoryState(prettySrcPath, checkoutState)
                 else:
@@ -726,6 +753,7 @@ esac
                 # we're done.
                 if BobState().getResultHash(prettyPackagePath) is None:
                     if self.__archive.downloadPackage(packageBuildId, prettyPackagePath, self.__verbose):
+                        self.__statistic.packagesDownloaded += 1
                         BobState().setInputHashes(prettyPackagePath, packageBuildId)
                         workspaceChanged = True
                         wasDownloaded = True
@@ -756,6 +784,7 @@ esac
                     BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
                     self._runShell(packageStep, "package")
                     workspaceChanged = True
+                    self.__statistic.packagesBuilt += 1
                     if packageBuildId and self.__archive.canUploadLocal():
                         self.__archive.uploadPackage(packageBuildId, prettyPackagePath, self.__verbose)
 
@@ -858,6 +887,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         else:
             parser.error("Malformed define: "+define)
 
+    startTime = time.time()
+
     recipes = RecipeSet()
     recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
@@ -906,11 +937,22 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     finally:
         builder.saveBuildState()
 
+    endTime = time.time()
     # tell the user
     if len(results) == 1:
         print("Build result is in", results[0])
     elif len(results) > 1:
         print("Build results are in:\n  ", "\n   ".join(results))
+
+    stats = builder.getStatistic()
+    activeOverrides = len(stats.getActiveOverrides())
+    print("Duration: " + str(datetime.timedelta(seconds=(endTime - startTime))) + ", "
+            + str(stats.checkouts)
+                + " checkout" + ("s" if (stats.checkouts != 1) else "")
+                + " (" + str(activeOverrides) + (" overrides" if (activeOverrides != 1) else " override") + " active), "
+            + str(stats.packagesBuilt)
+                + " package" + ("s" if (stats.packagesBuilt != 1) else "") + " built, "
+            + str(stats.packagesDownloaded) + " downloaded.")
 
     # copy build result if requested
     ok = True
