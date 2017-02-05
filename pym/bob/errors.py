@@ -17,16 +17,17 @@
 from .tty import colorize
 
 class BobError(Exception):
-    def __init__(self, kind, slogan, help=""):
+    def __init__(self, kind, stackSlogan, slogan, help=""):
         self.kind = kind
         self.slogan = slogan
+        self.stackSlogan = stackSlogan
         self.stack = []
         self.help = help
 
     def __str__(self):
         ret = colorize(self.kind+" error: ", "31;1") + colorize(self.slogan, "31")
         if self.stack:
-            ret = ret + "\nProcessing stack: " + "/".join(self.stack)
+            ret = ret + "\n" + self.stackSlogan + ": " + "/".join(self.stack)
         if self.help:
             ret = ret + "\n" + self.help
         return ret
@@ -35,11 +36,14 @@ class BobError(Exception):
         if not self.stack or (self.stack[0] != frame):
             self.stack.insert(0, frame)
 
+    def setStack(self, stack):
+        if not self.stack: self.stack = stack[:]
+
 class ParseError(BobError):
     def __init__(self, slogan, help=""):
-        BobError.__init__(self, "Parse", slogan, help)
+        BobError.__init__(self, "Parse", "Processing stack", slogan, help)
 
 class BuildError(BobError):
     def __init__(self, slogan, help=""):
-        BobError.__init__(self, "Build", slogan, help)
+        BobError.__init__(self, "Build", "Failed package", slogan, help)
 
