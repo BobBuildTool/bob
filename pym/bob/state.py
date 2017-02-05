@@ -105,7 +105,18 @@ class _BobState():
     def finalize(self):
         assert (self.__asynchronous == 0) and not self.__dirty
         if self.__lock:
-            os.unlink(self.__lock)
+            try:
+                os.unlink(self.__lock)
+            except FileNotFoundError:
+                from .tty import colorize
+                from sys import stderr
+                print(colorize("Warning: lock file was deleted while Bob was still running!", "33"),
+                    file=stderr)
+            except OSError as e:
+                from .tty import colorize
+                from sys import stderr
+                print(colorize("Warning: cannot unlock workspace: "+str(e), "33"),
+                    file=stderr)
 
     def setAsynchronous(self):
         self.__asynchronous += 1
