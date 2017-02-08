@@ -669,9 +669,9 @@ class Sandbox:
         """Return True if the sandbox is used in the current build configuration."""
         return self.enabled
 
-def diffTools(upperTools, argTools, upperPackage):
+def diffTools(upperTools, argTools, upperPackage, relevantTools):
     ret = {}
-    for name in (set(upperTools.keys()) | set(argTools.keys())):
+    for name in ((set(upperTools.keys()) | set(argTools.keys())) & relevantTools):
         if name not in argTools:
             # filtered tool
             ret[name] = None
@@ -721,7 +721,9 @@ class CoreStepRef:
         argStack = argPackage.getStack()
         self.stackAdder = argStack[stackPrefixLen:]
 
-        self.inputTools = diffTools(upperPackage._getInputTools(), argPackage._getInputTools(), upperPackage)
+        self.inputTools = diffTools(upperPackage._getInputTools(),
+                                    argPackage._getInputTools(),
+                                    upperPackage, argPackage._getTouchedTools())
         self.inputSandbox = diffSandbox(upperPackage._getInputSandboxRaw(), argPackage._getInputSandboxRaw(), upperPackage)
 
     def toStep(self, pathFormatter, upperPackage):
@@ -1310,7 +1312,8 @@ class PackageStep(RegularStep):
 
 class CorePackage:
     __slots__ = ("name", "recipe", "directDepSteps", "indirectDepSteps",
-        "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep")
+        "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
+        "touchedTools")
 
     def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps, states):
         self.name = name
@@ -1337,7 +1340,7 @@ class Package(object):
 
     def construct(self, name, stack, pathFormatter, recipe,
                   directDepSteps, indirectDepSteps, states, inputTools,
-                  allTools, inputSandbox, sandbox):
+                  allTools, inputSandbox, sandbox, touchedTools):
         self.__stack = stack
         self.__pathFormatter = pathFormatter
         self.__directDepSteps = directDepSteps
@@ -1357,7 +1360,8 @@ class Package(object):
         self._setPackageStep(PackageStep().construct(self, pathFormatter))
 
         # calculate local tools and sandbox
-        self.__corePackage.tools = diffTools(inputTools, allTools, self)
+        self.__corePackage.touchedTools = set(touchedTools)
+        self.__corePackage.tools = diffTools(inputTools, allTools, self, self.__corePackage.touchedTools)
         self.__corePackage.sandbox = diffSandbox(inputSandbox, sandbox, self)
 
         return self
@@ -1373,6 +1377,9 @@ class Package(object):
         self.__sandbox = patchSandbox(inputSandbox, corePackage.sandbox, pathFormatter, self)
 
         return self
+
+    def _getTouchedTools(self):
+        return self.__corePackage.touchedTools
 
     def _getCorePackage(self):
         return self.__corePackage
@@ -1985,10 +1992,14 @@ class Recipe(object):
         # filter duplicate results, fail on different variants of same package
         self.__filterDuplicateSteps(results)
 
+        # record used environment and tools
+        env.touch(self.__packageVars | self.__packageVarsWeak)
+        tools.touch(self.__toolDepPackage)
+
         # create package
         p = Package().construct(self.__packageName, stack, pathFormatter, self,
             directPackages, indirectPackages, states, inputTools.detach(), tools.detach(),
-            inputSandbox, sandbox)
+            inputSandbox, sandbox, tools.touchedKeys())
 
         # optional checkout step
         if self.__checkout != (None, None, []):
@@ -2022,10 +2033,6 @@ class Recipe(object):
             packageDigestEnv, packageEnv, tools.prune(self.__toolDepPackage),
             [buildStep], self.__shared)
         p._setPackageStep(packageStep)
-
-        # record used environment and tools
-        env.touch(self.__packageVars | self.__packageVarsWeak)
-        tools.touch(self.__toolDepPackage)
 
         # provide environment
         provideEnv = {}
@@ -2663,7 +2670,7 @@ class RecipeSet:
         states = { n:s() for (n,s) in self.__states.items() }
         rootPkg = Package()
         rootPkg.construct("<root>", [], nameFormatter, None, [], [], states,
-            {}, {}, None, None)
+            {}, {}, None, None, [])
         try:
             with open(cacheName, "rb") as f:
                 persistedCacheKey = f.read(len(cacheKey))
