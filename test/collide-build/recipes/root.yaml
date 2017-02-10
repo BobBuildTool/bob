@@ -1,0 +1,7 @@
+root: True
+
+buildScript: |
+    echo "root" > root.txt
+
+packageScript: |
+    cp $1/* .

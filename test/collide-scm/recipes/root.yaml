@@ -1,0 +1,8 @@
+root: True
+
+checkoutSCM:
+    scm: url
+    url: http://bob.test/a/b.tgz
+
+buildScript: "true"
+packageScript: "true"
