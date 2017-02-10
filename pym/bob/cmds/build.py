@@ -577,6 +577,15 @@ esac
                     BobState().setDirectoryState(prettySrcPath,
                         { d:s for (d,s) in checkoutState.items() if d is not None })
 
+                    # check that new checkouts do not collide with old stuff in workspace
+                    for scmDir in checkoutState.keys():
+                        if scmDir is None or scmDir == ".": continue
+                        if oldCheckoutState.get(scmDir) is not None: continue
+                        scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                        if os.path.exists(scmPath):
+                            raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
+                                                .format(scmDir, prettySrcPath))
+
                     # Forge checkout result before we run the step again.
                     # Normally the correct result is set directly after the
                     # checkout finished. But if the step fails and the user
@@ -618,8 +627,8 @@ esac
             (prettyBuildPath, created) = self._constructDir(buildStep, "build")
             oldBuildDigest = BobState().getDirectoryState(prettyBuildPath)
             if created or (buildDigest != oldBuildDigest):
-                if (oldBuildDigest is not None) and (buildDigest != oldBuildDigest):
-                    # build something different -> prune workspace
+                # not created but exists -> something different -> prune workspace
+                if not created and os.path.exists(prettyBuildPath):
                     print(colorize("   PRUNE     {} (recipe changed)".format(prettyBuildPath), "33"))
                     emptyDirectory(prettyBuildPath)
                 # invalidate build step
@@ -668,8 +677,8 @@ esac
             (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
             oldPackageDigest = BobState().getDirectoryState(prettyPackagePath)
             if created or (packageDigest != oldPackageDigest):
-                if (oldPackageDigest is not None) and (packageDigest != oldPackageDigest):
-                    # package something different -> prune workspace
+                # not created but exists -> something different -> prune workspace
+                if not created and os.path.exists(prettyPackagePath):
                     print(colorize("   PRUNE     {} (recipe changed)".format(prettyPackagePath), "33"))
                     emptyDirectory(prettyPackagePath)
                 # invalidate result if folder was created
