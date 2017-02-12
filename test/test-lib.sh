@@ -36,12 +36,12 @@ exec_blackbox_test()
 {
 	cleanup
 
-	run_bob dev root > log-cmd.txt
-	RES=$(sed -ne '/^Build result is in/s/.* //p' log-cmd.txt)
+	run_bob dev root
+	RES=$(run_bob query-path -f '{dist}' --develop root)
 	diff -Nurp $RES output
 
-	run_bob build root > log-cmd.txt
-	RES=$(sed -ne '/^Build result is in/s/.* //p' log-cmd.txt)
+	run_bob build root
+	RES=$(run_bob query-path -f '{dist}' --release root)
 	diff -Nurp $RES output
 
 	run_bob clean
