@@ -29,18 +29,10 @@ from bob.state import finalize
 class TestJenkinsSetOptions(TestCase):
     def executeBobJenkinsCmd(self, arg):
         doJenkins(arg.split(' '), self.cwd)
-        try:
-            finalize()
-        except FileNotFoundError:
-            pass
 
     def tearDown(self):
-        self.executeBobJenkinsCmd("prune -q myTestJenkins")
-        self.executeBobJenkinsCmd("rm myTestJenkins")
-
-        # do bob jenkins prune & remove
         self.jenkinsMock.stop_mock_server(8080)
-
+        finalize()
         os.chdir(self.oldCwd)
         removePath(self.cwd)
 
