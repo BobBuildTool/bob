@@ -248,4 +248,5 @@ def BobState():
 def finalize():
     if _BobState.instance is not None:
         _BobState.instance.finalize()
+        _BobState.instance = None
 
