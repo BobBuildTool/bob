@@ -332,7 +332,7 @@ class JenkinsJob:
     def _buildIdName(d):
         return d.getWorkspacePath().replace('/', '_') + ".buildid"
 
-    def dumpXML(self, orig, nodes, windows, credentials, clean, options, date):
+    def dumpXML(self, orig, nodes, windows, credentials, clean, options, date, authtoken):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
             builders = root.find("builders")
@@ -355,6 +355,15 @@ class JenkinsJob:
             if buildWrappers is None:
                 buildWrappers = xml.etree.ElementTree.SubElement(root,
                     "buildWrappers")
+            auth = root.find("authToken")
+            if auth:
+                if not authtoken:
+                    xml.etree.ElementTree.remove(auth)
+                else:
+                    auth.clear()
+            else:
+                if authtoken:
+                    xml.etree.ElementTree.SubElement(root, "authToken")
         else:
             root = xml.etree.ElementTree.Element("project")
             xml.etree.ElementTree.SubElement(root, "actions")
@@ -394,6 +403,10 @@ class JenkinsJob:
             archiver = xml.etree.ElementTree.SubElement(
                 publishers, "hudson.tasks.ArtifactArchiver")
             buildWrappers = xml.etree.ElementTree.SubElement(root, "buildWrappers")
+            if authtoken:
+                auth = xml.etree.ElementTree.SubElement(root, "authToken")
+            else:
+                auth = None
 
         root.find("description").text = self.getDescription(date)
         scmTrigger = xml.etree.ElementTree.SubElement(
@@ -666,6 +679,10 @@ class JenkinsJob:
             xml.etree.ElementTree.SubElement(preBuildClean, "cleanupParameter")
             xml.etree.ElementTree.SubElement(preBuildClean, "externalDelete")
 
+        # add authtoken if set in options
+        if auth:
+            auth.text = authtoken
+
         return xml.etree.ElementTree.tostring(root, encoding="UTF-8")
 
 
@@ -935,6 +952,8 @@ def doJenkinsExport(recipes, argv):
     credentials = config.get("credentials")
     clean = config.get("clean", False)
     options = config.get("options", {})
+    authtoken = config.get("authtoken")
+
     for j in buildOrder:
         job = jobs[j]
         info = {
@@ -950,7 +969,7 @@ def doJenkinsExport(recipes, argv):
             'packageSteps' : job.getPackageSteps()
         }
         xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes, windows,
-            credentials, clean, options, "now"), info)
+            credentials, clean, options, "now", authtoken), info)
         with open(os.path.join(args.dir, job.getName()+".xml"), "wb") as f:
             f.write(xml)
 
@@ -1324,6 +1343,7 @@ def doJenkinsPush(recipes, argv):
     clean = config.get("clean", False)
     keep = config.get("keep", False)
     options = config.get("options", {})
+    authtoken = config.get("authtoken")
     updatedJobs = {}
     verbose = args.verbose - args.quiet
     date = str(datetime.datetime.now())
@@ -1357,7 +1377,8 @@ def doJenkinsPush(recipes, argv):
                 'windows' : windows,
                 'checkoutSteps' : job.getCheckoutSteps(),
                 'buildSteps' : job.getBuildSteps(),
-                'packageSteps' : job.getPackageSteps()
+                'packageSteps' : job.getPackageSteps(),
+                'authtoken': authtoken
             }
 
             # get original XML if it exists
@@ -1381,13 +1402,13 @@ def doJenkinsPush(recipes, argv):
                 else:
                     jobXML = None
 
-                jobXML = job.dumpXML(jobXML, nodes, windows, credentials, clean, options, date)
+                jobXML = job.dumpXML(jobXML, nodes, windows, credentials, clean, options, date, authtoken)
 
                 if origXML is not None:
                     jobXML = applyHooks(jenkinsJobPostUpdate, jobXML, info)
                     # job hash is based on unmerged config to detect just our changes
                     hashXML = applyHooks(jenkinsJobCreate,
-                        job.dumpXML(None, nodes, windows, credentials, clean, options, date),
+                        job.dumpXML(None, nodes, windows, credentials, clean, options, date, authtoken),
                         info)
                 else:
                     jobXML = applyHooks(jenkinsJobCreate, jobXML, info)
@@ -1530,6 +1551,7 @@ def doJenkinsSetOptions(recipes, argv):
     parser.add_argument('-U', default=[], action='append', dest="undefines",
                         help="Undefine environment variable override")
     parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
+    parser.add_argument('--authtoken', help='AuthToken for remote triggering jobs')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--keep', action='store_true', default=None,
         help="Keep obsolete jobs by disabling them")
@@ -1586,6 +1608,7 @@ def doJenkinsSetOptions(recipes, argv):
             "clean" : False,
             "keep" : False,
             "options" : {},
+            "authtoken": None,
         })
 
     if args.nodes is not None:
@@ -1614,6 +1637,8 @@ def doJenkinsSetOptions(recipes, argv):
             print("Cannot undefine '{}': not defined".format(d), file=sys.stderr)
     if args.credentials is not None:
         config['credentials'] = args.credentials
+    if args.authtoken is not None:
+        config['authtoken'] = args.authtoken
     if args.clean is not None:
         config['clean'] = args.clean
     if args.keep is not None:
