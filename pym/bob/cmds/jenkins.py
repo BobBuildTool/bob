@@ -77,11 +77,7 @@ class SpecHasher:
         if isinstance(data, bytes):
             self.lines.extend(iter(genHexSlice(asHexStr(data))))
         else:
-            bid = data.getBuildId()
-            if bid is None:
-                self.lines.append("<" + JenkinsJob._buildIdName(data))
-            else:
-                self.lines.append("=" + asHexStr(bid))
+            self.lines.append("<" + JenkinsJob._buildIdName(data))
 
     def digest(self):
         return "\n".join(self.lines + ["}"])
@@ -90,11 +86,7 @@ class SpecHasher:
 def getBuildIdSpec(step):
     """Return bob-hash-engine spec to calculate build-id of step"""
     if step.isCheckoutStep():
-        bid = step.getBuildId()
-        if bid is None:
-            return "#" + step.getWorkspacePath()
-        else:
-            return "=" + asHexStr(bid)
+        return "#" + step.getWorkspacePath()
     else:
         return step.getDigest(lambda s: s, True, SpecHasher)
 

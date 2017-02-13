@@ -84,12 +84,15 @@ where
 * *env* is the sorted list of the environment key-value-pairs and
 * *input* is the list of all results that are passed to the step (i.e. previous step, dependencies).
 
+To keep the Variant-Id stable in the long run the scripts of SCMs in the
+checkout step are replaced by a symbolic representation.
+
 There exists also a second implicit version, called Build-Id, which identifies
 the build result in advance. The Build-Id can be used to grab matching build
 artifacts from another build server instead of building them locally. The
-Build-Id is derived from the source specification of the checkout step
-(commit-Ids, SVN URL+revision, ...), the build/package Scripts, the environment
-and all Build-Ids of the recipe dependencies:
+Build-Id is derived from the actual sources created by the checkout step, the
+build/package Scripts, the environment and all Build-Ids of the recipe
+dependencies:
 
 .. math::
 
@@ -107,14 +110,9 @@ where
 * *input* is the list of all results that are passed to the step (i.e. previous step, dependencies).
 
 The special property of the Build-Id is that it represents the expected result.
-Actually there are two Build-Ids: a static and a dynamic one. The static
-Build-Id of a step is only defined if the step and any of its dependencies is
-deterministic. For indeterministic checkouts the dynamic Build-Id is defined
-as the hash of the result of the checkout step. Compared to the Package- and
-static Build-Id the dynamic Build-Id is not computable in advance but requires
-to execute certain checkout steps. To keep the Build-Id stable in the long run
-the scripts of SCMs in the checkout step are replaced by a symbolic
-representation.
+To calculate it, all involved checkout steps have to be executed and the result
+of the checkouts have to get hashed.
+
 
 Variant management
 ------------------
