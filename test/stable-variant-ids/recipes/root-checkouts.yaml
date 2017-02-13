@@ -1,0 +1,46 @@
+root: True
+
+checkoutSCM:
+    -
+        scm: url
+        url: http://foo.test/a/b/c.gz
+        digestSHA1: "3130b50835ce5e9ce061dd7916eac1121e1a83e3"
+        dir: "url/a"
+    -
+        scm: url
+        url: http://bar.test/a/b/c.gz
+        extract: False
+        dir: "url/b"
+
+    -
+        scm: git
+        url: git@git.test:foo/bar.git
+        dir: "git/a"
+    -
+        scm: git
+        url: git@git.test:foo/bar.git
+        branch: feature
+        dir: "git/b"
+    -
+        scm: git
+        url: git@git.test:foo/bar.git
+        tag: "1.2.3"
+        dir: "git/c"
+    -
+        scm: git
+        url: git@git.test:foo/bar.git
+        rev: refs/heads/baz
+        dir: "git/d"
+
+    -
+        scm: svn
+        url: svn://svn.test/foo/bar
+        dir: "svn/a"
+    -
+        scm: svn
+        url: svn://svn.test/baz
+        revision: 123
+        dir: "svn/b"
+
+buildScript: "true"
+packageScript: "true"

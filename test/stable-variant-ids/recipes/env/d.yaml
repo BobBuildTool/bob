@@ -1,0 +1,6 @@
+packageVars: [AA, BB, CC, DD, ASDF]
+packageScript: "true"
+
+provideVars:
+    DD: "1"
+

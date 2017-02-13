@@ -1,0 +1,6 @@
+packageScript: |
+    echo "5" > tool
+
+provideTools:
+    t51: bin
+    t52: local

@@ -1,0 +1,17 @@
+depends:
+    - tool6
+    -
+        name: sandbox::b
+        use: [sandbox]
+    - tool7
+
+buildScript: "asdf"
+packageScript: "sandbox-a"
+
+provideSandbox:
+    paths: ["/bin", "/usr/bin"]
+    mount:
+        - "/foo/bar"
+        - [ "\\$HOME/.ssh", "/nonexistent/.ssh"]
+        - [ "\\$SSH_AUTH_SOCK", "\\$SSH_AUTH_SOCK", [nojenkins, nofail] ]
+

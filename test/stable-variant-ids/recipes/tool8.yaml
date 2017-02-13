@@ -1,0 +1,6 @@
+packageScript: |
+    echo "8" > tool
+
+provideTools:
+    t81: bin
+    t82: local

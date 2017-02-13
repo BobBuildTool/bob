@@ -1,0 +1,22 @@
+root: True
+
+environment:
+    FOO: "bar"
+
+depends:
+    -
+        name: env::a
+        use: [environment]
+    -
+        name: env::b
+        environment:
+            ASDF: "qwer"
+    -
+        name: env::c
+        use: [environment]
+        forward: True
+    - env::d
+
+buildVars: [AA, BB, CC, DD, ASDF]
+buildScript: "true"
+packageScript: "true"

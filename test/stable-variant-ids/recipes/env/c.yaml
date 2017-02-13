@@ -1,0 +1,5 @@
+packageVars: [BB, ASDF, FOO]
+packageScript: "true"
+
+provideVars:
+    CC: "1"

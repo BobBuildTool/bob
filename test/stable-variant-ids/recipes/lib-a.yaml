@@ -1,0 +1,18 @@
+depends:
+    - lib2
+
+#checkoutSCM:
+#   -
+#      scm: git
+#      url: ${MIRROR}/tsd.buildenv.git
+#      dir: tsd.buildenv
+#      branch: feature/kloetzke/unittests
+
+buildTools: [t11]
+buildScript: "true"
+packageScript: |
+    echo "liba" > lib.txt
+
+provideDeps:
+    - lib2
+

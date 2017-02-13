@@ -1,0 +1,51 @@
+root: True
+
+depends:
+    -
+        name: tool1
+        use: [tools]
+        forward: True
+    -
+        name: tool2
+        use: [tools]
+        forward: True
+    -
+        name: tool3
+        use: [tools]
+        forward: True
+    -
+        name: tool4
+        use: [tools]
+        forward: True
+    -
+        name: tool5
+        use: [tools]
+        forward: True
+    -
+        name: tool6
+        use: [tools]
+        forward: True
+    -
+        name: tool7
+        use: [tools]
+        forward: True
+    -
+        name: tool8
+        use: [tools]
+        forward: True
+    -
+        name: tool9
+        use: [tools]
+        forward: True
+
+    - lib-a
+    - lib-b
+    - lib-c
+    - lib-d
+    - lib-e
+    - lib-f
+    - lib-g
+    - lib-h
+
+buildScript: "true"
+packageScript: "true"

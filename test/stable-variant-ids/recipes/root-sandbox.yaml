@@ -1,0 +1,25 @@
+root: True
+
+depends:
+    -
+        name: tool1
+        use: [tools]
+        forward: True
+    # Just use result here because all lib-* recipes provide a common
+    # dependency lib2 that would collide due to the sandbox on the next line...
+    -
+        name: lib-a
+        use: [result]
+    -
+        name: sandbox::a
+        use: [sandbox]
+        forward: True
+    - lib-b
+    -
+        name: tool2
+        use: [tools]
+        forward: True
+    - lib-c
+
+buildScript: "true"
+packageScript: "true"

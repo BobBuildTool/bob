@@ -1,0 +1,3 @@
+packageScript: |
+    echo lib2 > lib2.txt
+

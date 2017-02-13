@@ -1,0 +1,383 @@
+root-sandbox dist 95c9dcf88e67b92122acfb7a2e37641c
+  digestScript: 9718449ab965b52c8c40ce526f7b2c86b6d25b22
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    bce4f3b1e12ff10847f759d3305fef46
+root-sandbox build bce4f3b1e12ff10847f759d3305fef46
+  digestScript: 9718449ab965b52c8c40ce526f7b2c86b6d25b22
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    2a3a2de206534cadf9a42b0c5b2bd75d
+    03a9896b8a1d2628c0be89c504a2ee25
+    45e4380bbde1d62fc29d8636ff289f5a
+    332e11ca62e46ec91906b3ae7b2b5ffa
+root-sandbox src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-a dist 2a3a2de206534cadf9a42b0c5b2bd75d
+  digestScript: ee3d5ed4d3cfdb25241b1903c4bbb58aa4d37011
+  tools:
+    t11 bin 00df7e513acbc4cff992603419793f59
+  args:
+    42f2a66c563d3ccafb1c336b7d4f20e2
+root-sandbox/lib-a build 42f2a66c563d3ccafb1c336b7d4f20e2
+  digestScript: 9718449ab965b52c8c40ce526f7b2c86b6d25b22
+  tools:
+    t11 bin 00df7e513acbc4cff992603419793f59
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    8d4a50e00268d88e7dad50b5c096d246
+root-sandbox/lib-a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-a/lib2 dist 8d4a50e00268d88e7dad50b5c096d246
+  digestScript: 6bc695bf91c5e7b4259dbb189781665444a2e7b4
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-a/lib2 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/tool1 dist 00df7e513acbc4cff992603419793f59
+  digestScript: 1e88b888d7e4b2eb60d72236f8f025f144ed362c
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/tool1 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/tool1 dist 00df7e513acbc4cff992603419793f59
+  digestScript: 1e88b888d7e4b2eb60d72236f8f025f144ed362c
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/tool1 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-b dist 03a9896b8a1d2628c0be89c504a2ee25
+  digestScript: a849444484353357c9fafe1bc7f4d9bfe0d80614
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    565cc483f95a3b9df86082fe867a8286
+root-sandbox/lib-b build 565cc483f95a3b9df86082fe867a8286
+  digestScript: 9718449ab965b52c8c40ce526f7b2c86b6d25b22
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    332e11ca62e46ec91906b3ae7b2b5ffa
+root-sandbox/lib-b src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-b/lib2 dist 332e11ca62e46ec91906b3ae7b2b5ffa
+  digestScript: 6bc695bf91c5e7b4259dbb189781665444a2e7b4
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-b/lib2 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-c dist 45e4380bbde1d62fc29d8636ff289f5a
+  digestScript: 1d469e8d00a44fe9e1e19b32cebdc95f0eacc602
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    565cc483f95a3b9df86082fe867a8286
+root-sandbox/lib-c build 565cc483f95a3b9df86082fe867a8286
+  digestScript: 9718449ab965b52c8c40ce526f7b2c86b6d25b22
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    332e11ca62e46ec91906b3ae7b2b5ffa
+root-sandbox/lib-c src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-c/lib2 dist 332e11ca62e46ec91906b3ae7b2b5ffa
+  digestScript: 6bc695bf91c5e7b4259dbb189781665444a2e7b4
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-c/lib2 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-b/lib2 dist 332e11ca62e46ec91906b3ae7b2b5ffa
+  digestScript: 6bc695bf91c5e7b4259dbb189781665444a2e7b4
+  sandbox: fa11f99cdf9d74a0d899d6b92a84cc0b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/lib-b/lib2 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a dist fa11f99cdf9d74a0d899d6b92a84cc0b
+  digestScript: 72c5a85fe641f9ace8baaea160c5ca5237c0627a
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    d1b0040f469dc6576d5c07e39ff67905
+root-sandbox/sandbox::a build d1b0040f469dc6576d5c07e39ff67905
+  digestScript: 30a518b67dcd7af15b369ccb1518ab3cad8e8b2c
+  sandbox: fc5ee0a798e497213fb9b33258e444b6
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+    5041aa10b59acfac5b2de11e0a23f504
+    1f586da87544f3761a9be63f6b4b173d
+root-sandbox/sandbox::a src 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 dist 5041aa10b59acfac5b2de11e0a23f504
+  digestScript: af7483858625ef8c08afced03336d410b05aa361
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool6 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 dist 1f586da87544f3761a9be63f6b4b173d
+  digestScript: 110c2cd5f46edbdd0b720a8e811eccc8d28779ae
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/tool7 build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b dist fc5ee0a798e497213fb9b33258e444b6
+  digestScript: e3cfcdf75515e39f35c918d396aa33e87c26606b
+  args:
+    81684c2e68ade2cd4bf9f2e8a67dd4fe
+root-sandbox/sandbox::a/sandbox::b build 81684c2e68ade2cd4bf9f2e8a67dd4fe

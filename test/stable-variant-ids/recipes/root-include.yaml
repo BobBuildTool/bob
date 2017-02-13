@@ -1,0 +1,5 @@
+root: true
+
+packageScript: |
+    cat $<<file.txt>> >> result.txt
+

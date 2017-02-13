@@ -1,0 +1,5 @@
+packageVars: [AA, ASDF]
+packageScript: "true"
+
+provideVars:
+    BB: "1"
