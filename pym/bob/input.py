@@ -738,13 +738,14 @@ class CoreStepRef:
 class CoreStep(metaclass=ABCMeta):
     __slots__ = ( "package", "label", "tools", "digestEnv", "env", "args",
         "shared", "doesProvideTools", "providedEnv", "providedTools",
-        "providedDeps", "providedSandbox", "variantId" )
+        "providedDeps", "providedSandbox", "variantId", "sandbox" )
 
-    def __init__(self, step, label, tools, digestEnv, env, args, shared):
+    def __init__(self, step, label, tools, sandbox, digestEnv, env, args, shared):
         package = step.getPackage()
         self.package = package._getCorePackage()
         self.label = label
         self.tools = list(tools.keys())
+        self.sandbox = sandbox is not None
         self.digestEnv = digestEnv
         self.env = env
         self.args = [ CoreStepRef(package, a) for a in args ]
@@ -763,12 +764,14 @@ class CoreStep(metaclass=ABCMeta):
         package = Package()
         package.reconstruct(self.package, pathFormatter, stack, inputTools, inputSandbox)
         step = self._createStep(package)
-        step.reconstruct(package, self, pathFormatter, package._getSandboxRaw())
+        step.reconstruct(package, self, pathFormatter,
+            package._getSandboxRaw() if self.sandbox else None)
         return step
 
     def getStepOfPackage(self, package, pathFormatter):
         step = self._createStep(package)
-        step.reconstruct(package, self, pathFormatter, package._getSandboxRaw())
+        step.reconstruct(package, self, pathFormatter,
+            package._getSandboxRaw() if self.sandbox else None)
         return step
 
 class Step(metaclass=ABCMeta):
@@ -802,8 +805,8 @@ class Step(metaclass=ABCMeta):
         self.__providedSandbox = None
 
         # will call back to us!
-        self._coreStep = self._createCoreStep(label, tools, digestEnv, env,
-            args, shared)
+        self._coreStep = self._createCoreStep(label, tools, sandbox, digestEnv,
+            env, args, shared)
 
     def reconstruct(self, package, coreStep, pathFormatter, sandbox):
         self.__package = package
@@ -836,7 +839,7 @@ class Step(metaclass=ABCMeta):
         return self.getVariantId() >= other.getVariantId()
 
     @abstractmethod
-    def _createCoreStep(self, label, tools, digestEnv, env, args, shared):
+    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared):
         pass
 
     def _getCoreStep(self):
@@ -1207,8 +1210,8 @@ class CheckoutStep(Step):
 
         return self
 
-    def _createCoreStep(self, label, tools, digestEnv, env, args, shared):
-        return CoreCheckoutStep(self, label, tools, digestEnv, env, args, shared)
+    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared):
+        return CoreCheckoutStep(self, label, tools, sandbox, digestEnv, env, args, shared)
 
     def isCheckoutStep(self):
         return True
@@ -1282,8 +1285,8 @@ class BuildStep(RegularStep):
                           digestEnv, env, tools, args)
         return self
 
-    def _createCoreStep(self, label, tools, digestEnv, env, args, shared):
-        return CoreBuildStep(self, label, tools, digestEnv, env, args, shared)
+    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared):
+        return CoreBuildStep(self, label, tools, sandbox, digestEnv, env, args, shared)
 
     def isBuildStep(self):
         return True
@@ -1303,8 +1306,8 @@ class PackageStep(RegularStep):
                           digestEnv, env, tools, args, shared)
         return self
 
-    def _createCoreStep(self, label, tools, digestEnv, env, args, shared):
-        return CorePackageStep(self, label, tools, digestEnv, env, args, shared)
+    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared):
+        return CorePackageStep(self, label, tools, sandbox, digestEnv, env, args, shared)
 
     def isPackageStep(self):
         return True
