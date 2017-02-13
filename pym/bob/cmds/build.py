@@ -927,6 +927,11 @@ def doProject(argv, bobRoot):
         help="Do not build (bob dev) before generate project Files. RunTargets may not work")
     parser.add_argument('-b', dest="execute_buildonly", default=False, action='store_true',
         help="Do build only (bob dev -b) before generate project Files. No checkout")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', default=False,
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -952,7 +957,7 @@ def doProject(argv, bobRoot):
     developPersister = recipes.getHook('developNamePersister')
     nameFormatter = developPersister(nameFormatter)
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
-    rootPackages = recipes.generatePackages(nameFormatter, defines)
+    rootPackages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=args.sandbox)
     touch(rootPackages)
 
     from ..generators.QtCreatorGenerator import qtProjectGenerator
@@ -986,6 +991,7 @@ def doProject(argv, bobRoot):
         extra.append('-e')
         extra.append(e)
     if args.preserve_env: extra.append('-E')
+    if args.sandbox: extra.append('--sandbox')
 
     package = walkPackagePath(rootPackages, args.package)
 
