@@ -51,6 +51,9 @@ Options
 ``--resume``
     Resume build where it was previously interrupted
 
+``--sandbox``
+    Enable sandboxing
+
 Eclipse CDT project generator
 -----------------------------
 
