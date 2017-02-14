@@ -935,8 +935,9 @@ class Step(metaclass=ABCMeta):
         for (key, val) in sorted(self._coreStep.digestEnv.items()):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
-        h.update(struct.pack("<I", len(self.getArguments())))
-        for arg in self.getArguments():
+        args = [ a for a in self.getArguments() if a.isValid() ]
+        h.update(struct.pack("<I", len(args)))
+        for arg in args:
             d = calculate(arg)
             if d is None: return None
             h.update(d)
