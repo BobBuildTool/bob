@@ -36,7 +36,7 @@ Available sub-commands:
                             [-D DEFINES] [-U UNDEFINES] [--credentials CREDENTIALS]
                             [--keep | --no-keep] [--download | --no-download]
                             [--upload | --no-upload] [--sandbox | --no-sandbox]
-                            [--clean | --incremental]
+                            [--clean | --incremental] [--autotoken AUTHTOKEN]
                             name
     bob jenkins set-url [-h] name url
 
@@ -49,6 +49,9 @@ Options
 
 ``--add-root ADD_ROOT``
     Add new root package
+
+``--authtoken AUTHTOKEN``
+    Add a authentication token to trigger job remotely
 
 ``--clean``
     Do clean builds (clear workspace)
