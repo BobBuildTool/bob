@@ -155,16 +155,17 @@ class JenkinsJob:
             self.__namesPerVariant.setdefault(vid, set()).add(package.getName())
             self.__packagesPerVariant.setdefault(vid, set()).add("/".join(package.getStack()))
 
-        # filter dependencies that are built in this job
-        self.__steps.add(vid)
-        if vid in self.__deps: del self.__deps[vid]
+        if vid not in self.__steps:
+            # filter dependencies that are built in this job
+            self.__steps.add(vid)
+            if vid in self.__deps: del self.__deps[vid]
 
-        # add dependencies unless they are built by this job or invalid
-        for dep in step.getAllDepSteps():
-            if not dep.isValid(): continue
-            vid = dep.getVariantId()
-            if vid in self.__steps: continue
-            self.__deps.setdefault(vid, dep)
+            # add dependencies unless they are built by this job or invalid
+            for dep in step.getAllDepSteps():
+                if not dep.isValid(): continue
+                vid = dep.getVariantId()
+                if vid in self.__steps: continue
+                self.__deps.setdefault(vid, dep)
 
     def getCheckoutSteps(self):
         return self.__checkoutSteps.values()
@@ -698,56 +699,129 @@ class JobNameCalculator:
 
     def __init__(self, prefix):
         self.__prefix = prefix
-        self.__packages = {}
-        self.__names = {}
-        self.__roots = []
+        self.__packages = {} # map all known packages to their job names
+        self.__names = {} # map job names to a list of held packages
+        self.__roots = [] # list of root packages
         self.__regexJobName = re.compile(r'[^a-zA-Z0-9-_]', re.DOTALL)
+        self.__splits = set() # names that have been split already
 
     def addPackage(self, package):
-        self.__roots.append(package)
-        self._addPackage(package)
+        step = package.getPackageStep()
+        self.__roots.append(step)
+        self.__addStep(step)
 
-    def _addPackage(self, package):
-        variantId = package.getPackageStep().getVariantId()
+    def __addStep(self, step):
+        variantId = step.getVariantId()
         if variantId not in self.__packages:
-            name = package.getRecipe().getName()
-            self.__packages[variantId] = (package, name)
-            self.__names.setdefault(name, []).append(package)
-            for d in package.getAllDepSteps():
-                self.addPackage(d.getPackage())
+            if step.isPackageStep():
+                name = step.getPackage().getRecipe().getName()
+                self.__packages[variantId] = (step, name)
+                self.__names.setdefault(name, []).append(step)
+            for d in step.getAllDepSteps():
+                self.__addStep(d)
 
     def sanitize(self):
+        """Make sure jobs are not cyclic.
+
+        We first build a dependency graph of the jobs. As long as we find
+        cycles we split all jobs that were the first node in a given cycle.
+        """
         toSplit = True
         while toSplit:
+            rootNames = [ self.__packages[p.getVariantId()][1] for p in self.__roots ]
+            depGraph = {}
+            for r in rootNames: self.__buildDepGraph(r, depGraph)
             toSplit = set()
-            for r in self.__roots:
-                toSplit |= self._findCycle(r)
-            for r in toSplit: self._split(r)
+            for r in rootNames: toSplit |= self.__findCycle(r, depGraph)
+            for r in toSplit: self.__split(r)
 
-    def _findCycle(self, package, stack=[]):
-        variantId = package.getPackageStep().getVariantId()
-        (p, name) = self.__packages[variantId]
-        if name in stack:
-            return set([name])
-        ret = set()
-        stack = stack + [name]
-        for d in package.getAllDepSteps():
-            ret |= self._findCycle(d.getPackage(), stack)
-        return ret
+    def __buildDepGraph(self, name, depGraph):
+        """Build a dependency graph.
 
-    def _split(self, name):
-        packages = self.__names[name].copy()
+        Traverse on step level build a graph that holds only the job names.
+        """
+        if name in depGraph: return
+        depGraph[name] = subDeps = set()
+        for packageStep in self.__names[name]:
+            backlog = list(packageStep.getAllDepSteps())
+            while backlog:
+                d = backlog.pop(0)
+                if d.isPackageStep():
+                    vid = d.getPackage().getPackageStep().getVariantId()
+                    subName = self.__packages[vid][1]
+                    subDeps.add(subName)
+                    self.__buildDepGraph(subName, depGraph)
+                else:
+                    backlog.extend(d.getAllDepSteps())
+
+    def __findCycle(self, name, depGraph):
+        """Find cycles in 'depGraph' starting at 'name'.
+
+        This does a depth first traversal of the tree while optimizing for the
+        usual case where no or only a few cycles are found. For that, the set
+        of all reachable nodes from a fully traversed node is cached. This can
+        only be done for sub-trees without cycles, though.
+        """
+        split = set()
+        processed = {}
+        stack = set()
+
+        def walk(n):
+            if n in stack:
+                # Found first node in cycle. Add to split set and prevent
+                # caching of trees above this node.
+                split.add(n)
+                return False, set()
+            else:
+                ret = set()
+                cache = True
+                stack.add(n)
+                if n in processed:
+                    subNodes = processed[n]
+                    if subNodes.isdisjoint(stack):
+                        # Found cached sub-tree. We're done...
+                        stack.remove(n)
+                        return True, subNodes
+                # Descend to sub-nodes, trying to build a cache
+                for d in sorted(depGraph[n]):
+                    ret.add(d)
+                    subCache, subNodes = walk(d)
+                    cache = cache and subCache
+                    ret |= subNodes
+                if cache: processed.setdefault(n, ret)
+                stack.remove(n)
+                return cache, ret
+
+        # I'm walking...
+        walk(name)
+        return split
+
+    def __split(self, name):
+        """Split a job.
+
+        As a first measure we use the package names trying to separate packages
+        into their own jobs but keep the different variants of each package
+        together.  If that doesn't help we will start adding suffixes.
+        """
+        packageSteps = self.__names[name].copy()
+
+        # Does it make sense to split the job?
+        if len(packageSteps) <= 1:
+            return
+
         # Do we have to add a counting suffix?
-        if name == packages[0].getName():
-            newNames = [ (p, name+"-"+str(n)) for (p, n) in zip(packages, range(1, 1000)) ]
+        if name in self.__splits:
+            newNames = [ (p, name+"-"+str(n)) for (p, n) in zip(packageSteps, range(1, 1000)) ]
         else:
-            newNames = [ (p, p.getName()) for p in packages ]
+            newNames = [ (p, p.getPackage().getName()) for p in packageSteps ]
+            self.__splits.add(name)
 
         # re-arrange the naming graph
         del self.__names[name]
-        for (p, name) in newNames:
-            self.__packages[p.getPackageStep().getVariantId()] = (p, name)
-            self.__names.setdefault(name, []).append(p)
+        for (p, n) in newNames:
+            self.__splits.add(n)
+            self.__packages[p.getVariantId()] = (p, n)
+            self.__names.setdefault(n, []).append(p)
 
     def getJobDisplayName(self, step):
         if step.isPackageStep():
@@ -761,7 +835,7 @@ class JobNameCalculator:
         return self.__regexJobName.sub('_', self.getJobDisplayName(step))
 
 
-def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend):
+def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages):
     name = nameCalculator.getJobInternalName(step)
     if name in jobs:
         jj = jobs[name]
@@ -771,10 +845,34 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend):
                         recipe, archiveBackend)
         jobs[name] = jj
 
-    if step.isValid():
-        jj.addStep(step)
-        for d in sorted(step.getAllDepSteps(), key=lambda d: d.getPackage().getName()):
-            _genJenkinsJobs(d, jobs, nameCalculator, archiveBackend)
+    # add step to job
+    jj.addStep(step)
+
+    # always recurse on arguments
+    for d in sorted(step.getArguments(), key=lambda d: d.getPackage().getName()):
+        if d.isValid(): _genJenkinsJobs(d, jobs, nameCalculator, archiveBackend,
+                                            seenPackages)
+
+    # Recurse on tools and sandbox only for package steps. Also do an early
+    # reject if the particular package stack was already seen. This is safe as
+    # the same package stack cannot have different variant-ids.
+    if step.isPackageStep():
+        for (name, tool) in sorted(step.getTools().items()):
+            toolStep = tool.getStep()
+            stack = "/".join(toolStep.getPackage().getStack())
+            if stack not in seenPackages:
+                seenPackages.add(stack)
+                _genJenkinsJobs(toolStep, jobs, nameCalculator, archiveBackend,
+                                seenPackages)
+
+        sandbox = step.getSandbox()
+        if sandbox is not None:
+            sandboxStep = sandbox.getStep()
+            stack = "/".join(sandboxStep.getPackage().getStack())
+            if stack not in seenPackages:
+                seenPackages.add(stack)
+                _genJenkinsJobs(sandboxStep, jobs, nameCalculator, archiveBackend,
+                                seenPackages)
 
 def jenkinsNameFormatter(step, props):
     return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
@@ -817,7 +915,7 @@ def genJenkinsJobs(recipes, jenkins):
 
     nameCalculator.sanitize()
     for root in sorted(rootPackages, key=lambda root: root.getName()):
-        _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler)
+        _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler, set())
 
     return jobs
 
