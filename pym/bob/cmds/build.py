@@ -37,25 +37,6 @@ import subprocess
 #    ==  1: package name, package steps, stderr, stdout
 #    ==  2: package name, package steps, stderr, stdout, set -x
 
-class Bijection(dict):
-    """Bijective dict that silently removes offending mappings"""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__rev = {}
-        for (key, val) in self.copy().items():
-            if val in self.__rev: del self[self.__rev[val]]
-            self.__rev[val] = key
-
-    def __setitem__(self, key, val):
-        if val in self.__rev: del self[self.__rev[val]]
-        self.__rev[val] = key
-        super().__setitem__(key, val)
-
-    def __delitem__(self, key):
-        del self.__rev[self[key]]
-        super().__delitem__(key)
-
 def hashWorkspace(step):
     return hashDirectory(step.getWorkspacePath(),
         os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
@@ -252,7 +233,7 @@ esac
     def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
                  envWhiteList, bobRoot, cleanBuild):
         self.__recipes = recipes
-        self.__wasRun= Bijection()
+        self.__wasRun= {}
         self.__wasSkipped = {}
         self.__verbose = max(-2, min(3, verbose))
         self.__force = force
@@ -299,7 +280,7 @@ esac
         BobState().setBuildState(state)
 
     def loadBuildState(self):
-        self.__wasRun = Bijection(BobState().getBuildState())
+        self.__wasRun = dict(BobState().getBuildState())
 
     def _wasAlreadyRun(self, step, skippedOk=False):
         path = step.getWorkspacePath()
