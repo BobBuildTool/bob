@@ -247,6 +247,7 @@ esac
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
+        self.__buildIds = {}
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -766,13 +767,24 @@ esac
             self._setAlreadyRun(packageStep, checkoutOnly)
 
     def _getBuildId(self, step, depth):
-        if step.isCheckoutStep():
-            # do checkout
-            self.cook([step], step.getPackage(), depth)
-            # return directory hash
-            return BobState().getResultHash(step.getWorkspacePath())
-        else:
-            return step.getDigest(lambda s: self._getBuildId(s, depth+1), True)
+        """Calculate build-id and cache result.
+
+        The cache uses the workspace path as index because there might be
+        multiple directories with the same variant-id.
+        """
+        path = step.getWorkspacePath()
+        ret = self.__buildIds.get(path)
+        if ret is None:
+            if step.isCheckoutStep():
+                # do checkout
+                self.cook([step], step.getPackage(), depth)
+                # return directory hash
+                ret = BobState().getResultHash(step.getWorkspacePath())
+            else:
+                ret = step.getDigest(lambda s: self._getBuildId(s, depth+1), True)
+            self.__buildIds[path] = ret
+
+        return ret
 
 
 def touch(rootPackages):
