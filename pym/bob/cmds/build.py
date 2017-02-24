@@ -25,10 +25,16 @@ from glob import glob
 from pipes import quote
 import argparse
 import datetime
+import fcntl
 import os
+import pty
+import re
+import select
 import shutil
+import signal
 import stat
 import subprocess
+import sys
 
 # Output verbosity:
 #    <= -2: package name
@@ -137,6 +143,9 @@ case "${{1:-run}}" in
                 }} 3>&1 1>&2- 2>&3-
                 ;;
         esac
+        ;;
+    __runNoLog)
+        run_script
         ;;
     shell)
         if [[ $_keep_env = 1 ]] ; then
@@ -434,7 +443,7 @@ esac
             print("# END BUILD SCRIPT", file=f)
         os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
-        cmdLine = ["/bin/bash", runFile, "__run"]
+        cmdLine = ["/bin/bash", runFile, "__runNoLog"]
         if self.__verbose < 0:
             cmdLine.append('-q')
         elif self.__verbose == 1:
@@ -442,8 +451,56 @@ esac
         elif self.__verbose >= 2:
             cmdLine.append('-vv')
 
-        proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv)
+        logFile = open(os.path.join(step.getWorkspacePath(), '..', 'log.txt'), 'a')
+
+        outpty = pty.openpty()
+        errpty = pty.openpty()
+        pipe   = os.pipe()
+        filefds = [outpty[0], outpty[1], errpty[0], errpty[1], pipe[0], pipe[1]]
+
+        for p in [outpty[0], errpty[0], pipe[0]]:
+            flag = fcntl.fcntl(p, fcntl.F_GETFL)
+            fcntl.fcntl(p, fcntl.F_SETFL, flag | os.O_NONBLOCK)
+
+        def child_exit(signum, frame):
+            try:
+                os.write(pipe[1], b"1")
+            except IOError as e:
+                if e.errno not in [errno.EAGAIN, errno.EINTR]:
+                    raise
+
+        signal.signal(signal.SIGCHLD, child_exit)
+
+        proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv,
+                stdout=outpty[1], stderr=errpty[1])
+
+        ansi_escape = re.compile(r'\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]')
         try:
+            done = False
+            while not done:
+                try:
+                    ready, _, _ = select.select([outpty[0], errpty[0], pipe[0]], [], [])
+                    for r in ready:
+                        if r == pipe[0]:
+                            os.read(pipe[0], 1)
+                            done = True
+                        else:
+                            oldLen = 0
+                            data = bytearray(b'')
+                            # read all available data from fd
+                            blockSize = 1024
+                            while True:
+                                data = data + os.read(r, blockSize)
+                                if len(data) != oldLen + blockSize:
+                                    break
+                            if ((r == errpty[0]) and (self.__verbose >= 0)):
+                                sys.stderr.buffer.write(data)
+                            if ((r == outpty[0]) and (self.__verbose >= 1)):
+                                sys.stdout.buffer.write(data)
+                            logFile.write(ansi_escape.sub('', data.decode(sys.stdout.encoding, errors='replace')).replace('\r\n', '\n'))
+                except InterruptedError:
+                    # select is interrupted by SIGCHLD...
+                    pass
             if proc.wait() != 0:
                 raise BuildError("Build script {} returned with {}"
                                     .format(absRunFile, proc.returncode),
@@ -451,6 +508,14 @@ esac
         except KeyboardInterrupt:
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
+        finally:
+            for f in filefds:
+                os.close(f)
+            logFile.close()
+            # need to flush at least stderr. Otherwise the next output of bob may get mixed into stderr output..
+            sys.stdout.flush()
+            sys.stderr.flush()
+            signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 
     def _info(self, *args, **kwargs):
         if self.__verbose >= -1:

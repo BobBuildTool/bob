@@ -132,6 +132,8 @@ def bob(bobRoot):
         # explicitly close stderr to suppress further error messages
         sys.stderr.close()
     except BobError as e:
+        sys.stdout.flush()
+        sys.stderr.flush()
         print(e, file=sys.stderr)
         ret = 1
     except KeyboardInterrupt:
