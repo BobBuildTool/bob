@@ -144,6 +144,7 @@ def bob(bobRoot):
     except Exception:
         print(colorize("""An internal Exception has occured. This should not have happenend.
 Please open an issue at https://github.com/BobBuildTool/bob with the following backtrace:""", "31;1"), file=sys.stderr)
+        print("Bob version", BOB_VERSION, file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         ret = 3
     finally:
