@@ -442,12 +442,14 @@ esac
         elif self.__verbose >= 2:
             cmdLine.append('-vv')
 
-        proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv)
         try:
+            proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv)
             if proc.wait() != 0:
                 raise BuildError("Build script {} returned with {}"
                                     .format(absRunFile, proc.returncode),
                                  help="You may resume at this point with '--resume' after fixing the error.")
+        except OSError as e:
+            raise BuildError("Cannot execute build script {}: {}".format(absRunFile, str(e)))
         except KeyboardInterrupt:
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
