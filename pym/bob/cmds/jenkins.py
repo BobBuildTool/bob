@@ -196,9 +196,10 @@ class JenkinsJob:
 
         cmds.append(self.getShebang(windows))
         if checkIfSkip:
-            cmds.append("if [[ -e {} ]] ; then"
-                            .format(JenkinsJob._tgzName(d.getPackage().getPackageStep())))
-            cmds.append("    echo \"Skip {} step. Artifact already downloaded...\""
+            checkIfSkip = " && ".join(sorted(
+                ("-e " + JenkinsJob._tgzName(s)) for s in checkIfSkip))
+            cmds.append("if [[ {} ]] ; then".format(checkIfSkip))
+            cmds.append("    echo \"Skip {} step. Artifact(s) already downloaded...\""
                             .format(d.getLabel()))
             cmds.append("    exit 0")
             cmds.append("fi")
@@ -558,7 +559,7 @@ class JenkinsJob:
             checkout = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
-                checkout, "command").text = self.dumpStep(d, windows, False)
+                checkout, "command").text = self.dumpStep(d, windows, [])
             checkoutSCMs.extend(d.getJenkinsXml(credentials, options))
 
         if len(checkoutSCMs) > 1:
@@ -615,8 +616,10 @@ class JenkinsJob:
         for d in sorted(self.__buildSteps.values()):
             build = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
+            affectedPackageSteps = [ pkgStep for pkgStep in self.__packageSteps.values()
+                if d in pkgStep.getArguments() ]
             xml.etree.ElementTree.SubElement(
-                build, "command").text = self.dumpStep(d, windows, True)
+                build, "command").text = self.dumpStep(d, windows, affectedPackageSteps)
 
         # package steps
         publish = []
@@ -624,7 +627,7 @@ class JenkinsJob:
             package = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
-                self.dumpStep(d, windows, True),
+                self.dumpStep(d, windows, [d]),
                 "", "# pack result for archive and inter-job exchange",
                 "cd $WORKSPACE",
                 "tar zcfv {} -C {} .".format(JenkinsJob._tgzName(d), d.getWorkspacePath()),
