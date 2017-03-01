@@ -241,10 +241,11 @@ fi
                         status += "S"
                         longStatus +=  colorize("   > commitId: configured: {}  actual: {}\n".format(self.__commit, output), "33")
                 elif self.__tag:
-                    output = self.callGit(workspacePath, 'tag', '--points-at', 'HEAD').rstrip().split()
+                    output = self.callGit(workspacePath, 'tag', '--points-at', 'HEAD').rstrip().splitlines()
                     if self.__tag not in output:
                         status += "S"
-                        longStatus += colorize("    > tag: configured: {} actual: {}\n".format(self.__tag, ", ".join(output)), "33")
+                        actual = ("'" + ", ".join(output) + "'") if output else "not on any tag"
+                        longStatus += colorize("    > tag: configured: '{}' actual: {}\n".format(self.__tag, actual), "33")
                 elif self.__branch:
                     output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD').rstrip()
                     if output != self.__branch:
