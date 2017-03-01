@@ -46,10 +46,10 @@ class DummyArchive:
     def canUploadJenkins(self):
         return False
 
-    def uploadPackage(self, buildId, path):
+    def uploadPackage(self, buildId, path, verbose):
         pass
 
-    def downloadPackage(self, buildId, path):
+    def downloadPackage(self, buildId, path, verbose):
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
@@ -96,7 +96,7 @@ class LocalArchive(BaseArchive):
         super().__init__(spec)
         self.__basePath = os.path.abspath(spec["path"])
 
-    def uploadPackage(self, buildId, path):
+    def uploadPackage(self, buildId, path, verbose):
         if not self.canUploadLocal():
             return
 
@@ -109,21 +109,28 @@ class LocalArchive(BaseArchive):
             print("   UPLOAD    skipped ({} exists in archive)".format(path))
             return
 
-        print(colorize("   UPLOAD    {}".format(path), "32"))
+        if verbose > 0:
+            print(colorize("   UPLOAD    {} to {} ".format(path, packageResultFile), "32"))
+        else:
+            print(colorize("   UPLOAD    {} ".format(path), "32"))
         if not os.path.isdir(packageResultPath): os.makedirs(packageResultPath)
         with tarfile.open(packageResultFile, "w:gz") as tar:
             tar.add(path, arcname=".")
 
-    def downloadPackage(self, buildId, path):
+    def downloadPackage(self, buildId, path, verbose):
         if not self.canDownloadLocal():
             return False
 
-        print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
         packageResultId = asHexStr(buildId)
         packageResultPath = os.path.join(self.__basePath, packageResultId[0:2],
                                          packageResultId[2:4])
         packageResultFile = os.path.join(packageResultPath,
                                          packageResultId[4:]) + ".tgz"
+        if verbose > 0:
+            print(colorize("   DOWNLOAD  {} from {} ...".format(path, packageResultFile), "32"), end="")
+        else:
+            print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
+
         if os.path.isfile(packageResultFile):
             removePath(path)
             os.makedirs(path)
@@ -171,7 +178,7 @@ class SimpleHttpArchive(BaseArchive):
         return "/".join([self.__url, packageResultId[0:2], packageResultId[2:4],
             packageResultId[4:] + ".tgz"])
 
-    def uploadPackage(self, buildId, path):
+    def uploadPackage(self, buildId, path, verbose):
         if not self.canUploadLocal():
             return
 
@@ -187,7 +194,11 @@ class SimpleHttpArchive(BaseArchive):
                 if e.code != 404 and not self._ignoreErrors():
                     raise BuildError("Error for HEAD on "+url+": "+e.reason)
 
-            print(colorize("   UPLOAD    {}".format(path), "32"))
+            if verbose > 0:
+                print(colorize("   UPLOAD    {} to {} ".format(path, url), "32"))
+            else:
+                print(colorize("   UPLOAD    {} ".format(path), "32"))
+
             with TemporaryFile() as tmpFile:
                 with tarfile.open(fileobj=tmpFile, mode="w:gz") as tar:
                     tar.add(path, arcname=".")
@@ -199,13 +210,17 @@ class SimpleHttpArchive(BaseArchive):
             if not self._ignoreErrors():
                 raise BuildError("Error uploading package: "+str(e.reason))
 
-    def downloadPackage(self, buildId, path):
+    def downloadPackage(self, buildId, path, verbose):
         if not self.canDownloadLocal():
             return False
 
         ret = False
-        print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
         url = self._makeUrl(buildId)
+        if verbose > 0:
+            print(colorize("   DOWNLOAD  {} from {} ...".format(path, url), "32"), end="")
+        else:
+            print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
+
         try:
             (localFilename, headers) = urllib.request.urlretrieve(url)
             removePath(path)
@@ -277,12 +292,16 @@ class CustomArchive(BaseArchive):
     def canUploadJenkins(self):
         return super().canUploadJenkins() and (self.__uploadCmd is not None)
 
-    def uploadPackage(self, buildId, path):
+    def uploadPackage(self, buildId, path, verbose):
         if not self.canUploadLocal():
             return
 
-        print(colorize("   UPLOAD    {}".format(path), "32"))
         (tmpFd, tmpName) = mkstemp()
+        url = self._makeUrl(buildId)
+        if verbose > 0:
+            print(colorize("   UPLOAD    {} to {} ({}) ".format(path, url, tmpName), "32"))
+        else:
+            print(colorize("   UPLOAD    {} ".format(path), "32"))
         try:
             os.close(tmpFd)
             with tarfile.open(tmpName, mode="w:gz") as tar:
@@ -290,7 +309,7 @@ class CustomArchive(BaseArchive):
 
             env = { k:v for (k,v) in os.environ.items() if k in self.__whiteList }
             env["BOB_LOCAL_ARTIFACT"] = tmpName
-            env["BOB_REMOTE_ARTIFACT"] = self._makeUrl(buildId)
+            env["BOB_REMOTE_ARTIFACT"] = url
             ret = subprocess.call(["/bin/bash", "-ec", self.__uploadCmd],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 cwd="/tmp", env=env)
@@ -302,18 +321,22 @@ class CustomArchive(BaseArchive):
         finally:
             os.unlink(tmpName)
 
-    def downloadPackage(self, buildId, path):
+    def downloadPackage(self, buildId, path, verbose):
         if not self.canDownloadLocal():
             return False
 
         success = False
-        print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
         (tmpFd, tmpName) = mkstemp()
+        url = self._makeUrl(buildId)
+        if verbose > 0:
+            print(colorize("   DOWNLOAD  {} from {} ({}) ...".format(path, url, tmpName), "32"), end="")
+        else:
+            print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
         try:
             os.close(tmpFd)
             env = { k:v for (k,v) in os.environ.items() if k in self.__whiteList }
             env["BOB_LOCAL_ARTIFACT"] = tmpName
-            env["BOB_REMOTE_ARTIFACT"] = self._makeUrl(buildId)
+            env["BOB_REMOTE_ARTIFACT"] = url
             ret = subprocess.call(["/bin/bash", "-ec", self.__downloadCmd],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 cwd="/tmp", env=env)
@@ -388,15 +411,15 @@ class MultiArchive:
     def canUploadJenkins(self):
         return any(i.canUploadJenkins() for i in self.__archives)
 
-    def uploadPackage(self, buildId, path):
+    def uploadPackage(self, buildId, path, verbose):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            i.uploadPackage(buildId, path)
+            i.uploadPackage(buildId, path, verbose)
 
-    def downloadPackage(self, buildId, path):
+    def downloadPackage(self, buildId, path, verbose):
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            if i.downloadPackage(buildId, path): return True
+            if i.downloadPackage(buildId, path, verbose): return True
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
@@ -429,4 +452,3 @@ def getArchiver(recipes):
         return MultiArchive([ getSingleArchiver(recipes, i) for i in archiveSpec ])
     else:
         return getSingleArchiver(recipes, archiveSpec)
-

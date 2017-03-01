@@ -693,7 +693,7 @@ esac
                 # empty. If the directory holds a result and was downloaded it
                 # we're done.
                 if BobState().getResultHash(prettyPackagePath) is None:
-                    if self.__archive.downloadPackage(packageBuildId, prettyPackagePath):
+                    if self.__archive.downloadPackage(packageBuildId, prettyPackagePath, self.__verbose):
                         BobState().setInputHashes(prettyPackagePath, packageBuildId)
                         packageDone = True
                         packageExecuted = True
@@ -722,7 +722,7 @@ esac
                     self._runShell(packageStep, "package")
                     packageExecuted = True
                     if packageBuildId and self.__archive.canUploadLocal():
-                        self.__archive.uploadPackage(packageBuildId, prettyPackagePath)
+                        self.__archive.uploadPackage(packageBuildId, prettyPackagePath, self.__verbose)
             else:
                 # do not change input hashes
                 packageInputHashes = BobState().getInputHashes(prettyPackagePath)
