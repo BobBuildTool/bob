@@ -154,6 +154,6 @@ fi
     def hasJenkinsPlugin(self):
         return False
 
-    def status(self, workspacePath, dir, verbose = 0):
-        return 'clean'
+    def status(self, workspacePath, dir):
+        return 'clean','',''
 

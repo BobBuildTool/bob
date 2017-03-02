@@ -212,7 +212,6 @@ fi
         return output
 
     # Get GitSCM status. The purpose of this function is to return the status of the given directory
-    # and if verbose is not zero print additional informations about it.
     #
     # return values:
     #  - error: the scm is in a error state. Use this if git returned a error code.
@@ -222,74 +221,67 @@ fi
     #
     # This function is called when build with --clean-checkou. 'error' and 'unclean' scm's are moved to attic,
     # while empty and clean directories are not.
-    def status(self, workspacePath, dir, verbose=0):
+    def status(self, workspacePath, dir):
         scmdir = os.path.join(workspacePath, dir)
         if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
-            return 'empty'
+            return 'empty','',''
 
-        status = ""
+        status = 'clean'
+        shortStatus = ""
         longStatus = ""
+        def setStatus(shortMsg, longMsg, dirty=True):
+            nonlocal status, shortStatus, longStatus
+            if (shortMsg not in shortStatus):
+                shortStatus += shortMsg
+            longStatus += longMsg
+            if (dirty):
+                status = 'dirty'
+
         try:
             output = self.callGit(workspacePath, 'ls-remote' ,'--get-url').rstrip()
             if output != self.__url:
-                status += "S"
-                longStatus += colorize("   > URL: configured: '{}'  actual: '{}'\n".format(self.__url, output), "33")
+                setStatus("S", colorize("> URL: configured: '{}'  actual: '{}'\n".format(self.__url, output), "33"))
             else:
                 if self.__commit:
                     output = self.callGit(workspacePath, 'rev-parse', 'HEAD').rstrip()
                     if output != self.__commit:
-                        status += "S"
-                        longStatus +=  colorize("   > commitId: configured: {}  actual: {}\n".format(self.__commit, output), "33")
+                        setStatus("S", colorize("> commitId: configured: {}  actual: {}\n".format(self.__commit, output), "33"))
                 elif self.__tag:
                     output = self.callGit(workspacePath, 'tag', '--points-at', 'HEAD').rstrip().splitlines()
                     if self.__tag not in output:
-                        status += "S"
                         actual = ("'" + ", ".join(output) + "'") if output else "not on any tag"
-                        longStatus += colorize("    > tag: configured: '{}' actual: {}\n".format(self.__tag, actual), "33")
+                        setStatus("S", colorize("    > tag: configured: '{}' actual: {}\n".format(self.__tag, actual), "33"))
                 elif self.__branch:
                     output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD').rstrip()
                     if output != self.__branch:
-                        status += "S"
-                        longStatus += colorize("    > branch: configured: {} actual: {}\n".format(self.__branch, output), "33")
+                        setStatus("S", colorize("> branch: configured: {} actual: {}\n".format(self.__branch, output), "33"))
                     else:
                         output = self.callGit(workspacePath, 'rev-list', 'origin/'+self.__branch+'..HEAD')
                         if len(output):
-                            status += "U"
+                            setStatus("U", "")
                             # do not print detailed status this point.
                             # git log --branches --not --remotes --decorate will give the same informations.
 
             output = self.callGit(workspacePath, 'status', '--porcelain')
             if len(output):
-                longStatus += colorize("    > modified:\n", "33")
-                status += "M"
-                if verbose >=2:
-                    for line in output.split('\n'):
-                        if line != "":
-                           longStatus += '      '+line + '\n'
+                longMsg = colorize("> modified:\n", "33")
+                for line in output.split('\n'):
+                    if line != "":
+                       longMsg += '  '+line + '\n'
+                setStatus("M", longMsg)
 
             # the following shows unpushed commits even on local branches. do not mark the SCM as unclean.
             output = self.callGit(workspacePath, 'log', '--branches', '--not', '--remotes', '--decorate')
             if len(output):
-                status += "u"
-                longStatus += colorize("     > unpushed:\n", "33")
-                if verbose >= 2:
-                    for line in output.split('\n'):
-                       if line != "":
-                           longStatus += '      ' + line + '\n'
-            ret = 'clean'
-            if status == "":
-                if verbose >= 3:
-                    print(colorize("   STATUS      {0}".format(scmdir), "32"))
-            elif status != "u":
-                ret = 'unclean'
+                longMsg = colorize("> unpushed:\n", "33")
+                for line in output.split('\n'):
+                   if line != "":
+                       longStatus += '  ' + line + '\n'
+                setStatus("u", longMsg, False)
 
-            if (status != "") and (verbose != 0):
-                print(colorize("   STATUS {0: <4} {1}".format(status, scmdir), "33"))
-                if (verbose >= 2) and (longStatus != ""):
-                    print(longStatus)
         except BuildError as e:
             print(e)
             ret = 'error'
 
-        return ret
+        return status, shortStatus, longStatus
 

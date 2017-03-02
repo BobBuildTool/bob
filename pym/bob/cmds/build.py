@@ -1106,8 +1106,15 @@ def doStatus(argv, bobRoot):
                 for (scmDir, scmDigest) in sorted(oldCheckoutState.copy().items(), key=lambda a:'' if a[0] is None else a[0]):
                     if scmDir is None: continue
                     if scmDigest != checkoutState.get(scmDir): continue
-                    stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir, verbose)
-
+                    status, shortStatus, longStatus = stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir)
+                    if (status == 'clean') or (status == 'empty'):
+                        if (verbose >= 3):
+                            print(colorize("   STATUS      {0}".format(os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "32"))
+                    elif (status == 'dirty'):
+                        print(colorize("   STATUS {0: <4} {1}".format(shortStatus, os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "33"))
+                        if (verbose >= 2) and (longStatus != ""):
+                            for line in longStatus.splitlines():
+                                print('   ' + line)
         if recurse:
             for d in package.getDirectDepSteps():
                 showStatus(d.getPackage(), recurse, verbose, done)

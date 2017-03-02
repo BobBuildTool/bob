@@ -118,15 +118,15 @@ fi
     # - empty: workspace does not exist
     # - error: workspace does not contain CVS checkout, or other bad things happen
     # - clean: no local and no remote changes
-    # - unclean: local or remote changes (cannot easily distinguish between both with CVS)
-    def status(self, workspacePath, dir, verbose = 0):
+    # - dirty: local or remote changes (cannot easily distinguish between both with CVS)
+    def status(self, workspacePath, dir):
         # Check directories
         workDir = os.path.join(workspacePath, dir)
         cvsDir = os.path.join(workDir, 'CVS')
         if not os.path.exists(workDir):
-            return 'empty'
+            return 'empty','',''
         if not os.path.exists(cvsDir):
-            return 'error'
+            return 'error','',''
 
         # Prepare an environment
         environment = os.environ.copy()
@@ -138,19 +138,25 @@ fi
             expectedRoot = self.__cvsroot
 
         # Validate root and module
-        status=""
-        longStatus=""
+        status = 'clean'
+        shortStatus = ''
+        longStatus = ''
+        def setStatus(shortMsg, longMsg, dirty=True):
+            nonlocal status, shortStatus, longStatus
+            if (shortMsg not in shortStatus):
+                shortStatus += shortMsg
+            longStatus += longMsg
+            if (dirty):
+                status = 'dirty'
 
         actualRoot = CvsScm._loadFile(os.path.join(cvsDir, 'Root'))
         actualModule = CvsScm._loadFile(os.path.join(cvsDir, 'Repository'))
         if actualRoot != expectedRoot:
             # Root mismatch counts as switch.
-            status += "S"
-            longStatus += colorize("     > Root does not match!\n     recipe:\t{}\n     actual:\t{}\n".format(self.__cvsroot, expectedRoot), "33")
+            setStatus("S", colorize("> Root does not match!\n     recipe:\t{}\n     actual:\t{}\n".format(self.__cvsroot, expectedRoot), "33"))
         elif actualModule != self.__module:
             # Module mismatch counts as switch.
-            status += "S"
-            longStatus += colorize("     > Module does not match!\n     recipe:\t{}\n     actual:\t{}\n".format(self.__module, actualModule), "33")
+            setStatus("S", colorize("> Module does not match!\n     recipe:\t{}\n     actual:\t{}\n".format(self.__module, actualModule), "33"))
         else:
             # Repository matches.
             # There is no (easy) local-only way to determine just local changes AND match it against the requested revision.
@@ -170,7 +176,7 @@ fi
                                                  stdin=subprocess.DEVNULL)
             except subprocess.CalledProcessError as e:
                 print ("cvs error: '{}' '{}'".format(" ".join(cmdLine), e.output))
-                return 'error'
+                return 'error','',''
 
             modified = False
             #   U = updated remotely, clean or missing locally (but can also mean local is on wrong branch)
@@ -182,24 +188,16 @@ fi
             #   ? = untracked (could be file forgotten to add)
             # We therefore interpret every nonempty output as a modification
             # (ignoring spurious extra output such as "cvs update: Updating...").
+            longMsg = ""
             for i in output.split('\n'):
                 if (re.match('^[^ ] ', i)):
-                    if not modified: longStatus += colorize("    > modified:\n", "33")
+                    if not modified: longMsg += colorize("> modified:\n", "33")
                     modified = True
-                    longStatus += '      ' + i + '\n'
+                    longMsg += '  ' + i + '\n'
             if modified:
-                status += "M"
+                setStatus("M", longMsg)
 
-        if status == "":
-            if verbose >= 3:
-                print(colorize("   STATUS   {}".format(workDir), "32"))
-            return 'clean'
-        else:
-            if verbose != 0:
-                print(colorize("   STATUS {0: <4} {1}".format(status, workDir), "33"))
-            if (verbose >= 2) and (longStatus != ""):
-                print(longStatus)
-            return 'unclean'
+        return status, shortStatus, longStatus
 
     @staticmethod
     def _loadFile(name):
