@@ -725,7 +725,7 @@ esac
                 # empty. If the directory holds a result and was downloaded it
                 # we're done.
                 if BobState().getResultHash(prettyPackagePath) is None:
-                    if self.__archive.downloadPackage(packageBuildId, prettyPackagePath):
+                    if self.__archive.downloadPackage(packageBuildId, prettyPackagePath, self.__verbose):
                         BobState().setInputHashes(prettyPackagePath, packageBuildId)
                         workspaceChanged = True
                         wasDownloaded = True
@@ -757,7 +757,7 @@ esac
                     self._runShell(packageStep, "package")
                     workspaceChanged = True
                     if packageBuildId and self.__archive.canUploadLocal():
-                        self.__archive.uploadPackage(packageBuildId, prettyPackagePath)
+                        self.__archive.uploadPackage(packageBuildId, prettyPackagePath, self.__verbose)
 
             # Rehash directory if content was changed
             if workspaceChanged:
