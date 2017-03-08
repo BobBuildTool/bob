@@ -67,6 +67,21 @@ def wrapCommandArguments(cmd, arguments):
     ret.append(line)
     return ret
 
+class BuildIdCache:
+    def __init__(self):
+        self.__cache = {}
+
+    def getBuildId(self, step):
+        path = step.getWorkspacePath()
+        if path in self.__cache:
+            ret = self.__cache[path]
+        else:
+            ret = self.__cache[path] = step.getDigest(lambda s: self.getBuildId(s), True) \
+                if step.isDeterministic() else None
+        return ret
+
+buildIdCache = BuildIdCache()
+
 class SpecHasher:
     """Track digest calculation and output as spec for bob-hash-engine"""
 
@@ -77,7 +92,7 @@ class SpecHasher:
         if isinstance(data, bytes):
             self.lines.extend(iter(genHexSlice(asHexStr(data))))
         else:
-            bid = data.getBuildId()
+            bid = buildIdCache.getBuildId(data)
             if bid is None:
                 self.lines.append("<" + JenkinsJob._buildIdName(data))
             else:
@@ -90,7 +105,7 @@ class SpecHasher:
 def getBuildIdSpec(step):
     """Return bob-hash-engine spec to calculate build-id of step"""
     if step.isCheckoutStep():
-        bid = step.getBuildId()
+        bid = buildIdCache.getBuildId(step)
         if bid is None:
             return "#" + step.getWorkspacePath()
         else:
