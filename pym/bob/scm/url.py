@@ -106,9 +106,9 @@ fi
 """.format(DIR=quote(self.__dir), URL=quote(self.__url), FILE=quote(self.__fn))
 
         if self.__digestSha1:
-            ret += "echo {DIGEST} {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
+            ret += "echo {DIGEST}\ \ {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
         if self.__digestSha256:
-            ret += "echo {DIGEST} {FILE} | sha256sum -c\n".format(DIGEST=self.__digestSha256, FILE=self.__fn)
+            ret += "echo {DIGEST}\ \ {FILE} | sha256sum -c\n".format(DIGEST=self.__digestSha256, FILE=self.__fn)
 
         extractor = None
         if self.__extract in ["yes", "auto", True]:
