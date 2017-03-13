@@ -33,18 +33,23 @@ from pipes import quote
 
 # scan package recursivelely with its dependencies and build a list of checkout dirs
 def getCheckOutDirs(package, excludes, dirs):
-    if package.getCheckoutStep().isValid():
-        dirs.append([package.getName(), package.getCheckoutStep().getWorkspacePath()])
+    def collect(package, excludes, dirs, steps):
+        if package.getCheckoutStep().isValid():
+            if package.getCheckoutStep().getVariantId() not in steps:
+                steps.add(package.getCheckoutStep().getVariantId())
+                dirs.append([package.getName(), package.getCheckoutStep().getWorkspacePath()])
 
-    for d in package.getDirectDepSteps():
-        excluded = False
-        for e in excludes:
-            if (e.match(d.getPackage().getName())):
-                excluded = True
-                break
+        for d in package.getDirectDepSteps():
+            excluded = False
+            for e in excludes:
+                if (e.match(d.getPackage().getName())):
+                    excluded = True
+                    break
 
-        if not excluded:
-            getCheckOutDirs(d.getPackage(), excludes, dirs)
+            if not excluded:
+                collect(d.getPackage(), excludes, dirs, steps)
+
+    collect(package, excludes, dirs, set())
 
 def generateFile(entries, fileName):
     try:
