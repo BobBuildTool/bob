@@ -93,7 +93,7 @@ if [[ -z $(git remote) ]] ; then
 fi
 # checkout only if HEAD is invalid
 if ! git rev-parse --verify -q HEAD >/dev/null ; then
-    git fetch -t origin
+    git fetch -t origin '+refs/heads/*:refs/remotes/origin/*'
     git checkout -q {REF}
 fi
 """.format(URL=self.__url, REF=self.__commit if self.__commit else "tags/"+self.__tag, DIR=self.__dir)
