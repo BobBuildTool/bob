@@ -1,0 +1,16 @@
+scmOverrides:
+    -
+      match:
+          scm: "git"
+      set:
+          dir: "git"
+    -
+      match:
+          scm: "url"
+      set:
+          dir: "url"
+    -
+      match:
+          scm: "svn"
+      set:
+          dir: "svn"

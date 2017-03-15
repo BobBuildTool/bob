@@ -281,7 +281,7 @@ __bob_status()
    if [[ "$prev" = "-c" ]] ; then
       COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
    else
-      __bob_complete_path "-r --recursive -D -c --build --release -e -E -v"
+      __bob_complete_path "-r --recursive -D -c --build --release -e -E -v --show-overrides"
    fi
 }
 

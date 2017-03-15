@@ -16,7 +16,7 @@
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError
-from .scm import CvsScm, GitScm, SvnScm, UrlScm
+from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride
 from .state import BobState
 from .tty import colorize, WarnOnce
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binLstat
@@ -469,61 +469,28 @@ class PluginState:
         """
         pass
 
-class ScmOverride:
-    def __init__(self, override):
-        self.__match = override.get("match", {})
-        self.__del = override.get("del", [])
-        self.__set = override.get("set", {})
-        self.__replaceRaw = override.get("replace", {})
-        self.__init()
-
-    def __init(self):
-        self.__replace = { key : (re.compile(subst["pattern"]), subst["replacement"])
-            for (key, subst) in self.__replaceRaw.items() }
-
-    def __getstate__(self):
-        return (self.__match, self.__del, self.__set, self.__replaceRaw)
-
-    def __setstate__(self, s):
-        (self.__match, self.__del, self.__set, self.__replaceRaw) = s
-        self.__init()
-
-    def __doesMatch(self, scm):
-        for (key, value) in self.__match.items():
-            if key not in scm: return False
-            if not fnmatch.fnmatchcase(scm[key], value): return False
-        return True
-
-    def mangle(self, scm):
-        if self.__doesMatch(scm):
-            scm = scm.copy()
-            for d in self.__del:
-                if d in scm: del scm[d]
-            scm.update(self.__set)
-            for (key, (pat, repl)) in self.__replace.items():
-                if key in scm:
-                    scm[key] = re.sub(pat, repl, scm[key])
-        return scm
-
 def Scm(spec, env, overrides):
     # resolve with environment
     spec = { k : ( env.substitute(v, "checkoutSCM::"+k) if isinstance(v, str) else v)
         for (k, v) in spec.items() }
 
-    # apply overrides
+    # apply overrides before creating scm instances. It's possible to switch the Scm type with an override..
+    matchedOverrides = []
     for override in overrides:
-        spec = override.mangle(spec)
+        matched, spec = override.mangle(spec)
+        if matched:
+            matchedOverrides.append(override)
 
     # create scm instance
     scm = spec["scm"]
     if scm == "git":
-        return GitScm(spec)
+        return GitScm(spec, matchedOverrides)
     elif scm == "svn":
-        return SvnScm(spec)
+        return SvnScm(spec, matchedOverrides)
     elif scm == "cvs":
-        return CvsScm(spec)
+        return CvsScm(spec, matchedOverrides)
     elif scm == "url":
-        return UrlScm(spec)
+        return UrlScm(spec, matchedOverrides)
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))
 

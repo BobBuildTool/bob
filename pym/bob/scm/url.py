@@ -16,12 +16,13 @@
 
 from ..errors import ParseError
 from ..utils import hashString
+from .scm import Scm
 from pipes import quote
 import os.path
 import re
 import schema
 
-class UrlScm:
+class UrlScm(Scm):
 
     SCHEMA = schema.Schema({
         'scm' : 'url',
@@ -55,7 +56,8 @@ class UrlScm:
         "zip"  : "unzip -o",
     }
 
-    def __init__(self, spec):
+    def __init__(self, spec, overrides=[]):
+        super().__init__(overrides)
         self.__recipe = spec['recipe']
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
@@ -104,9 +106,9 @@ fi
 """.format(DIR=quote(self.__dir), URL=quote(self.__url), FILE=quote(self.__fn))
 
         if self.__digestSha1:
-            ret += "echo {DIGEST} {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
+            ret += "echo {DIGEST}\ \ {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
         if self.__digestSha256:
-            ret += "echo {DIGEST} {FILE} | sha256sum -c\n".format(DIGEST=self.__digestSha256, FILE=self.__fn)
+            ret += "echo {DIGEST}\ \ {FILE} | sha256sum -c\n".format(DIGEST=self.__digestSha256, FILE=self.__fn)
 
         extractor = None
         if self.__extract in ["yes", "auto", True]:
@@ -154,6 +156,6 @@ fi
     def hasJenkinsPlugin(self):
         return False
 
-    def status(self, workspacePath, dir, verbose = 0):
-        return 'clean'
+    def status(self, workspacePath, dir):
+        return 'clean','',''
 
