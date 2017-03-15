@@ -1628,12 +1628,15 @@ class Recipe(object):
             self.packageStep = packageStep
 
     @staticmethod
-    def loadFromFile(recipeSet, fileName, properties, schema):
+    def loadFromFile(recipeSet, fileName, properties, fileSchema):
         # MultiPackages are handled as separate recipes with an anonymous base
         # class. Ignore first dir in path, which is 'recipes' by default.
         # Following dirs are treated as categories separated by '::'.
         baseName = os.path.splitext( fileName )[0].split( os.sep )[1:]
-        for n in baseName: RECIPE_NAME_SCHEMA.validate(n)
+        try:
+            for n in baseName: RECIPE_NAME_SCHEMA.validate(n)
+        except schema.SchemaError as e:
+            raise ParseError("Invalid recipe name: '{}'".format(fileName))
         baseName = "::".join( baseName )
         baseDir = os.path.dirname(fileName)
 
@@ -1657,7 +1660,7 @@ class Recipe(object):
                 return [ Recipe(recipeSet, recipe, fileName, baseDir, packageName,
                                 baseName, properties, anonBaseClass) ]
 
-        return list(collect(recipeSet.loadYaml(fileName, schema), "", None))
+        return list(collect(recipeSet.loadYaml(fileName, fileSchema), "", None))
 
     def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName, properties, anonBaseClass=None):
         self.__recipeSet = recipeSet
