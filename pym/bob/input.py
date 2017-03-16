@@ -2710,7 +2710,7 @@ class TreeStorage:
 
     def __getitem__(self, key):
         data = self.__content[key]
-        return (TreeStorage(self.__db, data[0]), data[1])
+        return (TreeStorage(self.__db, data[0]), data[1], data[2])
 
     def __iter__(self):
         return iter(self.__content)
@@ -2719,7 +2719,7 @@ class TreeStorage:
         return self.__content.keys()
 
     def items(self):
-        return iter( (name, (TreeStorage(self.__db, data[0]), data[1]))
+        return iter( (name, (TreeStorage(self.__db, data[0]), data[1], data[2]))
                      for name, data in self.__content.items() )
 
     def __len__(self):
@@ -2758,7 +2758,7 @@ class TreeStorage:
         root = {}
         for (name, pkg) in roots.items():
             pkgId = pkg.getPackageStep()._getResultId()
-            root[name] = (pkgId, True)
+            root[name] = (pkgId, True, "")
             if pkgId not in db:
                 TreeStorage.__convertPackageToTree(db, pkgId, pkg)
         db[b''] = pickle.dumps(root, -1)
@@ -2769,15 +2769,16 @@ class TreeStorage:
         for d in pkg.getDirectDepSteps():
             subPkgId = d._getResultId()
             subPkg = d.getPackage()
-            node[subPkg.getName()] = (subPkgId, True)
+            node[subPkg.getName()] = (subPkgId, True, "")
             if subPkgId not in db:
                 TreeStorage.__convertPackageToTree(db, subPkgId, subPkg)
+        prefixLen = len("/".join(pkg.getStack()))
         for d in pkg.getIndirectDepSteps():
             subPkg = d.getPackage()
             name = subPkg.getName()
             if name in node: continue
             subPkgId = d._getResultId()
-            node[name] = (subPkgId, False)
+            node[name] = (subPkgId, False, ".." + "/".join(subPkg.getStack())[prefixLen:] )
             if subPkgId not in db:
                 TreeStorage.__convertPackageToTree(db, subPkgId, subPkg)
         db[pkgId] = pickle.dumps(node, -1)
