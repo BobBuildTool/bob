@@ -59,7 +59,8 @@ def doLS(argv, bobRoot):
         for n,(p,o) in sorted(packages.items()):
             newStack = stack[:]
             newStack.append(n)
-            print("/".join(newStack), "({})".format(o) if (showOrigin and o) else "")
+            print("{}{}".format("/".join(newStack),
+                                " ({})".format(o) if (showOrigin and o) else ""))
             if recurse:
                 showPrefixed(p, recurse, showAll, showOrigin, newStack, level+1)
 
