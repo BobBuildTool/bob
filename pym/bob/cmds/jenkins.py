@@ -979,7 +979,7 @@ class JobNameCalculator:
         return self.__prefix + name
 
     def getJobInternalName(self, step):
-        return self.__regexJobName.sub('_', self.getJobDisplayName(step))
+        return self.__regexJobName.sub('_', self.getJobDisplayName(step)).lower()
 
 
 def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages):
