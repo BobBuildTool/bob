@@ -1425,10 +1425,11 @@ class JenkinsConnection:
 
     def disableJob(self, name):
         response = self._send("POST", "job/" + name + "/disable")
-        if response.status != 200 and response.status != 302:
+        if response.status not in [200, 302, 404]:
             raise BuildError("Error disabling '{}': HTTP error: {} {}"
                 .format(name, response.status, response.reason))
         response.read()
+        return response.status != 404
 
     def setDescription(self, name, description):
         body = urllib.parse.urlencode({"description" : description})
@@ -1717,9 +1718,12 @@ def doJenkinsPush(recipes, argv):
                 if oldJobConfig.get('enabled', True):
                     # disable obsolete jobs
                     printNormal(name, "Disabling job...")
-                    connection.disableJob(name)
-                    oldJobConfig['enabled'] = False
-                    BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
+                    if connection.disableJob(name):
+                        oldJobConfig['enabled'] = False
+                        BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
+                    else:
+                        printNormal(name, "Forget job. Has been deleted on the server!")
+                        BobState().delJenkinsJob(args.name, name)
                 else:
                     printDebug(name, "Already disabled.")
             else:
