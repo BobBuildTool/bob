@@ -208,3 +208,8 @@ fi
                 return f.read().rstrip('\r\n')
         except OSError:
             return ''
+
+    def getAuditSpec(self):
+        # FIXME: not supported yet
+        #return ("cvs", [self.__dir])
+        return ("cvs", [])

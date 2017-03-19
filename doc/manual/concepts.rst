@@ -58,6 +58,8 @@ processing. This will either happen when parsing the recipes (if detectable) or
 during execution of the build. All executed scripts are configured to fail if
 an undefined variable is used or any command returns a failure status.
 
+.. _concepts-implicit-versioning:
+
 Implicit versioning
 -------------------
 
@@ -75,7 +77,7 @@ each step (checkout, build and package) is calculated as follows:
 
 .. math::
 
-   Id_{variant}(step) = H_{md5}(script_{utf8} || \lbrace Id_{variant}(t) || RelPath_{utf8}(t) || LibPaths_{utf8}(t) : t \in tools \rbrace || env|| \lbrace Id_{variant}(i) : i \in input \rbrace )
+   Id_{variant}(step) = H_{sha1}(script_{utf8} || \lbrace Id_{variant}(t) || RelPath_{utf8}(t) || LibPaths_{utf8}(t) : t \in tools \rbrace || env|| \lbrace Id_{variant}(i) : i \in input \rbrace )
 
 where
 
@@ -98,7 +100,7 @@ dependencies:
 
     Id_{build}(step) =
     \begin{cases}
-        H_{md5}(script_{utf8} || \lbrace Id_{build}(t) || RelPath_{utf8}(t) || LibPaths_{utf8}(t) : t \in tools \rbrace || env || \lbrace Id_{build}(i) : i \in input \rbrace ) \\
+        H_{sha1}(script_{utf8} || \lbrace Id_{build}(t) || RelPath_{utf8}(t) || LibPaths_{utf8}(t) : t \in tools \rbrace || env || \lbrace Id_{build}(i) : i \in input \rbrace ) \\
         H_{sha1}(src)
     \end{cases}
 

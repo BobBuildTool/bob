@@ -17,12 +17,13 @@
 from ..errors import ParseError, BuildError
 from ..tty import colorize, WarnOnce
 from ..utils import hashString
-from .scm import Scm
+from .scm import Scm, ScmAudit
+from xml.etree import ElementTree
+import hashlib
 import os, os.path
 import re
 import schema
 import subprocess
-import xml.etree.ElementTree
 
 class GitScm(Scm):
 
@@ -130,28 +131,28 @@ fi
             return self.__url + " refs/heads/" + self.__branch + " " + self.__dir
 
     def asJenkins(self, workPath, credentials, options):
-        scm = xml.etree.ElementTree.Element("scm", attrib={
+        scm = ElementTree.Element("scm", attrib={
             "class" : "hudson.plugins.git.GitSCM",
             "plugin" : "git@2.2.7",
         })
-        xml.etree.ElementTree.SubElement(scm, "configVersion").text = "2"
+        ElementTree.SubElement(scm, "configVersion").text = "2"
 
-        userconfigs =  xml.etree.ElementTree.SubElement(
-                xml.etree.ElementTree.SubElement(scm, "userRemoteConfigs"),
+        userconfigs =  ElementTree.SubElement(
+                ElementTree.SubElement(scm, "userRemoteConfigs"),
                 "hudson.plugins.git.UserRemoteConfig")
 
-        url = xml.etree.ElementTree.SubElement(userconfigs,
+        url = ElementTree.SubElement(userconfigs,
             "url")
         url.text = self.__url
 
         if credentials:
-            credentialsId = xml.etree.ElementTree.SubElement(userconfigs,
+            credentialsId = ElementTree.SubElement(userconfigs,
                          "credentialsId")
             credentialsId.text = credentials
 
-        branch = xml.etree.ElementTree.SubElement(
-            xml.etree.ElementTree.SubElement(
-                xml.etree.ElementTree.SubElement(scm, "branches"),
+        branch = ElementTree.SubElement(
+            ElementTree.SubElement(
+                ElementTree.SubElement(scm, "branches"),
                 "hudson.plugins.git.BranchSpec"),
             "name")
         if self.__commit:
@@ -161,16 +162,16 @@ fi
         else:
             branch.text = "refs/heads/" + self.__branch
 
-        xml.etree.ElementTree.SubElement(scm, "doGenerateSubmoduleConfigurations").text = "false"
-        xml.etree.ElementTree.SubElement(scm, "submoduleCfg", attrib={"class" : "list"})
+        ElementTree.SubElement(scm, "doGenerateSubmoduleConfigurations").text = "false"
+        ElementTree.SubElement(scm, "submoduleCfg", attrib={"class" : "list"})
 
-        extensions = xml.etree.ElementTree.SubElement(scm, "extensions")
-        xml.etree.ElementTree.SubElement(
-            xml.etree.ElementTree.SubElement(extensions,
+        extensions = ElementTree.SubElement(scm, "extensions")
+        ElementTree.SubElement(
+            ElementTree.SubElement(extensions,
                 "hudson.plugins.git.extensions.impl.RelativeTargetDirectory"),
             "relativeTargetDir").text = os.path.normpath(os.path.join(workPath, self.__dir))
         # remove untracked files
-        xml.etree.ElementTree.SubElement(extensions,
+        ElementTree.SubElement(extensions,
             "hudson.plugins.git.extensions.impl.CleanCheckout")
         shallow = options.get("scm.git.shallow")
         if shallow is not None:
@@ -180,13 +181,13 @@ fi
             except ValueError:
                 raise BuildError("Invalid 'git.shallow' option: " + str(shallow))
             if shallow > 0:
-                co = xml.etree.ElementTree.SubElement(extensions,
+                co = ElementTree.SubElement(extensions,
                     "hudson.plugins.git.extensions.impl.CloneOption")
-                xml.etree.ElementTree.SubElement(co, "shallow").text = "true"
-                xml.etree.ElementTree.SubElement(co, "noTags").text = "false"
-                xml.etree.ElementTree.SubElement(co, "reference").text = ""
-                xml.etree.ElementTree.SubElement(co, "depth").text = str(shallow)
-                xml.etree.ElementTree.SubElement(co, "honorRefspec").text = "false"
+                ElementTree.SubElement(co, "shallow").text = "true"
+                ElementTree.SubElement(co, "noTags").text = "false"
+                ElementTree.SubElement(co, "reference").text = ""
+                ElementTree.SubElement(co, "depth").text = str(shallow)
+                ElementTree.SubElement(co, "honorRefspec").text = "false"
 
         return scm
 
@@ -287,3 +288,58 @@ fi
 
         return status, shortStatus, longStatus
 
+    def getAuditSpec(self):
+        return ("git", [self.__dir])
+
+
+class GitAudit(ScmAudit):
+
+    SCHEMA = schema.Schema({
+        'type' : 'git',
+        'dir' : str,
+        'remotes' : { str : str },
+        'commit' : str,
+        'description' : str,
+        'dirty' : bool
+    })
+
+    def _scanDir(self, workspace, dir):
+        self.__dir = dir
+        dir = os.path.join(workspace, dir)
+        try:
+            remotes = subprocess.check_output(["git", "remote", "-v"],
+                cwd=dir, universal_newlines=True).split("\n")
+            remotes = (r[:-8].split("\t") for r in remotes if r.endswith("(fetch)"))
+            self.__remotes = { remote:url for (remote,url) in remotes }
+
+            self.__commit = subprocess.check_output(["git", "rev-parse", "HEAD"],
+                cwd=dir, universal_newlines=True).strip()
+            self.__description = subprocess.check_output(
+                ["git", "describe", "--always", "--dirty"],
+                cwd=dir, universal_newlines=True).strip()
+            self.__dirty = subprocess.call(["git", "diff-index", "--quiet", "HEAD"],
+                cwd=dir) != 0
+        except subprocess.CalledProcessError as e:
+            raise BuildError("Git audit failed: " + str(e))
+        except OSError as e:
+            raise BuildError("Error calling git: " + str(e))
+
+    def _load(self, data):
+        self.__dir = data["dir"]
+        self.__remotes = data["remotes"]
+        self.__commit = data["commit"]
+        self.__description = data["description"]
+        self.__dirty = data["dirty"]
+
+    def dump(self):
+        return {
+            "type" : "git",
+            "dir" : self.__dir,
+            "remotes" : self.__remotes,
+            "commit" : self.__commit,
+            "description" : self.__description,
+            "dirty" : self.__dirty,
+        }
+
+    def getStatusLine(self):
+        return self.__description

@@ -15,9 +15,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ..errors import ParseError
-from ..utils import hashString
-from .scm import Scm
+from ..utils import asHexStr, hashString, hashFile
+from .scm import Scm, ScmAudit
 from pipes import quote
+import hashlib
 import os.path
 import re
 import schema
@@ -159,3 +160,35 @@ fi
     def status(self, workspacePath, dir):
         return 'clean','',''
 
+    def getAuditSpec(self):
+        return ("url", [os.path.join(self.__dir, self.__fn)])
+
+
+class UrlAudit(ScmAudit):
+
+    SCHEMA = schema.Schema({
+        'type' : 'url',
+        'dir' : str,
+        'digest' : {
+            'algorithm' : 'sha1',
+            'value' : str
+        }
+    })
+
+    def _scanDir(self, workspace, dir):
+        self.__dir = dir
+        self.__hash = asHexStr(hashFile(os.path.join(workspace, dir)))
+
+    def _load(self, data):
+        self.__dir = data["dir"]
+        self.__hash = data["digest"]["value"]
+
+    def dump(self):
+        return {
+            "type" : "url",
+            "dir" : self.__dir,
+            "digest" : {
+                "algorithm" : "sha1",
+                "value" : self.__hash
+            }
+        }

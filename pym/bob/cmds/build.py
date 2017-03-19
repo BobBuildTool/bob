@@ -14,7 +14,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from .. import BOB_VERSION
 from ..archive import DummyArchive, getArchiver
+from ..audit import Audit
 from ..errors import BuildError, ParseError
 from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
@@ -161,6 +163,7 @@ case "${{1:-run}}" in
         ;;
     __shell)
         cd "${{0%/*}}/workspace"
+        rm -f ../audit.json.gz
         if [[ $_keep_env = 1 ]] ; then
             run /bin/bash -s {ARGS}
         else
@@ -326,6 +329,33 @@ esac
             created = True
         return (workDir, created)
 
+    def _generateAudit(self, step, depth, resultHash):
+        audit = Audit.create(step.getVariantId(), self._getBuildId(step, depth), resultHash)
+        audit.addDefine("bob", BOB_VERSION)
+        audit.addDefine("recipe", step.getPackage().getRecipe().getName())
+        audit.addDefine("package", "/".join(step.getPackage().getStack()))
+        audit.addDefine("step", step.getLabel())
+        audit.setRecipesAudit(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
+        audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
+        if step.isCheckoutStep():
+            for scm in step.getScmList():
+                (typ, dirs) = scm.getAuditSpec()
+                for dir in dirs:
+                    audit.addScm(typ, step.getWorkspacePath(), dir)
+        for (name, tool) in sorted(step.getTools().items()):
+            audit.addTool(name,
+                os.path.join(tool.getStep().getWorkspacePath(), "..", "audit.json.gz"))
+        sandbox = step.getSandbox()
+        if sandbox is not None:
+            audit.setSandbox(os.path.join(sandbox.getStep().getWorkspacePath(), "..", "audit.json.gz"))
+        for dep in step.getArguments():
+            if dep.isValid():
+                audit.addArg(os.path.join(dep.getWorkspacePath(), "..", "audit.json.gz"))
+
+        auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
+        audit.save(auditPath)
+        return auditPath
+
     def _runShell(self, step, scriptName):
         workspacePath = step.getWorkspacePath()
         if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
@@ -443,6 +473,7 @@ esac
             print("# Environment:", file=f)
             for (k,v) in sorted(stepEnv.items()):
                 print("export {}={}".format(k, quote(v)), file=f)
+            print("declare -p > ../env", file=f)
             print("", file=f)
             print("# BEGIN BUILD SCRIPT", file=f)
             print(step.getScript(), file=f)
@@ -568,7 +599,7 @@ esac
                     (checkoutState != oldCheckoutState)):
                     # move away old or changed source directories
                     for (scmDir, scmDigest) in oldCheckoutState.copy().items():
-                        if ((scmDir is not None) and ((scmDigest != checkoutState.get(scmDir)))):
+                        if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
                             scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                             if os.path.exists(scmPath):
                                 atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
@@ -615,8 +646,16 @@ esac
 
             # We always have to rehash the directory as the user might have
             # changed the source code manually.
-            BobState().setResultHash(prettySrcPath, hashWorkspace(checkoutStep))
+            oldCheckoutHash = BobState().getResultHash(prettySrcPath)
+            checkoutHash = hashWorkspace(checkoutStep)
+            BobState().setResultHash(prettySrcPath, checkoutHash)
+
             self._setAlreadyRun(checkoutStep)
+
+            # Generate audit trail. Has to be done _after_ setResultHash()
+            # because the result is needed to calculate the buildId.
+            if checkoutHash != oldCheckoutHash:
+                self._generateAudit(checkoutStep, depth, checkoutHash)
 
     def _cookBuildStep(self, buildStep, checkoutOnly, depth):
         # Include actual directories of dependencies in buildDigest.
@@ -670,11 +709,9 @@ esac
                 BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
                 # build it
                 self._runShell(buildStep, "build")
-                # Use timestamp in release mode and only hash in development mode
-                BobState().setResultHash(prettyBuildPath,
-                                         datetime.datetime.utcnow()
-                                             if self.__cleanBuild
-                                             else hashWorkspace(buildStep))
+                buildHash = hashWorkspace(buildStep)
+                self._generateAudit(buildStep, depth, buildHash)
+                BobState().setResultHash(prettyBuildPath, buildHash)
                 BobState().setInputHashes(prettyBuildPath, buildInputHashes)
             self._setAlreadyRun(buildStep, checkoutOnly)
 
@@ -752,9 +789,11 @@ esac
                 # empty. If the directory holds a result and was downloaded it
                 # we're done.
                 if BobState().getResultHash(prettyPackagePath) is None:
-                    if self.__archive.downloadPackage(packageBuildId, prettyPackagePath, self.__verbose):
+                    audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
+                    if self.__archive.downloadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose):
                         self.__statistic.packagesDownloaded += 1
                         BobState().setInputHashes(prettyPackagePath, packageBuildId)
+                        packageHash = hashWorkspace(packageStep)
                         workspaceChanged = True
                         wasDownloaded = True
                 elif oldWasDownloaded:
@@ -783,14 +822,16 @@ esac
                     BobState().delInputHashes(prettyPackagePath)
                     BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
                     self._runShell(packageStep, "package")
+                    packageHash = hashWorkspace(packageStep)
+                    audit = self._generateAudit(packageStep, depth, packageHash)
                     workspaceChanged = True
                     self.__statistic.packagesBuilt += 1
                     if packageBuildId and self.__archive.canUploadLocal():
-                        self.__archive.uploadPackage(packageBuildId, prettyPackagePath, self.__verbose)
+                        self.__archive.uploadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose)
 
             # Rehash directory if content was changed
             if workspaceChanged:
-                BobState().setResultHash(prettyPackagePath, hashWorkspace(packageStep))
+                BobState().setResultHash(prettyPackagePath, packageHash)
                 if wasDownloaded:
                     BobState().setInputHashes(prettyPackagePath, packageBuildId)
                 else:

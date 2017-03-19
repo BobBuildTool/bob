@@ -95,8 +95,33 @@ def doHelp(extended, fd):
         print("\n{}\n".format(llCmds), file=fd)
         print("See 'bob <command> -h' for more information on a specific command.", file=fd)
 
+def catchErrors(fun, *args, **kwargs):
+    try:
+        ret = fun(*args, **kwargs)
+    except BrokenPipeError:
+        # explicitly close stderr to suppress further error messages
+        sys.stderr.close()
+        ret = 0
+    except BobError as e:
+        print(e, file=sys.stderr)
+        ret = 1
+    except KeyboardInterrupt:
+        ret = 2
+    except ImportError as e:
+        print(colorize("Python module '{}' seems to be missing. ".format(e.name) +
+                       "Please check your installation...", "31;1"),
+              file=sys.stderr)
+        ret = 3
+    except Exception:
+        print(colorize("""An internal Exception has occured. This should not have happenend.
+Please open an issue at https://github.com/BobBuildTool/bob with the following backtrace:""", "31;1"), file=sys.stderr)
+        print("Bob version", BOB_VERSION, file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        ret = 3
+
+    return ret
+
 def bob(bobRoot):
-    ret = 0
     origSysStdOut = sys.stdout
     origSysStdErr = sys.stderr
 
@@ -106,7 +131,8 @@ def bob(bobRoot):
     if not sys.stderr.isatty():
         sys.stderr = Unbuffered(sys.stderr)
 
-    try:
+    def cmd():
+        ret = 0
         while len(sys.argv) > 1:
             verb = sys.argv[1]
             argv = sys.argv[2:]
@@ -127,26 +153,10 @@ def bob(bobRoot):
             break
         else:
             doHelp(False, sys.stderr)
+        return ret
 
-    except BrokenPipeError:
-        # explicitly close stderr to suppress further error messages
-        sys.stderr.close()
-    except BobError as e:
-        print(e, file=sys.stderr)
-        ret = 1
-    except KeyboardInterrupt:
-        ret = 2
-    except ImportError as e:
-        print(colorize("Python module '{}' seems to be missing. ".format(e.name) +
-                       "Please check your installation...", "31;1"),
-              file=sys.stderr)
-        ret = 3
-    except Exception:
-        print(colorize("""An internal Exception has occured. This should not have happenend.
-Please open an issue at https://github.com/BobBuildTool/bob with the following backtrace:""", "31;1"), file=sys.stderr)
-        print("Bob version", BOB_VERSION, file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        ret = 3
+    try:
+        ret = catchErrors(cmd)
     finally:
         sys.stdout = origSysStdOut
         sys.stderr = origSysStdErr
@@ -192,6 +202,50 @@ def hashEngine():
         return 1
 
     return 0
+
+def auditEngine():
+    parser = argparse.ArgumentParser(description="Create audit trail.")
+    parser.add_argument('-o', dest="output", metavar="OUTPUT", default="-", help="Output file (default: stdout)")
+    parser.add_argument("-D", dest="defines", action="append", default=[], nargs=2)
+    parser.add_argument("--arg", action="append", default=[])
+    parser.add_argument("--env")
+    parser.add_argument("--recipes")
+    parser.add_argument("--sandbox")
+    parser.add_argument("--scm", action="append", default=[], nargs=3)
+    parser.add_argument("--tool", action="append", default=[], nargs=2)
+    parser.add_argument("variantID")
+    parser.add_argument("buildID")
+    parser.add_argument("resultHash")
+    args = parser.parse_args()
+
+    def cmd():
+        from .audit import Audit
+        import json
+        import os
+        try:
+            gen = Audit.create(bytes.fromhex(args.variantID), bytes.fromhex(args.buildID),
+                bytes.fromhex(args.resultHash))
+        except ValueError:
+            raise BuildError("Invalid digest argument")
+        if args.env is not None: gen.setEnv(args.env)
+        for (name, value) in args.defines: gen.addDefine(name, value)
+        for (name, workspace, dir) in args.scm: gen.addScm(name, workspace, dir)
+        for (name, audit) in args.tool: gen.addTool(name, audit)
+        try:
+            if args.recipes is not None: gen.setRecipesData(json.loads(args.recipes))
+        except ValueError as e:
+            raise BuildError("Invalid recipes json: " + str(e))
+        if args.sandbox is not None: gen.setSandbox(args.sandbox)
+        for arg in args.arg: gen.addArg(arg)
+
+        if args.output == "-":
+            gen.save(sys.stdout.buffer)
+        else:
+            gen.save(args.output)
+
+        return 0
+
+    return catchErrors(cmd)
 
 def __process(l, inFile, stateDir):
     if l.startswith("="):

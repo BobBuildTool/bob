@@ -10,4 +10,5 @@ Contents:
    concepts
    configuration
    extending
+   audit-trail
 
