@@ -58,6 +58,8 @@ processing. This will either happen when parsing the recipes (if detectable) or
 during execution of the build. All executed scripts are configured to fail if
 an undefined variable is used or any command returns a failure status.
 
+.. _concepts-implicit-versioning:
+
 Implicit versioning
 -------------------
 

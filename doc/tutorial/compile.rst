@@ -211,10 +211,10 @@ requires that the following plugins are available:
 .. _Workspace Cleanup Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Workspace+Cleanup+Plugin
 
 Additionally some of the Bob helper tools must be installed on the Jenkins
-server and be available in the PATH. The ``bob-hash-engine`` script is always
-needed.  If you're using the sandbox feature ``bob-namespace-sandbox`` must be
-available too. To keep the setup simple it is recommended to install Bob
-entirely on the server.
+server and be available in the PATH. The ``bob-hash-engine`` and
+``bob-audit-engine`` scripts are always needed. If you're using the sandbox
+feature ``bob-namespace-sandbox`` must be available too. To keep the setup
+simple it is recommended to install Bob entirely on the server.
 
 Suppose you have a suitable Jenkins server located at
 http://jenkins.intranet.local:8080. Go to the recipes directory and tell Bob
