@@ -1270,15 +1270,16 @@ class PackageStep(RegularStep):
 
 class CorePackage:
     __slots__ = ("name", "recipe", "directDepSteps", "indirectDepSteps",
-        "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
+        "states", "metaEnv", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
         "touchedTools")
 
-    def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps, states):
+    def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps, states, metaEnv):
         self.name = name
         self.recipe = recipe
         self.directDepSteps = [ CoreStepRef(package, d) for d in directDepSteps ]
         self.indirectDepSteps = [ CoreStepRef(package, d) for d in indirectDepSteps ]
         self.states = states
+        self.metaEnv = metaEnv
         self.tools = {}
         self.sandbox = ...
 
@@ -1298,7 +1299,7 @@ class Package(object):
 
     def construct(self, name, stack, pathFormatter, recipe,
                   directDepSteps, indirectDepSteps, states, inputTools,
-                  allTools, inputSandbox, sandbox, touchedTools):
+                  allTools, inputSandbox, sandbox, touchedTools, metaEnv):
         self.__stack = stack
         self.__pathFormatter = pathFormatter
         self.__directDepSteps = directDepSteps
@@ -1310,7 +1311,7 @@ class Package(object):
 
         # this will call back
         self.__corePackage = CorePackage(self, name, recipe, directDepSteps,
-            indirectDepSteps, states)
+            indirectDepSteps, states, metaEnv)
 
         # these already need our __corePackage
         self._setCheckoutStep(CheckoutStep().construct(self, pathFormatter))
@@ -1357,6 +1358,10 @@ class Package(object):
     def getName(self):
         """Name of the package"""
         return self.__corePackage.name
+
+    def getMetaEnv(self):
+        """meta variables of package"""
+        return self.__corePackage.metaEnv
 
     def getStack(self):
         """Returns the recipe processing stack leading to this package.
@@ -1684,6 +1689,7 @@ class Recipe(object):
         self.__provideSandbox = recipe.get("provideSandbox")
         self.__varSelf = recipe.get("environment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
+        self.__metaEnv = recipe.get("metaEnvironment", {})
         self.__checkoutVars = set(recipe.get("checkoutVars", []))
         self.__checkoutVarsWeak = set(recipe.get("checkoutVarsWeak", []))
         self.__buildVars = set(recipe.get("buildVars", []))
@@ -1773,6 +1779,9 @@ class Recipe(object):
             tmp.update(self.__varPrivate)
             self.__varPrivate = tmp
             self.__checkoutVars |= cls.__checkoutVars
+            tmp = cls.__metaEnv.copy()
+            tmp.update(self.__metaEnv)
+            self.__metaEnv = tmp
             self.__checkoutVarsWeak |= cls.__checkoutVarsWeak
             self.__buildVars |= cls.__buildVars
             self.__buildVarsWeak |= cls.__buildVarsWeak
@@ -1950,6 +1959,9 @@ class Recipe(object):
             varPrivate[key] = env.substitute(value, "privateEnvironment::"+key)
         env.update(varPrivate)
 
+        # meta variables override existing variables but can not be substituted
+        env.update(self.__metaEnv)
+
         # filter duplicate results, fail on different variants of same package
         self.__filterDuplicateSteps(results)
 
@@ -1960,7 +1972,7 @@ class Recipe(object):
         # create package
         p = Package().construct(self.__packageName, stack, pathFormatter, self,
             directPackages, indirectPackages, states, inputTools.detach(), tools.detach(),
-            inputSandbox, sandbox, tools.touchedKeys())
+            inputSandbox, sandbox, tools.touchedKeys(), self.__metaEnv)
 
         # optional checkout step
         if self.__checkout != (None, None, []):
@@ -2556,6 +2568,9 @@ class RecipeSet:
             schema.Optional('privateEnvironment') : schema.Schema({
                 varNameSchema : str
             }),
+            schema.Optional('metaEnvironment') : schema.Schema({
+                varNameSchema : str
+            }),
             schema.Optional('provideDeps') : [str],
             schema.Optional('provideTools') : schema.Schema({
                 str: schema.Or(
@@ -2628,7 +2643,7 @@ class RecipeSet:
         states = { n:s() for (n,s) in self.__states.items() }
         rootPkg = Package()
         rootPkg.construct("<root>", [], nameFormatter, None, [], [], states,
-            {}, {}, None, None, [])
+            {}, {}, None, None, [], {})
         try:
             with open(cacheName, "rb") as f:
                 persistedCacheKey = f.read(len(cacheKey))
