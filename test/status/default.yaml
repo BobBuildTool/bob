@@ -3,7 +3,11 @@ scmOverrides:
       match:
           scm: "git"
       set:
-          dir: "git"
+          dir: "not_working_but_replaced_below"
+      replace:
+          dir:
+            pattern: ".*"
+            replacement: "git"
     -
       match:
           scm: "url"
