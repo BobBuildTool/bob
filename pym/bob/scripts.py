@@ -59,6 +59,10 @@ def __queryscm(*args, **kwargs):
      from .cmds.misc import doQuerySCM
      doQuerySCM(*args, **kwargs)
 
+def __querymeta(*args, **kwargs):
+     from .cmds.misc import doQueryMeta
+     doQueryMeta(*args, **kwargs)
+
 def __queryrecipe(*args, **kwargs):
      from .cmds.misc import doQueryRecipe
      doQueryRecipe(*args, **kwargs)
@@ -80,6 +84,7 @@ availableCommands = {
     "query-scm"     : (False, __queryscm, "Query SCM information"),
     "query-recipe"  : (False, __queryrecipe, "Query package sources"),
     "query-path"    : (False, __querypath, "Query path information"),
+    "query-meta"    : (False, __querymeta, "Query Package meta information"),
 }
 
 def doHelp(extended, fd):
