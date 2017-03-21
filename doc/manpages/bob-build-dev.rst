@@ -18,7 +18,21 @@ Options
     Destination of build result (will be overwritten!)
 
 ``--download MODE``
-    Download from binary archive (yes, no, deps)
+    Download from binary archive (yes, no, deps, forced, forced-deps)
+
+    no
+      build given module and it's dependencies from sources
+    yes
+      download given module, if download fails - build it from sources
+      (default for release mode)
+    forced
+      like 'yes' above, but fail if any download fails
+    deps
+      download dependencies of given module and build the module
+      afterwards. If downloading of any dependency fails - build it
+      from sources (default for develop mode)
+    forced-deps
+      like 'deps' above, but fail if any download fails
 
 ``--incremental``
     Reuse build directory for incremental builds
