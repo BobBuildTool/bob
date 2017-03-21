@@ -261,6 +261,7 @@ esac
         self.__currentPackage = None
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
+        self.__forcedDownload = False
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
@@ -272,13 +273,19 @@ esac
 
     def setDownloadMode(self, mode):
         self.__downloadDepth = 0xffff
-        if mode == 'yes':
+        if mode in ('yes', 'forced'):
             self.__archive.wantDownload(True)
-            if self.__archive.canDownloadLocal():
+            if mode == 'forced':
                 self.__downloadDepth = 0
-        elif mode == 'deps':
+                self.__forcedDownload = True
+            elif self.__archive.canDownloadLocal():
+                self.__downloadDepth = 0
+        elif mode in ('deps', 'forced-deps'):
             self.__archive.wantDownload(True)
-            if self.__archive.canDownloadLocal():
+            if mode == 'forced-deps':
+                self.__downloadDepth = 1
+                self.__forcedDownload = True
+            elif self.__archive.canDownloadLocal():
                 self.__downloadDepth = 1
         else:
             assert mode == 'no'
@@ -774,8 +781,7 @@ esac
             #   build-id changed -> prune and try download, fall back to build
             workspaceChanged = False
             wasDownloaded = False
-            if ( (not checkoutOnly) and packageBuildId and self.__archive.canDownloadLocal()
-                 and (depth >= self.__downloadDepth) ):
+            if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ):
                 # prune directory if we previously downloaded/built something different
                 if (oldInputBuildId is not None) and (oldInputBuildId != packageBuildId):
                     print(colorize("   PRUNE     {} (build-id changed)".format(prettyPackagePath), "33"))
@@ -796,6 +802,8 @@ esac
                         packageHash = hashWorkspace(packageStep)
                         workspaceChanged = True
                         wasDownloaded = True
+                    elif self.__forcedDownload:
+                        raise BuildError("Downloading artifact failed")
                 elif oldWasDownloaded:
                     self._info("   PACKAGE   skipped (deterministic output in {})".format(prettyPackagePath))
                     wasDownloaded = True
@@ -908,7 +916,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('--upload', default=False, action='store_true',
         help="Upload to binary archive")
     parser.add_argument('--download', metavar="MODE", default="deps" if develop else "yes",
-        help="Download from binary archive (yes, no, deps)", choices=['yes', 'no', 'deps'])
+        help="Download from binary archive (yes, no, deps, forced, forced-deps)",
+        choices=['yes', 'no', 'deps', 'forced', 'forced-deps'])
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=not develop,
         help="Enable sandboxing")
