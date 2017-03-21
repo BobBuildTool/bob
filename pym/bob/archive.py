@@ -334,6 +334,8 @@ class SimpleHttpArchive(BaseArchive):
                     else:
                         raise ArtifactDownloadError("{} {}".format(response.status,
                                                                    response.reason))
+            except OSError as e:
+                raise ArtifactDownloadError(str(e))
             except http.client.HTTPException as e:
                 self._resetConnection()
                 if not retry: raise ArtifactDownloadError(str(e))
