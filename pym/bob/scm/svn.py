@@ -148,11 +148,11 @@ fi
     #
     # return values:
     #  - error: the scm is in a error state. Use this if svn call returns a error code.
-    #  - unclean: SCM is unclean. Could be: modified files, switched to another URL or revision
+    #  - dirty: SCM is dirty. Could be: modified files, switched to another URL or revision
     #  - clean: same URL and revision as specified in the recipe and no local changes.
     #  - empty: directory is not existing
     #
-    # This function is called when build with --clean-checkout. 'error' and 'unclean' scm's are moved to attic,
+    # This function is called when build with --clean-checkout. 'error' and 'dirty' scm's are moved to attic,
     # while empty and clean directories are not.
     def status(self, workspacePath, dir):
         scmdir = os.path.join(workspacePath, dir)
