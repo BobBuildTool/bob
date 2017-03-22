@@ -1171,7 +1171,7 @@ def doStatus(argv, bobRoot):
         nameFormatter = LocalBuilder.releaseNameInterrogator
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
 
-    roots = recipes.generatePackages(nameFormatter, defines)
+    roots = recipes.generatePackages(nameFormatter, defines, not args.develop)
     if args.develop:
        touch(roots)
 
