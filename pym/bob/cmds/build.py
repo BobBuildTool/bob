@@ -17,7 +17,7 @@
 from .. import BOB_VERSION
 from ..archive import DummyArchive, getArchiver
 from ..audit import Audit
-from ..errors import BuildError, ParseError
+from ..errors import BobError, BuildError, ParseError
 from ..input import RecipeSet, walkPackagePath
 from ..state import BobState
 from ..tty import colorize
@@ -336,28 +336,39 @@ esac
             created = True
         return (workDir, created)
 
-    def _generateAudit(self, step, depth, resultHash):
+    def _generateAudit(self, step, depth, resultHash, executed=True):
         audit = Audit.create(step.getVariantId(), self._getBuildId(step, depth), resultHash)
         audit.addDefine("bob", BOB_VERSION)
         audit.addDefine("recipe", step.getPackage().getRecipe().getName())
         audit.addDefine("package", "/".join(step.getPackage().getStack()))
         audit.addDefine("step", step.getLabel())
         audit.setRecipesAudit(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
-        audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
+
+        # The following things make only sense if we just executed the step
+        if executed:
+            audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
+            for (name, tool) in sorted(step.getTools().items()):
+                audit.addTool(name,
+                    os.path.join(tool.getStep().getWorkspacePath(), "..", "audit.json.gz"))
+            sandbox = step.getSandbox()
+            if sandbox is not None:
+                audit.setSandbox(os.path.join(sandbox.getStep().getWorkspacePath(), "..", "audit.json.gz"))
+            for dep in step.getArguments():
+                if dep.isValid():
+                    audit.addArg(os.path.join(dep.getWorkspacePath(), "..", "audit.json.gz"))
+
+        # Always check for SCMs but don't fail if we did not execute the step
         if step.isCheckoutStep():
             for scm in step.getScmList():
                 (typ, dirs) = scm.getAuditSpec()
                 for dir in dirs:
-                    audit.addScm(typ, step.getWorkspacePath(), dir)
-        for (name, tool) in sorted(step.getTools().items()):
-            audit.addTool(name,
-                os.path.join(tool.getStep().getWorkspacePath(), "..", "audit.json.gz"))
-        sandbox = step.getSandbox()
-        if sandbox is not None:
-            audit.setSandbox(os.path.join(sandbox.getStep().getWorkspacePath(), "..", "audit.json.gz"))
-        for dep in step.getArguments():
-            if dep.isValid():
-                audit.addArg(os.path.join(dep.getWorkspacePath(), "..", "audit.json.gz"))
+                    try:
+                        audit.addScm(typ, step.getWorkspacePath(), dir)
+                    except BobError as e:
+                        if executed: raise
+                        print(colorize("   WARNING: cannot audit SCM: {} ({})"
+                                            .format(e.slogan, dir),
+                                       "33"))
 
         auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
         audit.save(auditPath)
@@ -580,6 +591,7 @@ esac
                 oldCheckoutState = {}
                 BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
+            checkoutExecuted = False
             checkoutState = checkoutStep.getScmDirectories().copy()
             checkoutState[None] = checkoutDigest
             if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
@@ -646,6 +658,7 @@ esac
                         , "32"))
                     self._runShell(checkoutStep, "checkout")
                     self.__statistic.checkouts += 1
+                    checkoutExecuted = True
                     # reflect new checkout state
                     BobState().setDirectoryState(prettySrcPath, checkoutState)
                 else:
@@ -661,8 +674,8 @@ esac
 
             # Generate audit trail. Has to be done _after_ setResultHash()
             # because the result is needed to calculate the buildId.
-            if checkoutHash != oldCheckoutHash:
-                self._generateAudit(checkoutStep, depth, checkoutHash)
+            if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
+                self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
     def _cookBuildStep(self, buildStep, checkoutOnly, depth):
         # Include actual directories of dependencies in buildDigest.
