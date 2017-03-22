@@ -583,15 +583,15 @@ esac
                     self._info("   CHECKOUT  skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString))
             else:
                 if self.__cleanCheckout:
-                    # check state of SCMs and invalidate if the directory is unclean
+                    # check state of SCMs and invalidate if the directory is dirty
                     stats = {}
                     for scm in checkoutStep.getScmList():
                         stats.update({ dir : scm for dir in scm.getDirectories().keys() })
                     for (scmDir, scmDigest) in oldCheckoutState.copy().items():
                         if scmDir is None: continue
                         if scmDigest != checkoutState.get(scmDir): continue
-                        status = stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir)
-                        if (status == 'unclean') or (status == 'error'):
+                        status = stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir)[0]
+                        if (status == 'dirty') or (status == 'error'):
                             oldCheckoutState[scmDir] = None
 
                 if (self.__force or (not checkoutStep.isDeterministic()) or
@@ -915,7 +915,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
     parser.add_argument('--clean-checkout', action='store_true', default=False, dest='clean_checkout',
-        help="Do a clean checkout if SCM state is unclean.")
+        help="Do a clean checkout if SCM state is dirty.")
     args = parser.parse_args(argv)
 
     defines = {}
