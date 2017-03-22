@@ -335,6 +335,8 @@ esac
         audit.addDefine("recipe", step.getPackage().getRecipe().getName())
         audit.addDefine("package", "/".join(step.getPackage().getStack()))
         audit.addDefine("step", step.getLabel())
+        for var, val in step.getPackage().getMetaEnv().items():
+            audit.addMetaEnv(var, val)
         audit.setRecipesAudit(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
         audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
         if step.isCheckoutStep():
