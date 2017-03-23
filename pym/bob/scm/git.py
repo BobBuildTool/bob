@@ -218,11 +218,11 @@ fi
     #
     # return values:
     #  - error: the scm is in a error state. Use this if git returned a error code.
-    #  - unclean: SCM is unclean. Could be: modified files, switched to another branch/tag/commit/repo, unpushed commits
+    #  - dirty: SCM is dirty. Could be: modified files, switched to another branch/tag/commit/repo, unpushed commits
     #  - clean: same branch/tag/commit as specified in the recipe and no local changes.
     #  - empty: directory is not existing
     #
-    # This function is called when build with --clean-checkou. 'error' and 'unclean' scm's are moved to attic,
+    # This function is called when build with --clean-checkou. 'error' and 'dirty' scm's are moved to attic,
     # while empty and clean directories are not.
     def status(self, workspacePath, dir):
         scmdir = os.path.join(workspacePath, dir)
@@ -273,7 +273,7 @@ fi
                        longMsg += '  '+line + '\n'
                 setStatus("M", longMsg)
 
-            # the following shows unpushed commits even on local branches. do not mark the SCM as unclean.
+            # the following shows unpushed commits even on local branches. do not mark the SCM as dirty.
             output = self.callGit(workspacePath, 'log', '--branches', '--not', '--remotes', '--decorate')
             if len(output):
                 longMsg = colorize("> unpushed:\n", "33")
