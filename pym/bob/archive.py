@@ -120,7 +120,11 @@ class BaseArchive:
                                                 .format(f.name, f.linkname))
                         f.linkname = f.linkname[8:]
                     f.name = f.name[8:]
-                    tar.extract(f, content)
+                    try:
+                        tar.extract(f, content)
+                    except UnicodeError:
+                        raise BuildError("File name encoding error while extracting '{}'".format(f.name),
+                                         help="Your locale(7) probably does not (fully) support unicode.")
                 elif f.name == "meta/audit.json.gz":
                     f.name = audit
                     tar.extract(f)
