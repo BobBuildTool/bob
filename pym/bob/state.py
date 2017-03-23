@@ -61,8 +61,14 @@ class _BobState():
 
         # load state if it exists
         if os.path.exists(self.__path):
-            with open(self.__path, 'rb') as f:
-                state = pickle.load(f)
+            try:
+                with open(self.__path, 'rb') as f:
+                    state = pickle.load(f)
+            except OSError as e:
+                raise ParseError("Error loading workspace state: " + str(e))
+            except pickle.PickleError as e:
+                raise ParseError("Error decoding workspace state: " + str(e))
+
             if state["version"] < _BobState.MIN_VERSION:
                 raise ParseError("This version of bob cannot read the build tree anymore. Sorry. :-(")
             if state["version"] > _BobState.CUR_VERSION:
@@ -93,11 +99,14 @@ class _BobState():
                 "buildState" : self.__buildState,
             }
             tmpFile = self.__path+".new"
-            with open(tmpFile, "wb") as f:
-                pickle.dump(state, f)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmpFile, self.__path)
+            try:
+                with open(tmpFile, "wb") as f:
+                    pickle.dump(state, f)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmpFile, self.__path)
+            except OSError as e:
+                raise ParseError("Error saving workspace state: " + str(e))
             self.__dirty = False
         else:
             self.__dirty = True
