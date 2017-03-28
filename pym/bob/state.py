@@ -27,8 +27,9 @@ class _BobState():
     #
     # Version history:
     #  2 -> 3: byNameDirs: values are tuples (directory, isSourceDir)
+    #  3 -> 4: jenkins job names are lower case
     MIN_VERSION = 2
-    CUR_VERSION = 3
+    CUR_VERSION = 4
 
     instance = None
     def __init__(self):
@@ -86,6 +87,11 @@ class _BobState():
                     digest : ((dir, False) if isinstance(dir, str) else dir)
                     for (digest, dir) in self.__byNameDirs.items()
                 }
+
+            if state["version"] <= 3:
+                for j in self.__jenkins.values():
+                    jobs = j["jobs"]
+                    j["jobs"] = { k.lower() : v for (k,v) in jobs.items() }
 
     def __save(self):
         if self.__asynchronous == 0:
