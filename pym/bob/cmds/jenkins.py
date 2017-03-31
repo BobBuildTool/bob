@@ -1860,8 +1860,11 @@ def doJenkinsSetOptions(recipes, argv):
         config["nodes"] = args.nodes
     if args.prefix is not None:
         config["prefix"] = args.prefix
-    if args.add_root:
-        config["roots"].extend(args.add_root)
+    for r in args.add_root:
+        if r not in config["roots"]:
+            config["roots"].append(r)
+        else:
+            print("Not adding root '{}': already configured".format(r), file=sys.stderr)
     for r in args.del_root:
         try:
             config["roots"].remove(r)
