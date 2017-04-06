@@ -17,6 +17,7 @@
 from .errors import ParseError
 import copy
 import errno
+import fcntl
 import os
 import pickle
 
@@ -255,6 +256,49 @@ class _BobState():
     def getBuildState(self):
         return copy.deepcopy(self.__buildState)
 
+class _BobLock():
+    instance = None
+    def __init__(self):
+        self.__lockfiles = {}
+
+    def getNamedLock(self, name):
+        try:
+            fd = open(name, 'w')
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            self.__lockfiles[name] = fd
+        except OSError as e:
+            from .tty import colorize
+            from sys import stderr
+            print(colorize("Warning: cannot lock " + name + ": "+str(e), "33"),
+                 file=stderr)
+
+    def releaseNamedLock(self, name):
+        if self.__lockfiles[name]:
+            try:
+                fcntl.flock(self.__lockfiles[name], fcntl.LOCK_UN)
+                self.__lockfiles[name].close()
+            except FileNotFoundError:
+                from .tty import colorize
+                from sys import stderr
+                print(colorize("Warning: lock file " + name + " was deleted while Bob was still running!", "33"),
+                    file=stderr)
+            except OSError as e:
+                from .tty import colorize
+                from sys import stderr
+                print(colorize("Warning: cannot unlock workspace: "+str(e), "33"),
+                    file=stderr)
+            finally:
+                del self.__lockfiles[name]
+
+    def finalize(self):
+        for name, fd in self.__lockfiles.items():
+            self.releaseNamedLock(name)
+
+def BobLock():
+    if _BobLock.instance is None:
+        _BobLock.instance = _BobLock()
+    return _BobLock.instance
+
 def BobState():
     if _BobState.instance is None:
         _BobState.instance = _BobState()
@@ -264,4 +308,8 @@ def finalize():
     if _BobState.instance is not None:
         _BobState.instance.finalize()
         _BobState.instance = None
+
+    if _BobLock.instance is not None:
+        _BobLock.instance.finalize()
+        _BobLock.instance = None
 

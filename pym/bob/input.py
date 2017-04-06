@@ -17,7 +17,7 @@
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import BuildError, ParseError
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
-from .state import BobState
+from .state import BobState, BobLock
 from .tty import colorize, WarnOnce
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binLstat
 from abc import ABCMeta, abstractmethod
@@ -2684,17 +2684,20 @@ class RecipeSet:
     def generateTree(self, envOverrides={}, sandboxEnabled=False):
         (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
         cacheName = ".bob-tree.dbm"
+        BobLock().getNamedLock(cacheName + ".lock")
 
         # try to load persisted tree
         roots = TreeStorage.load(cacheName, cacheKey)
-        if roots is not None:
-            return roots
 
-        # generate and convert
-        roots = self.__generatePackages(lambda p, m: "unused", env, cacheKey, sandboxEnabled)
+        if roots is None:
+            # generate and convert
+            roots = self.__generatePackages(lambda p, m: "unused", env, cacheKey, sandboxEnabled)
 
-        # save tree cache
-        return TreeStorage.create(cacheName, cacheKey, roots)
+            # save tree cache
+            roots = TreeStorage.create(cacheName, cacheKey, roots)
+
+        BobLock().releaseNamedLock(cacheName + ".lock")
+        return roots
 
 
 class TreeStorage:
@@ -2784,11 +2787,13 @@ class TreeStorage:
 class YamlCache:
 
     def open(self):
+        BobLock().getNamedLock(".bob-cache.lock")
         self.__shelve = shelve.open(".bob-cache.shelve")
         self.__files = {}
 
     def close(self):
         self.__shelve.close()
+        BobLock().releaseNamedLock(".bob-cache.lock")
         h = hashlib.sha1()
         for (name, data) in sorted(self.__files.items()):
             h.update(struct.pack("<I", len(name)))
