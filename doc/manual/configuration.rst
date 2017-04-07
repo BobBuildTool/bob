@@ -324,7 +324,7 @@ newline preserving block literal. See the following example (note the pipe
 symbol on the end of the first line)::
 
     buildScript: |
-        ./configure
+        $1/configure
         make
 
 The script is subject to file inclusion with the ``$<<path>>`` and
