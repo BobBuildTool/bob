@@ -35,6 +35,7 @@ import re
 import ssl
 import sys
 import textwrap
+import time
 import urllib.parse
 import xml.etree.ElementTree
 
@@ -982,7 +983,15 @@ class JobNameCalculator:
         return self.__regexJobName.sub('_', self.getJobDisplayName(step)).lower()
 
 
-def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages):
+def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, allVariantIds,
+                    shortdescription=False):
+
+    if step.isPackageStep() and shortdescription:
+        if step.getVariantId() in allVariantIds:
+            return
+        else:
+            allVariantIds.add(step.getVariantId())
+
     name = nameCalculator.getJobInternalName(step)
     if name in jobs:
         jj = jobs[name]
@@ -998,7 +1007,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages):
     # always recurse on arguments
     for d in sorted(step.getArguments(), key=lambda d: d.getPackage().getName()):
         if d.isValid(): _genJenkinsJobs(d, jobs, nameCalculator, archiveBackend,
-                                            seenPackages)
+                                            seenPackages, allVariantIds, shortdescription)
 
     # Recurse on tools and sandbox only for package steps. Also do an early
     # reject if the particular package stack was already seen. This is safe as
@@ -1010,7 +1019,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages):
             if stack not in seenPackages:
                 seenPackages.add(stack)
                 _genJenkinsJobs(toolStep, jobs, nameCalculator, archiveBackend,
-                                seenPackages)
+                                seenPackages, allVariantIds, shortdescription)
 
         sandbox = step.getSandbox()
         if sandbox is not None:
@@ -1019,7 +1028,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages):
             if stack not in seenPackages:
                 seenPackages.add(stack)
                 _genJenkinsJobs(sandboxStep, jobs, nameCalculator, archiveBackend,
-                                seenPackages)
+                                seenPackages, allVariantIds, shortdescription)
 
 def jenkinsNameFormatter(step, props):
     return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
@@ -1054,15 +1063,14 @@ def genJenkinsJobs(recipes, jenkins):
         jenkinsNamePersister(jenkins, nameFormatter),
         config.get('defines', {}),
         config.get('sandbox', False))
-
     nameCalculator = JobNameCalculator(prefix)
     rootPackages = [ walkPackagePath(rootPackages, r) for r in config["roots"] ]
     for root in rootPackages:
         nameCalculator.addPackage(root)
-
     nameCalculator.sanitize()
     for root in sorted(rootPackages, key=lambda root: root.getName()):
-        _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler, set())
+        _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler, set(), set(),
+                        config.get('shortdescription', False))
 
     return jobs
 
@@ -1112,6 +1120,11 @@ def doJenkinsAdd(recipes, argv):
         help="Do clean builds (clear workspace)")
     parser.add_argument("name", help="Symbolic name for server")
     parser.add_argument("url", help="Server URL")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--shortdescription', action='store_true', default=None,
+                        help='Don\'t calculate all paths for description')
+    group.add_argument('--longdescription', action='store_false', dest='shortdescription',
+                        help='Calculate all paths for description')
     args = parser.parse_args(argv)
 
     defines = {}
@@ -1160,7 +1173,8 @@ def doJenkinsAdd(recipes, argv):
         "credentials" : args.credentials,
         "clean" : args.clean,
         "keep" : args.keep,
-        "options" : options
+        "options" : options,
+        "shortdescription" : args.shortdescription
     }
     BobState().addJenkins(args.name, config)
 
@@ -1798,6 +1812,11 @@ def doJenkinsSetOptions(recipes, argv):
     parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
     parser.add_argument('--authtoken', help='AuthToken for remote triggering jobs')
     group = parser.add_mutually_exclusive_group()
+    group.add_argument('--shortdescription', action='store_true', default=None,
+                        help='Don\'t calculate all paths for description')
+    group.add_argument('--longdescription', action='store_false', dest='shortdescription',
+                        help='Calculate all paths for description')
+    group = parser.add_mutually_exclusive_group()
     group.add_argument('--keep', action='store_true', default=None,
         help="Keep obsolete jobs by disabling them")
     group.add_argument('--no-keep', action='store_false', dest='keep',
@@ -1854,6 +1873,7 @@ def doJenkinsSetOptions(recipes, argv):
             "keep" : False,
             "options" : {},
             "authtoken": None,
+            "shortdescription": False,
         })
 
     if args.nodes is not None:
@@ -1887,6 +1907,8 @@ def doJenkinsSetOptions(recipes, argv):
         config['credentials'] = args.credentials
     if args.authtoken is not None:
         config['authtoken'] = args.authtoken
+    if args.shortdescription is not None:
+        config['shortdescription'] = args.shortdescription
     if args.clean is not None:
         config['clean'] = args.clean
     if args.keep is not None:
