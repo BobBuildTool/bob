@@ -131,6 +131,50 @@ class Default(dict):
     def __missing__(self, key):
         return self.__default
 
+def doQueryMeta(argv, bobRoot):
+    parser = argparse.ArgumentParser(prog="bob query-meta",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description="""Query meta information of packages.""")
+    parser.add_argument('package', help="(Sub-)package to query")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
+    parser.add_argument('-r', '--recursive', default=False, action='store_true',
+                        help="Recursively display dependencies")
+    args = parser.parse_args(argv)
+
+    defines = {}
+    for define in args.defines:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+
+    recipes = RecipeSet()
+    recipes.setConfigFiles(args.configFile)
+    recipes.parse()
+    rootPackages = recipes.generatePackages(lambda s,m: "unused", defines)
+    package = walkPackagePath(rootPackages, args.package)
+
+    def showPackage(package, recurse, done):
+        # show recipes only once for each package
+        key = (package.getName(), package.getPackageStep().getVariantId())
+        if key not in done:
+            for (var, val) in package.getMetaEnv().items():
+                print(package.getName() + " " + var + "=" + val)
+            done.add(key)
+
+        # recurse package tree if requested
+        if recurse:
+            for ps in package.getDirectDepSteps():
+                showPackage(ps.getPackage(), recurse, done)
+
+    showPackage(package, args.recursive, set())
+
 def doQuerySCM(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-scm",
         formatter_class=argparse.RawDescriptionHelpFormatter,

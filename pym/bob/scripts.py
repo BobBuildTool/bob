@@ -59,6 +59,10 @@ def __queryscm(*args, **kwargs):
      from .cmds.misc import doQuerySCM
      doQuerySCM(*args, **kwargs)
 
+def __querymeta(*args, **kwargs):
+     from .cmds.misc import doQueryMeta
+     doQueryMeta(*args, **kwargs)
+
 def __queryrecipe(*args, **kwargs):
      from .cmds.misc import doQueryRecipe
      doQueryRecipe(*args, **kwargs)
@@ -80,6 +84,7 @@ availableCommands = {
     "query-scm"     : (False, __queryscm, "Query SCM information"),
     "query-recipe"  : (False, __queryrecipe, "Query package sources"),
     "query-path"    : (False, __querypath, "Query path information"),
+    "query-meta"    : (False, __querymeta, "Query Package meta information"),
 }
 
 def doHelp(extended, fd):
@@ -209,6 +214,7 @@ def auditEngine():
     parser.add_argument("-D", dest="defines", action="append", default=[], nargs=2)
     parser.add_argument("--arg", action="append", default=[])
     parser.add_argument("--env")
+    parser.add_argument("-E", action="append", default=[], nargs=2)
     parser.add_argument("--recipes")
     parser.add_argument("--sandbox")
     parser.add_argument("--scm", action="append", default=[], nargs=3)
@@ -228,6 +234,7 @@ def auditEngine():
         except ValueError:
             raise BuildError("Invalid digest argument")
         if args.env is not None: gen.setEnv(args.env)
+        for (name, value) in args.metaEnv: gen.addMetaEnv(name, value)
         for (name, value) in args.defines: gen.addDefine(name, value)
         for (name, workspace, dir) in args.scm: gen.addScm(name, workspace, dir)
         for (name, audit) in args.tool: gen.addTool(name, audit)

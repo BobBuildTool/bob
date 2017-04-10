@@ -342,6 +342,8 @@ esac
         audit.addDefine("recipe", step.getPackage().getRecipe().getName())
         audit.addDefine("package", "/".join(step.getPackage().getStack()))
         audit.addDefine("step", step.getLabel())
+        for var, val in step.getPackage().getMetaEnv().items():
+            audit.addMetaEnv(var, val)
         audit.setRecipesAudit(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
 
         # The following things make only sense if we just executed the step

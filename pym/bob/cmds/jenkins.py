@@ -375,6 +375,8 @@ class JenkinsJob:
             "-D", "jenkins-node", '"$NODE_NAME"',
             "-D", "jenkins-build-url", '"$BUILD_URL"'
         ]
+        for (var, val) in step.getPackage().getMetaEnv().items():
+            cmd.extend(["-E", var, quote(val)])
         recipesAudit = step.getPackage().getRecipe().getRecipeSet().getScmAudit()
         if recipesAudit is not None:
             cmd.extend(["--recipes", quote(json.dumps(recipesAudit.dump()))])

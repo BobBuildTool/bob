@@ -84,6 +84,7 @@ class Artifact:
             'date'     : str
         },
         "env" : str,
+        schema.Optional('metaEnv') : str,
         "scms" : [ dict ],
         schema.Optional("recipes") : dict,
         "dependencies" : {
@@ -125,6 +126,7 @@ class Artifact:
             'date'     : str(datetime.utcnow()),
         }
         self.__env = ""
+        self.__metaEnv = {}
         self.__scms = []
         self.__deps = []
         self.__tools = {}
@@ -146,6 +148,7 @@ class Artifact:
         self.__defines = data["meta"]
         self.__build = data["build"]
         self.__env = data["env"]
+        self.__metaEnv = data.get("metaEnv", {})
 
         self.__scms = []
         scms = data["scms"]
@@ -187,6 +190,9 @@ class Artifact:
             "dependencies" : dependencies
         }
 
+        if self.__metaEnv:
+            ret[ "metaEnv"] = self.__metaEnv
+
         if self.__recipes is not None:
             ret["recipes"] = self.__recipes.dump()
 
@@ -217,6 +223,9 @@ class Artifact:
     def addTool(self, name, tool):
         self.__tools[name] = tool
         self.__id = None
+
+    def addMetaEnv(self, var, value):
+        self.__metaEnv[var] = value
 
     def setSandbox(self, sandbox):
         self.__sandbox = sandbox
@@ -329,6 +338,9 @@ class Audit:
         audit = Audit.fromFile(tool)
         self.__merge(audit)
         self.__artifact.addTool(name, audit.getId())
+
+    def addMetaEnv(self, var, value):
+        self.__artifact.addMetaEnv(var, value)
 
     def setSandbox(self, sandbox):
         audit = Audit.fromFile(sandbox)
