@@ -35,7 +35,6 @@ import re
 import ssl
 import sys
 import textwrap
-import time
 import urllib.parse
 import xml.etree.ElementTree
 

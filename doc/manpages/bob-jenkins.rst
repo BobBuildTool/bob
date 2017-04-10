@@ -24,6 +24,7 @@ Available sub-commands:
     bob jenkins add [-h] [-n NODES] [-o OPTIONS] [-w] [-p PREFIX] [-r ROOT]
                     [-D DEFINES] [--keep] [--download] [--upload]
                     [--no-sandbox] [--credentials CREDENTIALS] [--clean]
+                    [--shortdescription] [--longdescription]
                     name url
     bob jenkins export [-h] name dir
     bob jenkins graph [-h] name
@@ -37,6 +38,7 @@ Available sub-commands:
                             [--keep | --no-keep] [--download | --no-download]
                             [--upload | --no-upload] [--sandbox | --no-sandbox]
                             [--clean | --incremental] [--autotoken AUTHTOKEN]
+                            [--shortdescription]
                             name
     bob jenkins set-url [-h] name url
 
@@ -80,6 +82,9 @@ Options
 ``--keep``
     Keep obsolete jobs by disabling them
 
+``--longdescription``
+    Every path to a package will be calculated and displayed in job description
+
 ``-n NODES, --nodes NODES``
     Label for Jenkins Slave
 
@@ -122,6 +127,10 @@ Options
 
 ``--sandbox``
     Enable sandboxing
+
+``--shortdescription``
+    Do not calculate every path for every variant.
+    Leads to short job description: One path for each variant.
 
 ``-U UNDEFINES``
     Undefine environment variable override
