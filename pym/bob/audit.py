@@ -84,7 +84,7 @@ class Artifact:
             'date'     : str
         },
         "env" : str,
-        "metaEnv" : { schema.Optional(str) : str },
+        schema.Optional('metaEnv') : str,
         "scms" : [ dict ],
         schema.Optional("recipes") : dict,
         "dependencies" : {
@@ -148,7 +148,7 @@ class Artifact:
         self.__defines = data["meta"]
         self.__build = data["build"]
         self.__env = data["env"]
-        self.__metaEnv = data["metaEnv"]
+        self.__metaEnv = data.get("metaEnv", {})
 
         self.__scms = []
         scms = data["scms"]
@@ -186,10 +186,12 @@ class Artifact:
             "meta" : self.__defines,
             "build" : self.__build,
             "env" : self.__env,
-            "metaEnv" : self.__metaEnv,
             "scms" : [ s.dump() for s in self.__scms ],
             "dependencies" : dependencies
         }
+
+        if self.__metaEnv:
+            ret[ "metaEnv"] = self.__metaEnv
 
         if self.__recipes is not None:
             ret["recipes"] = self.__recipes.dump()
