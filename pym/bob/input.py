@@ -36,6 +36,7 @@ import pickle
 import re
 import schema
 import shelve
+import string
 import struct
 import sys
 import yaml
@@ -1495,7 +1496,9 @@ class IncludeHelper:
 
             self.incDigests.append(asHexStr(hashlib.sha1(content).digest()))
             if mode == '<':
+                valid_chars = "_%s%s" % (string.ascii_letters, string.digits)
                 var = "_{}{}".format(self.varBase, self.count)
+                var = ''.join(c for c in var if c in valid_chars)
                 self.count += 1
                 self.prolog.extend([
                     "{VAR}=$(mktemp)".format(VAR=var),
