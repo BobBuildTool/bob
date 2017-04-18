@@ -388,6 +388,7 @@ esac
             stepEnv["PATH"] = ":".join(step.getPaths() + step.getSandbox().getPaths())
         stepEnv["LD_LIBRARY_PATH"] = ":".join(step.getLibraryPaths())
         stepEnv["BOB_CWD"] = step.getExecPath()
+        stepEnv["BOB_STEP_NAME"] = "/".join(self.__currentPackage.getStack())
 
         # filter runtime environment
         if self.__preserveEnv:
