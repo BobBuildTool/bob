@@ -66,6 +66,64 @@ packageScript: |
         self.executeBobJenkinsCmd("push -q myTestJenkins")
         self.jenkinsMock.getServerData()
 
+    def createComplexRecipes(self):
+        ROOT = """
+root: True
+
+depends:
+    - dependency-one
+    - dependency-two
+
+checkoutSCM:
+    -
+      scm: git
+      url: git@mytest.de/root.git
+      branch: test
+
+buildScript: |
+    echo 'build'
+packageScript: |
+    echo 'package'
+        """
+
+        DEPENDENCYONE = """
+depends:
+    - dependency-two
+
+checkoutSCM:
+    -
+      scm: git
+      url: git@mytest.de/dependency-one.git
+      branch: test
+
+buildScript: |
+    echo 'build'
+packageScript: |
+    echo 'package'
+        """
+
+        DEPENDENCYTWO = """
+checkoutSCM:
+    -
+      scm: git
+      url: git@mytest.de/dependency-two.git
+      branch: test
+
+buildScript: |
+    echo 'build'
+packageScript: |
+    echo 'package'
+        """
+
+        with open(os.path.join("recipes", "root.yaml"), "w") as f:
+            print(ROOT, file=f)
+        with open(os.path.join("recipes", "dependency-one.yaml"), "w") as f:
+            print(DEPENDENCYONE, file=f)
+        with open(os.path.join("recipes", "dependency-two.yaml"), "w") as f:
+            print(DEPENDENCYTWO, file=f)
+
+        self.executeBobJenkinsCmd("add myTestJenkinsComplex http://localhost:8080 -r root")
+
     def testSetNode(self):
         self.executeBobJenkinsCmd("set-options -n testSlave myTestJenkins")
         self.executeBobJenkinsCmd("push -q myTestJenkins")
@@ -144,3 +202,42 @@ archive:
         self.executeBobJenkinsCmd("push -q myTestJenkins")
         send = self.jenkinsMock.getServerData()
         assert(send[0][0] == '/job/test/doDelete')
+
+    def testShortDescription(self):
+        self.createComplexRecipes()
+        self.executeBobJenkinsCmd("set-options --shortdescription myTestJenkinsComplex")
+        self.executeBobJenkinsCmd("push -q myTestJenkinsComplex")
+        send = self.jenkinsMock.getServerData()
+        result_set = set()
+        try:
+            for i in send:
+                if i[0] == '/createItem?name=dependency-two':
+                    for items in ElementTree.fromstring(i[1]).iter('description'):
+
+                        for line in [x for x in items.itertext()][0].splitlines():
+                            if line.startswith('<li>') and line.endswith('</li>'):
+                                result_set.add(line[4:-5])
+        except:
+            print("Malformed Data Recieved")
+
+        assert (result_set == {'root/dependency-one/dependency-two'})
+
+    def testLongDescription(self):
+
+        self.createComplexRecipes()
+        self.executeBobJenkinsCmd("set-options --longdescription myTestJenkinsComplex")
+        self.executeBobJenkinsCmd("push -q myTestJenkinsComplex")
+        send = self.jenkinsMock.getServerData()
+        result_set = set()
+        try:
+            for i in send:
+                if i[0] == '/createItem?name=dependency-two':
+                    for items in ElementTree.fromstring(i[1]).iter('description'):
+
+                        for line in [x for x in items.itertext()][0].splitlines():
+                            if line.startswith('<li>') and line.endswith('</li>'):
+                                result_set.add(line[4:-5])
+        except:
+            print("Malformed Data Recieved")
+
+        assert (result_set == {'root/dependency-two', 'root/dependency-one/dependency-two'})
