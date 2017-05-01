@@ -1,0 +1,5 @@
+.coverage.*
+dev
+work
+.bob-*
+log.txt

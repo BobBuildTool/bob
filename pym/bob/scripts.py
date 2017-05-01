@@ -22,6 +22,7 @@ from .utils import asHexStr, hashDirectory
 import argparse
 import sys
 import traceback
+import os
 
 def __build(*args, **kwargs):
      from .cmds.build import doBuild
@@ -143,6 +144,7 @@ def bob(bobRoot):
         parser = argparse.ArgumentParser(prog="bob",
                                          description="Bob build tool\n" + describeCommands(),
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser.add_argument('-C', '--directory', dest='directory', action='append', help="Change to DIRECTORY before doing anything", metavar="DIRECTORY")
         parser.add_argument('--version', dest='version', action='store_true', help="Show version")
         parser.add_argument('--debug',   dest='debug',   action='store_true', help="Enable debug mode")
         parser.add_argument('command', nargs='?', help="Command to execute")
@@ -161,6 +163,13 @@ def bob(bobRoot):
             return 2
 
         if args.command in availableCommands:
+            if args.directory is not None:
+                for i in args.directory:
+                    try:
+                        os.chdir(i)
+                    except OSError as e:
+                        print("bob -C: unable to change directory:", str(e), file=sys.stderr)
+                        return 1
             availableCommands[args.command][1](args.args, bobRoot)
             return 0
         else:
