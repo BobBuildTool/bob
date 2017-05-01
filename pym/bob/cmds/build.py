@@ -95,15 +95,17 @@ umask 0022
 
 _keep_env=0
 _verbose=1
+_no_log=0
 _sandbox={SANDBOX_SETUP}
 _keep_sandbox=0
-_args=`getopt -o kqvE -- "$@"`
+_args=`getopt -o nkqvE -- "$@"`
 if [ $? != 0 ] ; then echo "Args parsing failed..." >&2 ; exit 1 ; fi
 eval set -- "$_args"
 
 _args=( )
 while true ; do
     case "$1" in
+        -n) _no_log=1 ;;
         -k) _keep_sandbox=1 ;;
         -q) : $(( _verbose-- )) ;;
         -v) : $(( _verbose++ )) ;;
@@ -132,27 +134,41 @@ case "${{1:-run}}" in
         ;;
     __run)
         cd "${{0%/*}}/workspace"
-        case "$_verbose" in
-            0)
-                run_script >> ../log.txt 2>&1
-                ;;
-            1)
-                set -o pipefail
-                {{
+        if [[ $_no_log = 0 ]] ; then
+            case "$_verbose" in
+                0)
+                    run_script >> ../log.txt 2>&1
+                    ;;
+                1)
+                    set -o pipefail
                     {{
-                        run_script | tee -a ../log.txt
-                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
-                }} 1>&2- 2>/dev/null
-                ;;
-            *)
-                set -o pipefail
-                {{
+                        {{
+                            run_script | tee -a ../log.txt
+                        }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
+                    }} 1>&2- 2>/dev/null
+                    ;;
+                *)
+                    set -o pipefail
                     {{
-                        run_script | tee -a ../log.txt
-                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
-                }} 3>&1 1>&2- 2>&3-
-                ;;
-        esac
+                        {{
+                            run_script | tee -a ../log.txt
+                        }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
+                    }} 3>&1 1>&2- 2>&3-
+                    ;;
+            esac
+        else
+            case "$_verbose" in
+                0)
+                    run_script 2>&1 > /dev/null
+                    ;;
+                1)
+                    run_script > /dev/null
+                    ;;
+                *)
+                    run_script
+                    ;;
+            esac
+        fi
         ;;
     shell)
         if [[ $_keep_env = 1 ]] ; then
@@ -248,11 +264,12 @@ esac
         return fmt
 
     def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
-                 envWhiteList, bobRoot, cleanBuild):
+                 envWhiteList, bobRoot, cleanBuild, noLogFile):
         self.__recipes = recipes
         self.__wasRun= {}
         self.__wasSkipped = {}
         self.__verbose = max(-2, min(3, verbose))
+        self.__noLogFile = noLogFile
         self.__force = force
         self.__skipDeps = skipDeps
         self.__buildOnly = buildOnly
@@ -507,6 +524,8 @@ esac
             cmdLine.append('-v')
         elif self.__verbose >= 2:
             cmdLine.append('-vv')
+        if self.__noLogFile:
+            cmdLine.append('-n')
 
         try:
             proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv)
@@ -925,6 +944,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Decrease verbosity (may be specified multiple times)")
     parser.add_argument('-v', '--verbose', default=0, action='count',
         help="Increase verbosity (may be specified multiple times)")
+    parser.add_argument('--no-logfiles', default=None, action='store_true',
+        help="Disable logFile generation.")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
@@ -982,6 +1003,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             'download' : "deps" if develop else "yes",
             'sandbox' : not develop,
             'clean_checkout' : False,
+            'no_logfiles' : False,
         }
 
     for a in vars(args):
@@ -1005,7 +1027,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
     builder = LocalBuilder(recipes, cfg.get('verbosity', 0) + args.verbose - args.quiet, args.force,
                            args.no_deps, True if args.build_mode == 'build-only' else False,
-                           args.preserve_env, envWhiteList, bobRoot, args.clean)
+                           args.preserve_env, envWhiteList, bobRoot, args.clean,
+                           args.no_logfiles)
 
     builder.setArchiveHandler(getArchiver(recipes))
     builder.setUploadMode(args.upload)

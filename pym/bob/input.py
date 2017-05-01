@@ -2241,6 +2241,7 @@ class RecipeSet:
             schema.Optional('checkout_only') : bool,
             schema.Optional('clean') : bool,
             schema.Optional('verbosity') : int,
+            schema.Optional('no_logfiles') : bool,
             schema.Optional('upload') : bool,
             schema.Optional('download') : schema.Or("yes", "no", "deps", "forced", "forced-deps"),
             schema.Optional('sandbox') : bool,
