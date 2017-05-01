@@ -79,7 +79,7 @@ __bob_cook()
    elif [[ "$prev" = "-c" ]] ; then
       COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
    else
-      __bob_complete_path "--destination -e -f --force --clean-checkout -n --no-deps -b --build-only --clean --incremental --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose"
+      __bob_complete_path "--destination -e -f --force --clean-checkout -n --no-deps -b --build-only --clean --incremental --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose --no-logfiles"
    fi
 }
 
