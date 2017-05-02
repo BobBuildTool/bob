@@ -22,6 +22,7 @@ from .utils import asHexStr, hashDirectory
 import argparse
 import sys
 import traceback
+import os
 
 def __build(*args, **kwargs):
      from .cmds.build import doBuild
@@ -87,18 +88,21 @@ availableCommands = {
     "query-meta"    : (False, __querymeta, "Query Package meta information"),
 }
 
-def doHelp(extended, fd):
+def describeCommands():
     hlCmds = "\n".join(sorted([ "  {:16s}{}".format(k, v[2])
         for (k,v) in availableCommands.items() if v[0] ]))
     llCmds = "\n".join(sorted([ "  {:16s}{}".format(k, v[2])
         for (k,v) in availableCommands.items() if not v[0] ]))
-    print("usage: bob [-h | --help] [--version] <command> [<args>]", file=fd)
-    if extended:
-        print("\nThe following high level commands are available:", file=fd)
-        print("\n{}\n".format(hlCmds), file=fd)
-        print("The following scripting commands are available:", file=fd)
-        print("\n{}\n".format(llCmds), file=fd)
-        print("See 'bob <command> -h' for more information on a specific command.", file=fd)
+    return """
+The following high level commands are available:
+
+{}
+
+The following scripting commands are available:
+
+{}
+
+See 'bob <command> -h' for more information on a specific command.""".format(hlCmds, llCmds);
 
 def catchErrors(fun, *args, **kwargs):
     try:
@@ -137,28 +141,40 @@ def bob(bobRoot):
         sys.stderr = Unbuffered(sys.stderr)
 
     def cmd():
-        ret = 0
-        while len(sys.argv) > 1:
-            verb = sys.argv[1]
-            argv = sys.argv[2:]
-            if verb in availableCommands:
-                availableCommands[verb][1](argv, bobRoot)
-            elif (verb == '-h') or (verb == '--help'):
-                doHelp(True, sys.stdout)
-            elif (verb == '--version'):
-                print("Bob version", BOB_VERSION)
-            elif verb == "--debug":
-                _enableDebug()
-                del sys.argv[1]
-                continue
-            else:
-                print("Don't know what to do for '{}'.".format(verb), file=sys.stderr)
-                ret = 2
-                doHelp(True, sys.stderr)
-            break
+        parser = argparse.ArgumentParser(prog="bob",
+                                         description="Bob build tool\n" + describeCommands(),
+                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser.add_argument('-C', '--directory', dest='directory', action='append', help="Change to DIRECTORY before doing anything", metavar="DIRECTORY")
+        parser.add_argument('--version', dest='version', action='store_true', help="Show version")
+        parser.add_argument('--debug',   dest='debug',   action='store_true', help="Enable debug mode")
+        parser.add_argument('command', nargs='?', help="Command to execute")
+        parser.add_argument('args', nargs=argparse.REMAINDER, help="Arguments to command")
+
+        args = parser.parse_args(sys.argv[1:])
+        if args.version:
+            print("Bob version", BOB_VERSION)
+            return 0
+
+        if args.debug:
+            _enableDebug()
+
+        if args.command is None:
+            print("No command specified. Use 'bob -h' for help.", file=sys.stderr)
+            return 2
+
+        if args.command in availableCommands:
+            if args.directory is not None:
+                for i in args.directory:
+                    try:
+                        os.chdir(i)
+                    except OSError as e:
+                        print("bob -C: unable to change directory:", str(e), file=sys.stderr)
+                        return 1
+            availableCommands[args.command][1](args.args, bobRoot)
+            return 0
         else:
-            doHelp(False, sys.stderr)
-        return ret
+            print("Don't know what to do for '{}'. Use 'bob -h' for help".format(args.command), file=sys.stderr)
+            return 2
 
     try:
         ret = catchErrors(cmd)

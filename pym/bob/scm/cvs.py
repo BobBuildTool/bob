@@ -37,7 +37,7 @@ class CvsScm(Scm):
     # - mandatory parameters: cvsroot, module
     # - optional parameters: rev, dir (dir is required if there are multiple checkouts)
     def __init__(self, spec, overrides=[]):
-        super().__init__(spec, overrides)
+        super().__init__(overrides)
         self.__recipe = spec['recipe']
         self.__cvsroot = spec["cvsroot"]
         self.__module = spec["module"]

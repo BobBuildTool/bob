@@ -1,0 +1,26 @@
+# The point of this test is just to parse all SCMs,
+# serving as a litmus test that the SCM modules are at least remotely sane.
+root: true
+
+checkoutSCM:
+    -
+        scm: git
+        url: http://git.git/git.git/
+        dir: gitdir
+    -
+        scm: url
+        url: http://url.url/url.tgz
+        dir: urldir
+    -
+        scm: svn
+        url: https://svn.svn/svn/trunk/
+        dir: svndir
+    -
+        scm: cvs
+        cvsroot: /home/cvs/cvsroot
+        module: mod
+        dir: cvsdir
+
+buildScript: "true"
+
+packageScript: "true"
