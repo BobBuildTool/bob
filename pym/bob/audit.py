@@ -84,7 +84,7 @@ class Artifact:
             'date'     : str
         },
         "env" : str,
-        schema.Optional('metaEnv') : str,
+        schema.Optional('metaEnv') : { schema.Optional(str) : str },
         "scms" : [ dict ],
         schema.Optional("recipes") : dict,
         "dependencies" : {
