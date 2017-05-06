@@ -230,7 +230,7 @@ def auditEngine():
     parser.add_argument("-D", dest="defines", action="append", default=[], nargs=2)
     parser.add_argument("--arg", action="append", default=[])
     parser.add_argument("--env")
-    parser.add_argument("-E", action="append", default=[], nargs=2)
+    parser.add_argument("-E", dest="metaEnv", action="append", default=[], nargs=2)
     parser.add_argument("--recipes")
     parser.add_argument("--sandbox")
     parser.add_argument("--scm", action="append", default=[], nargs=3)
