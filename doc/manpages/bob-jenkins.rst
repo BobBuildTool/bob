@@ -178,6 +178,18 @@ artifacts.copy
          archive for sharing artifacts. Must be used together with ``--upload``
          and ``--download``.
 
+jobs.isolate
+    Regular expression that is matching package names. Any package that is
+    matched is put into a separate job. Multiple variants of the same package
+    are still kept in the same job, though.
+
+    This option might be used to single out specific packages into dedicated
+    Jenkins jobs that are unrelated to other jobs in the recipe. Typical use
+    cases are documentation and testing ``multiPackage`` that should not
+    prevent other packages from building if they fail. The obvious draw back is
+    that common checkout and build steps might be duplicated to multiple jobs,
+    though.
+
 scm.git.shallow
     Instruct the Jenkins git plugin to create shallow clones with a history
     truncated to the specified number of commits. If the parameter is unset
