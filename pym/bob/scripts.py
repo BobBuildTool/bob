@@ -162,6 +162,13 @@ def bob(bobRoot):
             print("No command specified. Use 'bob -h' for help.", file=sys.stderr)
             return 2
 
+        # Shortcut for 'bob help' displaying the same help screen like 'bob
+        # --help' would do. The 'bob help COMMAND' case is handled by help from
+        # the available commands.
+        if args.command == "help" and len(args.args) == 0:
+            parser.print_help()
+            return 0
+
         if args.command in availableCommands:
             if args.directory is not None:
                 for i in args.directory:

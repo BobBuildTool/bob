@@ -1,5 +1,6 @@
 *~
 *.pyc
+.*.swp
 .coverage
 __pycache__/
 /htmlcov

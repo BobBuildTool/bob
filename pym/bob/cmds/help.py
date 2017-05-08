@@ -22,6 +22,8 @@ import sys
 def doHelp(availableCommands, argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob help",
         description="Display help information about command.")
+    # Help without a command parameter gets handled by the main argument parser
+    # in pym/bob/scripts.py.
     parser.add_argument('command', help="Command to get help for")
 
     args = parser.parse_args(argv)
