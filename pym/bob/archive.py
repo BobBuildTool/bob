@@ -382,7 +382,7 @@ class SimpleHttpArchive(BaseArchive):
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
             BOB_UPLOAD_URL="{URL}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}.tgz"
             if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
-                curl -sSg -T {RESULT} "$BOB_UPLOAD_URL"{FIXUP}
+                curl -sSgf -T {RESULT} "$BOB_UPLOAD_URL"{FIXUP}
             fi""".format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                          FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
                          GEN=ARCHIVE_GENERATION))
