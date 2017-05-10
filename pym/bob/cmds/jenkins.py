@@ -888,6 +888,46 @@ class JobNameCalculator:
             for d in step.getAllDepSteps():
                 self.__addStep(d)
 
+    def isolate(self, regex):
+        """Isolate matching packages into separate jobs.
+
+        Any package that is matched is put into a dedicated job. Multiple
+        variants of the same package are still kept in the same job, though.
+        """
+        if not regex: return
+
+        regex = re.compile(regex)
+
+        # find all matching packages that have different names than their recipes
+        matches = [ recipeName for (recipeName, steps) in self.__names.items()
+                    if any((regex.search(s.getPackage().getName()) is not None) for s in steps)
+                  ]
+
+        # single them out
+        for recipeName in matches:
+            packageSteps = self.__names[recipeName]
+
+            # isolate
+            remainingSteps = [ s for s in packageSteps
+                               if (regex.search(s.getPackage().getName()) is None)
+                             ]
+            isolatedSteps = [ s for s in packageSteps
+                              if (regex.search(s.getPackage().getName()) is not None)
+                            ]
+
+            # re-arrange graph
+            if remainingSteps:
+                self.__names[recipeName] = remainingSteps
+            else:
+                # completely smashed job
+                del self.__names[recipeName]
+                self.__splits.add(recipeName)
+            for s in isolatedSteps:
+                pkgName = s.getPackage().getName()
+                self.__splits.add(pkgName)
+                self.__packages[s.getVariantId()] = (s, pkgName)
+                self.__names.setdefault(pkgName, []).append(s)
+
     def sanitize(self):
         """Make sure jobs are not cyclic.
 
@@ -1075,6 +1115,7 @@ def genJenkinsJobs(recipes, jenkins):
     jobs = {}
     config = BobState().getJenkinsConfig(jenkins)
     prefix = config["prefix"]
+    options = config.get("options", {})
     archiveHandler = getArchiver(recipes)
     archiveHandler.wantUpload(config.get("upload", False))
     archiveHandler.wantDownload(config.get("download", False))
@@ -1091,6 +1132,7 @@ def genJenkinsJobs(recipes, jenkins):
     rootPackages = [ walkPackagePath(rootPackages, r) for r in config["roots"] ]
     for root in rootPackages:
         nameCalculator.addPackage(root)
+    nameCalculator.isolate(options.get("jobs.isolate"))
     nameCalculator.sanitize()
     for root in sorted(rootPackages, key=lambda root: root.getName()):
         _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler, set(), set(),
