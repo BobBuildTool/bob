@@ -52,8 +52,6 @@ def getVersion():
 
     return version
 
-BOB_VERSION = getVersion()
-
 def getBobInputHash():
     from .utils import hashDirectory
     import os
@@ -62,7 +60,12 @@ def getBobInputHash():
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
     return hashDirectory(root, ignoreDirs=['__pycache__', 'cmds'])
 
-BOB_INPUT_HASH = getBobInputHash()
+try:
+    BOB_VERSION = getVersion()
+    BOB_INPUT_HASH = getBobInputHash()
+except KeyboardInterrupt:
+    import sys
+    sys.exit(1)
 
 # global debug switch
 DEBUG = False
