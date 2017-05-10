@@ -554,7 +554,8 @@ class JenkinsJob:
         prepareCmds.append("}")
         prepareCmds.append("")
         whiteList = []
-        whiteList.extend([ JenkinsJob._tgzName(d) for d in self.__deps.values()])
+        if options.get("artifacts.copy", "jenkins") == "jenkins":
+            whiteList.extend([ JenkinsJob._tgzName(d) for d in self.__deps.values()])
         whiteList.extend([ JenkinsJob._buildIdName(d) for d in self.__deps.values()])
         whiteList.extend([ d.getWorkspacePath() for d in self.__checkoutSteps.values() ])
         whiteList.extend([ d.getWorkspacePath() for d in self.__buildSteps.values() ])
@@ -615,8 +616,11 @@ class JenkinsJob:
                         })
                 xml.etree.ElementTree.SubElement(
                     cp, "project").text = self.__getJobName(d)
+                copyArtefacts = JenkinsJob._buildIdName(d)
+                if options.get("artifacts.copy", "jenkins") == "jenkins":
+                    copyArtefacts += "," + JenkinsJob._tgzName(d)
                 xml.etree.ElementTree.SubElement(
-                    cp, "filter").text = JenkinsJob._tgzName(d)+","+JenkinsJob._buildIdName(d)
+                    cp, "filter").text = copyArtefacts
                 xml.etree.ElementTree.SubElement(
                     cp, "target").text = ""
                 xml.etree.ElementTree.SubElement(
@@ -627,6 +631,20 @@ class JenkinsJob:
                     })
                 xml.etree.ElementTree.SubElement(
                     cp, "doNotFingerprintArtifacts").text = "true"
+
+                if options.get("artifacts.copy", "jenkins") == "archive":
+                    if d.isShared():
+                        vid = variantIdToName(d.getVariantId())
+                        prepareCmds.append(textwrap.dedent("""
+                            if  [[ ! -d {SHARED}/{VID1}/{VID2} ]] ; then
+                                {DOWNLOAD_CMD}
+                            fi""").format(VID1=vid[0:2], VID2=vid[2:],
+                                   SHARED=sharedDir,
+                                   DOWNLOAD_CMD=self.__archive.download(d,
+                                                    JenkinsJob._buildIdName(d),
+                                                    JenkinsJob._tgzName(d))))
+                    else:
+                        prepareCmds.append(self.__archive.download(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d)))
 
             # extract deps
             prepareCmds.append("\n# extract deps\n# ============")
@@ -770,10 +788,11 @@ class JenkinsJob:
                     TGZ=JenkinsJob._tgzName(d),
                     AUDIT=JenkinsJob._auditName(d),
                     WSP_PATH=d.getWorkspacePath()),
-                "" if d.doesProvideTools() and (d.getSandbox() is None)
+                "" if d.doesProvideTools() and (d.getSandbox() is None) and (options.get("artifacts.copy", "jenkins") == "jenkins")
                     else self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             ])
-            publish.append(JenkinsJob._tgzName(d))
+            if options.get("artifacts.copy", "jenkins") == "jenkins":
+                publish.append(JenkinsJob._tgzName(d))
             publish.append(JenkinsJob._buildIdName(d))
 
         # install shared packages
@@ -1059,6 +1078,10 @@ def genJenkinsJobs(recipes, jenkins):
     archiveHandler = getArchiver(recipes)
     archiveHandler.wantUpload(config.get("upload", False))
     archiveHandler.wantDownload(config.get("download", False))
+    options = config.get("options")
+    if options.get("artifacts.copy", "jenkins") == "archive":
+        if not archiveHandler.canUploadJenkins() or not archiveHandler.canDownloadJenkins():
+            raise ParseError("No archive for up and download found but artifacts.copy using archive enabled!")
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
     rootPackages = recipes.generatePackages(
         jenkinsNamePersister(jenkins, nameFormatter),
@@ -1145,6 +1168,14 @@ def doJenkinsAdd(recipes, argv):
             parser.error("Malformed plugin option: "+i)
         if val != "":
             options[opt] = val
+
+    if options.get("artifacts.copy") not in [None, "archive", "jenkins"]:
+        parser.error("Invalid option for artifacts.copy. Only 'archive' and 'jenkins' are allowed!")
+    if options.get("artifacts.copy", "jenkins") == "archive":
+        if not args.upload:
+            parser.error("Archive sharing can not be used without upload enabled! Exiting..", file=sys.stderr)
+        if not args.download:
+            parser.error("Archive sharing can not be used without download enabled! Exiting..", file=sys.stderr)
 
     if args.name in BobState().getAllJenkins():
         print("Jenkins '{}' already added.".format(args.name), file=sys.stderr)
@@ -1914,6 +1945,7 @@ def doJenkinsSetOptions(recipes, argv):
         config['clean'] = args.clean
     if args.keep is not None:
         config['keep'] = args.keep
+
     options = config.setdefault('options', {})
     for i in args.options:
         (opt, sep, val) = i.partition("=")
@@ -1923,6 +1955,14 @@ def doJenkinsSetOptions(recipes, argv):
             if opt in options: del options[opt]
         else:
             options[opt] = val
+
+    if options.get("artifacts.copy") not in [None, "archive", "jenkins"]:
+        parser.error("Invalid option for artifacts.copy. Only 'archive' and 'jenkins' are allowed!")
+    if options.get("artifacts.copy", "jenkins") == "archive":
+        if not args.upload:
+            parser.error("Archive sharing can not be used without upload enabled! Exiting..", file=sys.stderr)
+        if not args.download:
+            parser.error("Archive sharing can not be used without download enabled! Exiting..", file=sys.stderr)
 
     BobState().setJenkinsConfig(args.name, config)
 

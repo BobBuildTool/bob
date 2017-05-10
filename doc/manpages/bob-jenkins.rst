@@ -165,6 +165,19 @@ Extended Options
 The following Jenkins plugin options are available. Any unrecognized options
 are ignored.
 
+artifacts.copy
+    This options selects the way of sharing archives between workspaces.
+    Possible values are:
+      * jenkins:
+         Use copy artifacts pluing to copy result and buildId to jenkins-master.
+         The downstream job will afterwards be configured to use copy artifact
+         plugin again and copy the artifact into it's workspace. This is the
+         default.
+      * archive:
+         Only copy the buildID file to to jenkins master and use the binary
+         archive for sharing artifacts. Must be used together with ``--upload``
+         and ``--download``.
+
 scm.git.shallow
     Instruct the Jenkins git plugin to create shallow clones with a history
     truncated to the specified number of commits. If the parameter is unset
@@ -189,4 +202,5 @@ shared.dir
     directory set this option to an absolute path. If you expand Jenkins
     environment variables make sure that they follow the syntax of the default
     value because the path is also expanded by the Token Macro plugin.
+
 
