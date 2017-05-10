@@ -1,0 +1,6 @@
+root: true
+
+inherit: [a]
+
+packageScript: |
+    true
