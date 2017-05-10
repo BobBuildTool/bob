@@ -1732,28 +1732,33 @@ class Recipe(object):
         # involved.
         self.__checkoutDeterministic = recipe.get("checkoutDeterministic", checkoutScript is None)
 
+    def __resolveClassesOrder(self, cls, stack, visited):
+        # prevent cycles
+        clsName = cls.__packageName
+        if clsName in stack:
+            raise ParseError("Cyclic class inheritence: " + " -> ".join(stack + [clsName]))
+
+        # depth first
+        ret = []
+        subInherit = [ self.__recipeSet.getClass(c) for c in cls.__inherit ]
+        if cls.__anonBaseClass: subInherit.insert(0, cls.__anonBaseClass)
+        for c in subInherit:
+            ret.extend(self.__resolveClassesOrder(c, stack + [clsName], visited))
+
+        # classes are inherited only once
+        if clsName not in visited:
+            ret.append(cls)
+            visited.add(clsName)
+
+        return ret
+
     def resolveClasses(self):
         # must be done only once
         if self.__classesResolved: return
         self.__classesResolved = True
 
-        # calculate order of classes (depth first)
-        visited = set()
-        backlog = [ self.__recipeSet.getClass(c) for c in self.__inherit ]
-        if self.__anonBaseClass: backlog.insert(0, self.__anonBaseClass)
-        inherit = []
-        while backlog:
-            next = backlog.pop(0)
-            if next.__packageName in visited: continue
-            subInherit = [ self.__recipeSet.getClass(c) for c in next.__inherit if c not in visited ]
-            if next.__anonBaseClass and (next.__anonBaseClass.__packageName not in visited):
-                subInherit.insert(0, next.__anonBaseClass)
-            if subInherit:
-                # prepend and re-insert current class
-                backlog[0:0] = subInherit + [next]
-            else:
-                inherit.append(next)
-                visited.add(next.__packageName)
+        # calculate order of classes (depth first) but ignore ourself
+        inherit = self.__resolveClassesOrder(self, [], set([self.__packageName]))
 
         # inherit classes
         inherit.reverse()
