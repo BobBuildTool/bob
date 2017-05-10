@@ -48,7 +48,7 @@ def getVersion():
 
     if not version:
         # Last fallback. See http://semver.org/ and adjust accordingly.
-        version = "0.12.0"
+        version = "0.13-dev"
 
     return version
 
