@@ -848,7 +848,7 @@ class Step(metaclass=ABCMeta):
         sandbox of the step too. That is, the step is only deterministic if all
         its dependencies and this step itself is deterministic.
         """
-        return all(arg.isDeterministic() for arg in self.getAllDepSteps())
+        return all(arg.isDeterministic() for arg in self.getAllDepSteps(True))
 
     def isValid(self):
         """Returns True if this step is valid, False otherwise."""
