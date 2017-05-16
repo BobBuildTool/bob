@@ -26,6 +26,7 @@ from base64 import b64encode
 from itertools import chain
 from glob import glob
 from pipes import quote
+from os.path import expanduser
 from string import Template
 import copy
 import dbm
@@ -2470,6 +2471,9 @@ class RecipeSet:
         self.__createSchemas()
 
         # user config(s)
+        self.__parseUserConfig("/etc/bobdefault.yaml")
+        self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
+                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
         self.__parseUserConfig("default.yaml")
 
         # finally parse recipes
