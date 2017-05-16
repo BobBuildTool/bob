@@ -2513,7 +2513,7 @@ class RecipeSet:
         self.__aliases.update(cfg.get("alias", {}))
 
         for p in cfg.get("include", []):
-            self.__parseUserConfig(str(p) + ".yaml")
+            self.__parseUserConfig(os.path.join(os.path.dirname(fileName), str(p)) + ".yaml")
 
     def __createSchemas(self):
         varNameSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
