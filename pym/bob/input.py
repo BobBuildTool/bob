@@ -19,7 +19,7 @@ from .errors import BuildError, ParseError
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
 from .tty import colorize, WarnOnce
-from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat
+from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive
 from abc import ABCMeta, abstractmethod
 from collections.abc import MutableMapping
 from base64 import b64encode
@@ -2232,6 +2232,21 @@ class MountValidator:
 
 class RecipeSet:
 
+    BUILD_DEV_SCHEMA = schema.Schema(
+        {
+            schema.Optional('destination') : str,
+            schema.Optional('force') : bool,
+            schema.Optional('no_deps') : bool,
+            schema.Optional('build_mode') : schema.Or("build-only","normal", "checkout-only"),
+            schema.Optional('checkout_only') : bool,
+            schema.Optional('clean') : bool,
+            schema.Optional('verbosity') : int,
+            schema.Optional('upload') : bool,
+            schema.Optional('download') : schema.Or("yes", "no", "deps", "forced", "forced-deps"),
+            schema.Optional('sandbox') : bool,
+            schema.Optional('clean_checkout') : bool,
+        })
+
     USER_CONFIG_SCHEMA = schema.Schema(
         {
             schema.Optional('environment') : schema.Schema({
@@ -2262,12 +2277,21 @@ class RecipeSet:
                     })
                 })
             }) ],
+            schema.Optional('command') : schema.Schema({
+                schema.Optional('dev') : BUILD_DEV_SCHEMA,
+                schema.Optional('build') : BUILD_DEV_SCHEMA
+            }),
         })
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
         schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}$'),
         schema.Optional('plugins') : [str]
     })
+
+    _ignoreCmdConfig = False
+    @classmethod
+    def ignoreCommandCfg(cls):
+        cls._ignoreCmdConfig = True
 
     def __init__(self):
         self.__defaultEnv = {}
@@ -2298,6 +2322,7 @@ class RecipeSet:
             "match" : funMatch,
         }
         self.__plugins = {}
+        self.__commandConfig = {}
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -2402,6 +2427,9 @@ class RecipeSet:
     def setConfigFiles(self, configFiles):
         self.__configFiles = configFiles
 
+    def getCommandConfig(self):
+        return self.__commandConfig
+
     def getHook(self, name):
         return self.__hooks[name][-1]
 
@@ -2473,7 +2501,7 @@ class RecipeSet:
         # user config(s)
         self.__parseUserConfig("/etc/bobdefault.yaml")
         self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
-                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
+            os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
         self.__parseUserConfig("default.yaml")
 
         # finally parse recipes
@@ -2515,7 +2543,8 @@ class RecipeSet:
             self.__archive = cfg["archive"]
         self.__scmOverrides.extend([ ScmOverride(o) for o in cfg.get("scmOverrides", []) ])
         self.__aliases.update(cfg.get("alias", {}))
-
+        if not self._ignoreCmdConfig:
+            self.__commandConfig = updateDicRecursive(self.__commandConfig, cfg.get("command", {}))
         for p in cfg.get("include", []):
             self.__parseUserConfig(os.path.join(os.path.dirname(fileName), str(p)) + ".yaml")
 

@@ -898,19 +898,24 @@ def touch(rootPackages):
 def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('packages', metavar='PACKAGE', type=str, nargs='+',
         help="(Sub-)package to build")
-    parser.add_argument('--destination', metavar="DEST",
+    parser.add_argument('--destination', metavar="DEST", default=None,
         help="Destination of build result (will be overwritten!)")
-    parser.add_argument('-f', '--force', default=False, action='store_true',
+    parser.add_argument('-f', '--force', default=None, action='store_true',
         help="Force execution of all build steps")
-    parser.add_argument('-n', '--no-deps', default=False, action='store_true',
+    parser.add_argument('-n', '--no-deps', default=None, action='store_true',
         help="Don't build dependencies")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-b', '--build-only', default=False, action='store_true',
+    group.add_argument('-b', '--build-only', dest='build_mode', default=None,
+        action='store_const', const='build-only',
         help="Don't checkout, just build and package")
-    group.add_argument('-B', '--checkout-only', default=False, action='store_true',
+    group.add_argument('-B', '--checkout-only', dest='build_mode',
+        action='store_const', const='checkout-only',
         help="Don't build, just check out sources")
+    group.add_argument('--normal', dest='build_mode',
+        action='store_const', const='normal',
+        help="Checkout, build and package")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--clean', action='store_true', default=not develop,
+    group.add_argument('--clean', action='store_true', default=None,
         help="Do clean builds (clear build directory)")
     group.add_argument('--incremental', action='store_false', dest='clean',
         help="Reuse build directory for incremental builds")
@@ -928,17 +933,17 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Preserve environment variable")
     parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
         help="Preserve whole environment")
-    parser.add_argument('--upload', default=False, action='store_true',
+    parser.add_argument('--upload', default=None, action='store_true',
         help="Upload to binary archive")
-    parser.add_argument('--download', metavar="MODE", default="deps" if develop else "yes",
+    parser.add_argument('--download', metavar="MODE", default=None,
         help="Download from binary archive (yes, no, deps, forced, forced-deps)",
         choices=['yes', 'no', 'deps', 'forced', 'forced-deps'])
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=not develop,
+    group.add_argument('--sandbox', action='store_true', default=None,
         help="Enable sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
-    parser.add_argument('--clean-checkout', action='store_true', default=False, dest='clean_checkout',
+    parser.add_argument('--clean-checkout', action='store_true', default=None, dest='clean_checkout',
         help="Do a clean checkout if SCM state is dirty.")
     args = parser.parse_args(argv)
 
@@ -961,6 +966,28 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
 
+    # if arguments are not passed on cmdline use them from default.yaml or set to default yalue
+    if develop:
+        cfg = recipes.getCommandConfig().get('dev', {})
+    else:
+        cfg = recipes.getCommandConfig().get('build', {})
+
+    defaults = {
+            'destination' : '',
+            'force' : False,
+            'no_deps' : False,
+            'build_mode' : 'normal',
+            'clean' : not develop,
+            'upload' : False,
+            'download' : "deps" if develop else "yes",
+            'sandbox' : not develop,
+            'clean_checkout' : False,
+        }
+
+    for a in vars(args):
+        if getattr(args, a) == None:
+            setattr(args, a, cfg.get(a, defaults.get(a)))
+
     envWhiteList = recipes.envWhiteList()
     envWhiteList |= set(args.white_list)
 
@@ -976,9 +1003,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     if develop:
         touch(rootPackages)
 
-    builder = LocalBuilder(recipes, args.verbose - args.quiet, args.force,
-                           args.no_deps, args.build_only, args.preserve_env,
-                           envWhiteList, bobRoot, args.clean)
+    builder = LocalBuilder(recipes, cfg.get('verbosity', 0) + args.verbose - args.quiet, args.force,
+                           args.no_deps, True if args.build_mode == 'build-only' else False,
+                           args.preserve_env, envWhiteList, bobRoot, args.clean)
 
     builder.setArchiveHandler(getArchiver(recipes))
     builder.setUploadMode(args.upload)
@@ -995,7 +1022,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         if args.destination: backlog.extend(packageStep._getProvidedDeps())
     try:
         for p in backlog:
-            builder.cook([p], p.getPackage(), args.checkout_only)
+            builder.cook([p], p.getPackage(), True if args.build_mode == 'checkout-only' else False)
             resultPath = p.getWorkspacePath()
             if resultPath not in results:
                 results.append(resultPath)
