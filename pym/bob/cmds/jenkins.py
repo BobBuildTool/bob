@@ -200,7 +200,7 @@ class JenkinsJob:
             if vid in self.__deps: del self.__deps[vid]
 
             # add dependencies unless they are built by this job or invalid
-            for dep in step.getAllDepSteps():
+            for dep in step.getAllDepSteps(True):
                 if not dep.isValid(): continue
                 vid = dep.getVariantId()
                 if vid in self.__steps: continue
@@ -885,7 +885,7 @@ class JobNameCalculator:
                 name = step.getPackage().getRecipe().getName()
                 self.__packages[variantId] = (step, name)
                 self.__names.setdefault(name, []).append(step)
-            for d in step.getAllDepSteps():
+            for d in step.getAllDepSteps(True):
                 self.__addStep(d)
 
     def isolate(self, regex):
@@ -951,7 +951,7 @@ class JobNameCalculator:
         if name in depGraph: return
         depGraph[name] = subDeps = set()
         for packageStep in self.__names[name]:
-            backlog = list(packageStep.getAllDepSteps())
+            backlog = list(packageStep.getAllDepSteps(True))
             while backlog:
                 d = backlog.pop(0)
                 if d.isPackageStep():
@@ -960,7 +960,7 @@ class JobNameCalculator:
                     subDeps.add(subName)
                     self.__buildDepGraph(subName, depGraph)
                 else:
-                    backlog.extend(d.getAllDepSteps())
+                    backlog.extend(d.getAllDepSteps(True))
 
     def __findCycle(self, name, depGraph):
         """Find cycles in 'depGraph' starting at 'name'.
@@ -1081,7 +1081,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, al
                 _genJenkinsJobs(toolStep, jobs, nameCalculator, archiveBackend,
                                 seenPackages, allVariantIds, shortdescription)
 
-        sandbox = step.getSandbox()
+        sandbox = step.getSandbox(True)
         if sandbox is not None:
             sandboxStep = sandbox.getStep()
             stack = "/".join(sandboxStep.getPackage().getStack())
