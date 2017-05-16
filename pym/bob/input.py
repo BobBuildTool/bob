@@ -960,12 +960,12 @@ class Step(metaclass=ABCMeta):
 
         return h.digest()
 
-    def getSandbox(self):
+    def getSandbox(self, forceSandbox=False):
         """Return Sandbox used in this Step.
 
         Returns a Sandbox object or None if this Step is built without one.
         """
-        if self.__sandbox and self.__sandbox.isEnabled():
+        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
             return self.__sandbox
         else:
             return None
@@ -1045,14 +1045,16 @@ class Step(metaclass=ABCMeta):
                                   for a in self._coreStep.args ]
         return ret
 
-    def getAllDepSteps(self):
+    def getAllDepSteps(self, forceSandbox=False):
         """Get all dependent steps of this Step.
 
         This includes the direct input to the Step as well as indirect inputs
         such as the used tools or the sandbox.
         """
         return self.getArguments() + sorted([ d.step for d in self.getTools().values() ]) + (
-            [self.__sandbox.getStep()] if (self.__sandbox and self.__sandbox.isEnabled()) else [])
+            [self.__sandbox.getStep()]
+                if (self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox))
+                else [])
 
     def getEnv(self):
         """Return dict of environment variables."""
@@ -1401,14 +1403,14 @@ class Package(object):
                 for d in self.__corePackage.indirectDepSteps ]
         return ret
 
-    def getAllDepSteps(self):
+    def getAllDepSteps(self, forceSandbox=False):
         """Return list of all dependencies of the package.
 
         This list includes all direct and indirect dependencies. Additionally
         the used sandbox and tools are included too."""
         allDeps = set(self.getDirectDepSteps())
         allDeps |= set(self.getIndirectDepSteps())
-        if self.__sandbox and self.__sandbox.isEnabled():
+        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
             allDeps.add(self.__sandbox.getStep())
         for i in self.getPackageStep().getTools().values(): allDeps.add(i.getStep())
         return sorted(allDeps)
