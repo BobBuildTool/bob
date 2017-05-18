@@ -308,8 +308,8 @@ class DirHasher:
 def hashDirectory(path, index=None, ignoreDirs=None):
     return DirHasher(index, ignoreDirs).hashDirectory(path)
 
-def binLstat(path):
-    st = os.lstat(path)
+def binStat(path):
+    st = os.stat(path)
     return struct.pack('=QQLqLQ', float2ns(st.st_ctime), float2ns(st.st_mtime),
                        st.st_dev, st.st_ino, st.st_mode, st.st_size)
 

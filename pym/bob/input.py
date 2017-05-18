@@ -19,7 +19,7 @@ from .errors import BuildError, ParseError
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
 from .tty import colorize, WarnOnce
-from .utils import asHexStr, joinScripts, sliceString, compareVersion, binLstat
+from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat
 from abc import ABCMeta, abstractmethod
 from collections.abc import MutableMapping
 from base64 import b64encode
@@ -2822,10 +2822,10 @@ class YamlCache:
         return self.__digest
 
     def loadYaml(self, name, yamlSchema, default):
-        binStat = binLstat(name)
+        bs = binStat(name)
         if name in self.__shelve:
             cached = self.__shelve[name]
-            if ((cached['lstat'] == binStat) and
+            if ((cached['lstat'] == bs) and
                 (cached.get('vsn') == BOB_INPUT_HASH)):
                 self.__files[name] = cached['digest']
                 return cached['data']
@@ -2846,7 +2846,7 @@ class YamlCache:
 
         self.__files[name] = digest
         self.__shelve[name] = {
-            'lstat' : binStat,
+            'lstat' : bs,
             'data' : data,
             'vsn' : BOB_INPUT_HASH,
             'digest' : digest
