@@ -1,0 +1,2 @@
+checkoutScript: |
+    echo "root" > result.txt

@@ -1,5 +1,8 @@
 root: true
 
+# classes and recipes are in different namespaces
+inherit: [root]
+
 depends:
     - t1
     - t2
@@ -9,7 +12,7 @@ depends:
 
 buildScript: |
     rm -rf result.txt
-    for i in "${@:2}" ; do
+    for i in "$@" ; do
         cat "$i/result.txt" >> result.txt
     done
 
