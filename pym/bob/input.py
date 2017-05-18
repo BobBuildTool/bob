@@ -1734,9 +1734,9 @@ class Recipe(object):
         # involved.
         self.__checkoutDeterministic = recipe.get("checkoutDeterministic", checkoutScript is None)
 
-    def __resolveClassesOrder(self, cls, stack, visited):
+    def __resolveClassesOrder(self, cls, stack, visited, isRecipe=False):
         # prevent cycles
-        clsName = cls.__packageName
+        clsName = "<recipe>" if isRecipe else cls.__packageName
         if clsName in stack:
             raise ParseError("Cyclic class inheritence: " + " -> ".join(stack + [clsName]))
 
@@ -1748,7 +1748,7 @@ class Recipe(object):
             ret.extend(self.__resolveClassesOrder(c, stack + [clsName], visited))
 
         # classes are inherited only once
-        if clsName not in visited:
+        if (clsName not in visited) and not isRecipe:
             ret.append(cls)
             visited.add(clsName)
 
@@ -1760,7 +1760,7 @@ class Recipe(object):
         self.__classesResolved = True
 
         # calculate order of classes (depth first) but ignore ourself
-        inherit = self.__resolveClassesOrder(self, [], set([self.__packageName]))
+        inherit = self.__resolveClassesOrder(self, [], set(), True)
 
         # inherit classes
         inherit.reverse()
