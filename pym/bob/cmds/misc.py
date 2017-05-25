@@ -106,7 +106,7 @@ def doLS(argv, bobRoot):
     packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
     showAliases = packages.getAliases() if args.package == "" else []
 
-    for (stack, root) in packages.walkTreePath(args.package):
+    for (stack, root) in packages.queryTreePath(args.package, True):
         if args.prefixed:
             showPrefixed(root, args.recursive, showAll, showOrigin, showAliases, stack)
         elif args.recursive:
