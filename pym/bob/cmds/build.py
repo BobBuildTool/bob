@@ -1038,10 +1038,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     backlog = []
     results = []
     for p in args.packages:
-        packageStep = packages.walkPackagePath(p).getPackageStep()
-        backlog.append(packageStep)
-        # automatically include provided deps when exporting
-        if args.destination: backlog.extend(packageStep._getProvidedDeps())
+        for package in packages.queryPackagePath(p):
+            packageStep = package.getPackageStep()
+            backlog.append(packageStep)
+            # automatically include provided deps when exporting
+            if args.destination: backlog.extend(packageStep._getProvidedDeps())
     try:
         for p in backlog:
             builder.cook([p], p.getPackage(), True if args.build_mode == 'checkout-only' else False)
@@ -1051,30 +1052,33 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     finally:
         builder.saveBuildState()
 
-    endTime = time.time()
     # tell the user
-    if len(results) == 1:
-        print("Build result is in", results[0])
-    elif len(results) > 1:
-        print("Build results are in:\n  ", "\n   ".join(results))
+    if results:
+        if len(results) == 1:
+            print("Build result is in", results[0])
+        else:
+            print("Build results are in:\n  ", "\n   ".join(results))
 
-    stats = builder.getStatistic()
-    activeOverrides = len(stats.getActiveOverrides())
-    print("Duration: " + str(datetime.timedelta(seconds=(endTime - startTime))) + ", "
-            + str(stats.checkouts)
-                + " checkout" + ("s" if (stats.checkouts != 1) else "")
-                + " (" + str(activeOverrides) + (" overrides" if (activeOverrides != 1) else " override") + " active), "
-            + str(stats.packagesBuilt)
-                + " package" + ("s" if (stats.packagesBuilt != 1) else "") + " built, "
-            + str(stats.packagesDownloaded) + " downloaded.")
+        endTime = time.time()
+        stats = builder.getStatistic()
+        activeOverrides = len(stats.getActiveOverrides())
+        print("Duration: " + str(datetime.timedelta(seconds=(endTime - startTime))) + ", "
+                + str(stats.checkouts)
+                    + " checkout" + ("s" if (stats.checkouts != 1) else "")
+                    + " (" + str(activeOverrides) + (" overrides" if (activeOverrides != 1) else " override") + " active), "
+                + str(stats.packagesBuilt)
+                    + " package" + ("s" if (stats.packagesBuilt != 1) else "") + " built, "
+                + str(stats.packagesDownloaded) + " downloaded.")
 
-    # copy build result if requested
-    ok = True
-    if args.destination:
-        for result in results:
-            ok = copyTree(result, args.destination) and ok
-    if not ok:
-        raise BuildError("Could not copy everything to destination. Your aggregated result is probably incomplete.")
+        # copy build result if requested
+        ok = True
+        if args.destination:
+            for result in results:
+                ok = copyTree(result, args.destination) and ok
+        if not ok:
+            raise BuildError("Could not copy everything to destination. Your aggregated result is probably incomplete.")
+    else:
+        print("Your query matched no packages. Naptime!")
 
 def doBuild(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob build", description='Build packages in release mode.')
