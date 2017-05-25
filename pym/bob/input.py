@@ -2403,7 +2403,7 @@ class RecipeSet:
 
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
-        return PackageSet(cacheKey, self.__aliases,
+        return PackageSet(cacheKey, self.__aliases, self.__stringFunctions,
             lambda: self.__generatePackages(nameFormatter, env, cacheKey, sandboxEnabled))
 
     def getPolicy(self, name, location=None):
