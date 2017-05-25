@@ -123,9 +123,13 @@ def catchErrors(fun, *args, **kwargs):
     except KeyboardInterrupt:
         ret = 2
     except ImportError as e:
-        print(colorize("Python module '{}' seems to be missing. ".format(e.name) +
-                       "Please check your installation...", "31;1"),
-              file=sys.stderr)
+        if e.name:
+            print(colorize("Python module '{}' seems to be missing. ".format(e.name) +
+                           "Please check your installation...", "31;1"),
+                  file=sys.stderr)
+        else:
+            print(colorize(str(e) + " Please check your installation...", "31;1"),
+                  file=sys.stderr)
         ret = 3
     except Exception:
         print(colorize("""An internal Exception has occured. This should not have happenend.
