@@ -74,8 +74,11 @@ def doLS(argv, bobRoot):
                         help="Show origin of indirect dependencies")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
-    parser.add_argument('-p', '--prefixed', default=False, action='store_true',
-                        help="Prints the full path prefix for each package")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-p', '--prefixed', default=False, action='store_true',
+                       help="Prints the full path prefix for each package")
+    group.add_argument('-d', '--direct', default=False, action='store_true',
+                       help="List packages themselves, not their contents")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
@@ -109,6 +112,8 @@ def doLS(argv, bobRoot):
     for (stack, root) in packages.queryTreePath(args.package, True):
         if args.prefixed:
             showPrefixed(root, args.recursive, showAll, showOrigin, showAliases, stack)
+        elif args.direct:
+            print("/".join(stack) if stack else "/")
         elif args.recursive:
             print("/".join(stack) if stack else "/")
             showTree(root, showAll, showOrigin)
