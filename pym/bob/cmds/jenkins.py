@@ -17,7 +17,7 @@
 from .. import BOB_VERSION
 from ..archive import getArchiver
 from ..errors import ParseError, BuildError
-from ..input import RecipeSet, walkPackagePath
+from ..input import RecipeSet
 from ..state import BobState
 from ..tty import WarnOnce
 from ..utils import asHexStr
@@ -1124,12 +1124,12 @@ def genJenkinsJobs(recipes, jenkins):
         if not archiveHandler.canUploadJenkins() or not archiveHandler.canDownloadJenkins():
             raise ParseError("No archive for up and download found but artifacts.copy using archive enabled!")
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
-    rootPackages = recipes.generatePackages(
+    packages = recipes.generatePackages(
         jenkinsNamePersister(jenkins, nameFormatter),
         config.get('defines', {}),
         config.get('sandbox', False))
     nameCalculator = JobNameCalculator(prefix)
-    rootPackages = [ walkPackagePath(rootPackages, r) for r in config["roots"] ]
+    rootPackages = [ packages.walkPackagePath(r) for r in config["roots"] ]
     for root in rootPackages:
         nameCalculator.addPackage(root)
     nameCalculator.isolate(options.get("jobs.isolate"))

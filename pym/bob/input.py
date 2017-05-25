@@ -15,7 +15,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
-from .errors import BuildError, ParseError
+from .errors import ParseError
+from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
@@ -29,7 +30,6 @@ from pipes import quote
 from os.path import expanduser
 from string import Template
 import copy
-import dbm
 import hashlib
 import fnmatch
 import os, os.path
@@ -71,6 +71,14 @@ def maybeGlob(pattern):
     else:
         return None
 
+class __uidGen:
+    def __init__(self):
+        self.cur = 0
+    def get(self):
+        self.cur += 1
+        return self.cur
+
+uidGen = __uidGen().get
 
 class PluginProperty:
     """Base class for plugin property handlers.
@@ -988,9 +996,10 @@ class PackageStep(RegularStep):
 class CorePackage:
     __slots__ = ("name", "recipe", "directDepSteps", "indirectDepSteps",
         "states", "metaEnv", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "touchedTools")
+        "touchedTools", "pkgId")
 
-    def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps, states, metaEnv):
+    def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps,
+                 states, metaEnv, pkgId):
         self.name = name
         self.recipe = recipe
         self.directDepSteps = [ CoreStepRef(package, d) for d in directDepSteps ]
@@ -999,6 +1008,7 @@ class CorePackage:
         self.metaEnv = metaEnv
         self.tools = {}
         self.sandbox = ...
+        self.pkgId = pkgId
 
 class Package(object):
     """Representation of a package that was created from a recipe.
@@ -1016,7 +1026,8 @@ class Package(object):
 
     def construct(self, name, stack, pathFormatter, recipe,
                   directDepSteps, indirectDepSteps, states, inputTools,
-                  allTools, inputSandbox, sandbox, touchedTools, metaEnv):
+                  allTools, inputSandbox, sandbox, touchedTools, metaEnv,
+                  pkgId):
         self.__stack = stack
         self.__pathFormatter = pathFormatter
         self.__directDepSteps = directDepSteps
@@ -1028,7 +1039,7 @@ class Package(object):
 
         # this will call back
         self.__corePackage = CorePackage(self, name, recipe, directDepSteps,
-            indirectDepSteps, states, metaEnv)
+            indirectDepSteps, states, metaEnv, pkgId)
 
         # these already need our __corePackage
         self._setCheckoutStep(CheckoutStep().construct(self, pathFormatter))
@@ -1053,6 +1064,17 @@ class Package(object):
         self.__sandbox = patchSandbox(inputSandbox, corePackage.sandbox, pathFormatter, self)
 
         return self
+
+    def _getId(self):
+        """The package-Id is uniquely representing every package variant.
+
+        On the package level there might be more dependencies than on the step
+        level. Meta variables are usually unused and also do not contribute to
+        the variant-id. The package-id still guarantees to not collide in these
+        cases. OTOH there can be identical packages with different ids, though
+        it should be an unusual case.
+        """
+        return self.__corePackage.pkgId
 
     def _getTouchedTools(self):
         return self.__corePackage.touchedTools
@@ -1384,6 +1406,19 @@ class Recipe(object):
 
         return list(collect(recipeSet.loadYaml(fileName, fileSchema), "", None))
 
+    @staticmethod
+    def createVirtualRoot(recipeSet, roots):
+        recipe = {
+            "depends" : [
+                { "name" : name, "use" : ["result"] } for name in roots
+            ],
+            "buildScript" : "true",
+            "packageScript" : "true"
+        }
+        ret = Recipe(recipeSet, recipe, "", ".", "", "", {})
+        ret.resolveClasses()
+        return ret
+
     def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName, properties, anonBaseClass=None):
         self.__recipeSet = recipeSet
         self.__sources = [ sourceFile ] if anonBaseClass is None else []
@@ -1575,11 +1610,7 @@ class Recipe(object):
         return self.__root == True
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
-                inputTools=Env(), inputStack=[]):
-        if self.__packageName in inputStack:
-            raise ParseError("Recipes are cyclic (1st package in cylce)")
-        stack = inputStack + [self.__packageName]
-
+                inputTools=Env(), stack=[]):
         # already calculated?
         for m in self.__corePackages:
             if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox):
@@ -1637,9 +1668,12 @@ class Recipe(object):
                 if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
                 r = self.__recipeSet.getRecipe(dep.recipe)
                 try:
+                    if r.__packageName in stack:
+                        raise ParseError("Recipes are cyclic (1st package in cylce)")
+                    depStack = stack + [r.__packageName]
                     p, s = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
                                      sandboxEnabled, depStates, depSandbox, depTools,
-                                     stack)
+                                     depStack)
                     subTreePackages.add(p.getName())
                     subTreePackages.update(s)
                     p = p.getPackageStep()
@@ -1694,7 +1728,7 @@ class Recipe(object):
         # create package
         p = Package().construct(self.__packageName, stack, pathFormatter, self,
             directPackages, indirectPackages, states, inputTools.detach(), tools.detach(),
-            inputSandbox, sandbox, tools.touchedKeys(), self.__metaEnv)
+            inputSandbox, sandbox, tools.touchedKeys(), self.__metaEnv, uidGen())
 
         # optional checkout step
         if self.__checkout != (None, None, []):
@@ -1948,7 +1982,6 @@ class RecipeSet:
     def __init__(self):
         self.__defaultEnv = {}
         self.__aliases = {}
-        self.__rootRecipes = []
         self.__recipes = {}
         self.__classes = {}
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
@@ -2175,6 +2208,7 @@ class RecipeSet:
                     raise
 
         # resolve recipes and their classes
+        rootRecipes = []
         for recipe in self.__recipes.values():
             try:
                 recipe.resolveClasses()
@@ -2182,7 +2216,11 @@ class RecipeSet:
                 e.pushFrame(recipe.getPackageName())
                 raise
             if recipe.isRoot():
-                self.__rootRecipes.append(recipe)
+                rootRecipes.append(recipe.getPackageName())
+
+        # create virtual root package
+        self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(rootRecipes))
+        self.__addRecipe(self.__rootRecipe)
 
     def __parseUserConfig(self, fileName, relativeIncludes=None):
         if relativeIncludes is None:
@@ -2335,44 +2373,23 @@ class RecipeSet:
         states = { n:s() for (n,s) in self.__states.items() }
         rootPkg = Package()
         rootPkg.construct("<root>", [], nameFormatter, None, [], [], states,
-            {}, {}, None, None, [], {})
+            {}, {}, None, None, [], {}, -1)
         try:
             with open(cacheName, "rb") as f:
                 persistedCacheKey = f.read(len(cacheKey))
                 if cacheKey == persistedCacheKey:
                     tmp = PackageUnpickler(f, self.getRecipe, self.__plugins,
                                            nameFormatter).load()
-                    result = { name : package.toStep(nameFormatter, rootPkg).getPackage()
-                               for (name, package) in tmp.items() }
-                    return result
+                    return tmp.toStep(nameFormatter, rootPkg).getPackage()
         except (EOFError, OSError, pickle.UnpicklingError):
             pass
 
         # not cached -> calculate packages
-        result = {}
-        try:
-            BobState().setAsynchronous()
-            for root in sorted(self.__rootRecipes, key=lambda p: p.getPackageName()):
-                try:
-                    result[root.getPackageName()] = root.prepare(nameFormatter, env,
-                                                                 sandboxEnabled,
-                                                                 states)[0]
-                except ParseError as e:
-                    e.pushFrame(root.getPackageName())
-                    raise e
-            tmp = result.copy()
-            for i in self.__aliases:
-                try:
-                    p = walkPackagePath(tmp, self.__aliases[i])
-                    result[i] = p
-                except ParseError as e:
-                    print(colorize("Bad alias '{}': {}".format(i, e.slogan), "33"), file=sys.stderr)
-        finally:
-            BobState().setSynchronous()
+        result = self.__rootRecipe.prepare(nameFormatter, env, sandboxEnabled,
+                                           states)[0]
 
         # save package tree for next invocation
-        tmp = { name : CoreStepRef(rootPkg, package.getPackageStep())
-                for (name, package) in result.items() }
+        tmp = CoreStepRef(rootPkg, result.getPackageStep())
         try:
             newCacheName = cacheName + ".new"
             with open(newCacheName, "wb") as f:
@@ -2386,112 +2403,14 @@ class RecipeSet:
 
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
-        return self.__generatePackages(nameFormatter, env, cacheKey, sandboxEnabled)
-
-    def generateTree(self, envOverrides={}, sandboxEnabled=False):
-        (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
-        cacheName = ".bob-tree.dbm"
-
-        # try to load persisted tree
-        roots = TreeStorage.load(cacheName, cacheKey)
-        if roots is not None:
-            return roots
-
-        # generate and convert
-        roots = self.__generatePackages(lambda p, m: "unused", env, cacheKey, sandboxEnabled)
-
-        # save tree cache
-        return TreeStorage.create(cacheName, cacheKey, roots)
+        return PackageSet(cacheKey, self.__aliases,
+            lambda: self.__generatePackages(nameFormatter, env, cacheKey, sandboxEnabled))
 
     def getPolicy(self, name, location=None):
         (policy, warning) = self.__policies[name]
         if policy is None:
             warning.warn(location)
         return policy
-
-
-class TreeStorage:
-    def __init__(self, db, key=b''):
-        self.__db = db
-        self.__content = pickle.loads(db[key])
-
-    def __contains__(self, key):
-        return key in self.__content
-
-    def __getitem__(self, key):
-        data = self.__content[key]
-        return (TreeStorage(self.__db, data[0]), data[1], data[2])
-
-    def __iter__(self):
-        return iter(self.__content)
-
-    def keys(self):
-        return self.__content.keys()
-
-    def items(self):
-        return iter( (name, (TreeStorage(self.__db, data[0]), data[1], data[2]))
-                     for name, data in self.__content.items() )
-
-    def __len__(self):
-        return len(self.__content)
-
-    @classmethod
-    def load(cls, cacheName, cacheKey):
-        try:
-            db = dbm.open(cacheName, "r")
-            persistedCacheKey = db.get('vsn')
-            if cacheKey == persistedCacheKey:
-                return cls(db)
-            else:
-                db.close()
-        except OSError:
-            pass
-        except dbm.error:
-            pass
-        return None
-
-    @classmethod
-    def create(cls, cacheName, cacheKey, roots):
-        try:
-            db = dbm.open(cacheName, 'n')
-            try:
-                TreeStorage.__convertRootToTree(db, roots)
-                db['vsn'] = cacheKey
-            finally:
-                db.close()
-            return cls(dbm.open(cacheName, 'r'))
-        except OSError as e:
-            raise ParseError("Error saving internal state: " + str(e))
-
-    @staticmethod
-    def __convertRootToTree(db, roots):
-        root = {}
-        for (name, pkg) in roots.items():
-            pkgId = pkg.getPackageStep()._getResultId()
-            root[name] = (pkgId, True, "")
-            if pkgId not in db:
-                TreeStorage.__convertPackageToTree(db, pkgId, pkg)
-        db[b''] = pickle.dumps(root, -1)
-
-    @staticmethod
-    def __convertPackageToTree(db, pkgId, pkg):
-        node = {}
-        for d in pkg.getDirectDepSteps():
-            subPkgId = d._getResultId()
-            subPkg = d.getPackage()
-            node[subPkg.getName()] = (subPkgId, True, "")
-            if subPkgId not in db:
-                TreeStorage.__convertPackageToTree(db, subPkgId, subPkg)
-        prefixLen = len("/".join(pkg.getStack()))
-        for d in pkg.getIndirectDepSteps():
-            subPkg = d.getPackage()
-            name = subPkg.getName()
-            if name in node: continue
-            subPkgId = d._getResultId()
-            node[name] = (subPkgId, False, ".." + "/".join(subPkg.getStack())[prefixLen:] )
-            if subPkgId not in db:
-                TreeStorage.__convertPackageToTree(db, subPkgId, subPkg)
-        db[pkgId] = pickle.dumps(node, -1)
 
 
 class YamlCache:
@@ -2585,26 +2504,4 @@ class PackageUnpickler(pickle.Unpickler):
             return getattr(self.__plugins[module], name)
         else:
             return super().find_class(module, name)
-
-
-def walkPackagePath(rootPackages, path):
-    thisPackage = None
-    nextPackages = rootPackages.copy()
-    steps = [ s for s in path.split("/") if s != "" ]
-    trail = []
-    for step in steps:
-        if step not in nextPackages:
-            raise ParseError("Package '{}' not found under '{}'".format(step, "/".join(trail)))
-        thisPackage = nextPackages[step]
-        trail.append(step)
-        nextPackages = { s.getPackage().getName() : s.getPackage()
-            for s in thisPackage.getDirectDepSteps() }
-        for s in thisPackage.getIndirectDepSteps():
-            p = s.getPackage()
-            nextPackages.setdefault(p.getName(), p)
-
-    if not thisPackage:
-        raise ParseError("Must specify a valid package to build")
-
-    return thisPackage
 
