@@ -73,6 +73,13 @@ Options
 ``-n, --no-deps``
     Don't build dependencies
 
+``--no-logfiles``
+    Don't write a logfile. Without this bob is creating a logfile in the
+    current workspace. Because of the pipe-usage many tools like gcc,
+    ls, git detect they are not running on a tty and disable output
+    coloring. Disable the logfile generation to get the colored output
+    back. 
+
 ``-q, --quiet``
     Decrease verbosity (may be specified multiple times)
 

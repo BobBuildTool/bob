@@ -1022,6 +1022,20 @@ The ``default.yaml`` file holds configuration options that may be overridden by
 the user. Most commands will also take an '-c' option where any number of
 additional configuration files with the same syntax can be specified.
 
+Like git there are three locations where bob is looking for a
+configuration file. They are parsed in descending order making it
+possible to locally override global settings.::
+
+    /etc/bobdefault.yaml:
+        System-wide configuration file.
+
+    $XDG_CONFIG_HOME/bob/default.yaml resp. ~/.config/bob/default.yaml:
+        User-specific configuration File. If XDG_CONFIG_HOME is not set
+        ~/.config/bob/default.yaml is used.
+
+    ./default.yaml.
+        Workspace-specific configuration file.
+
 User configuration files may optionally include other configuration files.
 These includes are parsed *after* the current file, meaning that options of
 included configuration files take precedence over the current one. Included
@@ -1195,3 +1209,47 @@ Specifies alias names for packages::
 
    alias:
       myApp: "host/files/group/app42"
+
+command
+~~~~~~~
+
+Type: Dict of command dicts
+
+Override default command settings::
+
+    command:
+        dev:
+            [..]
+        build:
+            [..]
+
+build / dev
+^^^^^^^^^^^
+
+Set default build arguments here. See :ref:`manpage-dev` or
+:ref:`manpage-build` for details.::
+
+    dev:
+        no_logfile: True
+        build_mode: "build-only"
+    build:
+        verbosity: 3
+        download: No
+
+The following table lists possible arguments and their type:
+
+=============== ===================================================================
+Key             Type
+=============== ===================================================================
+destination     String
+force           Boolean
+no_deps         Boolean
+build_mode      "normal", "build-only" or "checkout-only"
+clean           Boolean
+verbosity       Integer
+no_logfiles     Boolean
+upload          Boolean
+download        "yes", "no", "deps", "forced" or "forced-deps"
+sandbox         Boolean
+clean_checkout  Boolean
+=============== ===================================================================

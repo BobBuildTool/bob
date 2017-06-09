@@ -17,6 +17,7 @@
 from .errors import BuildError, ParseError
 from binascii import hexlify
 from tempfile import NamedTemporaryFile
+import collections
 import hashlib
 import logging
 import os
@@ -66,6 +67,16 @@ def emptyDirectory(path):
             for f in os.listdir(path): removePath(os.path.join(path, f))
     except OSError as e:
         raise BuildError("Error cleaning '"+path+"': " + str(e))
+
+# recursive update entries of a dictonary. See: http://stackoverflow.com/questions/3232943
+def updateDicRecursive(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.Mapping):
+            r = updateDicRecursive(d.get(k, {}), v)
+            d[k] = r
+        else:
+            d[k] = u[k]
+    return d
 
 # Compare versions. Not strictly according to semver but enough for us.
 def compareVersion(origLeft, origRight):
