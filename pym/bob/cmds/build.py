@@ -1450,22 +1450,22 @@ been executed or does not exist), the line is omitted.
     for p in args.packages:
         # Format this package.
         # Only show the package if all of the requested directory names are present
-        package = packages.walkPackagePath(p)
-        state = State()
-        for (text, var, spec, conversion) in Formatter().parse(args.f):
-            state.appendText(text)
-            if var is None:
-                pass
-            elif var == 'name':
-                state.appendText(p)
-            elif var == 'src':
-                state.appendStep(package.getCheckoutStep())
-            elif var == 'build':
-                state.appendStep(package.getBuildStep())
-            elif var == 'dist':
-                state.appendStep(package.getPackageStep())
-            else:
-                raise ParseError("Unknown field '{" + var + "}'")
+        for package in packages.queryPackagePath(p):
+            state = State()
+            for (text, var, spec, conversion) in Formatter().parse(args.f):
+                state.appendText(text)
+                if var is None:
+                    pass
+                elif var == 'name':
+                    state.appendText("/".join(package.getStack()))
+                elif var == 'src':
+                    state.appendStep(package.getCheckoutStep())
+                elif var == 'build':
+                    state.appendStep(package.getBuildStep())
+                elif var == 'dist':
+                    state.appendStep(package.getPackageStep())
+                else:
+                    raise ParseError("Unknown field '{" + var + "}'")
 
-        # Show
-        state.print()
+            # Show
+            state.print()
