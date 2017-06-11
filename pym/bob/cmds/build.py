@@ -1289,8 +1289,8 @@ def doStatus(argv, bobRoot):
 
     done = set()
     for p in args.packages:
-        package = packages.walkPackagePath(p)
-        showStatus(package, args.recursive, args.verbose, done)
+        for package in packages.queryPackagePath(p):
+            showStatus(package, args.recursive, args.verbose, done)
 
 ### Clean #############################
 
