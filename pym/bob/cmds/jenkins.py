@@ -1129,7 +1129,8 @@ def genJenkinsJobs(recipes, jenkins):
         config.get('defines', {}),
         config.get('sandbox', False))
     nameCalculator = JobNameCalculator(prefix)
-    rootPackages = [ packages.walkPackagePath(r) for r in config["roots"] ]
+    rootPackages = []
+    for r in config["roots"]: rootPackages.extend(packages.queryPackagePath(r))
     for root in rootPackages:
         nameCalculator.addPackage(root)
     nameCalculator.isolate(options.get("jobs.isolate"))
