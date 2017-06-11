@@ -132,7 +132,7 @@ def doQueryMeta(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-meta",
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description="""Query meta information of packages.""")
-    parser.add_argument('package', help="(Sub-)package to query")
+    parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
@@ -154,7 +154,7 @@ def doQueryMeta(argv, bobRoot):
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    package = recipes.generatePackages(lambda s,m: "unused", defines).walkPackagePath(args.package)
+    packages = recipes.generatePackages(lambda s,m: "unused", defines)
 
     def showPackage(package, recurse, done):
         # show recipes only once for each package
@@ -169,7 +169,10 @@ def doQueryMeta(argv, bobRoot):
             for ps in package.getDirectDepSteps():
                 showPackage(ps.getPackage(), recurse, done)
 
-    showPackage(package, args.recursive, set())
+    done = set()
+    for p in args.packages:
+        for package in packages.queryPackagePath(p):
+            showPackage(package, args.recursive, done)
 
 def doQuerySCM(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-scm",
