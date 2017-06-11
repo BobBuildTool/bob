@@ -188,7 +188,7 @@ are used:
  * cvs="cvs {package} {dir} {cvsroot} {module}"
  * url="url {package} {dir}/{fileName} {url}"
 """)
-    parser.add_argument('package', help="(Sub-)package to query")
+    parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
 
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
@@ -222,7 +222,7 @@ are used:
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    package = recipes.generatePackages(lambda s,m: "unused", defines).walkPackagePath(args.package)
+    packages = recipes.generatePackages(lambda s,m: "unused", defines)
 
     # update formats
     for fmt in args.formats:
@@ -230,7 +230,7 @@ are used:
         if len(f) != 2: parser.error("Malformed format: "+fmt)
         formats[f[0]] = f[1]
 
-    def showPackage(package, recurse, done=set()):
+    def showPackage(package, recurse, done):
         # show recipes only once for each checkout variant
         key = (package.getRecipe().getName(), package.getCheckoutStep().getVariantId())
         if key not in done:
@@ -247,7 +247,10 @@ are used:
             for ps in package.getDirectDepSteps():
                 showPackage(ps.getPackage(), recurse, done)
 
-    showPackage(package, args.recursive)
+    done = set()
+    for p in args.packages:
+        for package in packages.queryPackagePath(p):
+            showPackage(package, args.recursive, done)
 
 def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
