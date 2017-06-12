@@ -834,22 +834,6 @@ class PackageSet:
         (nodes, valid) = self.__query(path)
         return self.__findResultPackages(self.__getGraphRoot(), self.getRootPackage(), nodes, valid, queryAll)
 
-    def walkTreePath(self, path):
-        # replace aliases
-        path = self.__substAlias(path)
-
-        # descend tree
-        root = self.__getGraphRoot()
-        stack = [ s for s in path.split("/") if s != "" ]
-        trail = []
-        for step in stack:
-            if step not in root:
-                raise BobError("Package '{}' not found under '{}'".format(step, "/".join(trail)))
-            trail.append(step)
-            root = root[step].node
-
-        yield (stack, root)
-
     def walkPackagePath(self, path):
         """Legacy path walking.
 
