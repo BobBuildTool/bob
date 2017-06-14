@@ -12,6 +12,7 @@ Contents:
    bob-jenkins
    bob-ls
    bob-project
+   bob-query-meta
    bob-query-path
    bob-query-recipe
    bob-query-scm
