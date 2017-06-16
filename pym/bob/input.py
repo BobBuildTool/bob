@@ -2288,6 +2288,7 @@ class RecipeSet:
         schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}$'),
         schema.Optional('plugins') : [str],
         schema.Optional('policies') : {
+            schema.Optional('relativeIncludes') : bool
         }
     })
 
@@ -2327,6 +2328,7 @@ class RecipeSet:
         self.__plugins = {}
         self.__commandConfig = {}
         self.__policies = {
+            'relativeIncludes' : ("0.13", WarnOnce("relativeIncludes policy not set. Using recipes directory as base for all includes!")),
         }
 
     def __addRecipe(self, recipe):
@@ -2510,9 +2512,9 @@ class RecipeSet:
             self.__policies[name] = (behaviour, None)
 
         # user config(s)
-        self.__parseUserConfig("/etc/bobdefault.yaml")
+        self.__parseUserConfig("/etc/bobdefault.yaml", True)
         self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
-            os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
+            os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
         self.__parseUserConfig("default.yaml")
 
         # finally parse recipes
@@ -2546,7 +2548,9 @@ class RecipeSet:
             if recipe.isRoot():
                 self.__rootRecipes.append(recipe)
 
-    def __parseUserConfig(self, fileName):
+    def __parseUserConfig(self, fileName, relativeIncludes=None):
+        if relativeIncludes is None:
+            relativeIncludes = self.getPolicy("relativeIncludes")
         cfg = self.loadYaml(fileName, RecipeSet.USER_CONFIG_SCHEMA)
         self.__defaultEnv.update(cfg.get("environment", {}))
         self.__whiteList |= set(cfg.get("whitelist", []))
@@ -2557,7 +2561,8 @@ class RecipeSet:
         if not self._ignoreCmdConfig:
             self.__commandConfig = updateDicRecursive(self.__commandConfig, cfg.get("command", {}))
         for p in cfg.get("include", []):
-            self.__parseUserConfig(os.path.join(os.path.dirname(fileName), str(p)) + ".yaml")
+            p = os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p
+            self.__parseUserConfig(p + ".yaml", relativeIncludes)
 
     def __createSchemas(self):
         varNameSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
