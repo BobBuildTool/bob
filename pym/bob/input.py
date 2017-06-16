@@ -2286,7 +2286,9 @@ class RecipeSet:
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
         schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}$'),
-        schema.Optional('plugins') : [str]
+        schema.Optional('plugins') : [str],
+        schema.Optional('policies') : {
+        }
     })
 
     _ignoreCmdConfig = False
@@ -2324,6 +2326,8 @@ class RecipeSet:
         }
         self.__plugins = {}
         self.__commandConfig = {}
+        self.__policies = {
+        }
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -2498,6 +2502,12 @@ class RecipeSet:
             raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
         self.__loadPlugins(config.get("plugins", []))
         self.__createSchemas()
+
+        # determine policies
+        self.__policies = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
+            for (name, (ver, warn)) in self.__policies.items() }
+        for (name, behaviour) in config.get("policies", {}).items():
+            self.__policies[name] = (behaviour, None)
 
         # user config(s)
         self.__parseUserConfig("/etc/bobdefault.yaml")
@@ -2751,6 +2761,12 @@ class RecipeSet:
 
         # save tree cache
         return TreeStorage.create(cacheName, cacheKey, roots)
+
+    def getPolicy(self, name, location=None):
+        (policy, warning) = self.__policies[name]
+        if policy is None:
+            warning.warn(location)
+        return policy
 
 
 class TreeStorage:
