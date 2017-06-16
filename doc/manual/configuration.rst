@@ -990,6 +990,8 @@ subject to be changed when building packages. The following sections describe
 the top level keys that are currently understood. The file is optional or could
 be empty.
 
+.. _configuration-bobMinimumVersion:
+
 bobMinimumVersion
 ~~~~~~~~~~~~~~~~~
 
@@ -1014,6 +1016,24 @@ Type: List of strings
 Plugins are loaded in the same order as listed here. For each name in this
 section there must be a .py-file in the ``plugins`` directory next to the
 recipes. For a detailed description of plugins see :ref:`extending-plugins`.
+
+.. _configuration-config-policies:
+
+policies
+~~~~~~~~
+
+Type: Dictionaly (Policy name -> Bool)
+
+The policies section allows to individually set policies to their old
+(disabled) or new (enabled) behaviour. See :ref:`policies-defined` for a list
+of all policies and their rationale.
+
+Example::
+
+    policies:
+        relativeIncludes: False
+
+This will explicitly request old behaviour for the `relativeIncludes` policy.
 
 User configuration (default.yaml)
 ---------------------------------
@@ -1044,6 +1064,14 @@ specified without the .yaml extension::
 
     include:
         - overrides
+
+.. note::
+    Depending on the :ref:`policies-relativeIncludes` policy the base directory
+    from where includes are resolved is different. Normally files are included
+    relative to the currently processed file unless the
+    :ref:`policies-relativeIncludes` policy is disabled. In this case files
+    included by ``default.yaml`` and by the command line use the recipes
+    directory as base directory.
 
 environment
 ~~~~~~~~~~~

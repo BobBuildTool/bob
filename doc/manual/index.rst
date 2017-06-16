@@ -9,6 +9,7 @@ Contents:
    introduction
    concepts
    configuration
+   policies
    extending
    audit-trail
 
