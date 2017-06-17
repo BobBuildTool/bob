@@ -17,8 +17,8 @@
 from unittest import TestCase
 from unittest.mock import MagicMock
 
-from bob.input import StringParser
-from bob.input import funEqual, funNotEqual, funNot, funOr, \
+from bob.stringparser import StringParser
+from bob.stringparser import funEqual, funNotEqual, funNot, funOr, \
     funAnd, funMatch, funIfThenElse, funSubst, funStrip, \
     funSandboxEnabled, funToolDefined
 from bob.errors import ParseError
