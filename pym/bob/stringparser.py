@@ -33,10 +33,11 @@ def isTrue(val):
 class StringParser:
     """Utility class for complex string parsing/manipulation"""
 
-    def __init__(self, env, funs, funArgs):
+    def __init__(self, env, funs, funArgs, nounset):
         self.env = env
         self.funs = funs
         self.funArgs = funArgs
+        self.nounset = nounset
 
     def parse(self, text):
         """Parse the text and make substitutions"""
@@ -150,7 +151,10 @@ class StringParser:
                 return alternate
         elif op == '}':
             if varName not in self.env:
-                raise ParseError("Unset variable: " + varName)
+                if self.nounset:
+                    raise ParseError("Unset variable: " + varName)
+                else:
+                    return ""
             return self.env[varName]
         else:
             raise ParseError("Unterminated variable: " + str(op))
@@ -286,9 +290,9 @@ class Env(MutableMapping):
             ret.touched = self.touched
             return ret
 
-    def substitute(self, value, prop):
+    def substitute(self, value, prop, nounset=True):
         try:
-            return StringParser(self, self.funs, self.funArgs).parse(value)
+            return StringParser(self, self.funs, self.funArgs, nounset).parse(value)
         except ParseError as e:
             raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
 

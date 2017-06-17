@@ -42,7 +42,7 @@ class TestStringParser(TestCase):
                 "indirect" : "asdf"
             },
             {"echo" : echo},
-            {})
+            {}, True)
 
     def tearDown(self):
         self.p = None
