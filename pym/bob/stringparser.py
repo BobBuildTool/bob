@@ -16,6 +16,7 @@
 
 from .errors import ParseError
 from collections.abc import MutableMapping
+import fnmatch
 import re
 
 def checkGlobList(name, allowed):
@@ -378,6 +379,21 @@ def funToolDefined(args, tools, **options):
     if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
     return "true" if (args[0] in tools) else "false"
 
+def funMatchScm(args, **options):
+    if len(args) != 2: raise ParseError("matchScm expects two arguments")
+    name = args[0]
+    val = args[1]
+    try:
+        pkg = options['package']
+    except KeyError:
+        raise ParseError('matchScm can only be used for queries')
+
+    for scm in pkg.getCheckoutStep().getScmList():
+        for props in scm.getProperties():
+            if fnmatch.fnmatchcase(props.get(name), val): return "true"
+
+    return "false"
+
 DEFAULT_STRING_FUNS = {
     "eq" : funEqual,
     "or" : funOr,
@@ -390,4 +406,5 @@ DEFAULT_STRING_FUNS = {
     "strip" : funStrip,
     "subst" : funSubst,
     "match" : funMatch,
+    "matchScm" : funMatchScm,
 }
