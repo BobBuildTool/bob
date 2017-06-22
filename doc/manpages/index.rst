@@ -6,6 +6,7 @@ Contents:
 .. toctree::
    :maxdepth: 1
 
+   bob-archive
    bob-build
    bob-clean
    bob-dev

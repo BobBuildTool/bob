@@ -746,6 +746,8 @@ of the respective attributes of the recipe. For example the scripts of the
 inherited class of all steps are inserted in front of the scripts of the
 current recipe. 
 
+.. _configuration-recipes-metaenv:
+
 metaEnvironment
 ~~~~~~~~~~~~~~~
 
@@ -1166,10 +1168,9 @@ found. All available upload backends are used for uploading artifacts. Any
 failing upload will fail the whole build.
 
 .. note::
-   The uploaded artifacts do not have any metadata attached to them yet.
-   Despite the opaque Build-ID there is no information, e.g. about the recipes
-   that created this artifact. Therefore there are no tools to manage binary
-   artifacts yet.
+   The uploaded artifacts can be managed by :ref:`manpage-archive`. It might be
+   wise to use different repositories for release builds and for continous
+   builds to keep them separated.
 
 Example::
 

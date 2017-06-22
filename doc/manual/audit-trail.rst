@@ -1,3 +1,5 @@
+.. _audit-trail:
+
 Audit trail
 ===========
 
@@ -49,6 +51,40 @@ Records
 The following sections describe the various keys and their semantics that can
 be found in an audit record.
 
+Example of a single audit record::
+
+    {
+      "artifact-id" : "c1cd9616caa783fcd8ef9b170cd968ccb306a727",
+      "variant-id" : "f5aa3695a2d6f0e70af2ffaf43bb461a428e6fba",
+      "build-id" : "a95ce8e3e30b7535751cefea942941c31a8ad1aa",
+      "result-hash" : "7710368d8165f1c780fb9f33b34415ab76a618c0",
+      "env" : "declare -- BASH=\"/bin/bash\"\ndeclare -r BASHOPTS=...",
+      "metaEnv" : {
+         "VERSION" : "1.2.3",
+         "LICENSE" : "GPLv2"
+      },
+      "scms" : [],
+      "dependencies" : {
+         "args" : [
+            "c5b2a8231156f43728af34f3a2dcb731ade2f76a"
+         ]
+      },
+      "meta" : {
+         "recipe" : "root",
+         "step" : "dist",
+         "bob" : "0.12.1",
+         "package" : "root"
+      },
+      "build" : {
+         "version" : "#1 SMP Debian 4.9.6-3 (2017-01-28)",
+         "date" : "2017-03-16 20:00:08.600749",
+         "nodename" : "tuxedo",
+         "release" : "4.9.0-1-amd64",
+         "sysname" : "Linux",
+         "machine" : "x86_64"
+      }
+    }
+
 Basic information
 ~~~~~~~~~~~~~~~~~
 
@@ -69,6 +105,11 @@ Basic information
 ``env``
     Dump of the bash environment as created by ``declare -p``. See
     `bash declare`_.
+
+``metaEnv``
+    This is a dictionary of all :ref:`configuration-recipes-metaenv` variables
+    of the package. They are included in the audit trail regardless of their
+    actual usage.
 
 .. _bash declare: https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html#index-declare
 
@@ -199,4 +240,30 @@ Example::
         "recipe" : "lib",
         "step" : "src",
     },
+
+Build data
+~~~~~~~~~~
+
+The build data describes when and where the artifact has been built. It can be
+found under the ``build`` key and contains the following fields:
+
+``date``
+    The date and time of the build. This is stored as UTC time and formatted in
+    ISO 8601 format with full precision.
+
+``machine``
+    The hardware identifier as returned by the uname system call. This is
+    typically the processor architecture of the host.
+
+``nodename``
+    The host name.
+
+``release``
+    The operating system release.
+
+``sysname``
+    The operating system name (e.g. "Linux").
+
+``version``
+    The operating system version.
 
