@@ -21,6 +21,7 @@ from .utils import asHexStr, hashFile
 from datetime import datetime, timezone
 import gzip
 import hashlib
+import io
 import json
 import os
 import schema
@@ -259,7 +260,14 @@ class Audit:
     @classmethod
     def fromFile(cls, file):
         audit = cls()
-        audit.load(file)
+        with gzip.open(file, 'rb') as gzf:
+            audit.load(gzf)
+        return audit
+
+    @classmethod
+    def fromByteStream(cls, stream):
+        audit = cls()
+        audit.load(stream)
         return audit
 
     @classmethod
@@ -286,8 +294,7 @@ class Audit:
 
     def load(self, file):
         try:
-            with gzip.open(file, 'rt') as gzf:
-                tree = json.load(gzf)
+            tree = json.load(io.TextIOWrapper(file, encoding='utf8'))
             tree = Audit.SCHEMA.validate(tree)
             self.__artifact = Artifact.fromData(tree["artifact"])
             self.__references = {
