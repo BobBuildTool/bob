@@ -13,6 +13,8 @@ Python modules that are not in the standard library:
   that comes with your distribution (e.g. python3-schema on Debian).
 * `python-magic` Either install via pip (``pip3 install python-magic``) or the package
   that comes with your distribution.
+* `pyparsing`_. Either install via pip (``pip3 install pyparsing``) or the package
+  that comes with your distribution (e.g. python3-pyparsing on Debian).
 * gcc
 * `python3-sphinx` Only needed for generating man pages.
 
@@ -46,6 +48,7 @@ to your ``/etc/sysctl.conf`` (or wherever your distro stores that).
 
 .. _PyYAML: http://pyyaml.org/
 .. _schema: https://pypi.python.org/pypi/schema
+.. _pyparsing: http://pyparsing.wikispaces.com/
 .. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
 
 Getting shell completion
