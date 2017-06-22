@@ -18,7 +18,7 @@ from .errors import BuildError, ParseError
 from .scm import GitAudit, SvnAudit, UrlAudit, auditFromData
 from .tty import colorize
 from .utils import asHexStr, hashFile
-from datetime import datetime
+from datetime import datetime, timezone
 import gzip
 import hashlib
 import json
@@ -123,7 +123,7 @@ class Artifact:
             'release'  : u.release,
             'version'  : u.version,
             'machine'  : u.machine,
-            'date'     : str(datetime.utcnow()),
+            'date'     : datetime.now(timezone.utc).isoformat(),
         }
         self.__env = ""
         self.__metaEnv = {}
