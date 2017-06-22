@@ -25,6 +25,10 @@ import sys
 import traceback
 import os
 
+def __archive(*args, **kwargs):
+     from .cmds.archive import doArchive
+     doArchive(*args, **kwargs)
+
 def __build(*args, **kwargs):
      from .cmds.build import doBuild
      doBuild(*args, **kwargs)
@@ -74,6 +78,7 @@ def __querypath(*args, **kwargs):
      doQueryPath(*args, **kwargs)
 
 availableCommands = {
+    "archive"       : (True, __archive, "Manage binary artifact archives"),
     "build"         : (True, __build, "Build (sub-)packages in release mode"),
     "dev"           : (True, __develop, "Build (sub-)packages in development mode"),
     "clean"         : (True, __clean, "Delete unused src/build/dist paths of release builds"),
