@@ -240,12 +240,24 @@ class Artifact:
         self.__calculate()
         return self.__id
 
+    def getBuildId(self):
+        return self.__buildId
+
     def getReferences(self):
         ret = set()
         for i in self.__deps: ret.add(i)
         if self.__sandbox: ret.add(self.__sandbox)
         for i in self.__tools.values(): ret.add(i)
         return ret
+
+    def getMetaData(self):
+        return self.__defines
+
+    def getBuildInfo(self):
+        return self.__build
+
+    def getMetaEnv(self):
+        return self.__metaEnv
 
 class Audit:
     SCHEMA = schema.Schema({
@@ -325,6 +337,23 @@ class Audit:
 
     def getId(self):
         return self.__artifact.getId()
+
+    def getArtifact(self, aid=None):
+        if aid:
+            return self.__references[aid]
+        else:
+            return self.__artifact
+
+    def getReferencedBuildIds(self):
+        ret = set()
+        refs = self.__artifact.getReferences()
+        while refs:
+            artifact = self.__references[refs.pop()]
+            if artifact.getMetaData()["step"] == "dist":
+                ret.add(artifact.getBuildId())
+            else:
+                refs.update(artifact.getReferences())
+        return sorted(ret)
 
     def setRecipesAudit(self, recipes):
         self.__artifact.setRecipes(recipes)
