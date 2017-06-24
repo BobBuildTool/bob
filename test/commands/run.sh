@@ -12,9 +12,14 @@ for cmd, (hl, func, help) in sorted(availableCommands.items()):
     print(cmd)")
 
 for c in $cmds; do
-    if ( [ $c == "clean" ] || [ $c == "jenkins" ] || [ $c == "help" ] || [ $c == "project" ] ); then
-        continue
-    fi
-    run_bob $c -DBAR=1 -c testconfig root
+	case "$c" in
+		archive | clean | jenkins | help)
+			;;
+		project)
+			run_bob project -DBAR=1 -c testconfig qt-creator root --kit=none
+			;;
+		*)
+			run_bob $c -DBAR=1 -c testconfig root
+			;;
+	esac
 done
-run_bob project qt-creator -DBAR=1 -c testconfig --kit=none root 
