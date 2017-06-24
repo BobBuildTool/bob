@@ -1153,14 +1153,12 @@ def doProject(argv, bobRoot):
         return 0
     else:
         if not args.package or not args.projectGenerator:
-            print("bob project: error: the following arguments are required: projectGenerator, package, args")
-            return 1
+            raise BobError("The following arguments are required: projectGenerator, package")
 
     try:
         generator = generators[args.projectGenerator]
     except KeyError:
-        print("Generator {} not found!".format(args.projectGenerator))
-        return 1
+        raise BobError("Generator '{}' not found!".format(args.projectGenerator))
 
     extra = [ "--download=" + args.download ]
     for d in args.defines:
