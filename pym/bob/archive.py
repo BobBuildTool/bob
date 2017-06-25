@@ -257,8 +257,8 @@ class LocalArchive(BaseArchive):
                 BOB_DOWNLOAD_FILE="{DIR}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}){GEN}.tgz"
                 cp "$BOB_DOWNLOAD_FILE" {RESULT} || echo Download failed: $?
             fi
-            """.format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile)),
-                       GEN=ARCHIVE_GENERATION)
+            """.format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
+                       GEN=ARCHIVE_GENERATION))
 
 class LocalArchiveDownloader:
     def __init__(self, name):
