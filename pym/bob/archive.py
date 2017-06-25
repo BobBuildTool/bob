@@ -470,10 +470,6 @@ class CustomArchive(BaseArchive):
     def _openDownloadTar(self, buildId):
         (tmpFd, tmpName) = mkstemp()
         url = self._makeUrl(buildId)
-        if verbose > 0:
-            print(colorize("   DOWNLOAD  {} from {} ({}) ...".format(path, url, tmpName), "32"), end="")
-        else:
-            print(colorize("   DOWNLOAD  {}...".format(path), "32"), end="")
         try:
             os.close(tmpFd)
             env = { k:v for (k,v) in os.environ.items() if k in self.__whiteList }
@@ -553,7 +549,7 @@ class CustomUploader:
     def __exit__(self, exc_type, exc_value, traceback):
         try:
             if exc_type is None:
-                env = { k:v for (k,v) in os.environ.items() if k in self.__whiteList }
+                env = { k:v for (k,v) in os.environ.items() if k in self.whiteList }
                 env["BOB_LOCAL_ARTIFACT"] = self.name
                 env["BOB_REMOTE_ARTIFACT"] = self.remoteName
                 ret = subprocess.call(["/bin/bash", "-ec", self.uploadCmd],
