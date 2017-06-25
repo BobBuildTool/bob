@@ -234,7 +234,7 @@ class LocalArchive(BaseArchive):
             packageResultFile)
 
     def upload(self, step, buildIdFile, tgzFile):
-        if self.canUploadJenkins():
+        if not self.canUploadJenkins():
             return ""
 
         return "\n" + textwrap.dedent("""\
