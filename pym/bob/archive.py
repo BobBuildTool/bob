@@ -107,34 +107,31 @@ class BaseArchive:
         return self.__wantUpload and self.__useUpload and self.__useJenkins
 
     def __extractPackage(self, tar, audit, content):
-        try:
-            if tar.pax_headers.get('bob-archive-vsn', "0") != "1":
-                raise BuildError("Unsupported binary artifact")
+        if tar.pax_headers.get('bob-archive-vsn', "0") != "1":
+            raise BuildError("Unsupported binary artifact")
 
+        f = tar.next()
+        while f is not None:
+            if f.name.startswith("content/"):
+                if f.islnk():
+                    if not f.linkname.startswith("content/"):
+                        raise BuildError("invalid hard link in archive: '{}' -> '{}'"
+                                            .format(f.name, f.linkname))
+                    f.linkname = f.linkname[8:]
+                f.name = f.name[8:]
+                try:
+                    tar.extract(f, content)
+                except UnicodeError:
+                    raise BuildError("File name encoding error while extracting '{}'".format(f.name),
+                                     help="Your locale(7) probably does not (fully) support unicode.")
+            elif f.name == "meta/audit.json.gz":
+                f.name = audit
+                tar.extract(f)
+            elif f.name == "content" or f.name == "meta":
+                pass
+            else:
+                raise BuildError("Binary artifact contained unknown file: " + f.name)
             f = tar.next()
-            while f is not None:
-                if f.name.startswith("content/"):
-                    if f.islnk():
-                        if not f.linkname.startswith("content/"):
-                            raise BuildError("invalid hard link in archive: '{}' -> '{}'"
-                                                .format(f.name, f.linkname))
-                        f.linkname = f.linkname[8:]
-                    f.name = f.name[8:]
-                    try:
-                        tar.extract(f, content)
-                    except UnicodeError:
-                        raise BuildError("File name encoding error while extracting '{}'".format(f.name),
-                                         help="Your locale(7) probably does not (fully) support unicode.")
-                elif f.name == "meta/audit.json.gz":
-                    f.name = audit
-                    tar.extract(f)
-                elif f.name == "content" or f.name == "meta":
-                    pass
-                else:
-                    raise BuildError("Binary artifact contained unknown file: " + f.name)
-                f = tar.next()
-        except tarfile.TarError as e:
-            raise BuildError("Error extracting binary artifact: " + str(e))
 
     def _openDownloadTar(self, buildId):
         raise ArtifactNotFoundError()
@@ -170,6 +167,8 @@ class BaseArchive:
         except OSError as e:
             print(colorize("error", "31"))
             raise BuildError("Cannot download artifact: " + str(e))
+        except tarfile.TarError as e:
+            raise BuildError("Error extracting binary artifact: " + str(e))
 
     def _openUploadTar(self, buildId):
         raise ArtifactExistsError()
