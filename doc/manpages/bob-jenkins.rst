@@ -168,12 +168,14 @@ are ignored.
 artifacts.copy
     This options selects the way of sharing archives between workspaces.
     Possible values are:
-      * jenkins:
+
+    jenkins
          Use copy artifacts pluing to copy result and buildId to jenkins-master.
          The downstream job will afterwards be configured to use copy artifact
          plugin again and copy the artifact into it's workspace. This is the
          default.
-      * archive:
+
+    archive
          Only copy the buildID file to to jenkins master and use the binary
          archive for sharing artifacts. Must be used together with ``--upload``
          and ``--download``.
