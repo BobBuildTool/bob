@@ -86,3 +86,7 @@ Options
 ``-v, --verbose``
     Increase verbosity (may be specified multiple times)
 
+See also
+--------
+
+:ref:`bobpaths(7) <manpage-bobpaths>`

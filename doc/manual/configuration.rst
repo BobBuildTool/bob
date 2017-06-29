@@ -1243,10 +1243,14 @@ alias
 
 Type: Dictionary (String -> String)
 
-Specifies alias names for packages::
+Aliases allow a string to be substituted for the first step of a
+:ref:`relative location path <manpage-bobpaths-locationpath>`::
 
    alias:
       myApp: "host/files/group/app42"
+      allTests: "//*-unittest"
+
+See :ref:`manpage-bobpaths-aliases` for the rules that apply to aliases.
 
 command
 ~~~~~~~
