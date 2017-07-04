@@ -272,8 +272,11 @@ class Audit:
     @classmethod
     def fromFile(cls, file):
         audit = cls()
-        with gzip.open(file, 'rb') as gzf:
-            audit.load(gzf)
+        try:
+            with gzip.open(file, 'rb') as gzf:
+                audit.load(gzf)
+        except OSError as e:
+            print(colorize("Error loading audit: " + str(e), "33"))
         return audit
 
     @classmethod
@@ -312,8 +315,6 @@ class Audit:
             self.__references = {
                 r["artifact-id"] : Artifact.fromData(r) for r in tree["references"]
             }
-        except OSError as e:
-            print(colorize("Error loading audit: " + str(e), "33"))
         except schema.SchemaError as e:
             raise ParseError("Invalid audit record: " + str(e))
         except ValueError as e:
