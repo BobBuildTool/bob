@@ -327,8 +327,8 @@ class Audit:
             "references" : [ a.dump() for a in self.__references.values() ]
         }
         try:
-            with gzip.open(file, 'wt', 6) as gzf:
-                json.dump(tree, gzf)
+            with gzip.open(file, 'wb', 6) as gzf:
+                json.dump(tree, io.TextIOWrapper(gzf, encoding='utf8'))
         except OSError as e:
             raise BuildError("Cannot write audit: " + str(e))
 
