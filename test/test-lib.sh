@@ -58,3 +58,17 @@ expect_fail()
 	echo "Expected command to fail: $*" >&2
 	return 1
 }
+
+expect_output()
+{
+	local EXP="$1"
+	local RES="$( "${@:2}" )"
+	if [[ "$RES" != "$EXP" ]] ; then
+		echo "Unexpected output: '$RES'" >&2
+		echo "Expected: '$EXP'" >&2
+		echo "Command: ${@:2}" >&2
+		return 1
+	fi
+
+	return 0
+}

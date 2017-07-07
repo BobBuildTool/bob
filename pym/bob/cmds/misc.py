@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from ..input import RecipeSet, walkPackagePath
+from ..input import RecipeSet
 from ..errors import BuildError
 import argparse
 import codecs
@@ -38,12 +38,12 @@ except UnicodeEncodeError:
 
 
 def doLS(argv, bobRoot):
-    def showTree(packages, showAll, showOrigin, prefix=""):
+    def showTree(package, showAll, showOrigin, prefix=""):
         i = 0
         if showAll:
-            packages = { name : (pkg, origin) for (name, (pkg, direct, origin)) in packages.items() }
+            packages = { name : (child.node, child.origin) for (name, child) in package.items() }
         else:
-            packages = { name : (pkg, origin) for (name, (pkg, direct, origin)) in packages.items() if direct }
+            packages = { name : (child.node, child.origin) for (name, child) in package.items() if child.direct }
         for n,(p,o) in sorted(packages.items()):
             last = (i >= len(packages)-1)
             print("{}{}{}{}".format(prefix, LS_SEP_1 if last else LS_SEP_2, n,
@@ -51,21 +51,22 @@ def doLS(argv, bobRoot):
             showTree(p, showAll, showOrigin, prefix + (LS_SEP_3 if last else LS_SEP_4))
             i += 1
 
-    def showPrefixed(packages, recurse, showAll, showOrigin, stack, level=0):
+    def showPrefixed(package, recurse, showAll, showOrigin, showAliases, stack, level=0):
         if showAll:
-            packages = { name : (pkg, origin) for (name, (pkg, direct, origin)) in packages.items() }
+            packages = { name : (child.node, child.origin) for (name, child) in package.items() }
         else:
-            packages = { name : (pkg, origin) for (name, (pkg, direct, origin)) in packages.items() if direct }
+            packages = { name : (child.node, child.origin) for (name, child) in package.items() if child.direct }
+        for p in showAliases: print(p)
         for n,(p,o) in sorted(packages.items()):
             newStack = stack[:]
             newStack.append(n)
             print("{}{}".format("/".join(newStack),
                                 " ({})".format(o) if (showOrigin and o) else ""))
             if recurse:
-                showPrefixed(p, recurse, showAll, showOrigin, newStack, level+1)
+                showPrefixed(p, recurse, showAll, showOrigin, [], newStack, level+1)
 
     parser = argparse.ArgumentParser(prog="bob ls", description='List packages.')
-    parser.add_argument('package', type=str, nargs='?',
+    parser.add_argument('package', type=str, nargs='?', default="",
                         help="Sub-package to start listing from")
     parser.add_argument('-a', '--all', default=False, action='store_true',
                         help="Show indirect dependencies too")
@@ -73,8 +74,11 @@ def doLS(argv, bobRoot):
                         help="Show origin of indirect dependencies")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
-    parser.add_argument('-p', '--prefixed', default=False, action='store_true',
-                        help="Prints the full path prefix for each package")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-p', '--prefixed', default=False, action='store_true',
+                       help="Prints the full path prefix for each package")
+    group.add_argument('-d', '--direct', default=False, action='store_true',
+                       help="List packages themselves, not their contents")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
@@ -102,26 +106,19 @@ def doLS(argv, bobRoot):
 
     showAll = args.all
     showOrigin = args.origin
-    roots = recipes.generateTree(defines, args.sandbox)
-    stack = []
-    if args.package:
-        stack = steps = [ s for s in args.package.split("/") if s != "" ]
-        trail = []
-        for step in steps:
-            if step not in roots:
-                raise BuildError("Package '{}' not found under '{}'".format(step, "/".join(trail)))
-            trail.append(step)
-            roots = roots[step][0]
-    else:
-        steps = ["/"]
+    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
+    showAliases = packages.getAliases() if args.package == "" else []
 
-    if args.prefixed:
-        showPrefixed(roots, args.recursive, showAll, showOrigin, stack)
-    elif args.recursive:
-        print("/".join(steps))
-        showTree(roots, showAll, showOrigin)
-    else:
-        showPrefixed(roots, False, showAll, showOrigin, [])
+    for (stack, root) in packages.queryTreePath(args.package, True):
+        if args.prefixed:
+            showPrefixed(root, args.recursive, showAll, showOrigin, showAliases, stack)
+        elif args.direct:
+            print("/".join(stack) if stack else "/")
+        elif args.recursive:
+            print("/".join(stack) if stack else "/")
+            showTree(root, showAll, showOrigin)
+        else:
+            showPrefixed(root, False, showAll, showOrigin, showAliases, [])
 
 class Default(dict):
     def __init__(self, default, *args, **kwargs):
@@ -135,7 +132,7 @@ def doQueryMeta(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-meta",
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description="""Query meta information of packages.""")
-    parser.add_argument('package', help="(Sub-)package to query")
+    parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
@@ -157,8 +154,7 @@ def doQueryMeta(argv, bobRoot):
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    rootPackages = recipes.generatePackages(lambda s,m: "unused", defines)
-    package = walkPackagePath(rootPackages, args.package)
+    packages = recipes.generatePackages(lambda s,m: "unused", defines)
 
     def showPackage(package, recurse, done):
         # show recipes only once for each package
@@ -173,7 +169,10 @@ def doQueryMeta(argv, bobRoot):
             for ps in package.getDirectDepSteps():
                 showPackage(ps.getPackage(), recurse, done)
 
-    showPackage(package, args.recursive, set())
+    done = set()
+    for p in args.packages:
+        for package in packages.queryPackagePath(p):
+            showPackage(package, args.recursive, done)
 
 def doQuerySCM(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-scm",
@@ -189,7 +188,7 @@ are used:
  * cvs="cvs {package} {dir} {cvsroot} {module}"
  * url="url {package} {dir}/{fileName} {url}"
 """)
-    parser.add_argument('package', help="(Sub-)package to query")
+    parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
 
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
@@ -223,8 +222,7 @@ are used:
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    rootPackages = recipes.generatePackages(lambda s,m: "unused", defines)
-    package = walkPackagePath(rootPackages, args.package)
+    packages = recipes.generatePackages(lambda s,m: "unused", defines)
 
     # update formats
     for fmt in args.formats:
@@ -232,7 +230,7 @@ are used:
         if len(f) != 2: parser.error("Malformed format: "+fmt)
         formats[f[0]] = f[1]
 
-    def showPackage(package, recurse, done=set()):
+    def showPackage(package, recurse, done):
         # show recipes only once for each checkout variant
         key = (package.getRecipe().getName(), package.getCheckoutStep().getVariantId())
         if key not in done:
@@ -249,7 +247,10 @@ are used:
             for ps in package.getDirectDepSteps():
                 showPackage(ps.getPackage(), recurse, done)
 
-    showPackage(package, args.recursive)
+    done = set()
+    for p in args.packages:
+        for package in packages.queryPackagePath(p):
+            showPackage(package, args.recursive, done)
 
 def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
@@ -275,8 +276,7 @@ def doQueryRecipe(argv, bobRoot):
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    rootPackages = recipes.generatePackages(lambda s,m: "unused", defines)
-    package = walkPackagePath(rootPackages, args.package)
+    package = recipes.generatePackages(lambda s,m: "unused", defines).walkPackagePath(args.package)
 
     for fn in package.getRecipe().getSources():
         print(fn)

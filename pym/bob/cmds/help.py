@@ -30,13 +30,15 @@ def doHelp(availableCommands, argv, bobRoot):
 
     if args.command in availableCommands:
         manPage = "bob-" + args.command
+        manSection = "1"
     else:
         manPage = "bob" + args.command
+        manSection = "7"
 
-    inSourceLoc = os.path.join(bobRoot, "doc", "_build", "man", manPage+".1")
+    inSourceLoc = os.path.join(bobRoot, "doc", "_build", "man", manPage+"."+manSection)
     if os.path.isfile(inSourceLoc):
         ret = subprocess.call(["man", inSourceLoc])
     else:
-        ret = subprocess.call(["man", manPage])
+        ret = subprocess.call(["man", manSection, manPage])
 
     sys.exit(ret)

@@ -18,7 +18,7 @@ from .. import BOB_VERSION
 from ..archive import DummyArchive, getArchiver
 from ..audit import Audit
 from ..errors import BobError, BuildError, ParseError
-from ..input import RecipeSet, walkPackagePath
+from ..input import RecipeSet
 from ..state import BobState
 from ..tty import colorize
 from ..utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirectory, copyTree
@@ -901,7 +901,7 @@ esac
         return ret
 
 
-def touch(rootPackages):
+def touch(packages):
     done = set()
     def touchStep(step):
         if step in done: return
@@ -910,8 +910,7 @@ def touch(rootPackages):
             if d.isValid(): touchStep(d)
         step.getWorkspacePath()
 
-    for p in sorted(rootPackages.values(), key=lambda p: p.getName()):
-        touchStep(p.getPackageStep())
+    touchStep(packages.getRootPackage().getPackageStep())
 
 
 def commonBuildDevelop(parser, argv, bobRoot, develop):
@@ -1021,9 +1020,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         nameFormatter = recipes.getHook('releaseNameFormatter')
         nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
-    rootPackages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
+    packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if develop:
-        touch(rootPackages)
+        touch(packages)
 
     builder = LocalBuilder(recipes, cfg.get('verbosity', 0) + args.verbose - args.quiet, args.force,
                            args.no_deps, True if args.build_mode == 'build-only' else False,
@@ -1039,10 +1038,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     backlog = []
     results = []
     for p in args.packages:
-        packageStep = walkPackagePath(rootPackages, p).getPackageStep()
-        backlog.append(packageStep)
-        # automatically include provided deps when exporting
-        if args.destination: backlog.extend(packageStep._getProvidedDeps())
+        for package in packages.queryPackagePath(p):
+            packageStep = package.getPackageStep()
+            backlog.append(packageStep)
+            # automatically include provided deps when exporting
+            if args.destination: backlog.extend(packageStep._getProvidedDeps())
     try:
         for p in backlog:
             builder.cook([p], p.getPackage(), True if args.build_mode == 'checkout-only' else False)
@@ -1052,30 +1052,33 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     finally:
         builder.saveBuildState()
 
-    endTime = time.time()
     # tell the user
-    if len(results) == 1:
-        print("Build result is in", results[0])
-    elif len(results) > 1:
-        print("Build results are in:\n  ", "\n   ".join(results))
+    if results:
+        if len(results) == 1:
+            print("Build result is in", results[0])
+        else:
+            print("Build results are in:\n  ", "\n   ".join(results))
 
-    stats = builder.getStatistic()
-    activeOverrides = len(stats.getActiveOverrides())
-    print("Duration: " + str(datetime.timedelta(seconds=(endTime - startTime))) + ", "
-            + str(stats.checkouts)
-                + " checkout" + ("s" if (stats.checkouts != 1) else "")
-                + " (" + str(activeOverrides) + (" overrides" if (activeOverrides != 1) else " override") + " active), "
-            + str(stats.packagesBuilt)
-                + " package" + ("s" if (stats.packagesBuilt != 1) else "") + " built, "
-            + str(stats.packagesDownloaded) + " downloaded.")
+        endTime = time.time()
+        stats = builder.getStatistic()
+        activeOverrides = len(stats.getActiveOverrides())
+        print("Duration: " + str(datetime.timedelta(seconds=(endTime - startTime))) + ", "
+                + str(stats.checkouts)
+                    + " checkout" + ("s" if (stats.checkouts != 1) else "")
+                    + " (" + str(activeOverrides) + (" overrides" if (activeOverrides != 1) else " override") + " active), "
+                + str(stats.packagesBuilt)
+                    + " package" + ("s" if (stats.packagesBuilt != 1) else "") + " built, "
+                + str(stats.packagesDownloaded) + " downloaded.")
 
-    # copy build result if requested
-    ok = True
-    if args.destination:
-        for result in results:
-            ok = copyTree(result, args.destination) and ok
-    if not ok:
-        raise BuildError("Could not copy everything to destination. Your aggregated result is probably incomplete.")
+        # copy build result if requested
+        ok = True
+        if args.destination:
+            for result in results:
+                ok = copyTree(result, args.destination) and ok
+        if not ok:
+            raise BuildError("Could not copy everything to destination. Your aggregated result is probably incomplete.")
+    else:
+        print("Your query matched no packages. Naptime!")
 
 def doBuild(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob build", description='Build packages in release mode.')
@@ -1139,8 +1142,8 @@ def doProject(argv, bobRoot):
     developPersister = recipes.getHook('developNamePersister')
     nameFormatter = developPersister(nameFormatter)
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
-    rootPackages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=args.sandbox)
-    touch(rootPackages)
+    packages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=args.sandbox)
+    touch(packages)
 
     from ..generators.QtCreatorGenerator import qtProjectGenerator
     from ..generators.EclipseCdtGenerator import eclipseCdtGenerator
@@ -1173,7 +1176,7 @@ def doProject(argv, bobRoot):
     if args.preserve_env: extra.append('-E')
     if args.sandbox: extra.append('--sandbox')
 
-    package = walkPackagePath(rootPackages, args.package)
+    package = packages.walkPackagePath(args.package)
 
     # execute a bob dev with the extra arguments to build all executables.
     # This makes it possible for the plugin to collect them and generate some runTargets.
@@ -1243,9 +1246,9 @@ def doStatus(argv, bobRoot):
         nameFormatter = LocalBuilder.releaseNameInterrogator
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
 
-    roots = recipes.generatePackages(nameFormatter, defines, not args.develop)
+    packages = recipes.generatePackages(nameFormatter, defines, not args.develop)
     if args.develop:
-       touch(roots)
+       touch(packages)
 
     def showStatus(package, recurse, verbose, done):
         checkoutStep = package.getCheckoutStep()
@@ -1286,8 +1289,8 @@ def doStatus(argv, bobRoot):
 
     done = set()
     for p in args.packages:
-        package = walkPackagePath(roots, p)
-        showStatus(package, args.recursive, args.verbose, done)
+        for package in packages.queryPackagePath(p):
+            showStatus(package, args.recursive, args.verbose, done)
 
 ### Clean #############################
 
@@ -1329,14 +1332,10 @@ would get removed without actually deleting that already.
 
     # collect all used paths (with and without sandboxing)
     usedPaths = set()
-    rootPackages = recipes.generatePackages(nameFormatter,
-                                            sandboxEnabled=True).values()
-    for root in rootPackages:
-        usedPaths |= collectPaths(root)
-    rootPackages = recipes.generatePackages(nameFormatter,
-                                            sandboxEnabled=False).values()
-    for root in rootPackages:
-        usedPaths |= collectPaths(root)
+    packages = recipes.generatePackages(nameFormatter, sandboxEnabled=True)
+    usedPaths |= collectPaths(packages.getRootPackage())
+    packages = recipes.generatePackages(nameFormatter, sandboxEnabled=False)
+    usedPaths |= collectPaths(packages.getRootPackage())
 
     # get all known existing paths
     cleanSources = args.src
@@ -1443,30 +1442,30 @@ been executed or does not exist), the line is omitted.
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
 
     # Find roots
-    roots = recipes.generatePackages(nameFormatter, defines, args.sandbox)
+    packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if args.dev:
-        touch(roots)
+        touch(packages)
 
     # Loop through packages
     for p in args.packages:
         # Format this package.
         # Only show the package if all of the requested directory names are present
-        package = walkPackagePath(roots, p)
-        state = State()
-        for (text, var, spec, conversion) in Formatter().parse(args.f):
-            state.appendText(text)
-            if var is None:
-                pass
-            elif var == 'name':
-                state.appendText(p)
-            elif var == 'src':
-                state.appendStep(package.getCheckoutStep())
-            elif var == 'build':
-                state.appendStep(package.getBuildStep())
-            elif var == 'dist':
-                state.appendStep(package.getPackageStep())
-            else:
-                raise ParseError("Unknown field '{" + var + "}'")
+        for package in packages.queryPackagePath(p):
+            state = State()
+            for (text, var, spec, conversion) in Formatter().parse(args.f):
+                state.appendText(text)
+                if var is None:
+                    pass
+                elif var == 'name':
+                    state.appendText("/".join(package.getStack()))
+                elif var == 'src':
+                    state.appendStep(package.getCheckoutStep())
+                elif var == 'build':
+                    state.appendStep(package.getBuildStep())
+                elif var == 'dist':
+                    state.appendStep(package.getPackageStep())
+                else:
+                    raise ParseError("Unknown field '{" + var + "}'")
 
-        # Show
-        state.print()
+            # Show
+            state.print()

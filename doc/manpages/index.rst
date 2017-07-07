@@ -12,6 +12,7 @@ Contents:
    bob-dev
    bob-jenkins
    bob-ls
+   bobpaths
    bob-project
    bob-query-meta
    bob-query-path

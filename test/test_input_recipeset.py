@@ -20,7 +20,7 @@ from unittest.mock import Mock
 import os
 import textwrap
 
-from bob.input import RecipeSet, walkPackagePath
+from bob.input import RecipeSet
 from bob.errors import ParseError
 
 class TestUserConfig(TestCase):
@@ -173,10 +173,10 @@ class TestDependencies(TestCase):
 
         recipes = RecipeSet()
         recipes.parse()
-        roots = recipes.generatePackages(lambda x,y: "unused")
+        packages = recipes.generatePackages(lambda x,y: "unused")
 
         # make sure "b" is addressable
-        p = walkPackagePath(roots, "root/b")
+        p = packages.walkPackagePath("root/b")
         self.assertEqual(p.getName(), "b")
 
     def testIncompatible(self):
@@ -214,8 +214,8 @@ class TestDependencies(TestCase):
 
         recipes = RecipeSet()
         recipes.parse()
-        self.assertRaises(ParseError, recipes.generatePackages,
-            lambda x,y: "unused")
+        packages = recipes.generatePackages(lambda x,y: "unused")
+        self.assertRaises(ParseError, packages.getRootPackage)
 
     def testCyclic(self):
         """Cyclic dependencies must be detected during parsing"""
@@ -238,8 +238,8 @@ class TestDependencies(TestCase):
 
         recipes = RecipeSet()
         recipes.parse()
-        self.assertRaises(ParseError, recipes.generatePackages,
-            lambda x,y: "unused")
+        packages = recipes.generatePackages(lambda x,y: "unused")
+        self.assertRaises(ParseError, packages.getRootPackage)
 
     def testCyclicSpecial(self):
         """Make sure cycles are detected on common sub-trees too"""
@@ -273,5 +273,5 @@ class TestDependencies(TestCase):
 
         recipes = RecipeSet()
         recipes.parse()
-        self.assertRaises(ParseError, recipes.generatePackages,
-            lambda x,y: "unused")
+        packages = recipes.generatePackages(lambda x,y: "unused")
+        self.assertRaises(ParseError, packages.getRootPackage)
