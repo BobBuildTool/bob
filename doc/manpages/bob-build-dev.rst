@@ -80,11 +80,20 @@ Options
     coloring. Disable the logfile generation to get the colored output
     back. 
 
+``-p, --with-provided``
+    Build provided dependencies too. In combination with ``--destination`` this
+    is the default. In any other case ``--without-provided`` is default.
+
 ``-q, --quiet``
     Decrease verbosity (may be specified multiple times)
 
 ``-v, --verbose``
     Increase verbosity (may be specified multiple times)
+
+``--without-provided``
+    Build just the named packages without their provided dependencies. This is
+    the default unless the ``--destination`` option is given too.
+
 
 See also
 --------
