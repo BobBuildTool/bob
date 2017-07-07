@@ -98,6 +98,7 @@ QtCreator project generator
                            [--destination DEST] [--name NAME]
                            [-I ADDITIONAL_INCLUDES] [-f Filter]
                            [--exclude Excludes] [--include Includes] [--kit KIT]
+                           [-S START_INCLUDES] [-C CONFIG_DEF]
 
 The QtCreator project generator has the following specific options. They have
 to be passed on the command line *after* the package name.
@@ -134,5 +135,10 @@ to be passed on the command line *after* the package name.
     Remove destination folder before generating.
 
 ``-u, --update``
-    Update project files (.files, .includes)
+    Update project files (.files, .includes, .config)
 
+``-S START_INCLUDES``
+    Additional include directories, will be placed at the beginning of the include list.
+
+``-C CONFIG_DEF``
+    Add line to .config file. Can be used to specify preprocessor defines used by the QTCreator.

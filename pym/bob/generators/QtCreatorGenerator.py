@@ -146,10 +146,24 @@ def compareAndRenameFileIfNotEqual(orig, new):
             return
     os.rename(new, orig)
 
+def parseArgumentLine(line):
+    lines = []
+    line.lstrip()
+    if line.startswith('@'):
+        filename = line.lstrip('@')
+        try:
+            lines = [line.rstrip('\n') for line in open(filename)]
+        except IOError:
+            raise BuildError("Input file (" + filename + ") could not be read.", 
+                             help="Specify the argument without leading @, if it is not a file path.")
+    else:
+        lines.append(line)
+    return lines
+
 def qtProjectGenerator(package, argv, extra):
     parser = argparse.ArgumentParser(prog="bob project qt-project", description='Generate QTCreator Project Files')
     parser.add_argument('-u', '--update', default=False, action='store_true',
-                        help="Update project files (.files, .includes)")
+                        help="Update project files (.files, .includes, .config)")
     parser.add_argument('--buildCfg', action='append', default=[], type=lambda a: a.split("::"),
          help="Adds a new buildconfiguration. Format: <Name>::<flags>")
     parser.add_argument('--overwrite', action='store_true',
@@ -159,7 +173,7 @@ def qtProjectGenerator(package, argv, extra):
     parser.add_argument('--name', metavar="NAME",
         help="Name of project. Default is complete_path_to_package")
     parser.add_argument('-I', dest="additional_includes", default=[], action='append',
-        help="Additional include directories. (added recursive starting from this directory)")
+        help="Additional include directories. (added recursive starting from this directory).")
     parser.add_argument('-f', '--filter', metavar="Filter",
         help="File filter. A regex for matching additional files.")
     parser.add_argument('--exclude', default=[], action='append', dest="excludes",
@@ -168,6 +182,10 @@ def qtProjectGenerator(package, argv, extra):
             help="Include package filter. A regex for including only the specified packages in QTCreator.")
     parser.add_argument('--kit',
         help="Kit to use for this project")
+    parser.add_argument('-S', dest="start_includes", default=[], action='append',
+        help="Additional include directories, will be placed at the beginning of the include list.")
+    parser.add_argument('-C', dest="config_defs", default=[], action='append',
+        help="Add line to .config file. Can be used to specify preprocessor defines used by the QTCreator.")
 
     args = parser.parse_args(argv)
     extra = " ".join(quote(e) for e in extra)
@@ -221,9 +239,11 @@ def qtProjectGenerator(package, argv, extra):
     if args.filter:
        additionalFiles = re.compile(args.filter)
 
-    # lists for storing all found sources files / include directories
+    # lists for storing all found sources files / include directories / defines
     sList = []
     hList = []
+    sIncList = []
+    cList = []
 
     # now go through all checkout dirs to find all header / include files
     for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
@@ -253,15 +273,27 @@ def qtProjectGenerator(package, argv, extra):
                     oldPath = os.path.join(oldPath, path)
 
     for i in args.additional_includes:
-        if os.path.exists(i):
-            for root, directories, filenames in os.walk(i):
-                hList.append(os.path.join(i,root))
+        for e in parseArgumentLine(i):
+            if os.path.exists(e):
+                for root, directories, filenames in os.walk(e):
+                    hList.append(os.path.join(e,root))
 
     # use default kit "Desktop" if no kit is given
     if args.kit is None:
         _kit = re.compile(r".*Desktop.*")
     else:
         _kit = re.compile(r""+args.kit)
+
+    # compose start includes
+    for i in args.start_includes:
+        for e in parseArgumentLine(i):
+            if os.path.exists(i):
+                sIncList.append(e)
+
+    # compose content of .config file (preprocessor defines)
+    for i in args.config_defs:
+        for e in parseArgumentLine(i):
+             cList.append(e)
 
     id = None
     name = None
@@ -301,7 +333,7 @@ def qtProjectGenerator(package, argv, extra):
     # Generate the includes file. Create a temporary file first and compare it with the old one.
     # only use the new one if different to prevent reindexing after each build.
     includesFile = os.path.join(destination, projectName + ".includes")
-    generateFile(sorted(hList, key=lambda file: (os.path.dirname(file))), includesFile + ".new")
+    generateFile(sIncList + sorted(hList, key=lambda file: (os.path.dirname(file))), includesFile + ".new")
     compareAndRenameFileIfNotEqual(includesFile, includesFile + ".new")
 
     # Generate files file
@@ -310,6 +342,10 @@ def qtProjectGenerator(package, argv, extra):
     generateFile(sorted(sList, key=lambda file: (os.path.dirname(file), os.path.basename(file))), filesFile + ".new")
     compareAndRenameFileIfNotEqual(filesFile, filesFile + ".new")
 
+    # Generate a .config file
+    configFile = os.path.join(destination, projectName  + ".config")
+    generateFile(cList, configFile + ".new")
+    compareAndRenameFileIfNotEqual(configFile, configFile + ".new")
 
     if not args.update:
         # Generate Buildme.sh
@@ -330,13 +366,15 @@ def qtProjectGenerator(package, argv, extra):
         if args.include:
             for e in args.include:
                 projectCmd += "--include " + quote(e)
-
+        for e in args.start_includes:
+            projectCmd += " -S " + quote(e)
+        for e in args.config_defs:
+            projectCmd += " -C " + quote(e)
+ 
         buildMe.append(projectCmd)
         generateFile(buildMe, buildMeFile)
         os.chmod(buildMeFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
-        # Generate a .config file
-        generateFile("", os.path.join(destination, projectName  + ".config"))
         # Generate creator file
         creatorFile = os.path.join(destination, projectName  + ".creator")
         generateFile([], creatorFile)
