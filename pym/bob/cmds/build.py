@@ -922,6 +922,10 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Force execution of all build steps")
     parser.add_argument('-n', '--no-deps', default=None, action='store_true',
         help="Don't build dependencies")
+    parser.add_argument('-p', '--with-provided', dest='build_provided', default=None, action='store_true',
+        help="Build provided dependencies")
+    parser.add_argument('--without-provided', dest='build_provided', default=None, action='store_false',
+        help="Build without provided dependencies")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-b', '--build-only', dest='build_mode', default=None,
         action='store_const', const='build-only',
@@ -1042,7 +1046,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             packageStep = package.getPackageStep()
             backlog.append(packageStep)
             # automatically include provided deps when exporting
-            if args.destination: backlog.extend(packageStep._getProvidedDeps())
+            build_provided = (args.destination and args.build_provided == None) or args.build_provided
+            if build_provided: backlog.extend(packageStep._getProvidedDeps())
+
     try:
         for p in backlog:
             builder.cook([p], p.getPackage(), True if args.build_mode == 'checkout-only' else False)
