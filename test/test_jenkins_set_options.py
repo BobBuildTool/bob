@@ -220,7 +220,7 @@ archive:
         except:
             print("Malformed Data Recieved")
 
-        assert (result_set == {'root/dependency-one/dependency-two'})
+        self.assertEqual(result_set, {'root/dependency-one/dependency-two'})
 
     def testLongDescription(self):
 
@@ -240,4 +240,4 @@ archive:
         except:
             print("Malformed Data Recieved")
 
-        assert (result_set == {'root/dependency-two', 'root/dependency-one/dependency-two'})
+        self.assertEqual(result_set, {'root/dependency-two', 'root/dependency-one/dependency-two'})

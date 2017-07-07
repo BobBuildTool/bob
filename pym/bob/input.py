@@ -15,13 +15,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
-from .errors import BuildError, ParseError
+from .errors import ParseError
+from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
+from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
 from .tty import colorize, WarnOnce
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive
 from abc import ABCMeta, abstractmethod
-from collections.abc import MutableMapping
 from base64 import b64encode
 from itertools import chain
 from glob import glob
@@ -29,7 +30,6 @@ from pipes import quote
 from os.path import expanduser
 from string import Template
 import copy
-import dbm
 import hashlib
 import fnmatch
 import os, os.path
@@ -71,292 +71,14 @@ def maybeGlob(pattern):
     else:
         return None
 
-def checkGlobList(name, allowed):
-    if allowed is None: return True
-    ok = False
-    for pred in allowed: ok = pred(ok, name)
-    return ok
+class __uidGen:
+    def __init__(self):
+        self.cur = 0
+    def get(self):
+        self.cur += 1
+        return self.cur
 
-def _isFalse(val):
-    return val.strip().lower() in [ "", "0", "false" ]
-
-class StringParser:
-    """Utility class for complex string parsing/manipulation"""
-
-    def __init__(self, env, funs, funArgs):
-        self.env = env
-        self.funs = funs
-        self.funArgs = funArgs
-
-    def parse(self, text):
-        """Parse the text and make substitutions"""
-        if all((c not in text) for c in '\\\"\'$'):
-            return text
-        else:
-            self.text = text
-            self.index = 0
-            self.end = len(text)
-            return self.getString()
-
-    def nextChar(self):
-        """Get next character"""
-        i = self.index
-        if i >= self.end:
-            raise ParseError('Unexpected end of string')
-        self.index += 1
-        return self.text[i:i+1]
-
-    def nextToken(self, extra=None):
-        delim=['\"', '\'', '$']
-        if extra: delim.extend(extra)
-
-        # EOS?
-        i = start = self.index
-        if i >= self.end:
-            return None
-
-        # directly on delimiter?
-        if self.text[i] in delim:
-            self.index = i+1
-            return self.text[i]
-
-        # scan
-        tok = []
-        while i < self.end:
-            if self.text[i] in delim: break
-            if self.text[i] == '\\':
-                tok.append(self.text[start:i])
-                start = i = i + 1
-                if i >= self.end:
-                    raise ParseError("Unexpected end after escape")
-            i += 1
-        tok.append(self.text[start:i])
-        self.index = i
-        return "".join(tok)
-
-    def getSingleQuoted(self):
-        i = self.index
-        while i < self.end:
-            if self.text[i] == "'":
-                i += 1
-                break
-            i += 1
-        if i >= self.end:
-            raise ParseError("Missing closing \"'\"")
-        ret = self.text[self.index:i-1]
-        self.index = i
-        return ret
-
-    def getString(self, delim=[None], keep=False):
-        s = []
-        tok = self.nextToken(delim)
-        while tok not in delim:
-            if tok == '"':
-                s.append(self.getString(['"']))
-            elif tok == '\'':
-                s.append(self.getSingleQuoted())
-            elif tok == '$':
-                tok = self.nextChar()
-                if tok == '{':
-                    s.append(self.getVariable())
-                elif tok == '(':
-                    s.append(self.getCommand())
-                else:
-                    raise ParseError("Invalid $-subsitituion")
-            elif tok == None:
-                if None not in delim:
-                    raise ParseError('Unexpected end of string')
-                break
-            else:
-                s.append(tok)
-            tok = self.nextToken(delim)
-        else:
-            if keep: self.index -= 1
-        return "".join(s)
-
-    def getVariable(self):
-        # get variable name
-        varName = self.getString([':', '-', '+', '}'], True)
-
-        # process?
-        op = self.nextChar()
-        unset = varName not in self.env
-        if op == ':':
-            # or null...
-            if not unset: unset = self.env[varName] == ""
-            op = self.nextChar()
-
-        if op == '-':
-            default = self.getString(['}'])
-            if unset:
-                return default
-            else:
-                return self.env[varName]
-        elif op == '+':
-            alternate = self.getString(['}'])
-            if unset:
-                return ""
-            else:
-                return alternate
-        elif op == '}':
-            if varName not in self.env:
-                raise ParseError("Unset variable: " + varName)
-            return self.env[varName]
-        else:
-            raise ParseError("Unterminated variable: " + str(op))
-
-    def getCommand(self):
-        words = []
-        delim = [",", ")"]
-        while True:
-            word = self.getString(delim, True)
-            words.append(word)
-            end = self.nextChar()
-            if end == ")": break
-
-        if len(words) < 1:
-            raise ParseError("Expected function name")
-        cmd = words[0]
-        del words[0]
-
-        if cmd not in self.funs:
-            raise ParseError("Unknown function: "+cmd)
-
-        return self.funs[cmd](words, env=self.env, **self.funArgs)
-
-class Env(MutableMapping):
-    def __init__(self, other={}):
-        self.data = dict(other)
-        self.funs = []
-        self.funArgs = {}
-        self.touched = [ set() ]
-
-    def __touch(self, key):
-        for i in self.touched: i.add(key)
-
-    def __contains__(self, key):
-        self.__touch(key)
-        return key in self.data
-
-    def __delitem__(self, key):
-        del self.data[key]
-
-    def __eq__(self, other):
-        if isinstance(other, Env):
-            return self.data == other.data
-        else:
-            return self.data == other
-
-    def __getitem__(self, key):
-        self.__touch(key)
-        return self.data[key]
-
-    def __iter__(self):
-        raise NotImplementedError("iter() not supported")
-
-    def __len__(self):
-        return len(self.data)
-
-    def __ne__(self, other):
-        if isinstance(other, Env):
-            return self.data != other.data
-        else:
-            return self.data != other
-
-    def __setitem__(self, key, value):
-        self.data[key] = value
-
-    def clear(self):
-        self.data.clear()
-
-    def copy(self):
-        ret = Env(self.data)
-        ret.funs = self.funs
-        ret.funArgs = self.funArgs
-        ret.touched = self.touched
-        return ret
-
-    def get(self, key, default=None):
-        self.__touch(key)
-        return self.data.get(key, default)
-
-    def items(self):
-        raise NotImplementedError("items() not supported")
-
-    def keys(self):
-        raise NotImplementedError("keys() not supported")
-
-    def pop(self, key, default=None):
-        raise NotImplementedError("pop() not supported")
-
-    def popitem(self):
-        raise NotImplementedError("popitem() not supported")
-
-    def update(self, other):
-        self.data.update(other)
-
-    def values(self):
-        raise NotImplementedError("values() not supported")
-
-    def derive(self, overrides = {}):
-        ret = self.copy()
-        ret.data.update(overrides)
-        return ret
-
-    def detach(self):
-        return self.data.copy()
-
-    def setFuns(self, funs):
-        self.funs = funs
-
-    def setFunArgs(self, funArgs):
-        self.funArgs = funArgs
-
-    def prune(self, allowed):
-        if allowed is None:
-            return self.copy()
-        else:
-            ret = Env()
-            ret.data = { key : self.data[key] for key in (set(self.data.keys()) & allowed) }
-            ret.funs = self.funs
-            ret.funArgs = self.funArgs
-            ret.touched = self.touched
-            return ret
-
-    def filter(self, allowed):
-        if allowed is None:
-            return self.copy()
-        else:
-            ret = Env()
-            ret.data = { key : value for (key, value) in self.data.items()
-                if checkGlobList(key, allowed) }
-            ret.funs = self.funs
-            ret.funArgs = self.funArgs
-            ret.touched = self.touched
-            return ret
-
-    def substitute(self, value, prop):
-        try:
-            return StringParser(self, self.funs, self.funArgs).parse(value)
-        except ParseError as e:
-            raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
-
-    def evaluate(self, condition, prop):
-        if condition is None:
-            return True
-
-        s = self.substitute(condition, "condition on "+prop)
-        return not _isFalse(s)
-
-    def touchReset(self):
-        self.touched = self.touched + [ set() ]
-
-    def touch(self, keys):
-        for k in keys: self.__touch(k)
-
-    def touchedKeys(self):
-        return self.touched[-1]
-
+uidGen = __uidGen().get
 
 class PluginProperty:
     """Base class for plugin property handlers.
@@ -1274,9 +996,10 @@ class PackageStep(RegularStep):
 class CorePackage:
     __slots__ = ("name", "recipe", "directDepSteps", "indirectDepSteps",
         "states", "metaEnv", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "touchedTools")
+        "touchedTools", "pkgId")
 
-    def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps, states, metaEnv):
+    def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps,
+                 states, metaEnv, pkgId):
         self.name = name
         self.recipe = recipe
         self.directDepSteps = [ CoreStepRef(package, d) for d in directDepSteps ]
@@ -1285,6 +1008,7 @@ class CorePackage:
         self.metaEnv = metaEnv
         self.tools = {}
         self.sandbox = ...
+        self.pkgId = pkgId
 
 class Package(object):
     """Representation of a package that was created from a recipe.
@@ -1302,7 +1026,8 @@ class Package(object):
 
     def construct(self, name, stack, pathFormatter, recipe,
                   directDepSteps, indirectDepSteps, states, inputTools,
-                  allTools, inputSandbox, sandbox, touchedTools, metaEnv):
+                  allTools, inputSandbox, sandbox, touchedTools, metaEnv,
+                  pkgId):
         self.__stack = stack
         self.__pathFormatter = pathFormatter
         self.__directDepSteps = directDepSteps
@@ -1314,7 +1039,7 @@ class Package(object):
 
         # this will call back
         self.__corePackage = CorePackage(self, name, recipe, directDepSteps,
-            indirectDepSteps, states, metaEnv)
+            indirectDepSteps, states, metaEnv, pkgId)
 
         # these already need our __corePackage
         self._setCheckoutStep(CheckoutStep().construct(self, pathFormatter))
@@ -1339,6 +1064,17 @@ class Package(object):
         self.__sandbox = patchSandbox(inputSandbox, corePackage.sandbox, pathFormatter, self)
 
         return self
+
+    def _getId(self):
+        """The package-Id is uniquely representing every package variant.
+
+        On the package level there might be more dependencies than on the step
+        level. Meta variables are usually unused and also do not contribute to
+        the variant-id. The package-id still guarantees to not collide in these
+        cases. OTOH there can be identical packages with different ids, though
+        it should be an unusual case.
+        """
+        return self.__corePackage.pkgId
 
     def _getTouchedTools(self):
         return self.__corePackage.touchedTools
@@ -1670,6 +1406,19 @@ class Recipe(object):
 
         return list(collect(recipeSet.loadYaml(fileName, fileSchema), "", None))
 
+    @staticmethod
+    def createVirtualRoot(recipeSet, roots):
+        recipe = {
+            "depends" : [
+                { "name" : name, "use" : ["result"] } for name in roots
+            ],
+            "buildScript" : "true",
+            "packageScript" : "true"
+        }
+        ret = Recipe(recipeSet, recipe, "", ".", "", "", {})
+        ret.resolveClasses()
+        return ret
+
     def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName, properties, anonBaseClass=None):
         self.__recipeSet = recipeSet
         self.__sources = [ sourceFile ] if anonBaseClass is None else []
@@ -1861,11 +1610,7 @@ class Recipe(object):
         return self.__root == True
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
-                inputTools=Env(), inputStack=[]):
-        if self.__packageName in inputStack:
-            raise ParseError("Recipes are cyclic (1st package in cylce)")
-        stack = inputStack + [self.__packageName]
-
+                inputTools=Env(), stack=[]):
         # already calculated?
         for m in self.__corePackages:
             if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox):
@@ -1923,9 +1668,12 @@ class Recipe(object):
                 if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
                 r = self.__recipeSet.getRecipe(dep.recipe)
                 try:
+                    if r.__packageName in stack:
+                        raise ParseError("Recipes are cyclic (1st package in cylce)")
+                    depStack = stack + [r.__packageName]
                     p, s = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
                                      sandboxEnabled, depStates, depSandbox, depTools,
-                                     stack)
+                                     depStack)
                     subTreePackages.add(p.getName())
                     subTreePackages.update(s)
                     p = p.getPackageStep()
@@ -1980,7 +1728,7 @@ class Recipe(object):
         # create package
         p = Package().construct(self.__packageName, stack, pathFormatter, self,
             directPackages, indirectPackages, states, inputTools.detach(), tools.detach(),
-            inputSandbox, sandbox, tools.touchedKeys(), self.__metaEnv)
+            inputSandbox, sandbox, tools.touchedKeys(), self.__metaEnv, uidGen())
 
         # optional checkout step
         if self.__checkout != (None, None, []):
@@ -2113,72 +1861,6 @@ class PackageMatcher:
         inputTools.touch(self.tools.keys())
 
 
-def funEqual(args, **options):
-    if len(args) != 2: raise ParseError("eq expects two arguments")
-    return "true" if (args[0] == args[1]) else "false"
-
-def funNotEqual(args, **options):
-    if len(args) != 2: raise ParseError("ne expects two arguments")
-    return "true" if (args[0] != args[1]) else "false"
-
-def funNot(args, **options):
-    if len(args) != 1: raise ParseError("not expects one argument")
-    return "true" if _isFalse(args[0]) else "false"
-
-def funOr(args, **options):
-    for arg in args:
-        if not _isFalse(arg):
-            return "true"
-    return "false"
-
-def funAnd(args, **options):
-    for arg in args:
-        if _isFalse(arg):
-            return "false"
-    return "true"
-
-def funMatch(args, **options):
-    try:
-        [2, 3].index(len(args))
-    except ValueError:
-        raise ParseError("match expects either two or three arguments")
-
-    flags = 0
-    if len(args) == 3:
-        if args[2] == 'i':
-            flags = re.IGNORECASE
-        else:
-            raise ParseError('match only supports the ignore case flag "i"')
-
-    if re.search(args[1],args[0],flags):
-        return "true"
-    else:
-        return "false"
-
-def funIfThenElse(args, **options):
-    if len(args) != 3: raise ParseError("if-then-else expects three arguments")
-    if _isFalse(args[0]):
-        return args[2]
-    else:
-        return args[1]
-
-def funSubst(args, **options):
-    if len(args) != 3: raise ParseError("subst expects three arguments")
-    return args[2].replace(args[0], args[1])
-
-def funStrip(args, **options):
-    if len(args) != 1: raise ParseError("strip expects one argument")
-    return args[0].strip()
-
-def funSandboxEnabled(args, sandbox, **options):
-    if len(args) != 0: raise ParseError("is-sandbox-enabled expects no arguments")
-    return "true" if ((sandbox is not None) and sandbox.isEnabled()) else "false"
-
-def funToolDefined(args, tools, **options):
-    if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
-    return "true" if (args[0] in tools) else "false"
-
-
 class ArchiveValidator:
     def __init__(self):
         self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http', 'shell')},
@@ -2300,7 +1982,6 @@ class RecipeSet:
     def __init__(self):
         self.__defaultEnv = {}
         self.__aliases = {}
-        self.__rootRecipes = []
         self.__recipes = {}
         self.__classes = {}
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
@@ -2312,19 +1993,7 @@ class RecipeSet:
         self.__properties = {}
         self.__states = {}
         self.__cache = YamlCache()
-        self.__stringFunctions = {
-            "eq" : funEqual,
-            "or" : funOr,
-            "and" : funAnd,
-            "if-then-else" : funIfThenElse,
-            "is-sandbox-enabled" : funSandboxEnabled,
-            "is-tool-defined" : funToolDefined,
-            "ne" : funNotEqual,
-            "not" : funNot,
-            "strip" : funStrip,
-            "subst" : funSubst,
-            "match" : funMatch,
-        }
+        self.__stringFunctions = DEFAULT_STRING_FUNS.copy()
         self.__plugins = {}
         self.__commandConfig = {}
         self.__policies = {
@@ -2539,6 +2208,7 @@ class RecipeSet:
                     raise
 
         # resolve recipes and their classes
+        rootRecipes = []
         for recipe in self.__recipes.values():
             try:
                 recipe.resolveClasses()
@@ -2546,7 +2216,11 @@ class RecipeSet:
                 e.pushFrame(recipe.getPackageName())
                 raise
             if recipe.isRoot():
-                self.__rootRecipes.append(recipe)
+                rootRecipes.append(recipe.getPackageName())
+
+        # create virtual root package
+        self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(rootRecipes))
+        self.__addRecipe(self.__rootRecipe)
 
     def __parseUserConfig(self, fileName, relativeIncludes=None):
         if relativeIncludes is None:
@@ -2699,44 +2373,23 @@ class RecipeSet:
         states = { n:s() for (n,s) in self.__states.items() }
         rootPkg = Package()
         rootPkg.construct("<root>", [], nameFormatter, None, [], [], states,
-            {}, {}, None, None, [], {})
+            {}, {}, None, None, [], {}, -1)
         try:
             with open(cacheName, "rb") as f:
                 persistedCacheKey = f.read(len(cacheKey))
                 if cacheKey == persistedCacheKey:
                     tmp = PackageUnpickler(f, self.getRecipe, self.__plugins,
                                            nameFormatter).load()
-                    result = { name : package.toStep(nameFormatter, rootPkg).getPackage()
-                               for (name, package) in tmp.items() }
-                    return result
+                    return tmp.toStep(nameFormatter, rootPkg).getPackage()
         except (EOFError, OSError, pickle.UnpicklingError):
             pass
 
         # not cached -> calculate packages
-        result = {}
-        try:
-            BobState().setAsynchronous()
-            for root in sorted(self.__rootRecipes, key=lambda p: p.getPackageName()):
-                try:
-                    result[root.getPackageName()] = root.prepare(nameFormatter, env,
-                                                                 sandboxEnabled,
-                                                                 states)[0]
-                except ParseError as e:
-                    e.pushFrame(root.getPackageName())
-                    raise e
-            tmp = result.copy()
-            for i in self.__aliases:
-                try:
-                    p = walkPackagePath(tmp, self.__aliases[i])
-                    result[i] = p
-                except ParseError as e:
-                    print(colorize("Bad alias '{}': {}".format(i, e.slogan), "33"), file=sys.stderr)
-        finally:
-            BobState().setSynchronous()
+        result = self.__rootRecipe.prepare(nameFormatter, env, sandboxEnabled,
+                                           states)[0]
 
         # save package tree for next invocation
-        tmp = { name : CoreStepRef(rootPkg, package.getPackageStep())
-                for (name, package) in result.items() }
+        tmp = CoreStepRef(rootPkg, result.getPackageStep())
         try:
             newCacheName = cacheName + ".new"
             with open(newCacheName, "wb") as f:
@@ -2750,112 +2403,14 @@ class RecipeSet:
 
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
-        return self.__generatePackages(nameFormatter, env, cacheKey, sandboxEnabled)
-
-    def generateTree(self, envOverrides={}, sandboxEnabled=False):
-        (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
-        cacheName = ".bob-tree.dbm"
-
-        # try to load persisted tree
-        roots = TreeStorage.load(cacheName, cacheKey)
-        if roots is not None:
-            return roots
-
-        # generate and convert
-        roots = self.__generatePackages(lambda p, m: "unused", env, cacheKey, sandboxEnabled)
-
-        # save tree cache
-        return TreeStorage.create(cacheName, cacheKey, roots)
+        return PackageSet(cacheKey, self.__aliases, self.__stringFunctions,
+            lambda: self.__generatePackages(nameFormatter, env, cacheKey, sandboxEnabled))
 
     def getPolicy(self, name, location=None):
         (policy, warning) = self.__policies[name]
         if policy is None:
             warning.warn(location)
         return policy
-
-
-class TreeStorage:
-    def __init__(self, db, key=b''):
-        self.__db = db
-        self.__content = pickle.loads(db[key])
-
-    def __contains__(self, key):
-        return key in self.__content
-
-    def __getitem__(self, key):
-        data = self.__content[key]
-        return (TreeStorage(self.__db, data[0]), data[1], data[2])
-
-    def __iter__(self):
-        return iter(self.__content)
-
-    def keys(self):
-        return self.__content.keys()
-
-    def items(self):
-        return iter( (name, (TreeStorage(self.__db, data[0]), data[1], data[2]))
-                     for name, data in self.__content.items() )
-
-    def __len__(self):
-        return len(self.__content)
-
-    @classmethod
-    def load(cls, cacheName, cacheKey):
-        try:
-            db = dbm.open(cacheName, "r")
-            persistedCacheKey = db.get('vsn')
-            if cacheKey == persistedCacheKey:
-                return cls(db)
-            else:
-                db.close()
-        except OSError:
-            pass
-        except dbm.error:
-            pass
-        return None
-
-    @classmethod
-    def create(cls, cacheName, cacheKey, roots):
-        try:
-            db = dbm.open(cacheName, 'n')
-            try:
-                TreeStorage.__convertRootToTree(db, roots)
-                db['vsn'] = cacheKey
-            finally:
-                db.close()
-            return cls(dbm.open(cacheName, 'r'))
-        except OSError as e:
-            raise ParseError("Error saving internal state: " + str(e))
-
-    @staticmethod
-    def __convertRootToTree(db, roots):
-        root = {}
-        for (name, pkg) in roots.items():
-            pkgId = pkg.getPackageStep()._getResultId()
-            root[name] = (pkgId, True, "")
-            if pkgId not in db:
-                TreeStorage.__convertPackageToTree(db, pkgId, pkg)
-        db[b''] = pickle.dumps(root, -1)
-
-    @staticmethod
-    def __convertPackageToTree(db, pkgId, pkg):
-        node = {}
-        for d in pkg.getDirectDepSteps():
-            subPkgId = d._getResultId()
-            subPkg = d.getPackage()
-            node[subPkg.getName()] = (subPkgId, True, "")
-            if subPkgId not in db:
-                TreeStorage.__convertPackageToTree(db, subPkgId, subPkg)
-        prefixLen = len("/".join(pkg.getStack()))
-        for d in pkg.getIndirectDepSteps():
-            subPkg = d.getPackage()
-            name = subPkg.getName()
-            if name in node: continue
-            subPkgId = d._getResultId()
-            node[name] = (subPkgId, False, ".." + "/".join(subPkg.getStack())[prefixLen:] )
-            if subPkgId not in db:
-                TreeStorage.__convertPackageToTree(db, subPkgId, subPkg)
-        db[pkgId] = pickle.dumps(node, -1)
 
 
 class YamlCache:
@@ -2949,26 +2504,4 @@ class PackageUnpickler(pickle.Unpickler):
             return getattr(self.__plugins[module], name)
         else:
             return super().find_class(module, name)
-
-
-def walkPackagePath(rootPackages, path):
-    thisPackage = None
-    nextPackages = rootPackages.copy()
-    steps = [ s for s in path.split("/") if s != "" ]
-    trail = []
-    for step in steps:
-        if step not in nextPackages:
-            raise ParseError("Package '{}' not found under '{}'".format(step, "/".join(trail)))
-        thisPackage = nextPackages[step]
-        trail.append(step)
-        nextPackages = { s.getPackage().getName() : s.getPackage()
-            for s in thisPackage.getDirectDepSteps() }
-        for s in thisPackage.getIndirectDepSteps():
-            p = s.getPackage()
-            nextPackages.setdefault(p.getName(), p)
-
-    if not thisPackage:
-        raise ParseError("Must specify a valid package to build")
-
-    return thisPackage
 

@@ -305,6 +305,15 @@ The following built in string functions are supported:
 * ``$(subst,from,to,text)``: Replace every occurence of ``from`` with ``to`` in
   ``text``.
 
+The following built in string functions are additionally supported in
+:ref:`package path queries <manpage-bobpaths>`. They cannot be used in recipes
+as they work on packages:
+
+* ``$(matchScm,property,pattern)``: Return ``true`` if there is at least one
+  :ref:`configuration-recipes-scm` in the package that has a ``property`` that
+  matches the ``pattern``. Otherwise returns ``false``. Shell globbing patterns
+  may be used as ``pattern``.
+
 Plugins may provide additional functions as described in
 :ref:`extending-hooks-string`. If a string is interpreted as a boolean then the
 empty string, "0" and "false" (case insensitive) are considered as logical
@@ -1234,10 +1243,14 @@ alias
 
 Type: Dictionary (String -> String)
 
-Specifies alias names for packages::
+Aliases allow a string to be substituted for the first step of a
+:ref:`relative location path <manpage-bobpaths-locationpath>`::
 
    alias:
       myApp: "host/files/group/app42"
+      allTests: "//*-unittest"
+
+See :ref:`manpage-bobpaths-aliases` for the rules that apply to aliases.
 
 command
 ~~~~~~~

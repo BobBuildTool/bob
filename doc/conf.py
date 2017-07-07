@@ -260,6 +260,7 @@ man_pages = [
     ('manpages/bob-dev', 'bob-dev', 'Bob develop mode build', ['Jan Klötzke'], 1),
     ('manpages/bob-jenkins', 'bob-jenkins', 'Configure Jenkins server', ['Jan Klötzke'], 1),
     ('manpages/bob-ls', 'bob-ls', 'List package hierarchy', ['Jan Klötzke'], 1),
+    ('manpages/bobpaths', 'bobpaths', 'Specifying paths to Bob packages', ['Jan Klötzke'], 7),
     ('manpages/bob-project', 'bob-project', 'Create IDE project files', ['Jan Klötzke'], 1),
     ('manpages/bob-query-meta', 'bob-query-meta', 'Query metaEnvironment variables', ['Ralf Hubert'], 1),
     ('manpages/bob-query-path', 'bob-query-path', 'Query path information', ['Jan Klötzke'], 1),
