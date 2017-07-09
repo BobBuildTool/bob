@@ -157,8 +157,9 @@ def doQueryMeta(argv, bobRoot):
     packages = recipes.generatePackages(lambda s,m: "unused", defines)
 
     def showPackage(package, recurse, done):
-        # show recipes only once for each package
-        key = (package.getName(), package.getPackageStep().getVariantId())
+        # Show each package only once. Meta variables are fixed and not variant
+        # dependent.
+        key = package.getName()
         if key not in done:
             for (var, val) in package.getMetaEnv().items():
                 print(package.getName() + " " + var + "=" + val)

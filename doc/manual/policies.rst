@@ -136,3 +136,35 @@ Old behaviour
 New behaviour
     All files are included relative to the currently processed file.
 
+.. _policies-cleanEnvironment:
+
+cleanEnvironment
+~~~~~~~~~~~~~~~~
+
+Introduced in: 0.13
+
+The environment variables that are consumed in recipes are fundamentally
+calculated from the recipes only. Bob has the notion of white listed variables
+that shall not influence the build result but should still be set during
+execution. Their value is kept unchanged from the current OS environment when
+building packages.
+
+Previously the current set of environment variables during package calculation
+started with the ones named by :ref:`configuration-config-whitelist` in
+``default.yaml``. This made these variables bound to the value that was set
+during package calculation. Especially on Jenkins setups this is wrong as the
+machine that configures the Jenkins may have a different OS environment than
+the Jenkins executors/slaves. Also using such variables in the recipes made
+the calculated packages dependent on the state of the local machine.
+
+Old behavior
+    Environment computation in root recipes starts with white listed variables
+    of the current OS environment.
+
+New behavior
+    Package computation starts with a clean environment. The default
+    environment variables (:ref:`configuration-config-environment`) may
+    reference OS environment variables and are taken as initial environment for
+    package computation. White listed variables are only available while
+    building packages and are taken verbatim from the current OS execution
+    environment.

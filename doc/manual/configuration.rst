@@ -58,9 +58,9 @@ local state that consists of the following information:
 Environment
     Bob always keeps the full set of variables but only a subset is visible
     when executing the scripts. Initially only the variables defined in
-    ``default.yaml`` in the ``environment`` section and whitelisted variables
-    named by ``whitelist`` are available. Environment variables can be set at
-    various points that are described below in more detail.
+    ``default.yaml`` in the ``environment`` section are available. Environment
+    variables can be set at various points that are described below in more
+    detail.
 
 Tools
     Tools are aliases for paths to executables. Initially there are no tools.
@@ -118,11 +118,19 @@ steps. Only the working directory might be modified.
 Environment handling
 ~~~~~~~~~~~~~~~~~~~~
 
-The available set of environment variables starts only with the ones named
-explicitly by ``whitelist`` in ``config.yaml``. The next step is to set all
-variables listed in ``environment`` to their configured value. The user might
-additionally override or set certain variables from the command line. The
-so calculated set of variables is the starting point for each root recipe.
+The variables listed in :ref:`configuration-config-environment` of
+``default.yaml`` with their configured value are mangled through
+:ref:`configuration-principle-subst` by the current OS environment and are then
+taken over into the initial environment. The user might additionally override
+or set certain variables from the command line. Such variables are always taken
+over verbatim. The so calculated set of variables is the starting point for
+each root recipe.
+
+.. note::
+    Depending on the :ref:`policies-cleanEnvironment` policy the initial
+    environment may first be populated with the whitelisted variables named by
+    :ref:`configuration-config-whitelist` from the current OS environment. The
+    new behaviour (i.e. enabled policy) is to start with a clean environment.
 
 The next steps are repeated for each recipe as the dependency tree is traversed.
 A copy of the environment is inherited from the upstream recipe.
@@ -1084,6 +1092,8 @@ specified without the .yaml extension::
     included by ``default.yaml`` and by the command line use the recipes
     directory as base directory.
 
+.. _configuration-config-environment:
+
 environment
 ~~~~~~~~~~~
 
@@ -1096,6 +1106,11 @@ Specifies default environment variables. Example::
       # (nproc).  If desired it can be set to a specific number, e.g. "2". See
       # classes/make.yaml for details.
       MAKE_JOBS: "nproc"
+
+If the :ref:`policies-cleanEnvironment` policy is enabled then these variables
+are subject to :ref:`configuration-principle-subst` with the current OS
+environment. This allows to take over certain variables from the OS environment
+in a controlled fashion.
 
 .. _configuration-config-whitelist:
 

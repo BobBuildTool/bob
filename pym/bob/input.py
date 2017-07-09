@@ -1970,7 +1970,8 @@ class RecipeSet:
         schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}$'),
         schema.Optional('plugins') : [str],
         schema.Optional('policies') : {
-            schema.Optional('relativeIncludes') : bool
+            schema.Optional('relativeIncludes') : bool,
+            schema.Optional('cleanEnvironment') : bool,
         }
     })
 
@@ -1998,6 +1999,7 @@ class RecipeSet:
         self.__commandConfig = {}
         self.__policies = {
             'relativeIncludes' : ("0.13", WarnOnce("relativeIncludes policy not set. Using recipes directory as base for all includes!")),
+            'cleanEnvironment' : ("0.13", WarnOnce("cleanEnvironment policy not set. Initial environment tainted by whitelisted variables!")),
         }
 
     def __addRecipe(self, recipe):
@@ -2346,9 +2348,15 @@ class RecipeSet:
 
     def __getEnvWithCacheKey(self, envOverrides, sandboxEnabled):
         # calculate start environment
-        env = Env(os.environ).prune(self.__whiteList)
+        if self.getPolicy("cleanEnvironment"):
+            osEnv = Env(os.environ)
+            osEnv.setFuns(self.__stringFunctions)
+            env = Env({ k : osEnv.substitute(v, k) for (k, v) in
+                self.__defaultEnv.items() })
+        else:
+            env = Env(os.environ).prune(self.__whiteList)
+            env.update(self.__defaultEnv)
         env.setFuns(self.__stringFunctions)
-        env.update(self.__defaultEnv)
         env.update(envOverrides)
 
         # calculate cache key for persisted packages
