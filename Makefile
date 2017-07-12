@@ -51,8 +51,10 @@ install: all
 		rm -rf $(DESTDIR)/lib/bob/version ; \
 	fi
 ifdef SPHINX
-	@mkdir -p $(DESTDIR)/share/man/man1
-	@cp doc/_build/man/*.1 $(DESTDIR)/share/man/man1/
+	@for num in 1 7 ; do \
+		mkdir -p $(DESTDIR)/share/man/man$$num ; \
+		cp doc/_build/man/*.$$num $(DESTDIR)/share/man/man$$num/ ; \
+	done
 endif
 
 check:
