@@ -704,7 +704,7 @@ class PackageSet:
         predExpr = pyparsing.infixNotation(
             locationPath ^ stringLiteral ^ functionCall,
             [
-                ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks, self.__getTree)),
+                ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks, self.__getGraphRoot)),
                 ('<',  2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
                 ('<=', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
                 ('>',  2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
