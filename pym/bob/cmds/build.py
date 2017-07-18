@@ -651,14 +651,9 @@ esac
                             del oldCheckoutState[scmDir]
                             BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
-                    # Store new SCM checkout state. The script state is not stored
-                    # so that this step will run again if it fails. OTOH we must
-                    # record the SCM directories as some checkouts might already
-                    # succeeded before the step ultimately fails.
-                    BobState().setDirectoryState(prettySrcPath,
-                        { d:s for (d,s) in checkoutState.items() if d is not None })
-
-                    # check that new checkouts do not collide with old stuff in workspace
+                    # Check that new checkouts do not collide with old stuff in
+                    # workspace. Do it before we store the new SCM state to
+                    # check again if the step is rerun.
                     for scmDir in checkoutState.keys():
                         if scmDir is None or scmDir == ".": continue
                         if oldCheckoutState.get(scmDir) is not None: continue
@@ -666,6 +661,13 @@ esac
                         if os.path.exists(scmPath):
                             raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
                                                 .format(scmDir, prettySrcPath))
+
+                    # Store new SCM checkout state. The script state is not stored
+                    # so that this step will run again if it fails. OTOH we must
+                    # record the SCM directories as some checkouts might already
+                    # succeeded before the step ultimately fails.
+                    BobState().setDirectoryState(prettySrcPath,
+                        { d:s for (d,s) in checkoutState.items() if d is not None })
 
                     # Forge checkout result before we run the step again.
                     # Normally the correct result is set directly after the
