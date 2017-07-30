@@ -140,11 +140,18 @@ Axis specifier
     The following axis are available:
 
     * the ``self`` axis contains just the context package itself,
-    * the ``child`` axis contains the children of the context package,
-    * the ``descendant`` axis contains the descendants of the context package;
-      a descendant is a child or a child of a child and so on
+    * the ``child`` axis contains all children of the context package,
+    * the ``direct-child`` axis contains the direct children of the context
+      package (i.e. without provided dependencies),
+    * the ``descendant`` axis contains all descendants of the context package;
+      a descendant is a child or a child of a child and so on,
+    * the ``direct-descendant`` axis contains the direct descendants of the
+      context package; a direct descendant is a direct child or a direct child
+      of a direct child and so on,
     * the ``descendant-or-self`` axis contains the context package and the
-      descendants of the context package.
+      descendants of the context package
+    * the ``direct-descendant-or-self`` axis contains the context package and
+      the direct descendants of the context package.
 
 Package name test
     For every package that is reachable by the axis the package name is matched
