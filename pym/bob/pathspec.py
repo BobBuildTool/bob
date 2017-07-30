@@ -101,7 +101,7 @@ class LocationPath(BaseASTNode):
     def __repr__(self):
         return "LocationPath({})".format(self.__path)
 
-    def __findIntermediateNodes(self, old, new):
+    def __findIntermediateNodes(self, old, new, queryIndirect):
         """Find nodes that are on on any path between 'old' and 'new'"""
 
         visited = set()
@@ -116,7 +116,8 @@ class LocationPath(BaseASTNode):
             else:
                 stack = stack + [node]
                 for i in node.values():
-                    traverse(i.node, stack)
+                    if queryIndirect or i.direct:
+                        traverse(i.node, stack)
                 visited.add(node)
 
         for n in old: traverse(n, [])
@@ -132,7 +133,7 @@ class LocationPath(BaseASTNode):
             node = todo.pop()
             if (node not in valid) or (node in ret): continue
             ret.add(node)
-            todo.update(node.parents())
+            todo.update(node.parents(True))
 
         return ret
 
@@ -154,8 +155,8 @@ class LocationPath(BaseASTNode):
         for i in self.__path:
             oldNodes = nodes
             nodes, search = i.evalForward(nodes, valid)
-            if search:
-                valid.update(self.__findIntermediateNodes(oldNodes, nodes))
+            if search is not None:
+                valid.update(self.__findIntermediateNodes(oldNodes, nodes, search))
             else:
                 valid.update(nodes)
             valid.update(nodes)
@@ -219,39 +220,40 @@ class LocationStep(BaseASTNode):
     def __repr__(self):
         return "LocationStep({}@{}[{}])".format(self.__axis, self.__test, self.__pred)
 
-    def __evalAxisChild(self, nodes):
+    def __evalAxisChild(self, nodes, queryIndirect):
         """Find nodes in the 'child' axis."""
         ret = set()
         for i in nodes:
-            ret.update(c.node for c in i.values())
+            ret.update(c.node for c in i.values() if (queryIndirect or c.direct))
         return ret
 
-    def __evalAxisDescendant(self, nodes):
+    def __evalAxisDescendant(self, nodes, queryIndirect):
         """Find nodes in the 'descendant' axis."""
         ret = set()
         todo = nodes
         while todo:
             childs = set()
             for i in todo:
-                childs.update(c.node for c in i.values())
+                childs.update(c.node for c in i.values()
+                              if (queryIndirect or c.direct))
             todo = childs - ret
             ret.update(childs)
         return ret
 
-    def __evalAxisParent(self, nodes):
+    def __evalAxisParent(self, nodes, queryIndirect):
         """Find nodes in the 'parent' axis."""
         ret = set()
         for i in nodes:
-            ret.update(i.parents())
+            ret.update(i.parents(queryIndirect))
         return ret
 
-    def __evalAxisAncestor(self, nodes):
+    def __evalAxisAncestor(self, nodes, queryIndirect):
         """Find nodes in the 'ancestor' axis."""
         ret = set()
         todo = nodes
         while todo:
             parents = set()
-            for i in todo: parents.update(i.parents())
+            for i in todo: parents.update(i.parents(queryIndirect))
             todo = parents - ret
             ret.update(parents)
         return ret
@@ -281,15 +283,23 @@ class LocationStep(BaseASTNode):
         caste it is the responsibility of the caller to calculate all possible
         paths that lead to the result set.
         """
-        search = False
+        search = None
         if self.__axis == "child":
-            nodes = self.__evalAxisChild(nodes)
+            nodes = self.__evalAxisChild(nodes, True)
         elif self.__axis == "descendant":
-            nodes = self.__evalAxisDescendant(nodes)
+            nodes = self.__evalAxisDescendant(nodes, True)
             search = True
         elif self.__axis == "descendant-or-self":
-            nodes = self.__evalAxisDescendant(nodes) | nodes
+            nodes = self.__evalAxisDescendant(nodes, True) | nodes
             search = True
+        elif self.__axis == "direct-child":
+            nodes = self.__evalAxisChild(nodes, False)
+        elif self.__axis == "direct-descendant":
+            nodes = self.__evalAxisDescendant(nodes, False)
+            search = False
+        elif self.__axis == "direct-descendant-or-self":
+            nodes = self.__evalAxisDescendant(nodes, False) | nodes
+            search = False
         elif self.__axis == "self":
             pass
         else:
@@ -320,11 +330,17 @@ class LocationStep(BaseASTNode):
             nodes = nodes & self.__pred.evalBackward()
 
         if self.__axis == "child":
-            nodes = self.__evalAxisParent(nodes)
+            nodes = self.__evalAxisParent(nodes, True)
         elif self.__axis == "descendant":
-            nodes = self.__evalAxisAncestor(nodes)
+            nodes = self.__evalAxisAncestor(nodes, True)
         elif self.__axis == "descendant-or-self":
-            nodes = self.__evalAxisAncestor(nodes) | nodes
+            nodes = self.__evalAxisAncestor(nodes, True) | nodes
+        elif self.__axis == "direct-child":
+            nodes = self.__evalAxisParent(nodes, False)
+        elif self.__axis == "direct-descendant":
+            nodes = self.__evalAxisAncestor(nodes, False)
+        elif self.__axis == "direct-descendant-or-self":
+            nodes = self.__evalAxisAncestor(nodes, False) | nodes
         elif self.__axis == "self":
             pass
         else:
@@ -572,8 +588,9 @@ class PkgGraphNode:
         return iter( (name, PkgGraphEdge(self.__db, child))
                      for name, child in self.__childs.items() )
 
-    def parents(self):
-        return iter( PkgGraphNode(self.__db, p) for p in self.__parents )
+    def parents(self, queryIndirect):
+        return iter( PkgGraphNode(self.__db, p) for (p, d) in self.__parents.items()
+                     if (queryIndirect or d) )
 
     def allNodes(self):
         return iter( PkgGraphNode(self.__db, i) for i in self.__db.keys()
@@ -582,15 +599,17 @@ class PkgGraphNode:
     def getName(self):
         return self.__name
 
-    def __addParent(self, parent):
+    def __addParent(self, parent, direct):
+        # Direct dependencies are traversed first. We don't need to worry that
+        # a parent is flipping between direct and indirect.
         if parent not in self.__parents:
-            self.__parents.add(parent)
+            self.__parents[parent] = direct
             self.__db[self.__key] = pickle.dumps(
                 (self.__name, self.__parents, self.__childs),
                 -1)
 
     @staticmethod
-    def __convertPackageToGraph(db, pkg, parent=None):
+    def __convertPackageToGraph(db, pkg, parent=None, directParent=True):
         name = pkg.getName()
         key = pkg._getId().to_bytes(4, 'little')
         if key not in db:
@@ -598,22 +617,22 @@ class PkgGraphNode:
             childs = OrderedDict()
             for d in pkg.getDirectDepSteps():
                 subPkg = d.getPackage()
-                subPkgId = PkgGraphNode.__convertPackageToGraph(db, subPkg, key)
+                subPkgId = PkgGraphNode.__convertPackageToGraph(db, subPkg, key, True)
                 childs[subPkg.getName()] = (subPkgId, True, "")
             prefixLen = len("/".join(pkg.getStack()))
             for d in pkg.getIndirectDepSteps():
                 subPkg = d.getPackage()
                 subPkgName = subPkg.getName()
                 if subPkgName in childs: continue
-                subPkgId = PkgGraphNode.__convertPackageToGraph(db, subPkg, key)
+                subPkgId = PkgGraphNode.__convertPackageToGraph(db, subPkg, key, False)
                 childs[subPkgName] = ( subPkgId, False,
                     ".." + "/".join(subPkg.getStack())[prefixLen:] )
             # create node
-            node = ( name, (set([parent]) if parent is not None else set()), childs )
+            node = ( name, ({parent:directParent} if parent is not None else {}), childs )
             db[key] = pickle.dumps(node, -1)
         elif parent is not None:
             # add as parent
-            PkgGraphNode(db, key).__addParent(parent)
+            PkgGraphNode(db, key).__addParent(parent, directParent)
 
         return key
 
@@ -672,6 +691,9 @@ class PackageSet:
               pyparsing.Keyword("descendant-or-self") \
             | pyparsing.Keyword("child") \
             | pyparsing.Keyword("descendant") \
+            | pyparsing.Keyword("direct-descendant-or-self") \
+            | pyparsing.Keyword("direct-child") \
+            | pyparsing.Keyword("direct-descendant") \
             | pyparsing.Keyword("self")
 
         nodeTest = pyparsing.Word(pyparsing.alphanums + "_.:+-*")
@@ -761,14 +783,14 @@ class PackageSet:
         """Get iterator that yields graph node and package together."""
         return GraphPackageIterator(self.__getGraphRoot(), self.getRootPackage())
 
-    def __findResultNodes(self, node, result, valid, queryIndirect, queryAll, stack=[]):
+    def __findResultNodes(self, node, result, valid, queryAll, stack=[]):
         if not queryAll: valid.discard(node)
         if node in result:
             if not queryAll: result.remove(node)
             yield (stack, node)
         for (name, child) in sorted((n, c.node) for (n, c) in node.items()
-                                    if ((c.node in valid) and (c.direct or queryIndirect))):
-            yield from self.__findResultNodes(child, result, valid, queryIndirect,
+                                    if ((c.node in valid))):
+            yield from self.__findResultNodes(child, result, valid,
                                               queryAll, stack + [name])
 
     def __findResultPackages(self, node, pkg, result, valid, queryAll):
@@ -813,17 +835,14 @@ class PackageSet:
             self.__root = self.__generator()
         return self.__root
 
-    def queryTreePath(self, path, queryIndirect, queryAll=False):
+    def queryTreePath(self, path, queryAll=False):
         """Execute query and return (stack, PkgGraphNode) tuples.
 
-        If 'queryIndirect' is True then indirect dependencies are consideret
-        too for path traversals. Setting it to false will only return paths
-        that consist of direct dependencies. Setting 'queryAll' to True will
-        return all alternate paths to a result element instead of only the
-        first one.
+        Setting 'queryAll' to True will return all alternate paths to a result
+        element instead of only the first one.
         """
         (nodes, valid) = self.__query(path)
-        return self.__findResultNodes(self.__getGraphRoot(), nodes, valid, queryIndirect, queryAll)
+        return self.__findResultNodes(self.__getGraphRoot(), nodes, valid, queryAll)
 
     def queryPackagePath(self, path, queryAll=False):
         """Execute query and return bob.input.Package objects.
