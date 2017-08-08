@@ -18,6 +18,10 @@ for c in $cmds; do
 		project)
 			run_bob project -DBAR=1 -c testconfig qt-creator root --kit=none
 			;;
+        graph)
+			run_bob $c -DBAR=1 -c testconfig -t dot root
+			run_bob $c -DBAR=1 -c testconfig -t d3 root
+            ;;
 		*)
 			run_bob $c -DBAR=1 -c testconfig root
 			;;
