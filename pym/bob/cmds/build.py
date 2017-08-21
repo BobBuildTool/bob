@@ -819,8 +819,9 @@ esac
             wasDownloaded = False
             if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ):
                 # prune directory if we previously downloaded/built something different
-                if (oldInputBuildId is not None) and (oldInputBuildId != packageBuildId):
-                    print(colorize("   PRUNE     {} (build-id changed)".format(prettyPackagePath), "33"))
+                if ((oldInputBuildId is not None) and (oldInputBuildId != packageBuildId)) or self.__force:
+                    print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
+                            "build forced" if self.__force else "build-id changed"), "33"))
                     emptyDirectory(prettyPackagePath)
                     BobState().delInputHashes(prettyPackagePath)
                     BobState().delResultHash(prettyPackagePath)
@@ -841,7 +842,7 @@ esac
                     elif self.__forcedDownload:
                         raise BuildError("Downloading artifact failed")
                 elif oldWasDownloaded:
-                    self._info("   PACKAGE   skipped (deterministic output in {})".format(prettyPackagePath))
+                    self._info("   PACKAGE   skipped (already downloaded in {})".format(prettyPackagePath))
                     wasDownloaded = True
 
             # Run package step if we have not yet downloaded the package or if
