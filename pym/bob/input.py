@@ -1407,7 +1407,7 @@ class Recipe(object):
         return list(collect(recipeSet.loadYaml(fileName, fileSchema), "", None))
 
     @staticmethod
-    def createVirtualRoot(recipeSet, roots):
+    def createVirtualRoot(recipeSet, roots, properties):
         recipe = {
             "depends" : [
                 { "name" : name, "use" : ["result"] } for name in roots
@@ -1415,7 +1415,7 @@ class Recipe(object):
             "buildScript" : "true",
             "packageScript" : "true"
         }
-        ret = Recipe(recipeSet, recipe, "", ".", "", "", {})
+        ret = Recipe(recipeSet, recipe, "", ".", "", "", properties)
         ret.resolveClasses()
         return ret
 
@@ -2221,7 +2221,7 @@ class RecipeSet:
                 rootRecipes.append(recipe.getPackageName())
 
         # create virtual root package
-        self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(rootRecipes))
+        self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(rootRecipes), self.__properties)
         self.__addRecipe(self.__rootRecipe)
 
     def __parseUserConfig(self, fileName, relativeIncludes=None):
