@@ -16,7 +16,6 @@
 
 from . import BOB_VERSION, _enableDebug
 from .errors import BobError
-from .input import RecipeSet
 from .state import finalize
 from .tty import colorize, Unbuffered
 from .utils import asHexStr, hashDirectory
@@ -171,6 +170,7 @@ def bob(bobRoot):
             _enableDebug()
 
         if args.ignore_commandCfg:
+            from .input import RecipeSet
             RecipeSet.ignoreCommandCfg()
 
         if args.command is None:
