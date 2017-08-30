@@ -1,5 +1,5 @@
 #!/bin/sh
-D="$(dirname "$(realpath "${0}")")"
+D="$(dirname "$(readlink -f "${0}")")"
 export PYTHONPATH="$D/pym:${PYTHONPATH}"
 exec python3 -c "import sys
 from bob.scripts import hashTree
