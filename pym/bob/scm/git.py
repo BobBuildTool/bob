@@ -170,9 +170,11 @@ fi
             ElementTree.SubElement(extensions,
                 "hudson.plugins.git.extensions.impl.RelativeTargetDirectory"),
             "relativeTargetDir").text = os.path.normpath(os.path.join(workPath, self.__dir))
-        # remove untracked files
+        # remove untracked files and stale branches
         ElementTree.SubElement(extensions,
             "hudson.plugins.git.extensions.impl.CleanCheckout")
+        ElementTree.SubElement(extensions,
+            "hudson.plugins.git.extensions.impl.PruneStaleBranch")
         shallow = options.get("scm.git.shallow")
         if shallow is not None:
             try:
