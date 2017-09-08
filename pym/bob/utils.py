@@ -369,7 +369,7 @@ def copyTree(src, dst):
                 else:
                     ret = copyTree(srcname, dstname) and ret
             else:
-                if os.path.exists(dstname):
+                if os.path.lexists(dstname):
                     os.unlink(dstname)
                 if os.path.islink(srcname):
                     linkto = os.readlink(srcname)
