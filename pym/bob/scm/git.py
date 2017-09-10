@@ -219,12 +219,12 @@ fi
     # Get GitSCM status. The purpose of this function is to return the status of the given directory
     #
     # return values:
-    #  - error: the scm is in a error state. Use this if git returned a error code.
-    #  - dirty: SCM is dirty. Could be: modified files, switched to another branch/tag/commit/repo, unpushed commits
-    #  - clean: same branch/tag/commit as specified in the recipe and no local changes.
-    #  - empty: directory is not existing
+    #  - error: The SCM is in a error state. Use this if git returned a error code.
+    #  - dirty: SCM is dirty. Could be: modified files, switched to another branch/tag/commit/repo, unpushed commits.
+    #  - clean: Same branch/tag/commit as specified in the recipe and no local changes.
+    #  - empty: Directory is not existing.
     #
-    # This function is called when build with --clean-checkou. 'error' and 'dirty' scm's are moved to attic,
+    # This function is called when build with --clean-checkout. 'error' and 'dirty' SCMs are moved to attic,
     # while empty and clean directories are not.
     def status(self, workspacePath, dir):
         scmdir = os.path.join(workspacePath, dir)
