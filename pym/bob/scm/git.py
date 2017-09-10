@@ -24,6 +24,7 @@ import os, os.path
 import re
 import schema
 import subprocess
+from pipes import quote
 
 class GitScm(Scm):
 
@@ -36,7 +37,9 @@ class GitScm(Scm):
         schema.Optional('tag') : str,
         schema.Optional('commit') : str,
         schema.Optional('rev') : str,
+        schema.Optional(schema.Regex('^remote-.*')) : str,
     })
+    REMOTE_PREFIX = "remote-"
 
     def __init__(self, spec, overrides=[]):
         super().__init__(overrides)
@@ -45,6 +48,7 @@ class GitScm(Scm):
         self.__branch = None
         self.__tag = None
         self.__commit = None
+        self.__remotes = {}
         if "rev" in spec:
             rev = spec["rev"]
             if rev.startswith("refs/heads/"):
@@ -66,9 +70,16 @@ class GitScm(Scm):
             # nothing secified at all -> master branch
             self.__branch = "master"
         self.__dir = spec.get("dir", ".")
+        # convert remotes into separate dictionary
+        for key, val in spec.items():
+            if key.startswith(GitScm.REMOTE_PREFIX):
+                stripped_key = key[len(GitScm.REMOTE_PREFIX):] # remove prefix
+                if stripped_key == "origin":
+                    raise ParseError("Invalid remote name: " + stripped_key)
+                self.__remotes.update({stripped_key : val})
 
     def getProperties(self):
-        return [{
+        properties = [{
             'recipe' : self.__recipe,
             'scm' : 'git',
             'url' : self.__url,
@@ -81,8 +92,43 @@ class GitScm(Scm):
                     ("refs/heads/" + self.__branch))
             )
         }]
+        for key, val in self.__remotes.items():
+            properties[0].update({GitScm.REMOTE_PREFIX+key : val})
+        return properties
 
     def asScript(self):
+        remotes_array = """
+# create an array of all remotes for this repository
+declare -A BOB_GIT_REMOTES=( [origin]={URL} )""".format(URL=quote(self.__url))
+        # add additional remotes to array
+        for name, url in self.__remotes.items():
+            remotes_array += """
+BOB_GIT_REMOTES[{NAME}]={URL}""".format(NAME=quote(name), URL=quote(url))
+        # create script to handle remotes
+        remotes_script = """
+(
+    {REMOTES_ARRAY}
+    # remove remotes from array that are already known to Git
+    while read -r REMOTE_NAME ; do
+        # check for empty variable in case no remote at all is specified
+        if [ -z "$REMOTE_NAME" ]; then
+            continue
+        fi
+        # check if existing remote is configured
+        if [ "${{BOB_GIT_REMOTES[$REMOTE_NAME]+_}}" ]; then
+            # check if URL has changed
+            if [ ! "${{BOB_GIT_REMOTES[$REMOTE_NAME]}}" == "$(git ls-remote --get-url $REMOTE_NAME)" ]; then
+                git remote set-url "$REMOTE_NAME" "${{BOB_GIT_REMOTES[$REMOTE_NAME]}}"
+            fi
+            # it is configured, therefore no need to keep in list
+            unset "BOB_GIT_REMOTES[$REMOTE_NAME]"
+        fi
+    done <<< "$(git remote)"
+    # add all remaining remotes in the array to the repository
+    for REMOTE_NAME in "${{!BOB_GIT_REMOTES[@]}}" ; do
+        git remote add "$REMOTE_NAME" "${{BOB_GIT_REMOTES[$REMOTE_NAME]}}"
+    done
+)""".format(REMOTES_ARRAY=remotes_array)
         if self.__tag or self.__commit:
             return """
 export GIT_SSL_NO_VERIFY=true
@@ -90,16 +136,16 @@ if [ ! -d {DIR}/.git ] ; then
     git init {DIR}
 fi
 cd {DIR}
-# see if we have a remote
-if [[ -z $(git remote) ]] ; then
-    git remote add origin {URL}
-fi
+{REMOTES}
 # checkout only if HEAD is invalid
 if ! git rev-parse --verify -q HEAD >/dev/null ; then
     git fetch -t origin '+refs/heads/*:refs/remotes/origin/*'
     git checkout -q {REF}
 fi
-""".format(URL=self.__url, REF=self.__commit if self.__commit else "tags/"+self.__tag, DIR=self.__dir)
+""".format(URL=self.__url,
+           REF=self.__commit if self.__commit else "tags/"+self.__tag,
+           DIR=self.__dir,
+           REMOTES=remotes_script)
         else:
             return """
 export GIT_SSL_NO_VERIFY=true
@@ -116,7 +162,11 @@ else
         exit 1
     fi
 fi
-""".format(URL=self.__url, BRANCH=self.__branch, DIR=self.__dir)
+{REMOTES}
+""".format(URL=self.__url,
+           BRANCH=self.__branch,
+           DIR=self.__dir,
+           REMOTES=remotes_script)
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this git module.
