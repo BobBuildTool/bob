@@ -10,6 +10,7 @@ Contents:
    bob-build
    bob-clean
    bob-dev
+   bob-graph
    bob-jenkins
    bob-ls
    bobpaths

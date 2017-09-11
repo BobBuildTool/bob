@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<head>
+<title>Bob graph: sandbox </title>
+<style>
+ .info { font-family: arial; font-size: 10pt;}
+</style
+</head>
+<meta charset="utf-8">
+<svg width="0" height="0"></svg>
+<script src='d3.v4.min.js'></script>
+<script>
+var nodes =
+[{"hover": "{}", "colorid": 1, "id": 157, "label": "sandbox"}, {"hover": "{}", "colorid": 3, "id": 73, "label": "bootstrap-sandbox"}, {"hover": "{}", "colorid": 3, "id": 13, "label": "cross-toolchain#0"}, {"hover": "{}", "colorid": 3, "id": 10, "label": "gcc-stage2#0"}, {"hover": "{}", "colorid": 3, "id": 1, "label": "gmp#0"}, {"hover": "{}", "colorid": 3, "id": 3, "label": "mpfr#0"}, {"hover": "{}", "colorid": 3, "id": 2, "label": "gmp#0"}, {"hover": "{}", "colorid": 3, "id": 4, "label": "mpc#0"}, {"hover": "{}", "colorid": 3, "id": 5, "label": "isl#0"}, {"hover": "{}", "colorid": 3, "id": 6, "label": "binutils#0"}, {"hover": "{}", "colorid": 3, "id": 9, "label": "glibc-dev#0"}, {"hover": "{}", "colorid": 3, "id": 7, "label": "linux-headers#0"}, {"hover": "{}", "colorid": 3, "id": 8, "label": "gcc-stage1#0"}, {"hover": "{}", "colorid": 3, "id": 12, "label": "glibc-dev#0"}, {"hover": "{}", "colorid": 3, "id": 11, "label": "gcc-stage1#0"}, {"hover": "{}", "colorid": 3, "id": 18, "label": "bash#0"}, {"hover": "{}", "colorid": 3, "id": 14, "label": "ncurses-dev#0"}, {"hover": "{}", "colorid": 3, "id": 16, "label": "readline-dev#0"}, {"hover": "{}", "colorid": 3, "id": 15, "label": "ncurses-tgt#0"}, {"hover": "{}", "colorid": 3, "id": 17, "label": "readline-tgt#0"}, {"hover": "{}", "colorid": 3, "id": 19, "label": "bzip2#0"}, {"hover": "{}", "colorid": 3, "id": 21, "label": "coreutils#0"}, {"hover": "{}", "colorid": 3, "id": 20, "label": "gmp#1"}, {"hover": "{}", "colorid": 3, "id": 26, "label": "curl#0"}, {"hover": "{}", "colorid": 3, "id": 24, "label": "openssl-dev#0"}, {"hover": "{}", "colorid": 2, "id": 22, "label": "zlib-dev#0"}, {"hover": "{}", "colorid": 2, "id": 23, "label": "zlib-tgt#0"}, {"hover": "{}", "colorid": 3, "id": 25, "label": "openssl-tgt#0"}, {"hover": "{}", "colorid": 3, "id": 27, "label": "diffutils#0"}, {"hover": "{}", "colorid": 3, "id": 28, "label": "file#0"}, {"hover": "{}", "colorid": 3, "id": 29, "label": "findutils#0"}, {"hover": "{}", "colorid": 3, "id": 32, "label": "gawk#0"}, {"hover": "{}", "colorid": 3, "id": 31, "label": "mpfr#0"}, {"hover": "{}", "colorid": 3, "id": 30, "label": "gmp#2"}, {"hover": "{}", "colorid": 3, "id": 33, "label": "gettext#0"}, {"hover": "{}", "colorid": 3, "id": 34, "label": "grep#0"}, {"hover": "{}", "colorid": 3, "id": 35, "label": "gzip#0"}, {"hover": "{}", "colorid": 3, "id": 36, "label": "m4#0"}, {"hover": "{}", "colorid": 3, "id": 37, "label": "make#0"}, {"hover": "{}", "colorid": 3, "id": 39, "label": "makedepend#0"}, {"hover": "{}", "colorid": 3, "id": 38, "label": "xproto#0"}, {"hover": "{}", "colorid": 3, "id": 44, "label": "openssh#0"}, {"hover": "{}", "colorid": 2, "id": 40, "label": "zlib-dev#0"}, {"hover": "{}", "colorid": 3, "id": 41, "label": "openssl-dev#0"}, {"hover": "{}", "colorid": 2, "id": 42, "label": "zlib-tgt#0"}, {"hover": "{}", "colorid": 3, "id": 43, "label": "openssl-tgt#0"}, {"hover": "{}", "colorid": 3, "id": 45, "label": "patch#0"}, {"hover": "{}", "colorid": 3, "id": 46, "label": "perl#0"}, {"hover": "{}", "colorid": 3, "id": 59, "label": "python"}, {"hover": "{}", "colorid": 3, "id": 47, "label": "expat-dev"}, {"hover": "{}", "colorid": 3, "id": 48, "label": "gdbm-dev"}, {"hover": "{}", "colorid": 3, "id": 49, "label": "libffi-dev#0"}, {"hover": "{}", "colorid": 3, "id": 50, "label": "ncurses-dev#0"}, {"hover": "{}", "colorid": 3, "id": 51, "label": "openssl-dev#1"}, {"hover": "{}", "colorid": 2, "id": 52, "label": "zlib-dev#1"}, {"hover": "{}", "colorid": 3, "id": 53, "label": "expat-tgt"}, {"hover": "{}", "colorid": 3, "id": 54, "label": "gdbm-tgt"}, {"hover": "{}", "colorid": 3, "id": 55, "label": "libffi-tgt#0"}, {"hover": "{}", "colorid": 3, "id": 56, "label": "ncurses-tgt#0"}, {"hover": "{}", "colorid": 3, "id": 57, "label": "openssl-tgt#1"}, {"hover": "{}", "colorid": 2, "id": 58, "label": "zlib-tgt#1"}, {"hover": "{}", "colorid": 3, "id": 60, "label": "sed#0"}, {"hover": "{}", "colorid": 3, "id": 61, "label": "tar#0"}, {"hover": "{}", "colorid": 3, "id": 62, "label": "unzip#0"}, {"hover": "{}", "colorid": 3, "id": 65, "label": "util-linux#0"}, {"hover": "{}", "colorid": 2, "id": 63, "label": "zlib-dev#2"}, {"hover": "{}", "colorid": 2, "id": 64, "label": "zlib-tgt#2"}, {"hover": "{}", "colorid": 3, "id": 66, "label": "which#0"}, {"hover": "{}", "colorid": 3, "id": 67, "label": "xz-utils#0"}, {"hover": "{}", "colorid": 3, "id": 68, "label": "binutils#0"}, {"hover": "{}", "colorid": 3, "id": 72, "label": "gcc-native#0"}, {"hover": "{}", "colorid": 3, "id": 69, "label": "mpfr#1"}, {"hover": "{}", "colorid": 3, "id": 70, "label": "mpc#0"}, {"hover": "{}", "colorid": 3, "id": 71, "label": "isl#0"}, {"hover": "{}", "colorid": 3, "id": 74, "label": "bootstrap-sandbox-toolchain"}, {"hover": "{}", "colorid": 3, "id": 75, "label": "bison"}, {"hover": "{}", "colorid": 3, "id": 76, "label": "flex"}, {"hover": "{}", "colorid": 3, "id": 89, "label": "cross-toolchain"}, {"hover": "{}", "colorid": 3, "id": 86, "label": "gcc-stage2"}, {"hover": "{}", "colorid": 3, "id": 77, "label": "gmp#3"}, {"hover": "{}", "colorid": 3, "id": 79, "label": "mpfr#2"}, {"hover": "{}", "colorid": 3, "id": 78, "label": "gmp#4"}, {"hover": "{}", "colorid": 3, "id": 80, "label": "mpc#1"}, {"hover": "{}", "colorid": 3, "id": 81, "label": "isl#1"}, {"hover": "{}", "colorid": 3, "id": 82, "label": "binutils#1"}, {"hover": "{}", "colorid": 3, "id": 85, "label": "glibc-dev#1"}, {"hover": "{}", "colorid": 3, "id": 83, "label": "linux-headers"}, {"hover": "{}", "colorid": 3, "id": 84, "label": "gcc-stage1#1"}, {"hover": "{}", "colorid": 3, "id": 88, "label": "glibc-dev#2"}, {"hover": "{}", "colorid": 3, "id": 87, "label": "gcc-stage1#2"}, {"hover": "{}", "colorid": 3, "id": 94, "label": "bash"}, {"hover": "{}", "colorid": 3, "id": 90, "label": "ncurses-dev#1"}, {"hover": "{}", "colorid": 3, "id": 92, "label": "readline-dev"}, {"hover": "{}", "colorid": 3, "id": 91, "label": "ncurses-tgt#1"}, {"hover": "{}", "colorid": 3, "id": 93, "label": "readline-tgt"}, {"hover": "{}", "colorid": 3, "id": 95, "label": "bc"}, {"hover": "{}", "colorid": 3, "id": 96, "label": "bzip2"}, {"hover": "{}", "colorid": 3, "id": 98, "label": "coreutils"}, {"hover": "{}", "colorid": 3, "id": 97, "label": "gmp#5"}, {"hover": "{}", "colorid": 3, "id": 103, "label": "curl"}, {"hover": "{}", "colorid": 3, "id": 101, "label": "openssl-dev#2"}, {"hover": "{}", "colorid": 2, "id": 99, "label": "zlib-dev#3"}, {"hover": "{}", "colorid": 2, "id": 100, "label": "zlib-tgt#3"}, {"hover": "{}", "colorid": 3, "id": 102, "label": "openssl-tgt#2"}, {"hover": "{}", "colorid": 3, "id": 104, "label": "diffutils"}, {"hover": "{}", "colorid": 3, "id": 107, "label": "fakeroot"}, {"hover": "{}", "colorid": 3, "id": 105, "label": "libcap-dev"}, {"hover": "{}", "colorid": 3, "id": 106, "label": "libcap-tgt"}, {"hover": "{}", "colorid": 3, "id": 108, "label": "file"}, {"hover": "{}", "colorid": 3, "id": 109, "label": "findutils"}, {"hover": "{}", "colorid": 3, "id": 112, "label": "gawk"}, {"hover": "{}", "colorid": 3, "id": 111, "label": "mpfr#3"}, {"hover": "{}", "colorid": 3, "id": 110, "label": "gmp#6"}, {"hover": "{}", "colorid": 3, "id": 113, "label": "gettext"}, {"hover": "{}", "colorid": 3, "id": 118, "label": "git"}, {"hover": "{}", "colorid": 2, "id": 114, "label": "zlib-dev#4"}, {"hover": "{}", "colorid": 3, "id": 115, "label": "openssl-dev#3"}, {"hover": "{}", "colorid": 2, "id": 116, "label": "zlib-tgt#4"}, {"hover": "{}", "colorid": 3, "id": 117, "label": "openssl-tgt#3"}, {"hover": "{}", "colorid": 3, "id": 119, "label": "gperf"}, {"hover": "{}", "colorid": 3, "id": 120, "label": "grep"}, {"hover": "{}", "colorid": 3, "id": 121, "label": "gzip"}, {"hover": "{}", "colorid": 3, "id": 122, "label": "kmod"}, {"hover": "{}", "colorid": 3, "id": 123, "label": "libtool"}, {"hover": "{}", "colorid": 3, "id": 124, "label": "m4"}, {"hover": "{}", "colorid": 3, "id": 125, "label": "make"}, {"hover": "{}", "colorid": 3, "id": 127, "label": "makedepend"}, {"hover": "{}", "colorid": 3, "id": 126, "label": "xproto"}, {"hover": "{}", "colorid": 3, "id": 132, "label": "openssh"}, {"hover": "{}", "colorid": 2, "id": 128, "label": "zlib-dev#5"}, {"hover": "{}", "colorid": 3, "id": 129, "label": "openssl-dev#4"}, {"hover": "{}", "colorid": 2, "id": 130, "label": "zlib-tgt#5"}, {"hover": "{}", "colorid": 3, "id": 131, "label": "openssl-tgt#4"}, {"hover": "{}", "colorid": 3, "id": 133, "label": "patch"}, {"hover": "{}", "colorid": 3, "id": 134, "label": "perl"}, {"hover": "{}", "colorid": 3, "id": 141, "label": "pkg-config"}, {"hover": "{}", "colorid": 3, "id": 139, "label": "glib-dev"}, {"hover": "{}", "colorid": 3, "id": 135, "label": "libffi-dev"}, {"hover": "{}", "colorid": 2, "id": 136, "label": "zlib-dev#6"}, {"hover": "{}", "colorid": 3, "id": 137, "label": "libffi-tgt"}, {"hover": "{}", "colorid": 2, "id": 138, "label": "zlib-tgt#6"}, {"hover": "{}", "colorid": 3, "id": 140, "label": "glib-tgt"}, {"hover": "{}", "colorid": 3, "id": 142, "label": "rsync"}, {"hover": "{}", "colorid": 3, "id": 143, "label": "sed"}, {"hover": "{}", "colorid": 3, "id": 144, "label": "tar"}, {"hover": "{}", "colorid": 3, "id": 145, "label": "texinfo"}, {"hover": "{}", "colorid": 3, "id": 146, "label": "unzip"}, {"hover": "{}", "colorid": 3, "id": 149, "label": "util-linux"}, {"hover": "{}", "colorid": 2, "id": 147, "label": "zlib-dev#7"}, {"hover": "{}", "colorid": 2, "id": 148, "label": "zlib-tgt#7"}, {"hover": "{}", "colorid": 3, "id": 150, "label": "which"}, {"hover": "{}", "colorid": 3, "id": 151, "label": "xz-utils"}, {"hover": "{}", "colorid": 3, "id": 152, "label": "binutils#2"}, {"hover": "{}", "colorid": 3, "id": 156, "label": "gcc-native"}, {"hover": "{}", "colorid": 3, "id": 153, "label": "mpfr#4"}, {"hover": "{}", "colorid": 3, "id": 154, "label": "mpc#2"}, {"hover": "{}", "colorid": 3, "id": 155, "label": "isl#2"}]
+var links =[{"target": 73, "source": 157}, {"target": 13, "source": 73}, {"target": 10, "source": 13}, {"target": 1, "source": 10}, {"target": 3, "source": 10}, {"target": 2, "source": 3}, {"target": 4, "source": 10}, {"target": 1, "source": 4}, {"target": 3, "source": 4}, {"target": 5, "source": 10}, {"target": 1, "source": 5}, {"target": 6, "source": 10}, {"target": 9, "source": 10}, {"target": 7, "source": 9}, {"target": 8, "source": 9}, {"target": 1, "source": 8}, {"target": 3, "source": 8}, {"target": 4, "source": 8}, {"target": 5, "source": 8}, {"target": 6, "source": 8}, {"target": 12, "source": 13}, {"target": 7, "source": 12}, {"target": 11, "source": 12}, {"target": 1, "source": 11}, {"target": 3, "source": 11}, {"target": 4, "source": 11}, {"target": 5, "source": 11}, {"target": 6, "source": 11}, {"target": 18, "source": 73}, {"target": 14, "source": 18}, {"target": 16, "source": 18}, {"target": 14, "source": 16}, {"target": 15, "source": 16}, {"target": 15, "source": 18}, {"target": 17, "source": 18}, {"target": 14, "source": 17}, {"target": 15, "source": 17}, {"target": 19, "source": 73}, {"target": 21, "source": 73}, {"target": 20, "source": 21}, {"target": 26, "source": 73}, {"target": 24, "source": 26}, {"target": 22, "source": 24}, {"target": 23, "source": 24}, {"target": 25, "source": 26}, {"target": 22, "source": 25}, {"target": 23, "source": 25}, {"target": 27, "source": 73}, {"target": 28, "source": 73}, {"target": 29, "source": 73}, {"target": 32, "source": 73}, {"target": 31, "source": 32}, {"target": 30, "source": 31}, {"target": 33, "source": 73}, {"target": 34, "source": 73}, {"target": 35, "source": 73}, {"target": 36, "source": 73}, {"target": 37, "source": 73}, {"target": 39, "source": 73}, {"target": 38, "source": 39}, {"target": 44, "source": 73}, {"target": 40, "source": 44}, {"target": 41, "source": 44}, {"target": 22, "source": 41}, {"target": 23, "source": 41}, {"target": 42, "source": 44}, {"target": 43, "source": 44}, {"target": 22, "source": 43}, {"target": 23, "source": 43}, {"target": 45, "source": 73}, {"target": 46, "source": 73}, {"target": 59, "source": 73}, {"target": 47, "source": 59}, {"target": 48, "source": 59}, {"target": 49, "source": 59}, {"target": 50, "source": 59}, {"target": 51, "source": 59}, {"target": 22, "source": 51}, {"target": 23, "source": 51}, {"target": 52, "source": 59}, {"target": 53, "source": 59}, {"target": 54, "source": 59}, {"target": 55, "source": 59}, {"target": 56, "source": 59}, {"target": 57, "source": 59}, {"target": 22, "source": 57}, {"target": 23, "source": 57}, {"target": 58, "source": 59}, {"target": 60, "source": 73}, {"target": 61, "source": 73}, {"target": 62, "source": 73}, {"target": 65, "source": 73}, {"target": 14, "source": 65}, {"target": 63, "source": 65}, {"target": 15, "source": 65}, {"target": 64, "source": 65}, {"target": 66, "source": 73}, {"target": 67, "source": 73}, {"target": 68, "source": 73}, {"target": 72, "source": 73}, {"target": 20, "source": 72}, {"target": 69, "source": 72}, {"target": 30, "source": 69}, {"target": 70, "source": 72}, {"target": 20, "source": 70}, {"target": 69, "source": 70}, {"target": 71, "source": 72}, {"target": 20, "source": 71}, {"target": 74, "source": 157}, {"target": 75, "source": 157}, {"target": 76, "source": 157}, {"target": 89, "source": 157}, {"target": 86, "source": 89}, {"target": 77, "source": 86}, {"target": 79, "source": 86}, {"target": 78, "source": 79}, {"target": 80, "source": 86}, {"target": 77, "source": 80}, {"target": 79, "source": 80}, {"target": 81, "source": 86}, {"target": 77, "source": 81}, {"target": 82, "source": 86}, {"target": 85, "source": 86}, {"target": 83, "source": 85}, {"target": 84, "source": 85}, {"target": 77, "source": 84}, {"target": 79, "source": 84}, {"target": 80, "source": 84}, {"target": 81, "source": 84}, {"target": 82, "source": 84}, {"target": 88, "source": 89}, {"target": 83, "source": 88}, {"target": 87, "source": 88}, {"target": 77, "source": 87}, {"target": 79, "source": 87}, {"target": 80, "source": 87}, {"target": 81, "source": 87}, {"target": 82, "source": 87}, {"target": 94, "source": 157}, {"target": 90, "source": 94}, {"target": 92, "source": 94}, {"target": 90, "source": 92}, {"target": 91, "source": 92}, {"target": 91, "source": 94}, {"target": 93, "source": 94}, {"target": 90, "source": 93}, {"target": 91, "source": 93}, {"target": 95, "source": 157}, {"target": 96, "source": 157}, {"target": 98, "source": 157}, {"target": 97, "source": 98}, {"target": 103, "source": 157}, {"target": 101, "source": 103}, {"target": 99, "source": 101}, {"target": 100, "source": 101}, {"target": 102, "source": 103}, {"target": 99, "source": 102}, {"target": 100, "source": 102}, {"target": 104, "source": 157}, {"target": 107, "source": 157}, {"target": 105, "source": 107}, {"target": 106, "source": 107}, {"target": 108, "source": 157}, {"target": 109, "source": 157}, {"target": 112, "source": 157}, {"target": 111, "source": 112}, {"target": 110, "source": 111}, {"target": 113, "source": 157}, {"target": 118, "source": 157}, {"target": 114, "source": 118}, {"target": 115, "source": 118}, {"target": 99, "source": 115}, {"target": 100, "source": 115}, {"target": 116, "source": 118}, {"target": 117, "source": 118}, {"target": 99, "source": 117}, {"target": 100, "source": 117}, {"target": 119, "source": 157}, {"target": 120, "source": 157}, {"target": 121, "source": 157}, {"target": 122, "source": 157}, {"target": 123, "source": 157}, {"target": 124, "source": 157}, {"target": 125, "source": 157}, {"target": 127, "source": 157}, {"target": 126, "source": 127}, {"target": 132, "source": 157}, {"target": 128, "source": 132}, {"target": 129, "source": 132}, {"target": 99, "source": 129}, {"target": 100, "source": 129}, {"target": 130, "source": 132}, {"target": 131, "source": 132}, {"target": 99, "source": 131}, {"target": 100, "source": 131}, {"target": 133, "source": 157}, {"target": 134, "source": 157}, {"target": 141, "source": 157}, {"target": 139, "source": 141}, {"target": 135, "source": 139}, {"target": 136, "source": 139}, {"target": 137, "source": 139}, {"target": 138, "source": 139}, {"target": 140, "source": 141}, {"target": 135, "source": 140}, {"target": 136, "source": 140}, {"target": 137, "source": 140}, {"target": 138, "source": 140}, {"target": 142, "source": 157}, {"target": 143, "source": 157}, {"target": 144, "source": 157}, {"target": 145, "source": 157}, {"target": 146, "source": 157}, {"target": 149, "source": 157}, {"target": 90, "source": 149}, {"target": 147, "source": 149}, {"target": 91, "source": 149}, {"target": 148, "source": 149}, {"target": 150, "source": 157}, {"target": 151, "source": 157}, {"target": 152, "source": 157}, {"target": 156, "source": 157}, {"target": 97, "source": 156}, {"target": 153, "source": 156}, {"target": 110, "source": 153}, {"target": 154, "source": 156}, {"target": 97, "source": 154}, {"target": 153, "source": 154}, {"target": 155, "source": 156}, {"target": 97, "source": 155}]
+
+
+function getDependencies(node) {
+  return links.reduce(function (neighbors, link) {
+      if (link.source.id === node.id) {
+        neighbors.push(link.target.id)
+      }
+      return neighbors
+    },
+    [node.id]
+  )
+}
+
+function isDependency(node, link) {
+  return link.source.id === node.id
+}
+
+function getNodeColor(node, neighbors) {
+  if (Array.isArray(neighbors) && neighbors.indexOf(node.id) > -1) {
+   switch(node.colorid) {
+    case 1:
+        return 'blue';
+    case 2:
+        return 'pink';
+    default:
+        return 'green';
+   }
+  }
+
+  switch(node.colorid) {
+    case 1:
+        return 'red';
+    case 2:
+        return 'orange';
+    default:
+        return 'gray';
+  }
+}
+
+function getArrow(node, link) {
+  return isDependency(node, link) ? 'url(#arrowhead_green)' :
+      'url(#arrowhead_gray)'
+}
+
+function getLinkColor(node, link) {
+  return isDependency(node, link) ? 'green' : '#E5E5E5'
+}
+
+
+var width = window.innerWidth
+var height = window.innerHeight
+
+var zoom = d3.zoom()
+    .scaleExtent([0.01, 10])
+    .on("zoom", zoomed);
+
+var svg = d3.select('svg')
+var container = svg.append("g")
+
+svg.call(zoom)
+
+window.addEventListener('resize', function(event){
+    // resize the svg if the window size changes
+    var width = window.innerWidth
+    var height = window.innerHeight
+    svg.attr('width', width).attr('height', height)
+});
+
+// simulation setup with all forces
+var linkForce = d3
+  .forceLink()
+  .id(function (link) { return link.id }).distance(80).strength(0.5)
+
+var attractForce = d3.forceManyBody().strength(1).distanceMax(800)
+                     .distanceMin(80);
+
+var collisionForce = d3.forceCollide(80).strength(0.5).iterations(20);
+
+var simulation = d3
+  .forceSimulation()
+  .nodes(nodes)
+  .force('collide', collisionForce)
+  .force('link', linkForce)
+  .force("center", d3.forceCenter(width / 2, height / 2))
+
+function selectNode(selectedNode) {
+  var neighbors = getDependencies(selectedNode)
+
+  // we modify the styles to highlight selected nodes
+  nodeElements.attr('fill', function (node) { return getNodeColor(node, neighbors) })
+  linkElements.attr('stroke', function (link) { return getLinkColor(selectedNode, link) })
+  linkElements.attr('marker-end', function (link) { return getArrow(selectedNode, link) })
+}
+
+// Create Event Handlers for mouse
+function handleMouseOver(d, i) {
+  var meta = JSON.parse(d.hover);
+  var entries = Object.keys(meta).length
+
+  if (entries != 0) {
+    // find the longest entry
+    var max = 0
+    var lineHeight = 12
+    for (e in meta) {
+        if (e.length + meta[e].length > max) {
+            max = e.length + meta[e].length
+        }
+    }
+
+    // draw a box
+    container.append("rect")
+        .attr('id', "tb" + d.id)
+        .attr("x", d.x + this.getComputedTextLength())
+        .attr("y", d.y - 13)
+        .attr("width",  (max+2) * 6 + 20 )
+        .attr("height", entries * lineHeight + 10 )
+        .attr("rx", 5)
+        .attr("ry", 5)
+        .attr("style", "fill:white;stroke:black;stroke-width:1")
+
+    var line = 0
+    for (e in meta) {
+        // add the text
+        container
+            .append("text")
+            .attr('id', "t" + d.id)  // Create an id for text so we can select it later for removing on mouseout
+            .attr('x', d.x + this.getComputedTextLength() + 10)
+            .attr('y', d.y + line*lineHeight)
+            .text(e +': ' + meta[e])  // Value of the text
+                .attr("font-size", 10)
+                .attr("font-family", "Courier New")
+        line += 1
+    }
+  }
+}
+
+function handleMouseOut(d, i) {
+    d3.selectAll("#t" + d.id).remove();  // Remove text location
+    d3.select("#tb" + d.id).remove();  // Remove textbox location
+}
+
+function zoomed() {
+  container.attr("transform", d3.event.transform);
+}
+
+// Arrow marker for end-of-line arrow
+svg.append('defs').append('marker')
+    .attr('id', 'arrowhead_gray')
+    .attr('refX', 100)
+    .attr('refY',   5)
+    .attr('markerWidth', 15)
+    .attr('markerHeight',15)
+    .attr('orient', 'auto')
+    .attr('fill', '#E5E5E5')
+    .append('path')
+    .attr('d', 'M 0,0 l 10,5 l -10,5 Z');
+
+svg.append('defs').append('marker')
+    .attr('id', 'arrowhead_green')
+    .attr('refX', 100)
+    .attr('refY',  5)
+    .attr('markerWidth', 15)
+    .attr('markerHeight',15 )
+    .attr('orient', 'auto')
+    .attr('fill', 'green')
+    .append('path')
+    .attr('d', 'M 0,0 l 10,5 l -10,5 Z');
+
+var linkElements = container.attr("class", "links")
+  .selectAll("line")
+  .data(links)
+  .enter().append("line")
+    .attr("stroke-width", 1)
+    .attr("stroke", "rgba(50, 50, 50, 0.2)")
+    .attr("marker-end", 'url(#arrowhead_gray)');
+
+var nodeElements = container.attr("class", "nodes")
+  .selectAll("rect")
+  .data(nodes)
+  .enter().append("rect")
+  .attr("width", function (node) {
+          if (node.label.length >= 20) {
+             return 130
+          } else {
+             return node.label.length * 6 + 10
+         }})
+  .attr("height", function (node) {
+          if (node.label.length >= 20) {
+             return Math.floor((node.label.length+19) / 20) * 14
+          } else {
+             return 14
+          }})
+  .attr("rx", 2)
+  .attr("ry", 2)
+    .attr("fill", getNodeColor)
+  .on('click', selectNode)
+  .call(d3.drag()
+     .on("start", dragstarted)
+     .on("drag", dragged)
+     .on("end", dragended));
+
+function dragstarted(d) {
+  if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x;
+  d.fy = d.y;
+}
+
+function dragged(d) {
+  d.fx = d3.event.x;
+  d.fy = d3.event.y;
+}
+
+function dragended(d) {
+  if (!d3.event.active) simulation.alphaTarget(0);
+  d.fx = null;
+  d.fy = null;
+}
+
+var textElements = container.attr("class", "texts")
+  .selectAll("text")
+  .data(nodes)
+  .enter().append("text")
+    .text(function (node) { return  node.label })
+    .attr("font-size", 10)
+    .attr("font-family", "Courier New")
+    .attr("dx", 5)
+    .attr("dy", 10)
+    .on('click', selectNode)
+    .on("mouseover", handleMouseOver)
+    .on("mouseout", handleMouseOut)
+    .call(wrap)
+    .call(d3.drag()
+     .on("start", dragstarted)
+     .on("drag", dragged)
+     .on("end", dragended));
+
+
+function wrap(text) {
+   text.each(function() {
+        var text = d3.select(this),
+        words = text.text().match(/.{1,20}/g).reverse(),
+        word,
+        line = [],
+        lineNumber = 0,
+        lineHeight = 1.2,
+        x = text.attr("x"),
+        y = text.attr("y"),
+        dy = text.attr("dy") ? text.attr("dy") : 0;
+        tspan = text.text(null).append("tspan");
+        while (word = words.pop()) {
+            line.push(word);
+            tspan.text(line.join(" "));
+            if (tspan.node().getComputedTextLength() > 125) {
+                line.pop();
+                tspan.text(line.join(" "));
+                line = [word];
+                tspan = text.append("tspan").attr("dx", -120).attr("dy", lineHeight + dy + "em").text(word);
+            }
+        }
+    });
+}
+
+var busy = document.createElement('div');
+busy.setAttribute("id","busy")
+busy.innerHTML = "<p style='font-size:20pt'> Please wait...</p>"
+document.body.appendChild(busy);
+
+simulation.nodes(nodes).on('end', ticked)
+function ticked() {
+  busy = document.getElementById("busy")
+  if (busy) {
+    simulation.nodes(nodes).on('tick', ticked)
+    busy.remove();
+    svg.attr('width', width).attr('height', height)
+  }
+  nodeElements
+    .attr('x', function (node) { return node.x })
+    .attr('y', function (node) { return node.y })
+  textElements
+    .attr('x', function (node) { return node.x })
+    .attr('y', function (node) { return node.y })
+  linkElements
+    .attr('x1', function (link) {
+        if (link.source.label.length > 21) {
+            return link.source.x + 65
+        } else {
+            return link.source.x + link.source.label.length * 3
+        }
+    })
+    .attr('y1', function (link) {
+            return link.source.y + ((link.source.label.length + 20) / 21-1) * 12
+        })
+    .attr('x2', function (link) {
+        if (link.target.label.length > 21) {
+            return link.target.x + 65
+        } else {
+            return link.target.x + link.target.label.length * 3 }
+        })
+    .attr('y2', function (link) {
+            return link.target.y + ((link.target.label.length + 20)/21-1) * 12
+        })
+}
+
+simulation.force("link").links(links)
+</script>
+<div class='info' style="width: 100%; text-align: center;">
+  <div id='innerLeft' style="float: left"> Recipes: 7c5384f</div>
+  <div id='innerRight' style="float: right">Bob version: 0.12.0-87-gc883b12-dirty</div>
+  <div id='innerMiddle' style="display: inline-block">Generated using <a href="https://www.d3js.org">D3JS</a></div>
+</div>

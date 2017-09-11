@@ -258,6 +258,7 @@ man_pages = [
     ('manpages/bob-build', 'bob-build', 'Bob release mode build', ['Jan Klötzke'], 1),
     ('manpages/bob-clean', 'bob-clean', 'Delete unused src/build/dist paths of release builds', ['Jan Klötzke'], 1),
     ('manpages/bob-dev', 'bob-dev', 'Bob develop mode build', ['Jan Klötzke'], 1),
+    ('manpages/bob-graph', 'bob-graph', 'Generate dependency graph', ['Ralf Hubert'], 1),
     ('manpages/bob-jenkins', 'bob-jenkins', 'Configure Jenkins server', ['Jan Klötzke'], 1),
     ('manpages/bob-ls', 'bob-ls', 'List package hierarchy', ['Jan Klötzke'], 1),
     ('manpages/bobpaths', 'bobpaths', 'Specifying paths to Bob packages', ['Jan Klötzke'], 7),
