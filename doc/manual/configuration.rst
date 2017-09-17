@@ -1310,3 +1310,18 @@ download        "yes", "no", "deps", "forced" or "forced-deps"
 sandbox         Boolean
 clean_checkout  Boolean
 =============== ===================================================================
+
+graph
+^^^^^
+
+Set default graph arguments here. See :ref:`manpage-graph` for details.
+
+Supported arguments and their type:
+
+=============== ===================================================================
+Key             Type
+=============== ===================================================================
+options         Dictonary of String key value pairs
+type            "d3" or "dot"
+max_depth       Integer
+=============== ===================================================================

@@ -32,7 +32,7 @@ __bob_complete_words()
    done
 }
 
-__bob_commands="build dev clean help jenkins ls project status  query-scm query-recipe query-path query-meta"
+__bob_commands="build dev clean graph help jenkins ls project status  query-scm query-recipe query-path query-meta"
 
 __bob_complete_path()
 {
@@ -93,6 +93,15 @@ __bob_dev()
 {
    sandbox="--no-sandbox"
    __bob_cook "$@"
+}
+
+__bob_graph()
+{
+   if [[ "$prev" = "-c" ]] ; then
+      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
+   else
+      __bob_complete_path "-c -D -e --exclude -f --filename -H --highlight -n --max-depth -t --type -o"
+   fi
 }
 
 __bob_help()

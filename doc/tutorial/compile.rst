@@ -328,3 +328,33 @@ Eclipse specificArgs:
 * ``-I``: additional include directories. They will only be added for indexer
   and will not change the buildresult.
 
+
+Visualizing dependencies
+========================
+
+A dependency graph visualizes your package dependencies. Bob supports
+two different graph types: 'dot' and 'd3'.
+
+For the sandbox-totorial the output of ::
+
+      $ bob graph vexpress -t dot
+      $ dot -Tpng -osandbox_graph.png graph/vexpress.dot
+
+gives you the following image:
+
+.. image:: ../images/sandbox_graph.png
+
+For more complex projects 'dot' graphs doesn't scale well. Therefore you
+can make interactive graphs using the d3_ javascript library:
+
+.. _d3: https://d3js.org/
+
+Using ``bob graph`` with the basement-project_, enable node dragging and highlighting
+the zlib packages: ::
+
+      $ bob graph sandbox -H zlib.* -o d3.dragNodes=True
+
+.. _basement-project: https://github.com/BobBuildTool/basement
+.. raw:: html
+
+    <iframe src="../../_static/sandbox.html" height="500px" width="100%"></iframe>

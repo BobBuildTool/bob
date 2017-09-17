@@ -1930,6 +1930,13 @@ class RecipeSet:
             schema.Optional('clean_checkout') : bool,
         })
 
+    GRAPH_SCHEMA = schema.Schema(
+        {
+            schema.Optional('options') : schema.Schema({str : schema.Or(str, bool)}),
+            schema.Optional('type') : schema.Or("d3", "dot"),
+            schema.Optional('max_depth') : int,
+        })
+
     USER_CONFIG_SCHEMA = schema.Schema(
         {
             schema.Optional('environment') : schema.Schema({
@@ -1962,7 +1969,8 @@ class RecipeSet:
             }) ],
             schema.Optional('command') : schema.Schema({
                 schema.Optional('dev') : BUILD_DEV_SCHEMA,
-                schema.Optional('build') : BUILD_DEV_SCHEMA
+                schema.Optional('build') : BUILD_DEV_SCHEMA,
+                schema.Optional('graph') : GRAPH_SCHEMA
             }),
         })
 
