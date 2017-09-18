@@ -357,4 +357,4 @@ the zlib packages: ::
 .. _basement-project: https://github.com/BobBuildTool/basement
 .. raw:: html
 
-    <iframe src="../../_static/sandbox.html" height="500px" width="100%"></iframe>
+    <iframe src="../_static/sandbox.html" height="500px" width="100%"></iframe>
