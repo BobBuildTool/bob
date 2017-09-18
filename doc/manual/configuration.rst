@@ -536,6 +536,7 @@ git `Git`_ project               | ``url``: URL of remote repository
                                  | ``tag``: Checkout this tag (optional, overrides branch attribute)
                                  | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
                                  | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
+                                 | ``remote-*``: additional remote repositories (optional, see below)
 svn `Svn`_ repository            | ``url``: URL of SVN module
                                  | ``revision``: Optional revision number (optional)
 cvs CVS repository               | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
@@ -573,6 +574,12 @@ described in git-rev-parse(1) the following formats are currently supported:
   The symbolic name of a tag.
 * refs/heads/<branchname>, e.g. refs/heads/master.
   The name of a branch.
+
+The ``remote-*`` property allows adding extra remotes whereas the part after
+``remote-`` corresponds to the remote name and the value given corresponds to
+the remote URL. For example ``remote-my_name`` set to ``some/url.git`` will
+result in an additional remote named ``my_name`` and the URL set to
+``some/url.git``.
 
 The Svn SCM, like git, requires the ``url`` attribute too. If you specify a
 numeric ``revision`` Bob considers the SCM as deterministic.
