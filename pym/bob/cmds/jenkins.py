@@ -19,6 +19,7 @@ from ..archive import getArchiver
 from ..errors import ParseError, BuildError
 from ..input import RecipeSet
 from ..state import BobState
+from ..stringparser import isTrue
 from ..tty import WarnOnce
 from ..utils import asHexStr
 from pipes import quote
@@ -510,7 +511,7 @@ class JenkinsJob:
             triggers, "hudson.triggers.SCMTrigger")
         xml.etree.ElementTree.SubElement(scmTrigger, "spec").text = options.get("scm.poll")
         xml.etree.ElementTree.SubElement(
-            scmTrigger, "ignorePostCommitHooks").text = "false"
+            scmTrigger, "ignorePostCommitHooks").text = ("true" if isTrue(options.get("scm.ignore-hooks", "false")) else "false")
 
         sharedDir = options.get("shared.dir", "${JENKINS_HOME}/bob")
 
