@@ -144,6 +144,10 @@ class DirHasher:
                 self.size = 0
                 self.digest = b''
 
+            def __repr__(self):
+                return "Stat(name={}, ctime={}, mtime={}, dev={}, ino={}, mode={}, size={}, digest={})".format(
+                    self.name, self.ctime, self.mtime, self.dev, self.ino, self.mode, self.size, self.digest)
+
         def __init__(self, cachePath):
             self.__cachePath = cachePath
             self.__cacheDir = os.path.dirname(cachePath)
@@ -152,6 +156,7 @@ class DirHasher:
             self.__inPos = 0
             self.__inPosOld = 0
             self.__outFile = None
+            self.__current = DirHasher.FileIndex.Stat()
             try:
                 if os.path.exists(self.__cachePath):
                     self.__inFile = open(self.__cachePath, "rb")
@@ -159,6 +164,7 @@ class DirHasher:
                     if sig == DirHasher.FileIndex.SIGNATURE:
                         self.__mismatch = False
                         self.__inPos = self.__inPosOld = 4
+                        self.__readEntry() # prefetch first entry
                     else:
                         logging.getLogger(__name__).info(
                             "Wrong signature at '%s': %s", self.__cachePath, sig)
@@ -170,7 +176,6 @@ class DirHasher:
                     self.__mismatch = True
             except OSError as e:
                 raise BuildError("Error opening hash cache: " + str(e))
-            self.__current = DirHasher.FileIndex.Stat()
 
         def close(self):
             try:
@@ -217,14 +222,14 @@ class DirHasher:
                 (e.mtime == float2ns(st.st_mtime)) and (e.dev == st.st_dev) and
                 (e.ino == st.st_ino) and (e.mode == st.st_mode) and
                 (e.size == st.st_size))
-            #if not res: print("Mismatch", e.name, name)
+            #if not res: print("Mismatch", e.name, name, e, st)
             return res
 
         def check(self, prefix, name, st, process):
             if self.__match(name, st):
                 digest = self.__current.digest
             else:
-                digest = process(os.path.join(prefix, name))
+                digest = process(os.path.join(prefix, name) if name else prefix)
                 self.__mismatch = True
             if self.__mismatch:
                 self.__writeEntry(name, st, digest)
@@ -241,7 +246,7 @@ class DirHasher:
             pass
 
         def check(self, prefix, name, st, process):
-            return process(os.path.join(prefix, name))
+            return process(os.path.join(prefix, name) if name else prefix)
 
     def __init__(self, basePath=None, ignoreDirs=None):
         if basePath:
@@ -253,7 +258,7 @@ class DirHasher:
         else:
             self.__ignoreDirs = DirHasher.IGNORE_DIRS
 
-    def __hashEntry(self, prefix, entry, file, s):
+    def __hashEntry(self, prefix, entry, s):
         if stat.S_ISREG(s.st_mode):
             digest = self.__index.check(prefix, entry, s, hashFile)
         elif stat.S_ISDIR(s.st_mode):
@@ -268,7 +273,7 @@ class DirHasher:
             digest = b''
             logging.getLogger(__name__).warning("Unknown file: %s", entry)
 
-        return struct.pack("=L", s.st_mode) + digest + file
+        return digest
 
     @staticmethod
     def __hashLink(path):
@@ -303,7 +308,10 @@ class DirHasher:
             except OSError as err:
                 logging.getLogger(__name__).warning("Cannot stat '%s': %s", e, str(err))
         entries = sorted(entries, key=lambda x: x[1])
-        dirList = [ self.__hashEntry(prefix, e, f, s) for (e, f, s) in entries ]
+        dirList = [
+            (struct.pack("=L", s.st_mode) + self.__hashEntry(prefix, e, s) + f)
+            for (e, f, s) in entries
+        ]
         dirBlob = b"".join(dirList)
         m = hashlib.sha1()
         m.update(dirBlob)
@@ -316,8 +324,26 @@ class DirHasher:
         finally:
             self.__index.close()
 
+    def hashPath(self, path):
+        path = os.fsencode(path)
+        try:
+            s = os.lstat(path)
+        except OSError as err:
+            logging.getLogger(__name__).warning("Cannot stat '%s': %s", path, str(err))
+            return b''
+
+        self.__index.open()
+        try:
+            return self.__hashEntry(path, b'', s)
+        finally:
+            self.__index.close()
+
+
 def hashDirectory(path, index=None, ignoreDirs=None):
     return DirHasher(index, ignoreDirs).hashDirectory(path)
+
+def hashPath(path, index=None, ignoreDirs=None):
+    return DirHasher(index, ignoreDirs).hashPath(path)
 
 def binStat(path):
     st = os.stat(path)

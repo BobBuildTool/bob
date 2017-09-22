@@ -18,7 +18,7 @@ from . import BOB_VERSION, _enableDebug
 from .errors import BobError
 from .state import finalize
 from .tty import colorize, Unbuffered
-from .utils import asHexStr, hashDirectory
+from .utils import asHexStr, hashPath
 import argparse
 import sys
 import traceback
@@ -222,7 +222,7 @@ def hashTree():
     args = parser.parse_args()
 
     def cmd():
-        digest = hashDirectory(args.dir, args.state)
+        digest = hashPath(args.dir, args.state)
         print(asHexStr(digest))
         return 0
 
@@ -316,7 +316,7 @@ def __process(l, inFile, stateDir):
             stateFile = os.path.join(stateDir, l[1:].replace(os.sep, "_"))
         else:
             stateFile = None
-        return hashDirectory(l[1:], stateFile)
+        return hashPath(l[1:], stateFile)
     elif l.startswith("g"):
         from .scm.git import GitScm
         return bytes.fromhex(GitScm.processLiveBuildIdSpec(l[1:]))
