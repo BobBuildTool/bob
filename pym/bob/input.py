@@ -1992,6 +1992,7 @@ class RecipeSet:
             schema.Optional('download') : schema.Or("yes", "no", "deps", "forced", "forced-deps"),
             schema.Optional('sandbox') : bool,
             schema.Optional('clean_checkout') : bool,
+            schema.Optional('always_checkout') : [str],
         })
 
     GRAPH_SCHEMA = schema.Schema(
