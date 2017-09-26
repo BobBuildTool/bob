@@ -1,0 +1,5 @@
+whitelist:
+    - APPLY_CHANGE
+
+include:
+    - repo

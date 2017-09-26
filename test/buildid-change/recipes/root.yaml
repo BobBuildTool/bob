@@ -1,0 +1,13 @@
+root: True
+
+depends:
+    - left
+    - right
+
+buildScript: |
+    for i in "${@:2}" ; do
+        cp -a $i/* .
+    done
+
+packageScript: |
+    cp -a $1/* .
