@@ -56,6 +56,9 @@ def runHook(recipes, hook, args):
 
     return ret
 
+class RestartBuildException(Exception):
+    pass
+
 class LocalBuilderStatistic:
     def __init__(self):
         self.__activeOverrides = set()
@@ -603,7 +606,17 @@ esac
     def getStatistic(self):
         return self.__statistic
 
-    def cook(self, steps, parentPackage, checkoutOnly, depth=0):
+    def cook(self, step, checkoutOnly):
+        done = False
+        while not done:
+            try:
+                self._cook([step], step.getPackage(), checkoutOnly)
+                done = True
+            except RestartBuildException:
+                print(colorize("** Restart build due to wrongly predicted sources.", "33"))
+                self.__currentPackage = None
+
+    def _cook(self, steps, parentPackage, checkoutOnly, depth=0):
         currentPackage = self.__currentPackage
 
         # skip everything except the current package
@@ -657,7 +670,7 @@ esac
             self._info("   CHECKOUT  skipped (reuse {}) {}".format(prettySrcPath, overridesString))
         else:
             # depth first
-            self.cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
+            self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
                       False, depth+1)
 
             # get directory into shape
@@ -770,8 +783,8 @@ esac
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
         else:
             # depth first
-            self.cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
-                      checkoutOnly, depth+1)
+            self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
+                       checkoutOnly, depth+1)
 
             # get directory into shape
             (prettyBuildPath, created) = self._constructDir(buildStep, "build")
@@ -908,8 +921,8 @@ esac
             # an actual build.
             if not wasDownloaded:
                 # depth first
-                self.cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
-                          checkoutOnly, depth+1)
+                self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
+                           checkoutOnly, depth+1)
 
                 packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                     for i in packageStep.getArguments() if i.isValid() ]
@@ -951,7 +964,7 @@ esac
             ret = self.__srcBuildIds.get(path)
             if ret is None:
                 # do checkout
-                self.cook([step], step.getPackage(), depth)
+                self._cook([step], step.getPackage(), depth)
                 # return directory hash
                 ret = BobState().getResultHash(step.getWorkspacePath())
                 self.__srcBuildIds[path] = ret
@@ -1120,7 +1133,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     success = False
     try:
         for p in backlog:
-            builder.cook([p], p.getPackage(), True if args.build_mode == 'checkout-only' else False)
+            builder.cook(p, True if args.build_mode == 'checkout-only' else False)
             resultPath = p.getWorkspacePath()
             if resultPath not in results:
                 results.append(resultPath)
