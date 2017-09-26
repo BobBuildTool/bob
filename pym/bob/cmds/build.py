@@ -294,7 +294,8 @@ esac
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
-        self.__buildIds = {}
+        self.__srcBuildIds = {}
+        self.__buildDistBuildIds = {}
         self.__statistic = LocalBuilderStatistic()
 
     def setArchiveHandler(self, archive):
@@ -946,16 +947,19 @@ esac
         multiple directories with the same variant-id.
         """
         path = step.getWorkspacePath()
-        ret = self.__buildIds.get(path)
-        if ret is None:
-            if step.isCheckoutStep():
+        if step.isCheckoutStep():
+            ret = self.__srcBuildIds.get(path)
+            if ret is None:
                 # do checkout
                 self.cook([step], step.getPackage(), depth)
                 # return directory hash
                 ret = BobState().getResultHash(step.getWorkspacePath())
-            else:
+                self.__srcBuildIds[path] = ret
+        else:
+            ret = self.__buildDistBuildIds.get(path)
+            if ret is None:
                 ret = step.getDigest(lambda s: self._getBuildId(s, depth+1), True)
-            self.__buildIds[path] = ret
+                self.__buildDistBuildIds[path] = ret
 
         return ret
 
