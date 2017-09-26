@@ -88,6 +88,22 @@ class Scm(object):
             return True, status, longStatus
         return False, '', ''
 
+    def hasLiveBuildId(self):
+        """Check if live build-ids are supported."""
+        return False
+
+    def predictLiveBuildId(self):
+        """Query server to predict live build-id."""
+        return [None]
+
+    def calcLiveBuildId(self, workspacePath):
+        """Calculate live build-id from workspace."""
+        return [None]
+
+    def getLiveBuildIdSpec(self, workspacePath):
+        """Generate spec lines for bob-hash-engine."""
+        return None
+
 class ScmAudit(metaclass=ABCMeta):
     @classmethod
     def fromDir(cls, workspace, dir):
