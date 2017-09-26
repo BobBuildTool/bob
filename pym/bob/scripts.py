@@ -317,6 +317,9 @@ def __process(l, inFile, stateDir):
         else:
             stateFile = None
         return hashDirectory(l[1:], stateFile)
+    elif l.startswith("g"):
+        from .scm.git import GitScm
+        return bytes.fromhex(GitScm.processLiveBuildIdSpec(l[1:]))
     else:
         print("Malformed spec:", l, file=sys.stderr)
         sys.exit(1)
