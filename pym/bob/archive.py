@@ -28,9 +28,24 @@ import http.client
 
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
+BUILDID_SUFFIX = ".buildid"
 
 def buildIdToName(bid):
     return asHexStr(bid) + ARCHIVE_GENERATION
+
+def readFileOrHandle(name, fileobj):
+    if fileobj is not None:
+        return fileobj.read()
+    with open(name, "rb") as f:
+        return f.read()
+
+def writeFileOrHandle(name, fileobj, content):
+    if fileobj is not None:
+        fileobj.write(content)
+        return
+    with open(name, "wb") as f:
+        f.write(content)
+
 
 class DummyArchive:
     """Archive that does nothing"""
@@ -63,6 +78,15 @@ class DummyArchive:
         return ""
 
     def download(self, step, buildIdFile, tgzFile):
+        return ""
+
+    def uploadLocalLiveBuildId(self, liveBuildId, buildId, verbose):
+        pass
+
+    def downloadLocalLiveBuildId(self, liveBuildId, verbose):
+        return None
+
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
         return ""
 
 class ArtifactNotFoundError(Exception):
@@ -171,6 +195,33 @@ class BaseArchive:
         except tarfile.TarError as e:
             raise BuildError("Error extracting binary artifact: " + str(e))
 
+    def downloadLocalLiveBuildId(self, liveBuildId, verbose):
+        if not self.canDownloadLocal():
+            return None
+
+        ret = None
+        if verbose > 0:
+            print(colorize("   LOOKUP    {} .. "
+                            .format(self._remoteName(liveBuildId, BUILDID_SUFFIX)), "32"),
+                  end="")
+
+        try:
+            with self._openDownloadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
+                ret = readFileOrHandle(name, fileobj)
+            if verbose > 0: print(colorize("ok", "32"))
+        except ArtifactNotFoundError:
+            if verbose > 0: print(colorize("unknown", "33"))
+        except ArtifactDownloadError as e:
+            if verbose > 0: print(colorize(e.reason, "33"))
+        except BuildError as e:
+            if verbose > 0: print(colorize("error", "31"))
+            raise
+        except OSError as e:
+            if verbose > 0: print(colorize("error", "31"))
+            raise BuildError("Cannot download artifact: " + str(e))
+
+        return ret
+
     def _openUploadFile(self, buildId, suffix):
         raise ArtifactExistsError()
 
@@ -192,6 +243,24 @@ class BaseArchive:
                     tar.add(content, arcname="content")
         except ArtifactExistsError:
             print("   UPLOAD    skipped ({} exists in archive)".format(content))
+            return
+        except tarfile.TarError as e:
+            raise BuildError("Error archiving binary artifact: " + str(e))
+        except OSError as e:
+            raise BuildError("Cannot upload artifact: " + str(e))
+
+    def uploadLocalLiveBuildId(self, liveBuildId, buildId, verbose):
+        if not self.canUploadLocal():
+            return
+
+        try:
+            with self._openUploadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
+                if verbose > 0:
+                    print(colorize("   CACHE     {}"
+                                    .format(self._remoteName(liveBuildId, BUILDID_SUFFIX)), "32"))
+                writeFileOrHandle(name, fileobj, buildId)
+        except ArtifactExistsError:
+            if verbose > 0: print("   UPLOAD    skipped (exists in archive)")
             return
         except tarfile.TarError as e:
             raise BuildError("Error archiving binary artifact: " + str(e))
@@ -262,6 +331,9 @@ class LocalArchive(BaseArchive):
             fi
             """.format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                        GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
+
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -404,6 +476,26 @@ class SimpleHttpArchive(BaseArchive):
             """.format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                        GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
 
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+        # only upload if requested
+        if not self.canUploadJenkins():
+            return ""
+
+        # upload with curl if file does not exist yet on server
+        return "\n" + textwrap.dedent("""\
+            # upload live build-id
+            cd $WORKSPACE
+            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {LIVEBUILDID}){GEN}"
+            BOB_UPLOAD_URL="{URL}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
+            BOB_UPLOAD_RSP=$(curl -sSgf -w '%{{http_code}}' -H 'If-None-Match: *' -T {BUILDID} "$BOB_UPLOAD_URL" || true)
+            if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
+                echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
+            fi
+            """.format(URL=self.__url.geturl(), LIVEBUILDID=quote(liveBuildId),
+                       BUILDID=quote(buildId),
+                       FAIL="" if self._ignoreErrors() else "; exit 1",
+                       GEN=ARCHIVE_GENERATION, SUFFIX=BUILDID_SUFFIX))
+
 class SimpleHttpDownloader:
     def __init__(self, archiver, response):
         self.archiver = archiver
@@ -533,6 +625,9 @@ fi
 """.format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
            GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX)
 
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
+
 class CustomDownloader:
     def __init__(self, name):
         self.name = name
@@ -612,6 +707,24 @@ class MultiArchive:
         return "\n".join(
             i.download(step, buildIdFile, tgzFile) for i in self.__archives
             if i.canDownloadJenkins())
+
+    def uploadLocalLiveBuildId(self, liveBuildId, buildId, verbose):
+        for i in self.__archives:
+            if not i.canUploadLocal(): continue
+            i.uploadLocalLiveBuildId(liveBuildId, buildId, verbose)
+
+    def downloadLocalLiveBuildId(self, liveBuildId, verbose):
+        ret = None
+        for i in self.__archives:
+            if not i.canDownloadLocal(): continue
+            ret = i.downloadLocalLiveBuildId(liveBuildId, verbose)
+            if ret is not None: break
+        return ret
+
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+        return "\n".join(
+            i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId)
+            for i in self.__archives if i.canUploadJenkins())
 
 
 def getSingleArchiver(recipes, archiveSpec):
