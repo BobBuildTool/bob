@@ -348,6 +348,61 @@ class GitScm(Scm):
     def getAuditSpec(self):
         return ("git", [self.__dir])
 
+    def hasLiveBuildId(self):
+        return True
+
+    def predictLiveBuildId(self):
+        if self.__commit:
+            return [ bytes.fromhex(self.__commit) ]
+
+        if self.__tag:
+            # Annotated tags are objects themselves. We need the commit object!
+            refs = ["refs/tags/" + self.__tag + '^{}', "refs/tags/" + self.__tag]
+        else:
+            refs = ["refs/heads/" + self.__branch]
+        cmdLine = ['git', 'ls-remote', self.__url] + refs
+        try:
+            output = subprocess.check_output(cmdLine, universal_newlines=True,
+                stderr=subprocess.STDOUT).strip()
+        except subprocess.CalledProcessError as e:
+            return [None]
+
+        # have we found anything at all?
+        if not output:
+            return [None]
+
+        # see if we got one of our intended refs
+        output = { ref.strip() : bytes.fromhex(commit.strip())
+            for commit, ref
+            in (line.split('\t') for line in output.split('\n')) }
+        for ref in refs:
+            if ref in output: return [output[ref]]
+
+        # uhh, should not happen...
+        return [None]
+
+    def calcLiveBuildId(self, workspacePath):
+        if self.__commit:
+            return [ bytes.fromhex(self.__commit) ]
+        else:
+            output = self.callGit(workspacePath, 'rev-parse', 'HEAD').strip()
+            return [ bytes.fromhex(output) ]
+
+    def getLiveBuildIdSpec(self, workspacePath):
+        if self.__commit:
+            return [ "=" + self.__commit ]
+        else:
+            return [ "g" + os.path.join(workspacePath, self.__dir) ]
+
+    @staticmethod
+    def processLiveBuildIdSpec(dir):
+        try:
+            return subprocess.check_output(["git", "rev-parse", "HEAD"],
+                cwd=dir, universal_newlines=True).strip()
+        except subprocess.CalledProcessError as e:
+            raise BuildError("Git audit failed: " + str(e))
+        except OSError as e:
+            raise BuildError("Error calling git: " + str(e))
 
 class GitAudit(ScmAudit):
 
