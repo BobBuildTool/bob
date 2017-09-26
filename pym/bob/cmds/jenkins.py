@@ -417,6 +417,31 @@ class JenkinsJob:
         ret.append(line)
         return "\n".join(ret)
 
+    def dumpStepLiveBuildIdGen(self, step):
+        # this makes only sense if we can upload the result
+        if not self.__archive.canUploadJenkins():
+            return []
+
+        # Get calculation spec. May be None if step is indeterministic or some
+        # SCM does not support live build-ids.
+        spec = step.getLiveBuildIdSpec()
+        if spec is None:
+            return []
+
+        buildId = JenkinsJob._buildIdName(step)
+        liveBuildId = JenkinsJob._liveBuildIdName(step)
+        ret = [ "bob-hash-engine --state .state -o {} <<'EOF'".format(liveBuildId),
+                spec, "EOF" ]
+        ret.append(self.__archive.uploadJenkinsLiveBuildId(step, liveBuildId, buildId))
+
+        # Without sandbox we only upload the live build-id on the initial
+        # checkout. Otherwise accidential modifications of the sources can
+        # happen in later build steps.
+        if step.getSandbox() is None:
+            ret = [ "if [[ ! -e {} ]] ; then".format(liveBuildId) ] + ret + [ "fi" ]
+
+        return ret
+
     @staticmethod
     def _tgzName(d):
         return d.getWorkspacePath().replace('/', '_') + ".tgz"
@@ -424,6 +449,10 @@ class JenkinsJob:
     @staticmethod
     def _buildIdName(d):
         return d.getWorkspacePath().replace('/', '_') + ".buildid"
+
+    @staticmethod
+    def _liveBuildIdName(d):
+        return d.getWorkspacePath().replace('/', '_') + ".live-buildid"
 
     @staticmethod
     def _envName(d):
@@ -562,6 +591,7 @@ class JenkinsJob:
             whiteList.extend([ JenkinsJob._tgzName(d) for d in self.__deps.values()])
         whiteList.extend([ JenkinsJob._buildIdName(d) for d in self.__deps.values()])
         whiteList.extend([ d.getWorkspacePath() for d in self.__checkoutSteps.values() ])
+        whiteList.extend([ JenkinsJob._liveBuildIdName(d) for d in self.__checkoutSteps.values() ])
         whiteList.extend([ d.getWorkspacePath() for d in self.__buildSteps.values() ])
         prepareCmds.extend(wrapCommandArguments("pruneUnused", sorted(whiteList)))
         prepareCmds.append("set -x")
@@ -723,6 +753,7 @@ class JenkinsJob:
         ]
         for d in sorted(self.__checkoutSteps.values()):
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
+            buildIdCalc.extend(self.dumpStepLiveBuildIdGen(d))
         for d in sorted(self.__buildSteps.values()):
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
         for d in sorted(self.__packageSteps.values()):
