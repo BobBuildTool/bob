@@ -16,6 +16,7 @@
 
 from .errors import ParseError
 import copy
+import dbm
 import errno
 import os
 import pickle
@@ -44,6 +45,7 @@ class _BobState():
         self.__dirStates = {}
         self.__buildState = {}
         self.__lock = None
+        self.__buildIdCache = None
 
         # lock state
         lockFile = ".bob-state.lock"
@@ -128,8 +130,17 @@ class _BobState():
         else:
             self.__dirty = True
 
+    def __getBIdCache(self):
+        if self.__buildIdCache is None:
+            self.__buildIdCache = dbm.open(".bob-buildids.dbm", 'c')
+            #self.__buildIdCache = {}
+        return self.__buildIdCache
+
     def finalize(self):
         assert (self.__asynchronous == 0) and not self.__dirty
+        if self.__buildIdCache is not None:
+            self.__buildIdCache.close()
+            self.__buildIdCache = None
         if self.__lock:
             try:
                 os.unlink(self.__lock)
@@ -265,6 +276,15 @@ class _BobState():
 
     def getBuildState(self):
         return copy.deepcopy(self.__buildState)
+
+    def getBuildId(self, key):
+        return self.__getBIdCache().get(key, None)
+
+    def setBuildId(self, key, val):
+        self.__getBIdCache()[key] = val
+
+    def delBuildId(self, key):
+        del self.__getBIdCache()[key]
 
 def BobState():
     if _BobState.instance is None:
