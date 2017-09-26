@@ -163,6 +163,28 @@ fi
     def getAuditSpec(self):
         return ("url", [os.path.join(self.__dir, self.__fn)])
 
+    def hasLiveBuildId(self):
+        return self.isDeterministic()
+
+    def predictLiveBuildId(self):
+        if self.__digestSha256:
+            return [ bytes.fromhex(self.__digestSha256) ]
+        elif self.__digestSha1:
+            return [ bytes.fromhex(self.__digestSha1) ]
+        else:
+            return [None]
+
+    def calcLiveBuildId(self, workspacePath):
+        return self.predictLiveBuildId()
+
+    def getLiveBuildIdSpec(self, workspacePath):
+        if self.__digestSha256:
+            return [ "=" + self.__digestSha256 ]
+        elif self.__digestSha1:
+            return [ "=" + self.__digestSha1 ]
+        else:
+            return [None]
+
 
 class UrlAudit(ScmAudit):
 
