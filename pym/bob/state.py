@@ -28,8 +28,9 @@ class _BobState():
     # Version history:
     #  2 -> 3: byNameDirs: values are tuples (directory, isSourceDir)
     #  3 -> 4: jenkins job names are lower case
+    #  4 -> 5: build state stores step kind (checkout-step vs. others)
     MIN_VERSION = 2
-    CUR_VERSION = 4
+    CUR_VERSION = 5
 
     instance = None
     def __init__(self):
@@ -95,6 +96,10 @@ class _BobState():
                     for j in self.__jenkins.values():
                         jobs = j["jobs"]
                         j["jobs"] = { k.lower() : v for (k,v) in jobs.items() }
+
+                if state["version"] <= 4:
+                    self.__buildState = { path : (vid, False)
+                        for path, vid in self.__buildState.items() }
         except:
             self.finalize()
             raise

@@ -334,8 +334,9 @@ esac
         # Save as plain dict. Skipped steps are dropped because they were not
         # really executed. Either they are simply skipped again or, if the
         # user changes his mind, they will finally be executed.
-        state = { k:v for (k,v) in self.__wasRun.items()
-                      if not self.__wasSkipped.get(k, False) }
+        state = { path : (vid, isCheckoutStep)
+            for path, (vid, isCheckoutStep) in self.__wasRun.items()
+            if not self.__wasSkipped.get(path, False) }
         BobState().setBuildState(state)
 
     def loadBuildState(self):
@@ -344,7 +345,7 @@ esac
     def _wasAlreadyRun(self, step, skippedOk=False):
         path = step.getWorkspacePath()
         if path in self.__wasRun:
-            digest = self.__wasRun[path]
+            digest = self.__wasRun[path][0]
             # invalidate invalid cached entries
             if digest != step.getVariantId():
                 del self.__wasRun[path]
@@ -356,9 +357,9 @@ esac
         else:
             return False
 
-    def _setAlreadyRun(self, step, skipped=False):
+    def _setAlreadyRun(self, step, isCheckoutStep, skipped=False):
         path = step.getWorkspacePath()
-        self.__wasRun[path] = step.getVariantId()
+        self.__wasRun[path] = (step.getVariantId(), isCheckoutStep)
         self.__wasSkipped[path] = skipped
 
     def _constructDir(self, step, label):
@@ -763,7 +764,7 @@ esac
             checkoutHash = hashWorkspace(checkoutStep)
             BobState().setResultHash(prettySrcPath, checkoutHash)
 
-            self._setAlreadyRun(checkoutStep)
+            self._setAlreadyRun(checkoutStep, True)
 
             # Generate audit trail. Has to be done _after_ setResultHash()
             # because the result is needed to calculate the buildId.
@@ -826,7 +827,7 @@ esac
                 self._generateAudit(buildStep, depth, buildHash)
                 BobState().setResultHash(prettyBuildPath, buildHash)
                 BobState().setInputHashes(prettyBuildPath, buildInputHashes)
-            self._setAlreadyRun(buildStep, checkoutOnly)
+            self._setAlreadyRun(buildStep, False, checkoutOnly)
 
     def _cookPackageStep(self, packageStep, checkoutOnly, depth):
         packageDigest = packageStep.getVariantId()
@@ -951,7 +952,7 @@ esac
                     BobState().setInputHashes(prettyPackagePath, packageBuildId)
                 else:
                     BobState().setInputHashes(prettyPackagePath, [packageBuildId] + packageInputHashes)
-            self._setAlreadyRun(packageStep, checkoutOnly)
+            self._setAlreadyRun(packageStep, False, checkoutOnly)
 
     def _getBuildId(self, step, depth):
         """Calculate build-id and cache result.
