@@ -428,7 +428,7 @@ class CoreStepRef:
 class CoreStep(metaclass=ABCMeta):
     __slots__ = ( "package", "label", "tools", "digestEnv", "env", "args",
         "shared", "doesProvideTools", "providedEnv", "providedTools",
-        "providedDeps", "providedSandbox", "variantId", "sandbox" )
+        "providedDeps", "providedSandbox", "variantId", "sandbox", "sbxVarId" )
 
     def __init__(self, step, label, tools, sandbox, digestEnv, env, args, shared):
         package = step.getPackage()
@@ -644,6 +644,15 @@ class Step(metaclass=ABCMeta):
             ret = self._coreStep.variantId
         except AttributeError:
             ret = self._coreStep.variantId = self.getDigest(lambda step: step.getVariantId())
+        return ret
+
+    def _getSandboxVariantId(self):
+        try:
+            ret = self._coreStep.sbxVarId
+        except AttributeError:
+            ret = self._coreStep.sbxVarId = self.getDigest(
+                lambda step: step._getSandboxVariantId(),
+                True)
         return ret
 
     def _getResultId(self):
