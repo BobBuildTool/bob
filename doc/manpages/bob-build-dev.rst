@@ -88,6 +88,12 @@ Options
 ``-f, --force``
     Force execution of all build steps
 
+``-i, --installshared``
+    Install shared packages to a given location (has to be combined with --shared)
+
+``-s, --shared PATH``
+    Shared packages will be searched at or installed to provided path
+
 ``-n, --no-deps``
     Don't build dependencies
 
