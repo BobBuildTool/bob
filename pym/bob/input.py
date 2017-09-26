@@ -942,6 +942,61 @@ class CheckoutStep(Step):
                  all([ s.isDeterministic() for s in self._coreStep.scmList ]) and
                  super().isDeterministic() )
 
+    def hasLiveBuildId(self):
+        """Check if live build-ids are supported.
+
+        This must be supported by all SCMs. Additionally the checkout script
+        must be deterministic.
+        """
+        return ( self._coreStep.deterministic and
+                 all(s.hasLiveBuildId() for s in self._coreStep.scmList) and
+                 super().isDeterministic() )
+
+    def predictLiveBuildId(self):
+        """Query server to predict live build-id.
+
+        Returns the live-build-id or None if an SCM query failed.
+        """
+        if not self.hasLiveBuildId():
+            return None
+        h = hashlib.sha1()
+        h.update(self._getSandboxVariantId())
+        for s in self._coreStep.scmList:
+            for liveBId in s.predictLiveBuildId():
+                if liveBId is None: return None
+                h.update(liveBId)
+        return h.digest()
+
+    def calcLiveBuildId(self):
+        """Calculate live build-id from workspace."""
+        if not self.hasLiveBuildId():
+            return None
+        workspacePath = self.getWorkspacePath()
+        h = hashlib.sha1()
+        h.update(self._getSandboxVariantId())
+        for s in self._coreStep.scmList:
+            for liveBId in s.calcLiveBuildId(workspacePath):
+                if liveBId is None: return None
+                h.update(liveBId)
+        return h.digest()
+
+    def getLiveBuildIdSpec(self):
+        """Generate spec lines for bob-hash-engine.
+
+        May return None if an SCM does not support live-build-ids on Jenkins.
+        """
+        if not self.hasLiveBuildId():
+            return None
+        workspacePath = self.getWorkspacePath()
+        lines = [ "{sha1", "=" + asHexStr(self._getSandboxVariantId()) ]
+        for s in self._coreStep.scmList:
+            for liveBIdSpec in s.getLiveBuildIdSpec(workspacePath):
+                if liveBIdSpec is None: return None
+                lines.append(liveBIdSpec)
+        lines.append("}")
+        return "\n".join(lines)
+
+
 class RegularStep(Step):
     def construct(self, package, pathFormatter, sandbox, label, script=(None, None),
                  digestEnv=Env(), env=Env(), tools=Env(), args=[], shared=False):
