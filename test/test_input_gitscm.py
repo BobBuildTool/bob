@@ -22,6 +22,7 @@ import tempfile
 
 from bob.input import GitScm
 from bob.errors import ParseError
+from bob.utils import asHexStr
 
 def createGitScm(spec = {}):
     s = { 'scm' : "git", 'url' : "MyURL", 'recipe' : "foo.yaml#0" }
@@ -316,3 +317,100 @@ class TestGitRemotes(RealGitRepositoryTestCase):
                 "origin" : self.repodir,
                 'bar' : 'http://bar.test/foo.git',
             })
+
+
+class TestLiveBuildId(RealGitRepositoryTestCase):
+    """Test live-build-id support of git scm"""
+
+    def callCalcLiveBuildId(self, scm):
+        with tempfile.TemporaryDirectory() as workspace:
+            subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
+                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            return scm.calcLiveBuildId(workspace)
+
+    def processHashEngine(self, scm, expected):
+        with tempfile.TemporaryDirectory() as workspace:
+            subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
+                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            [spec] = scm.getLiveBuildIdSpec(workspace)
+            if spec.startswith('='):
+                self.assertEqual(bytes.fromhex(spec[1:]), expected)
+            else:
+                self.assertTrue(spec.startswith('g'))
+                self.assertEqual(bytes.fromhex(GitScm.processLiveBuildIdSpec(spec[1:])),
+                    expected)
+
+    def testHasLiveBuildId(self):
+        """GitScm's always support live-build-ids"""
+        s = self.createGitScm()
+        self.assertTrue(s.hasLiveBuildId())
+
+    def testPredictBranch(self):
+        """See if we can predict remote branches correctly"""
+        s = self.createGitScm()
+        self.assertEqual(s.predictLiveBuildId(), [self.commit_master])
+
+        s = self.createGitScm({ 'branch' : 'foobar' })
+        self.assertEqual(s.predictLiveBuildId(), [self.commit_foobar])
+
+    def testPredictLightweightTags(self):
+        """Lightweight tags are just like branches"""
+        s = self.createGitScm({ 'tag' : 'lightweight' })
+        self.assertEqual(s.predictLiveBuildId(), [self.commit_lightweight])
+
+    def testPredictAnnotatedTags(self):
+        """Predict commit object of annotated tags.
+
+        Annotated tags are separate git objects that point to a commit object.
+        We have to predict the commit object, not the tag object."""
+        s = self.createGitScm({ 'tag' : 'annotated' })
+        self.assertEqual(s.predictLiveBuildId(), [self.commit_annotated])
+
+    def testPredictCommit(self):
+        """Predictions of explicit commit-ids are easy."""
+        s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
+        self.assertEqual(s.predictLiveBuildId(), [self.commit_foobar])
+
+    def testPredictBroken(self):
+        """Predictions of broken URLs must not fail"""
+        s = self.createGitScm({ 'url' : '/does/not/exist' })
+        self.assertEqual(s.predictLiveBuildId(), [None])
+
+    def testPredictDeleted(self):
+        """Predicting deleted branches/tags must not fail"""
+        s = self.createGitScm({ 'branch' : 'nx' })
+        self.assertEqual(s.predictLiveBuildId(), [None])
+        s = self.createGitScm({ 'tag' : 'nx' })
+        self.assertEqual(s.predictLiveBuildId(), [None])
+
+    def testCalcBranch(self):
+        """Clone branch and calculate live-build-id"""
+        s = self.createGitScm()
+        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_master])
+        s = self.createGitScm({ 'branch' : 'foobar' })
+        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_foobar])
+
+    def testCalcTags(self):
+        """Clone tag and calculate live-build-id"""
+        s = self.createGitScm({ 'tag' : 'annotated' })
+        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_annotated])
+        s = self.createGitScm({ 'tag' : 'lightweight' })
+        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_lightweight])
+
+    def testCalcCommit(self):
+        """Clone commit and calculate live-build-id"""
+        s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
+        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_foobar])
+
+    def testHashEngine(self):
+        """Calculate live-build-id via bob-hash-engine spec"""
+        s = self.createGitScm()
+        self.processHashEngine(s, self.commit_master)
+        s = self.createGitScm({ 'branch' : 'foobar' })
+        self.processHashEngine(s, self.commit_foobar)
+        s = self.createGitScm({ 'tag' : 'annotated' })
+        self.processHashEngine(s, self.commit_annotated)
+        s = self.createGitScm({ 'tag' : 'lightweight' })
+        self.processHashEngine(s, self.commit_lightweight)
+        s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
+        self.processHashEngine(s, self.commit_foobar)
