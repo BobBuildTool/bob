@@ -61,37 +61,43 @@ class _BobState():
             os.close(fd)
 
         # load state if it exists
-        if os.path.exists(self.__path):
-            try:
-                with open(self.__path, 'rb') as f:
-                    state = pickle.load(f)
-            except OSError as e:
-                raise ParseError("Error loading workspace state: " + str(e))
-            except pickle.PickleError as e:
-                raise ParseError("Error decoding workspace state: " + str(e))
+        try:
+            if os.path.exists(self.__path):
+                try:
+                    with open(self.__path, 'rb') as f:
+                        state = pickle.load(f)
+                except OSError as e:
+                    raise ParseError("Error loading workspace state: " + str(e))
+                except pickle.PickleError as e:
+                    raise ParseError("Error decoding workspace state: " + str(e))
 
-            if state["version"] < _BobState.MIN_VERSION:
-                raise ParseError("This version of bob cannot read the build tree anymore. Sorry. :-(")
-            if state["version"] > _BobState.CUR_VERSION:
-                raise ParseError("This version of bob is too old for the build tree.")
-            self.__byNameDirs = state["byNameDirs"]
-            self.__results = state["results"]
-            self.__inputs = state["inputs"]
-            self.__jenkins = state.get("jenkins", {})
-            self.__dirStates = state.get("dirStates", {})
-            self.__buildState = state.get("buildState", {})
+                if state["version"] < _BobState.MIN_VERSION:
+                    raise ParseError("This version of Bob cannot read the workspace anymore. Sorry. :-(",
+                                     help="This workspace was created by an older version of Bob that is no longer supported.")
+                if state["version"] > _BobState.CUR_VERSION:
+                    raise ParseError("This version of Bob is too old for the workspace.",
+                                     help="A more recent version of Bob was previously used in this workspace. You have to use that version instead.")
+                self.__byNameDirs = state["byNameDirs"]
+                self.__results = state["results"]
+                self.__inputs = state["inputs"]
+                self.__jenkins = state.get("jenkins", {})
+                self.__dirStates = state.get("dirStates", {})
+                self.__buildState = state.get("buildState", {})
 
-            # version upgrades
-            if state["version"] == 2:
-                self.__byNameDirs = {
-                    digest : ((dir, False) if isinstance(dir, str) else dir)
-                    for (digest, dir) in self.__byNameDirs.items()
-                }
+                # version upgrades
+                if state["version"] == 2:
+                    self.__byNameDirs = {
+                        digest : ((dir, False) if isinstance(dir, str) else dir)
+                        for (digest, dir) in self.__byNameDirs.items()
+                    }
 
-            if state["version"] <= 3:
-                for j in self.__jenkins.values():
-                    jobs = j["jobs"]
-                    j["jobs"] = { k.lower() : v for (k,v) in jobs.items() }
+                if state["version"] <= 3:
+                    for j in self.__jenkins.values():
+                        jobs = j["jobs"]
+                        j["jobs"] = { k.lower() : v for (k,v) in jobs.items() }
+        except:
+            self.finalize()
+            raise
 
     def __save(self):
         if self.__asynchronous == 0:
