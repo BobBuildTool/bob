@@ -1344,7 +1344,7 @@ def doDevelop(argv, bobRoot):
 def doProject(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob project", description='Generate Project Files')
     parser.add_argument('projectGenerator', nargs='?', help="Generator to use.")
-    parser.add_argument('package', nargs='?', help="Sub-package that is the root of the project")
+    parser.add_argument('packages', nargs='+', help="(Sub-)packages to generate")
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for project generator")
 
@@ -1365,6 +1365,8 @@ def doProject(argv, bobRoot):
         help="Do not build (bob dev) before generate project Files. RunTargets may not work")
     parser.add_argument('-b', dest="execute_buildonly", default=False, action='store_true',
         help="Do build only (bob dev -b) before generate project Files. No checkout")
+    parser.add_argument('--build', default=False, action='store_true',
+        help="Do path calculations as if 'bob build', not as 'bob dev'")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
@@ -1383,6 +1385,7 @@ def doProject(argv, bobRoot):
             parser.error("Malformed define: "+define)
 
     recipes = RecipeSet()
+    recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
     recipes.defineHook('developNamePersister', LocalBuilder.developNamePersister)
     recipes.setConfigFiles(args.configFile)
@@ -1391,12 +1394,18 @@ def doProject(argv, bobRoot):
     envWhiteList = recipes.envWhiteList()
     envWhiteList |= set(args.white_list)
 
-    nameFormatter = recipes.getHook('developNameFormatter')
-    developPersister = recipes.getHook('developNamePersister')
-    nameFormatter = developPersister(nameFormatter)
+    if args.build:
+        nameFormatter = recipes.getHook('releaseNameFormatter')
+        nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
+    else:
+        nameFormatter = recipes.getHook('developNameFormatter')
+        developPersister = recipes.getHook('developNamePersister')
+        nameFormatter = developPersister(nameFormatter)
+
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
     packages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=args.sandbox)
-    touch(packages)
+    if not args.build:
+        touch(packages)
 
     from ..generators.QtCreatorGenerator import qtProjectGenerator
     from ..generators.EclipseCdtGenerator import eclipseCdtGenerator
@@ -1408,7 +1417,7 @@ def doProject(argv, bobRoot):
             print(g)
         return 0
     else:
-        if not args.package or not args.projectGenerator:
+        if not args.packages or not args.projectGenerator:
             raise BobError("The following arguments are required: projectGenerator, package")
 
     try:
@@ -1429,20 +1438,35 @@ def doProject(argv, bobRoot):
     if args.preserve_env: extra.append('-E')
     if args.sandbox: extra.append('--sandbox')
 
-    package = packages.walkPackagePath(args.package)
 
-    # execute a bob dev with the extra arguments to build all executables.
+    backlog = []
+    for p in args.packages:
+        for package in packages.queryPackagePath(p):
+            backlog.append(package)
+
+    # execute a bob dev/build with the extra arguments to build all executables.
     # This makes it possible for the plugin to collect them and generate some runTargets.
     if args.execute_prebuild:
         devArgs = extra.copy()
         if args.resume: devArgs.append('--resume')
         if args.execute_buildonly: devArgs.append('-b')
-        devArgs.append(args.package)
-        doDevelop(devArgs, bobRoot)
+        for p in backlog:
+            devArgs.append(p.getName())
+        if args.build:
+            doBuild(devArgs, bobRoot)
+        else:
+            doDevelop(devArgs, bobRoot)
 
-    print(">>", colorize("/".join(package.getStack()), "32;1"))
-    print(colorize("   PROJECT   {} ({})".format(args.package, args.projectGenerator), "32"))
-    generator(package, args.args, extra)
+    if len(backlog) == 1:
+        print(">>", colorize("/".join(backlog[0].getStack()), "32;1"))
+        print(colorize("   PROJECT   {} ({})".format(backlog[0].getName(), args.projectGenerator), "32"))
+        generator(backlog[0], args.args, extra)
+    else:
+        print(">>", colorize("Generate project for", "32;1"))
+        for package in backlog:
+            print(colorize("   PROJECT   {} ({})".format(package.getName(), args.projectGenerator), "32"))
+        generator(backlog, args.args, extra)
+
 
 def doStatus(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob status", description='Show SCM status')
