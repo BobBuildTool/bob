@@ -137,7 +137,7 @@ class JenkinsJob:
         self.__displayName = displayName
         self.__nameCalculator = nameCalculator
         self.__recipe = recipe
-        self.__isRoot = recipe.isRoot()
+        self.__isRoot = False
         self.__archive = archiveBackend
         self.__checkoutSteps = {}
         self.__buildSteps = {}
@@ -155,6 +155,9 @@ class JenkinsJob:
 
     def isRoot(self):
         return self.__isRoot
+
+    def makeRoot(self):
+        self.__isRoot = True
 
     def getDescription(self, date):
         description = [
@@ -1045,11 +1048,12 @@ class JobNameCalculator:
 
 
 def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, allVariantIds,
-                    shortdescription=False):
+                    shortdescription):
 
     if step.isPackageStep() and shortdescription:
         if step.getVariantId() in allVariantIds:
-            return
+            name = nameCalculator.getJobInternalName(step)
+            return jobs[name]
         else:
             allVariantIds.add(step.getVariantId())
 
@@ -1090,6 +1094,8 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, al
                 seenPackages.add(stack)
                 _genJenkinsJobs(sandboxStep, jobs, nameCalculator, archiveBackend,
                                 seenPackages, allVariantIds, shortdescription)
+
+    return jj
 
 def jenkinsNameFormatter(step, props):
     return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
@@ -1137,8 +1143,9 @@ def genJenkinsJobs(recipes, jenkins):
     nameCalculator.isolate(options.get("jobs.isolate"))
     nameCalculator.sanitize()
     for root in sorted(rootPackages, key=lambda root: root.getName()):
-        _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler, set(), set(),
+        rootJenkinsJob = _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler, set(), set(),
                         config.get('shortdescription', False))
+        rootJenkinsJob.makeRoot()
 
     return jobs
 
