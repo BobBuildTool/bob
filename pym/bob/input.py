@@ -1972,6 +1972,10 @@ class RecipeSet:
                 schema.Optional('build') : BUILD_DEV_SCHEMA,
                 schema.Optional('graph') : GRAPH_SCHEMA
             }),
+            schema.Optional('hooks') : schema.Schema({
+                schema.Optional('preBuildHook') : str,
+                schema.Optional('postBuildHook') : str,
+            }),
         })
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
@@ -2017,6 +2021,7 @@ class RecipeSet:
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#cleanenvironment for more information")
             ),
         }
+        self.__buildHooks = {}
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -2159,6 +2164,9 @@ class RecipeSet:
         else:
             return audit.getStatusLine()
 
+    def getBuildHook(self, name):
+        return self.__buildHooks.get(name)
+
     def loadBinary(self, path):
         return self.__cache.loadBinary(path)
 
@@ -2252,6 +2260,7 @@ class RecipeSet:
         self.__aliases.update(cfg.get("alias", {}))
         if not self._ignoreCmdConfig:
             self.__commandConfig = updateDicRecursive(self.__commandConfig, cfg.get("command", {}))
+        self.__buildHooks.update(cfg.get("hooks", {}))
         for p in cfg.get("include", []):
             p = os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p
             self.__parseUserConfig(p + ".yaml", relativeIncludes)

@@ -44,6 +44,17 @@ def hashWorkspace(step):
     return hashDirectory(step.getWorkspacePath(),
         os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
 
+def runHook(recipes, hook, args):
+    hookCmd = recipes.getBuildHook(hook)
+    ret = True
+    if hookCmd:
+        try:
+            ret = subprocess.call([hookCmd] + args) == 0
+        except OSError as e:
+            raise BuildError(hook + ": cannor run '" + hookCmd + ": " + str(e))
+
+    return ret
+
 class LocalBuilderStatistic:
     def __init__(self):
         self.__activeOverrides = set()
@@ -1096,14 +1107,22 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             build_provided = (args.destination and args.build_provided == None) or args.build_provided
             if build_provided: backlog.extend(packageStep._getProvidedDeps())
 
+    success = runHook(recipes, 'preBuildHook',
+        ["/".join(p.getPackage().getStack()) for p in backlog])
+    if not success:
+        raise BuildError("preBuildHook failed!",
+            help="A preBuildHook is set but it returned with a non-zero status.")
+    success = False
     try:
         for p in backlog:
             builder.cook([p], p.getPackage(), True if args.build_mode == 'checkout-only' else False)
             resultPath = p.getWorkspacePath()
             if resultPath not in results:
                 results.append(resultPath)
+            success = True
     finally:
         builder.saveBuildState()
+        runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
 
     # tell the user
     if results:
