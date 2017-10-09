@@ -1,6 +1,22 @@
 Options
 -------
 
+``--always-checkout RE``
+    Always checkout packages that match the regular expression pattern ``RE``.
+    The option may be given more than once. In this case all patterns will be
+    checked.
+
+    Bob may skip the checkout of packages where a correct binary artifact can
+    be downloaded from an archive. While this can dramatically decrease the
+    build time of large projects it can hamper actually changing and rebuilding
+    the packages with modifications. Use this option to instruct Bob to always
+    checkout the sources of the packges that you may want to modify.
+
+    This option will just make sure that the sources of matching packages are
+    checked out. Bob will still try to find matching binary artifacts to skip
+    the actual compilation of these packages. See the ``--download`` option
+    to control what is built and what is downloaded.
+
 ``--clean``
     Do clean builds by clearing the build directory before executing the build
     commands. It will *not* clean all build results (e.g. like ``make clean``)
