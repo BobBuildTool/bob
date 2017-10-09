@@ -17,6 +17,7 @@
 from unittest import TestCase
 
 from bob.input import GitScm
+from bob.errors import ParseError
 
 def createGitScm(spec = {}):
     s = { 'scm' : "git", 'url' : "MyURL", 'recipe' : "foo.yaml#0" }
@@ -125,6 +126,9 @@ class TestGitScm(TestCase):
         s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
         self.assertIsInstance(s.asScript(), str)
 
+        s = createGitScm({'remote-test' : "test/url.git"})
+        self.assertRegexpMatches(s.asScript(), ".*test.*test/url.git.*")
+
     def testDigestScripts(self):
         """Test digest script stable representation"""
         s = createGitScm()
@@ -179,3 +183,13 @@ class TestGitScm(TestCase):
         self.assertEqual(s2.merge(s1), False)
         self.assertEqual(s2.hasJenkinsPlugin(), True)
         self.assertEqual(s2.isDeterministic(), True)
+
+    def testRemotesSetAndGet(self):
+        """Test setting and getting remotes as they are stored in a different format internally"""
+        s1 = createGitScm({'remote-test_user' : "test/url", 'remote-other_user' : "other/url"})
+        self.assertEqual(s1.getProperties()[0]['remote-test_user'], "test/url")
+        self.assertEqual(s1.getProperties()[0]['remote-other_user'], "other/url")
+
+    def testRemotesSetOrigin(self):
+        """A remote calle origin should result in an error, because this is the default remote name"""
+        self.assertRaises(ParseError, createGitScm, {'remote-origin' : "test/url.git"})
