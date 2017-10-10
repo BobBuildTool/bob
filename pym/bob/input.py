@@ -1783,7 +1783,7 @@ class Recipe(object):
         env.update(self.__metaEnv)
 
         # filter duplicate results, fail on different variants of same package
-        self.__filterDuplicateSteps(results)
+        results = self.__filterDuplicateSteps(results)
 
         # record used environment and tools
         env.touch(self.__packageVars | self.__packageVarsWeak)
@@ -1846,8 +1846,7 @@ class Recipe(object):
             if subDep is not None:
                 provideDeps.append(subDep)
                 for d in subDep._getProvidedDeps(): provideDeps.append(d)
-        self.__filterDuplicateSteps(provideDeps)
-        packageStep._setProvidedDeps(provideDeps)
+        packageStep._setProvidedDeps(self.__filterDuplicateSteps(provideDeps))
 
         # provide Sandbox
         if self.__provideSandbox:
@@ -1876,24 +1875,22 @@ class Recipe(object):
         return p, subTreePackages
 
     def __filterDuplicateSteps(self, results):
-        i = 0
-        while i < len(results):
-            j = i+1
-            r = results[i]
-            while j < len(results):
-                if r.getPackage().getName() == results[j].getPackage().getName():
-                    if r.getVariantId() != results[j].getVariantId():
-                        raise ParseError("Incompatibe variants of package: {} vs. {}"
-                            .format("/".join(r.getPackage().getStack()),
-                                    "/".join(results[j].getPackage().getStack())),
-                            help=
+        cache = {}
+        ret = []
+        for r in results:
+            r2 = cache.setdefault(r.getPackage().getName(), r)
+            if r2 is r:
+                ret.append(r)
+            elif r.getVariantId() != r2.getVariantId():
+                raise ParseError("Incompatibe variants of package: {} vs. {}"
+                    .format("/".join(r.getPackage().getStack()),
+                            "/".join(r2.getPackage().getStack())),
+                    help=
 """This error is caused by '{PKG}' that is passed upwards via 'provideDeps' from multiple dependencies of '{CUR}'.
 These dependencies constitute different variants of '{PKG}' and can therefore not be used in '{CUR}'."""
     .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
-                    del results[j]
-                else:
-                    j += 1
-            i += 1
+
+        return ret
 
 class PackageMatcher:
     def __init__(self, package, env, tools, states, sandbox, subTreePackages):
