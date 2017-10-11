@@ -165,6 +165,7 @@ class GitScm(Scm):
                         rm -rf {DIR}/.git {DIR}/*
                         exit 1
                     fi
+                    cd {DIR}
                 fi
                 {REMOTES}
                 """).format(URL=self.__url,
