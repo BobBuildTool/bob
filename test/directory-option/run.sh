@@ -1,6 +1,11 @@
 #!/bin/bash -e
 . ../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
+# clean workspace
+pushd elsewhere
+cleanup
+popd
+
 # Test ls
 run_bob -C elsewhere ls > log-ls.txt
 diff -u output/log-ls.txt log-ls.txt
