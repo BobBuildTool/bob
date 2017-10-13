@@ -393,9 +393,53 @@ esac
         audit.save(auditPath)
         return auditPath
 
+    def __linkDependencies(self, step):
+        """Create symlinks to the dependency workspaces"""
+
+        # this will only work on POSIX
+        if os.name != 'posix': return
+
+        # always re-create the deps directory
+        basePath = os.getcwd()
+        depsPath = os.path.join(basePath, step.getWorkspacePath(), "..", "deps")
+        removePath(depsPath)
+        os.makedirs(depsPath)
+
+        def linkTo(dest, linkName):
+            os.symlink(os.path.relpath(os.path.join(basePath, dest, ".."),
+                                       os.path.join(linkName, "..")),
+                       linkName)
+
+        # there can only be one sandbox
+        if step.getSandbox() is not None:
+            sandboxPath = os.path.join(depsPath, "sandbox")
+            linkTo(step.getSandbox().getStep().getWorkspacePath(), sandboxPath)
+
+        # link tools by name
+        tools = step.getTools()
+        if tools:
+            toolsPath = os.path.join(depsPath, "tools")
+            os.makedirs(toolsPath)
+            for (n,t) in tools.items():
+                linkTo(t.getStep().getWorkspacePath(), os.path.join(toolsPath, n))
+
+        # link dependencies by position and name
+        args = step.getArguments()
+        if args:
+            argsPath = os.path.join(depsPath, "args")
+            os.makedirs(argsPath)
+            i = 1
+            for a in args:
+                if a.isValid():
+                    linkTo(a.getWorkspacePath(),
+                           os.path.join(argsPath,
+                                        "{:02}-{}".format(i, a.getPackage().getName())))
+                i += 1
+
     def _runShell(self, step, scriptName):
         workspacePath = step.getWorkspacePath()
         if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
+        self.__linkDependencies(step)
 
         # construct environment
         stepEnv = step.getEnv().copy()
