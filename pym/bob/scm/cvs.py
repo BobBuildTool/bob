@@ -70,25 +70,26 @@ class CvsScm(Scm):
         #   cvs checkout: existing repository /home/stefan/cvsroot does not match /home/stefan/cvsroot/cxxtest
         #   cvs checkout: ignoring module cxxtest
         # Thus, we have to trick it with a symlink.
+        # Workaround 2: 'cvs co' does not have a '-P' option like 'cvs up' has.
+        # This option removes empty (=deleted) directories.
+        # We therefore use a 'cvs up' after the initial 'cvs co', to get the same behaviour for the initial and subsequent builds.
         if re.match('^:ext:', rootarg) and self.__dir == '.':
             return """
 # Checkout or update
-if [ -d CVS ]; then
-   {prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} .
-else
+if ! [ -d CVS ]; then
    ln -s . __tmp$$
    {prefix}cvs -qz3 -d '{rootarg}' co {revarg} -d __tmp$$ '{module}'
    rm __tmp$$
 fi
+{prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} .
 """.format(prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module)
         else:
             return """
 # Checkout or update
-if [ -d {dir}/CVS ]; then
-   {prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} {dir}
-else
+if ! [ -d {dir}/CVS ]; then
    {prefix}cvs -qz3 -d '{rootarg}' co {revarg} -d {dir} '{module}'
 fi
+{prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} {dir}
 """.format(prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module, dir=self.__dir)
 
     def asDigestScript(self):
