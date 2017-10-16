@@ -20,7 +20,7 @@ from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
-from .tty import colorize, WarnOnce
+from .tty import colorize, InfoOnce, WarnOnce
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
@@ -2006,8 +2006,16 @@ class RecipeSet:
         self.__plugins = {}
         self.__commandConfig = {}
         self.__policies = {
-            'relativeIncludes' : ("0.13", WarnOnce("relativeIncludes policy not set. Using recipes directory as base for all includes!")),
-            'cleanEnvironment' : ("0.13", WarnOnce("cleanEnvironment policy not set. Initial environment tainted by whitelisted variables!")),
+            'relativeIncludes' : (
+                "0.13",
+                InfoOnce("relativeIncludes policy not set. Using recipes directory as base for all includes!",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#relativeincludes for more information.")
+            ),
+            'cleanEnvironment' : (
+                "0.13",
+                InfoOnce("cleanEnvironment policy not set. Initial environment tainted by whitelisted variables!",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#cleanenvironment for more information")
+            ),
         }
 
     def __addRecipe(self, recipe):
@@ -2425,7 +2433,7 @@ class RecipeSet:
     def getPolicy(self, name, location=None):
         (policy, warning) = self.__policies[name]
         if policy is None:
-            warning.warn(location)
+            warning.show(location)
         return policy
 
 
