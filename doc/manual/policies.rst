@@ -76,6 +76,10 @@ warning is produced telling the project author to set the policy.
 Setting Policies
 ----------------
 
+Policies can be set in ``config.yaml``. They are either set implicitly by
+:ref:`configuration-bobMinimumVersion` or explicitly in the
+:ref:`configuration-config-policies` section.
+
 In most cases a project release should simply set a policy version
 corresponding to the release version of Bob for which the project is written.
 Setting the policy version requests new behavior for all policies introduced in
