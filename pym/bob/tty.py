@@ -31,16 +31,34 @@ class Unbuffered(object):
     def __getattr__(self, attr):
         return getattr(self.stream, attr)
 
-class WarnOnce:
-    def __init__(self, message):
+class ShowOnce:
+    def __init__(self, slogan, color, message, help):
+        self.__slogan = slogan
+        self.__color = color
         self.__message = message
+        self.__help = help
         self.__triggered = False
 
-    def warn(self, location=None):
+    def show(self, location=None):
         if not self.__triggered:
-            print(colorize("WARNING: " + ((location + ": ") if location else "")
-                + self.__message, "33"), file=sys.stderr)
+            print(colorize(self.__slogan + ":", self.__color+";1"),
+                colorize(((location + ": ") if location else "") + self.__message,
+                    self.__color),
+                file=sys.stderr)
+            if self.__help:
+                print(self.__help, file=sys.stderr)
             self.__triggered = True
+
+class InfoOnce(ShowOnce):
+    def __init__(self, message, help=None):
+        super().__init__("INFO", "34", message, help)
+
+class WarnOnce(ShowOnce):
+    def __init__(self, message, help=None):
+        super().__init__("WARNING", "33", message, help)
+
+    def warn(self, location=None):
+        super().show(location)
 
 # module initialization
 
