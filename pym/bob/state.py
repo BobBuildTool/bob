@@ -30,8 +30,9 @@ class _BobState():
     #  2 -> 3: byNameDirs: values are tuples (directory, isSourceDir)
     #  3 -> 4: jenkins job names are lower case
     #  4 -> 5: build state stores step kind (checkout-step vs. others)
+    #  5 -> 6: build state stores predicted live-build-ids too
     MIN_VERSION = 2
-    CUR_VERSION = 5
+    CUR_VERSION = 6
 
     instance = None
     def __init__(self):
@@ -102,6 +103,12 @@ class _BobState():
                 if state["version"] <= 4:
                     self.__buildState = { path : (vid, False)
                         for path, vid in self.__buildState.items() }
+
+                if state["version"] <= 5:
+                    self.__buildState = {
+                        'wasRun' : self.__buildState,
+                        'predictedBuidId' : {}
+                    }
         except:
             self.finalize()
             raise

@@ -336,16 +336,26 @@ esac
         self.__alwaysCheckout = [ re.compile(e) for e in alwaysCheckout ]
 
     def saveBuildState(self):
-        # Save as plain dict. Skipped steps are dropped because they were not
-        # really executed. Either they are simply skipped again or, if the
-        # user changes his mind, they will finally be executed.
-        state = { path : (vid, isCheckoutStep)
+        state = {}
+        # Save 'wasRun' as plain dict. Skipped steps are dropped because they
+        # were not really executed. Either they are simply skipped again or, if
+        # the user changes his mind, they will finally be executed.
+        state['wasRun'] = { path : (vid, isCheckoutStep)
             for path, (vid, isCheckoutStep) in self.__wasRun.items()
             if not self.__wasSkipped.get(path, False) }
+        # Save all predicted src build-ids. In case of a resume we won't ask
+        # the server again for a live-build-id. Regular src build-ids are
+        # cached by the usual 'wasRun' and 'resultHash' states.
+        state['predictedBuidId'] = { (path, vid) : bid
+            for (path, vid), (bid, predicted) in self.__srcBuildIds.items()
+            if predicted }
         BobState().setBuildState(state)
 
     def loadBuildState(self):
-        self.__wasRun = dict(BobState().getBuildState())
+        state = BobState().getBuildState()
+        self.__wasRun = dict(state['wasRun'])
+        self.__srcBuildIds = { (path, vid) : (bid, True)
+            for (path, vid), bid in state['predictedBuidId'].items() }
 
     def _wasAlreadyRun(self, step, skippedOk=False):
         path = step.getWorkspacePath()
