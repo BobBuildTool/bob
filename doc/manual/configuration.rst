@@ -1332,3 +1332,41 @@ options         Dictonary of String key value pairs
 type            "d3" or "dot"
 max_depth       Integer
 =============== ===================================================================
+
+hooks
+~~~~~
+
+Hooks are other programs or scripts that can be executed by Bob at certain
+points, e.g. before or after a build. Unless otherwise noted they are executed
+with the recipes directory as working directory. Example::
+
+    hooks:
+        postBuildHook: ./contrib/notify.sh
+
+where ``contrib/notify.sh`` is::
+
+    #!/bin/bash
+    HEADLINE="Bob build finished"
+    BODY="The build in $PWD has finished: $1"
+    if [[ ${XDG_CURRENT_DESKTOP:-unknown} == KDE ]] ; then
+        kdialog --passivepopup "$BODY" 10 --title "$HEADLINE"
+    else
+        notify-send -u normal -t 10000 "$HEADLINE" "$BODY"
+    fi
+
+The currently supported hooks are described below.
+
+preBuildHook
+    The pre-build hook is run directly before a local build (bob dev / bob
+    build). It receives the paths of all packages that are built as arguments.
+
+    If the hook returns with a non-zero status the build will be interrupted.
+
+postBuildHook 
+    The post-build hook is run after a local build finished, regardless if the
+    build succeeded or failed. It receives the status as first argument
+    (``success`` or ``fail``) and the relative paths to the workspaces of the
+    results as further arguments.
+
+    The return status of the hook is ignored.
+
