@@ -987,7 +987,7 @@ esac
                         wasShared = True
                         workspaceChanged = True
                         packageHash = hashWorkspace(packageStep)
-                elif oldWasDownloadedorShared:
+                elif oldWasDownloadedOrShared:
                     self._info("   PACKAGE   skipped (deterministic output in {})".format(prettyPackagePath))
                     wasShared = True
 
