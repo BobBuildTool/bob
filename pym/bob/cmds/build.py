@@ -51,7 +51,7 @@ def runHook(recipes, hook, args):
         try:
             ret = subprocess.call([hookCmd] + args) == 0
         except OSError as e:
-            raise BuildError(hook + ": cannor run '" + hookCmd + ": " + str(e))
+            raise BuildError(hook + ": cannot run '" + hookCmd + ": " + str(e))
 
     return ret
 

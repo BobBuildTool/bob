@@ -2018,7 +2018,7 @@ class RecipeSet:
             'cleanEnvironment' : (
                 "0.13",
                 InfoOnce("cleanEnvironment policy not set. Initial environment tainted by whitelisted variables!",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#cleanenvironment for more information")
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#cleanenvironment for more information.")
             ),
         }
         self.__buildHooks = {}
