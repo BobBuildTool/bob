@@ -68,12 +68,18 @@ def emptyDirectory(path):
     except OSError as e:
         raise BuildError("Error cleaning '"+path+"': " + str(e))
 
-# recursive update entries of a dictonary. See: http://stackoverflow.com/questions/3232943
+# Recursively merge entries of two dictonaries.
+#
+# Expect that both arguments have the same schema. Dictionaries are merged
+# key-by-key. Lists are appended. Returns merged result.
+#
+# See: http://stackoverflow.com/questions/3232943
 def updateDicRecursive(d, u):
     for k, v in u.items():
         if isinstance(v, collections.Mapping):
-            r = updateDicRecursive(d.get(k, {}), v)
-            d[k] = r
+            d[k] = updateDicRecursive(d.get(k, {}), v)
+        elif isinstance(v, collections.Sequence):
+            d[k] = list(d.get(k, [])) + list(v)
         else:
             d[k] = u[k]
     return d
