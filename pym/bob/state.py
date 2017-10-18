@@ -39,6 +39,7 @@ class _BobState():
         self.__inputs = {}
         self.__jenkins = {}
         self.__asynchronous = 0
+        self.__optimistic = 0
         self.__dirty = False
         self.__dirStates = {}
         self.__buildState = {}
@@ -115,7 +116,8 @@ class _BobState():
                 with open(tmpFile, "wb") as f:
                     pickle.dump(state, f)
                     f.flush()
-                    os.fsync(f.fileno())
+                    if self.__optimistic == 0:
+                        os.fsync(f.fileno())
                 os.replace(tmpFile, self.__path)
             except OSError as e:
                 raise ParseError("Error saving workspace state: " + str(e))
@@ -147,6 +149,9 @@ class _BobState():
         assert self.__asynchronous >= 0
         if (self.__asynchronous == 0) and self.__dirty:
             self.__save()
+
+    def setOptimistic(self):
+        self.__optimistic += 1
 
     def getByNameDirectory(self, baseDir, digest, isSourceDir):
         if digest in self.__byNameDirs:
