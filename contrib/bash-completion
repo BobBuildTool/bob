@@ -78,8 +78,10 @@ __bob_cook()
          __bob_complete_words "yes no deps"
    elif [[ "$prev" = "-c" ]] ; then
       COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
+   elif [[ "$prev" = "--always-checkout" ]] ; then
+      COMPREPLY=( )
    else
-      __bob_complete_path "--destination -e -f --force --clean-checkout -n --no-deps -b --build-only --clean --incremental --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose --no-logfiles"
+      __bob_complete_path "--destination -e -f --force --clean-checkout -n --no-deps -b --build-only --clean --incremental --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose --no-logfiles --always-checkout"
    fi
 }
 
