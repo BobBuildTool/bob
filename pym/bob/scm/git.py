@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ..errors import ParseError, BuildError
+from ..stringparser import isTrue
 from ..tty import colorize, WarnOnce
 from ..utils import hashString
 from .scm import Scm, ScmAudit
@@ -245,6 +246,9 @@ class GitScm(Scm):
                 ElementTree.SubElement(co, "reference").text = ""
                 ElementTree.SubElement(co, "depth").text = str(shallow)
                 ElementTree.SubElement(co, "honorRefspec").text = "false"
+        if isTrue(options.get("scm.ignore-hooks", "0")):
+            ElementTree.SubElement(extensions,
+                "hudson.plugins.git.extensions.impl.IgnoreNotifyCommit")
 
         return scm
 
