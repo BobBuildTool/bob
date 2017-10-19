@@ -18,7 +18,7 @@ from . import BOB_VERSION, _enableDebug
 from .errors import BobError
 from .state import finalize
 from .tty import colorize, Unbuffered
-from .utils import asHexStr, hashDirectory
+from .utils import asHexStr, hashPath
 import argparse
 import sys
 import traceback
@@ -221,9 +221,12 @@ def hashTree():
     parser.add_argument('dir', help="Directory")
     args = parser.parse_args()
 
-    digest = hashDirectory(args.dir, args.state)
-    print(asHexStr(digest))
-    return 0
+    def cmd():
+        digest = hashPath(args.dir, args.state)
+        print(asHexStr(digest))
+        return 0
+
+    return catchErrors(cmd)
 
 def hashEngine():
     parser = argparse.ArgumentParser(description="Create hash based on spec.")
@@ -232,24 +235,25 @@ def hashEngine():
     parser.add_argument('spec', nargs='?', default="-", help="Spec input (default: stdin)")
     args = parser.parse_args()
 
-    if args.spec == "-":
-        inFile = sys.stdin
-    else:
-        inFile = open(args.spec, "r")
+    def cmd():
+        try:
+            if args.spec == "-":
+                inFile = sys.stdin
+            else:
+                inFile = open(args.spec, "r")
 
-    l = inFile.readline().strip()
-    try:
-        res = __process(l, inFile, args.state)
-        if args.output == "-":
-            sys.stdout.buffer.write(res)
-        else:
-            with open(args.output, "wb") as f:
-                f.write(res)
-    except OSError as e:
-        print("IO error:", str(e), file=sys.stderr)
-        return 1
+            res = __process(inFile.readline().strip(), inFile, args.state)
+            if args.output == "-":
+                sys.stdout.buffer.write(res)
+            else:
+                with open(args.output, "wb") as f:
+                    f.write(res)
+        except OSError as e:
+            raise BobError("IO error: " + str(e))
 
-    return 0
+        return 0
+
+    return catchErrors(cmd)
 
 def auditEngine():
     parser = argparse.ArgumentParser(description="Create audit trail.")
@@ -312,7 +316,10 @@ def __process(l, inFile, stateDir):
             stateFile = os.path.join(stateDir, l[1:].replace(os.sep, "_"))
         else:
             stateFile = None
-        return hashDirectory(l[1:], stateFile)
+        return hashPath(l[1:], stateFile)
+    elif l.startswith("g"):
+        from .scm.git import GitScm
+        return bytes.fromhex(GitScm.processLiveBuildIdSpec(l[1:]))
     else:
         print("Malformed spec:", l, file=sys.stderr)
         sys.exit(1)

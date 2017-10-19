@@ -1,0 +1,9 @@
+depends:
+    - common
+
+buildScript: |
+    mkdir -p left
+    cp -a $2/* left
+
+packageScript: |
+    cp -a $1/* .

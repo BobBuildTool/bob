@@ -28,6 +28,7 @@ from pipes import quote
 import argparse
 import datetime
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -55,6 +56,9 @@ def runHook(recipes, hook, args):
             raise BuildError(hook + ": cannot run '" + hookCmd + ": " + str(e))
 
     return ret
+
+class RestartBuildException(Exception):
+    pass
 
 class LocalBuilderStatistic:
     def __init__(self):
@@ -294,8 +298,10 @@ esac
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
-        self.__buildIds = {}
+        self.__srcBuildIds = {}
+        self.__buildDistBuildIds = {}
         self.__statistic = LocalBuilderStatistic()
+        self.__alwaysCheckout = []
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -326,21 +332,35 @@ esac
     def setCleanCheckout(self, clean):
         self.__cleanCheckout = clean
 
+    def setAlwaysCheckout(self, alwaysCheckout):
+        self.__alwaysCheckout = [ re.compile(e) for e in alwaysCheckout ]
+
     def saveBuildState(self):
-        # Save as plain dict. Skipped steps are dropped because they were not
-        # really executed. Either they are simply skipped again or, if the
-        # user changes his mind, they will finally be executed.
-        state = { k:v for (k,v) in self.__wasRun.items()
-                      if not self.__wasSkipped.get(k, False) }
+        state = {}
+        # Save 'wasRun' as plain dict. Skipped steps are dropped because they
+        # were not really executed. Either they are simply skipped again or, if
+        # the user changes his mind, they will finally be executed.
+        state['wasRun'] = { path : (vid, isCheckoutStep)
+            for path, (vid, isCheckoutStep) in self.__wasRun.items()
+            if not self.__wasSkipped.get(path, False) }
+        # Save all predicted src build-ids. In case of a resume we won't ask
+        # the server again for a live-build-id. Regular src build-ids are
+        # cached by the usual 'wasRun' and 'resultHash' states.
+        state['predictedBuidId'] = { (path, vid) : bid
+            for (path, vid), (bid, predicted) in self.__srcBuildIds.items()
+            if predicted }
         BobState().setBuildState(state)
 
     def loadBuildState(self):
-        self.__wasRun = dict(BobState().getBuildState())
+        state = BobState().getBuildState()
+        self.__wasRun = dict(state['wasRun'])
+        self.__srcBuildIds = { (path, vid) : (bid, True)
+            for (path, vid), bid in state['predictedBuidId'].items() }
 
     def _wasAlreadyRun(self, step, skippedOk=False):
         path = step.getWorkspacePath()
         if path in self.__wasRun:
-            digest = self.__wasRun[path]
+            digest = self.__wasRun[path][0]
             # invalidate invalid cached entries
             if digest != step.getVariantId():
                 del self.__wasRun[path]
@@ -352,10 +372,16 @@ esac
         else:
             return False
 
-    def _setAlreadyRun(self, step, skipped=False):
+    def _setAlreadyRun(self, step, isCheckoutStep, skipped=False):
         path = step.getWorkspacePath()
-        self.__wasRun[path] = step.getVariantId()
+        self.__wasRun[path] = (step.getVariantId(), isCheckoutStep)
         self.__wasSkipped[path] = skipped
+
+    def _clearWasRun(self):
+        """Clear "was-run" info for build- and package-steps."""
+        self.__wasRun = { path : (vid, isCheckoutStep)
+            for path, (vid, isCheckoutStep) in self.__wasRun.items()
+            if isCheckoutStep }
 
     def _constructDir(self, step, label):
         created = False
@@ -602,7 +628,17 @@ esac
     def getStatistic(self):
         return self.__statistic
 
-    def cook(self, steps, parentPackage, checkoutOnly, depth=0):
+    def cook(self, step, checkoutOnly):
+        done = False
+        while not done:
+            try:
+                self._cook([step], step.getPackage(), checkoutOnly)
+                done = True
+            except RestartBuildException:
+                print(colorize("** Restart build due to wrongly predicted sources.", "33"))
+                self.__currentPackage = None
+
+    def _cook(self, steps, parentPackage, checkoutOnly, depth=0):
         currentPackage = self.__currentPackage
 
         # skip everything except the current package
@@ -656,7 +692,7 @@ esac
             self._info("   CHECKOUT  skipped (reuse {}) {}".format(prettySrcPath, overridesString))
         else:
             # depth first
-            self.cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
+            self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
                       False, depth+1)
 
             # get directory into shape
@@ -749,12 +785,27 @@ esac
             checkoutHash = hashWorkspace(checkoutStep)
             BobState().setResultHash(prettySrcPath, checkoutHash)
 
-            self._setAlreadyRun(checkoutStep)
+            self._setAlreadyRun(checkoutStep, True)
 
             # Generate audit trail. Has to be done _after_ setResultHash()
             # because the result is needed to calculate the buildId.
             if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
                 self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
+
+            # upload live build-id cache in case of fresh checkout
+            if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
+                liveBId = checkoutStep.calcLiveBuildId()
+                if liveBId is not None:
+                    self.__archive.uploadLocalLiveBuildId(liveBId, checkoutHash, self.__verbose)
+
+            # Predicted build-id and real one after checkout do not need to
+            # match necessarily. Handle it as some build results might be
+            # inconsistent to the sources now.
+            buildId, predicted = self.__srcBuildIds.get((prettySrcPath, checkoutDigest),
+                (checkoutHash, False))
+            if buildId != checkoutHash:
+                assert predicted, "Non-predicted incorrect Build-Id found!"
+                self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
     def _cookBuildStep(self, buildStep, checkoutOnly, depth):
         # Include actual directories of dependencies in buildDigest.
@@ -769,8 +820,8 @@ esac
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
         else:
             # depth first
-            self.cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
-                      checkoutOnly, depth+1)
+            self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
+                       checkoutOnly, depth+1)
 
             # get directory into shape
             (prettyBuildPath, created) = self._constructDir(buildStep, "build")
@@ -812,7 +863,7 @@ esac
                 self._generateAudit(buildStep, depth, buildHash)
                 BobState().setResultHash(prettyBuildPath, buildHash)
                 BobState().setInputHashes(prettyBuildPath, buildInputHashes)
-            self._setAlreadyRun(buildStep, checkoutOnly)
+            self._setAlreadyRun(buildStep, False, checkoutOnly)
 
     def _cookPackageStep(self, packageStep, checkoutOnly, depth):
         packageDigest = packageStep.getVariantId()
@@ -907,8 +958,8 @@ esac
             # an actual build.
             if not wasDownloaded:
                 # depth first
-                self.cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
-                          checkoutOnly, depth+1)
+                self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
+                           checkoutOnly, depth+1)
 
                 packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                     for i in packageStep.getArguments() if i.isValid() ]
@@ -937,27 +988,153 @@ esac
                     BobState().setInputHashes(prettyPackagePath, packageBuildId)
                 else:
                     BobState().setInputHashes(prettyPackagePath, [packageBuildId] + packageInputHashes)
-            self._setAlreadyRun(packageStep, checkoutOnly)
+            self._setAlreadyRun(packageStep, False, checkoutOnly)
+
+    def __queryLiveBuildId(self, step):
+        """Predict live build-id of checkout step.
+
+        Query the SCMs for their live-buildid and cache the result. Normally
+        the current result is retuned unless we're in build-only mode. Then the
+        cached result is used. Only if there is no cached entry the query is
+        performed.
+        """
+
+        key = b'\x00' + step._getSandboxVariantId()
+        if self.__buildOnly:
+            liveBId = BobState().getBuildId(key)
+            if liveBId is not None: return liveBId
+
+        if self.__verbose > 0:
+            print(colorize("   QUERY-SRC {} .. ".format(step.getPackage().getName()), "32"), end="")
+        liveBId = None
+        try:
+            liveBId = step.predictLiveBuildId()
+        finally:
+            if self.__verbose > 0:
+                if liveBId is None:
+                    print(colorize("unknown", "33"))
+                else:
+                    print(colorize("ok", "32"))
+
+        if liveBId is not None:
+            BobState().setBuildId(key, liveBId)
+        return liveBId
+
+    def __invalidateLiveBuildId(self, step):
+        """Invalidate last live build-id of a step."""
+
+        key = b'\x00' + step._getSandboxVariantId()
+        liveBId = BobState().getBuildId(key)
+        if liveBId is not None:
+            BobState().delBuildId(key)
+
+    def __translateLiveBuildId(self, liveBId):
+        """Translate live build-id into real build-id.
+
+        We maintain a local cache of previous translations. In case of a cache
+        miss the archive is interrogated. A valid result is cached.
+        """
+        key = b'\x01' + liveBId
+        bid = BobState().getBuildId(key)
+        if bid is not None:
+            return bid
+
+        bid = self.__archive.downloadLocalLiveBuildId(liveBId, self.__verbose)
+        if bid is not None:
+            BobState().setBuildId(key, bid)
+
+        return bid
+
+    def __getCheckoutStepBuildId(self, step, depth):
+        ret = None
+        v = (self.__verbose >= -1) and (self.__verbose < 1)
+
+        # Try to use live build-ids for checkout steps. Do not use them if
+        # there is already a workspace or if the package matches one of the
+        # 'always-checkout' patterns. Fall back to a regular checkout if any
+        # condition is not met.
+        name = step.getPackage().getName()
+        if not os.path.exists(step.getWorkspacePath()) and \
+           not any(pat.match(name) for pat in self.__alwaysCheckout) and \
+           step.hasLiveBuildId() and self.__archive.canDownloadLocal():
+            if v:
+                print(colorize("   QUERY     {} .. ".format(step.getPackage().getName()), "32"), end="")
+            try:
+                liveBId = self.__queryLiveBuildId(step)
+                if liveBId:
+                    ret = self.__translateLiveBuildId(liveBId)
+            finally:
+                if v:
+                    if ret is None:
+                        print(colorize("unknown", "33"))
+                    else:
+                        print(colorize("ok", "32"))
+
+        # do the checkout if we still don't have a build-id
+        if ret is None:
+            # do checkout
+            self._cook([step], step.getPackage(), depth)
+            # return directory hash
+            ret = BobState().getResultHash(step.getWorkspacePath())
+            predicted = False
+        else:
+            predicted = True
+
+        return ret, predicted
 
     def _getBuildId(self, step, depth):
         """Calculate build-id and cache result.
 
         The cache uses the workspace path as index because there might be
-        multiple directories with the same variant-id.
+        multiple directories with the same variant-id. As the src build-ids can
+        be cached for a long time the variant-id is used as index too to
+        prevent possible false hits if the recipes change between runs.
+
+        Checkout steps are cached separately from build and package steps.
+        Build-ids of checkout steps may be predicted through live-build-ids. If
+        we the prediction was wrong the build and package step build-ids are
+        invalidated because they could be derived from the wrong checkout
+        build-id.
         """
         path = step.getWorkspacePath()
-        ret = self.__buildIds.get(path)
-        if ret is None:
-            if step.isCheckoutStep():
-                # do checkout
-                self.cook([step], step.getPackage(), depth)
-                # return directory hash
-                ret = BobState().getResultHash(step.getWorkspacePath())
-            else:
+        if step.isCheckoutStep():
+            key = (path, step.getVariantId())
+            ret, predicted = self.__srcBuildIds.get(key, (None, False))
+            if ret is None:
+                tmp = self.__getCheckoutStepBuildId(step, depth)
+                self.__srcBuildIds[key] = tmp
+                ret = tmp[0]
+        else:
+            ret = self.__buildDistBuildIds.get(path)
+            if ret is None:
                 ret = step.getDigest(lambda s: self._getBuildId(s, depth+1), True)
-            self.__buildIds[path] = ret
+                self.__buildDistBuildIds[path] = ret
 
         return ret
+
+    def __handleChangedBuildId(self, step, checkoutHash):
+        """Handle different build-id of src step after checkout.
+
+        Through live-build-ids it is possible that an initially queried
+        build-id does not match the real build-id after the sources have been
+        checked out. As we might have already downloaded artifacts based on
+        the now invalidated build-id we have to restart the build and check all
+        build-ids, build- and package-steps again.
+        """
+        key = (step.getWorkspacePath(), step.getVariantId())
+
+        # Invalidate wrong live-build-id
+        self.__invalidateLiveBuildId(step)
+
+        # Invalidate (possibly) derived build-ids
+        self.__srcBuildIds[key] = (checkoutHash, False)
+        self.__buildDistBuildIds = {}
+
+        # Forget all executed build- and package-steps
+        self._clearWasRun()
+
+        # start from scratch
+        raise RestartBuildException()
 
 
 def touch(packages):
@@ -1000,6 +1177,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Do clean builds (clear build directory)")
     group.add_argument('--incremental', action='store_false', dest='clean',
         help="Reuse build directory for incremental builds")
+    parser.add_argument('--always-checkout', default=[], action='append', metavar="RE",
+        help="Regex pattern of packages that should always be checked out")
     parser.add_argument('--resume', default=False, action='store_true',
         help="Resume build where it was previously interrupted")
     parser.add_argument('-q', '--quiet', default=0, action='count',
@@ -1096,6 +1275,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     builder.setUploadMode(args.upload)
     builder.setDownloadMode(args.download)
     builder.setCleanCheckout(args.clean_checkout)
+    builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
     if args.resume: builder.loadBuildState()
 
     backlog = []
@@ -1116,7 +1296,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     success = False
     try:
         for p in backlog:
-            builder.cook([p], p.getPackage(), True if args.build_mode == 'checkout-only' else False)
+            builder.cook(p, True if args.build_mode == 'checkout-only' else False)
             resultPath = p.getWorkspacePath()
             if resultPath not in results:
                 results.append(resultPath)

@@ -1,0 +1,22 @@
+Verify handling of wrong build-id predictions
+
+Live-build-ids are inherently racy. Between the moment the server is queried
+and the checkout of the sources some changes could be applied. This will
+invalidate the initial build-id prediction and Bob has to re-evaluate all build
+results as they may rely on outdated sources.
+
+Dependency tree:
+
+       root
+        |
+    /---+---\
+  left     right
+    \---+---/
+        |
+      common   <-- checks out the "sources"
+
+The change is faked in this test by applying a commit in the checkout step of
+the "common" package.  The result of the "right" package is downloaded while
+the result of the "left" package cannot be found. This forces a build of the
+"common" and "left" package. The test validates that the correct result is in
+the final workspace.

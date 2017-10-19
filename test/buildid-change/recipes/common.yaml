@@ -1,0 +1,19 @@
+checkoutSCM:
+    scm: git
+    url: ${REPO}/test.git
+
+checkoutDeterministic: True
+checkoutScript: |
+    # simulate that repo changed 
+    if [[ ${APPLY_CHANGE:-0} != 0 ]] ; then
+        echo "second" > second.txt
+        git add second.txt
+        git commit -m '2nd commit'
+        git push
+    fi
+
+buildScript: |
+    cp -a $1/* .
+
+packageScript: |
+    cp -a $1/* .
