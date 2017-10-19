@@ -122,13 +122,17 @@ __bob_jenkins_add()
 
    case "$cur" in
       -*)
-         __bob_complete_words "--credentials -D -h --help -n --nodes --no-sandbox -p --prefix -r --root --upload --download -w --windows"
+         __bob_complete_words "--clean --credentials --download --help --keep --longdescription --no-sandbox --nodes --prefix --root --shortdescription --upload --windows -D -h -n -o -p -r -w"
          ;;
       *)
-         if [[ "$prev" = "-r" ]] ; then
-            __bob_complete_path
-         fi
-         ;;
+         case "$prev" in
+            -r|--root)
+               __bob_complete_path
+               ;;
+            -o)
+               __bob_complete_words "artifacts.copy jobs.isolate scm.git.shallow scm.ignore-hooks scm.poll shared.dir" "" "="
+               ;;
+         esac
    esac
 }
 
@@ -157,7 +161,7 @@ __bob_jenkins_export()
          ;;
       *)
          if [[ -z $jenkins ]] ; then
-            __bob_complete_words "$($bob jenkins ls)"
+            __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
          elif [[ -z $dir ]] ; then
             COMPREPLY=( $(compgen -o dirnames "$cur") )
          fi
@@ -177,7 +181,7 @@ __bob_jenkins_prune()
          __bob_complete_words "-h --help"
          ;;
       *)
-         __bob_complete_words "$($bob jenkins ls)"
+         __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
          ;;
    esac
 }
@@ -189,7 +193,7 @@ __bob_jenkins_push()
          __bob_complete_words "-h --help -f --force --no-trigger"
          ;;
       *)
-         __bob_complete_words "$($bob jenkins ls)"
+         __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
          ;;
    esac
 }
@@ -201,7 +205,7 @@ __bob_jenkins_rm()
          __bob_complete_words "-h --help -f --force"
          ;;
       *)
-         __bob_complete_words "$($bob jenkins ls)"
+         __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
          ;;
    esac
 }
@@ -213,7 +217,7 @@ __bob_jenkins_set_url()
          __bob_complete_words "-h --help"
          ;;
       *)
-         __bob_complete_words "$($bob jenkins ls)"
+         __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
          ;;
    esac
 }
@@ -224,15 +228,23 @@ __bob_jenkins_set_options()
 
    case "$cur" in
       -*)
-         __bob_complete_words "-h --help -n --nodes -p --prefix --add-root --del-root -D -U --credentials --upload --no-upload --sandbox --no-sandbox --download --no-download"
+         __bob_complete_words "-h --help --reset -n --nodes -o -p --prefix --add-root --del-root -D -U --credentials --authtoken --shortdescription --longdescription --keep --no-keep --download --no-download --upload --no-upload --sandbox --no-sandbox --clean --incremental"
          ;;
       *)
-         if [[ "$prev" = "--add-root" ]] ; then
-            __bob_complete_path
-         else
-            __bob_complete_words "$($bob jenkins ls)"
-         fi
-         ;;
+         case "$prev" in
+            --add-root)
+               __bob_complete_path
+               ;;
+            -n|--nodes|-p|--prefix|-D|-U|--credentials|--authtoken)
+               COMPREPLY=( )
+               ;;
+            -o)
+               __bob_complete_words "artifacts.copy jobs.isolate scm.git.shallow scm.ignore-hooks scm.poll shared.dir" "" "="
+               ;;
+            *)
+               __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
+               ;;
+         esac
    esac
 }
 
@@ -260,7 +272,7 @@ __bob_project()
             __bob_complete_words "-D -E -e -n -c"
             ;;
          *)
-            __bob_complete_words "$($bob project --list)"
+            __bob_complete_words "$($bob project --list 2>/dev/null)"
             ;;
       esac
    else
