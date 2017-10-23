@@ -78,8 +78,8 @@ def updateDicRecursive(d, u):
     for k, v in u.items():
         if isinstance(v, collections.Mapping):
             d[k] = updateDicRecursive(d.get(k, {}), v)
-        elif isinstance(v, collections.Sequence):
-            d[k] = list(d.get(k, [])) + list(v)
+        elif isinstance(v, list):
+            d[k] = d.get(k, []) + v
         else:
             d[k] = u[k]
     return d
