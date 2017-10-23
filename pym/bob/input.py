@@ -2074,7 +2074,7 @@ class RecipeSet:
         self.__policies = {
             'relativeIncludes' : (
                 "0.13",
-                InfoOnce("relativeIncludes policy not set. Using recipes directory as base for all includes!",
+                InfoOnce("relativeIncludes policy not set. Using project root directory as base for all includes!",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#relativeincludes for more information.")
             ),
             'cleanEnvironment' : (
