@@ -106,7 +106,7 @@ def addBuildConfig(outFile, num, name, buildArgs, buildMeFile):
     outFile.write('<value type="int" key="ProjectExplorer.BuildConfiguration.BuildStepListCount">1</value>\n')
     outFile.write('<value type="bool" key="ProjectExplorer.BuildConfiguration.ClearSystemEnvironment">false</value>\n')
     outFile.write('<valuelist type="QVariantList" key="ProjectExplorer.BuildConfiguration.UserEnvironmentChanges">\n')
-    outFile.write(' <value type="QString">' + "PATH=" + os.environ['PATH'] + '  </value>\n')
+    outFile.write(' <value type="QString">' + "PATH=" + os.environ['PATH'] + '</value>\n')
     outFile.write('</valuelist>\n')
     outFile.write('<value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">Vorgabe</value>\n')
     outFile.write('<value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">' + name + '</value>\n')
