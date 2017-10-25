@@ -49,6 +49,8 @@ Options
       from sources (default for develop mode)
     forced-deps
       like 'deps' above, but fail if any download fails
+    forced-fallback
+      combination of forced and forced-deps modes: if forced fails fall back to forced-deps
 
 ``--incremental``
     Reuse build directory for incremental builds
