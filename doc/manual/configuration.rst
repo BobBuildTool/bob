@@ -2,7 +2,7 @@ Configuration
 =============
 
 When building packages Bob executes the instructions defined by the recipes.
-All recipes are located relative to the working directory in the ``recipes``
+All recipes are located relative to the project root directory in the ``recipes``
 subdirectory. Recipes are YAML files with a defined structure. The name of the
 recipe and the resulting package(s) is derived from the file name by removing
 the trailing '.yaml'. To aid further organization of the recipes they may be
@@ -1096,7 +1096,7 @@ specified without the .yaml extension::
     from where includes are resolved is different. Normally files are included
     relative to the currently processed file unless the
     :ref:`policies-relativeIncludes` policy is disabled. In this case files
-    included by ``default.yaml`` and by the command line use the recipes
+    included by ``default.yaml`` and by the command line use the project root
     directory as base directory.
 
 .. _configuration-config-environment:
@@ -1339,7 +1339,7 @@ hooks
 
 Hooks are other programs or scripts that can be executed by Bob at certain
 points, e.g. before or after a build. Unless otherwise noted they are executed
-with the recipes directory as working directory. Example::
+with the project root directory as working directory. Example::
 
     hooks:
         postBuildHook: ./contrib/notify.sh

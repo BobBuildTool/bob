@@ -134,8 +134,8 @@ processed file.
 
 Old behaviour
     Include further files from ``default.yaml`` and command line passed files
-    relative to the current recipes directory. Global configuration files use
-    the new policy in any case.
+    relative to the project root directory. Global configuration files use the
+    new policy in any case.
 
 New behaviour
     All files are included relative to the currently processed file.

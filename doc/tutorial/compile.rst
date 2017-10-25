@@ -217,7 +217,7 @@ feature ``bob-namespace-sandbox`` must be available too. To keep the setup
 simple it is recommended to install Bob entirely on the server.
 
 Suppose you have a suitable Jenkins server located at
-http://jenkins.intranet.local:8080. Go to the recipes directory and tell Bob
+http://jenkins.intranet.local:8080. Go to the project root directory and tell Bob
 about your server and what you want to build there (substitute ``<user>`` and
 ``<pass>`` with your actual credentials)::
 
