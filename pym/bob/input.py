@@ -2051,6 +2051,7 @@ class RecipeSet:
                 schema.Optional('preBuildHook') : str,
                 schema.Optional('postBuildHook') : str,
             }),
+            schema.Optional('sharedFolder') : str,
         })
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
@@ -2097,6 +2098,7 @@ class RecipeSet:
             ),
         }
         self.__buildHooks = {}
+        self.__sharedFolder = ""
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -2242,6 +2244,9 @@ class RecipeSet:
     def getBuildHook(self, name):
         return self.__buildHooks.get(name)
 
+    def getSharedFolder(self):
+        return self.__sharedFolder
+
     def loadBinary(self, path):
         return self.__cache.loadBinary(path)
 
@@ -2286,7 +2291,6 @@ class RecipeSet:
         self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
             os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
         self.__parseUserConfig("default.yaml")
-
         # finally parse recipes
         for root, dirnames, filenames in os.walk('classes'):
             for path in fnmatch.filter(filenames, "*.yaml"):
@@ -2336,6 +2340,7 @@ class RecipeSet:
         if not self._ignoreCmdConfig:
             self.__commandConfig = updateDicRecursive(self.__commandConfig, cfg.get("command", {}))
         self.__buildHooks.update(cfg.get("hooks", {}))
+        self.__sharedFolder = cfg.get("sharedFolder", self.__sharedFolder)
         for p in cfg.get("include", []):
             p = os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p
             self.__parseUserConfig(p + ".yaml", relativeIncludes)

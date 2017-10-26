@@ -32,6 +32,7 @@ import re
 import shutil
 import stat
 import subprocess
+import tempfile
 import time
 
 # Output verbosity:
@@ -897,10 +898,12 @@ esac
             # determine a build-id for all other artifacts.
             #
             # Create build-id for shared packages, but don't download them
+            canLinkShared = False
+            canDownload = False
             if packageStep.doesProvideTools() and (packageStep.getSandbox() is None):
-                if packageStep.isShared() and self.__sharedFolder:
-                    canDownload = False
+                if packageStep.isShared() and self.__sharedFolder and packageStep.isPackageRelocatable():
                     packageBuildId = self._getBuildId(packageStep, depth)
+                    canLinkShared = True
                 else:
                     packageBuildId = None
             else:
@@ -924,22 +927,24 @@ esac
                 oldInputHashes = oldInputBuildId
                 oldWasDownloadedOrShared = False
 
-            # If possible try to download the package. If we downloaded the
+            # If possible try to link shared or download the package. If we linked or downloaded the
             # package in the last run we have to make sure that the Build-Id is
             # still the same. The overall behaviour should look like this:
             #
             # new workspace -> try download
             # previously built
             #   still same build-id -> normal build
-            #   build-id changed -> prune and try download, fall back to build
+            #   build-id changed -> prune and try link/download, fall back to build
             # previously downloaded
             #   still same build-id -> done
-            #   build-id changed -> prune and try download, fall back to build
+            #   build-id changed -> prune and try link/download, fall back to build
+            # previously linked
+            #   still same build-id -> done
+            #   build-id changed -> prune and try link/download, fall back to build
             workspaceChanged = False
-            wasDownloaded = False
-            wasShared = False
-            if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ) and canDownload:
-                # prune directory if we previously downloaded/built something different
+            wasDownloadedOrShared = False
+            if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ) and (canDownload or canLinkShared):
+                # prune directory if we previously downloaded/built/linked something different
                 if ((oldInputBuildId is not None) and (oldInputBuildId != packageBuildId)) or self.__force:
                     print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
                             "build forced" if self.__force else "build-id changed"), "33"))
@@ -953,50 +958,52 @@ esac
                 # empty. If the directory holds a result and was downloaded it
                 # we're done.
                 if BobState().getResultHash(prettyPackagePath) is None:
-                    audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
-                    if self.__archive.downloadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose):
-                        self.__statistic.packagesDownloaded += 1
+                    if packageStep.isShared() and self.__sharedFolder and packageStep.isPackageRelocatable():
+                        if self._checkSharedPackage(asHexStr(packageBuildId)):
+                            sharedpackagepath = os.path.join(self.__sharedFolder, asHexStr(packageBuildId))
+                            print(colorize("     Link from shared location {}".format(sharedpackagepath), "32"))
+                            dirlist = os.listdir(sharedpackagepath)
+                            for item in dirlist:
+                                itempath = os.path.join(sharedpackagepath, item)
+                                if item in ['audit.json.gz']:
+                                    os.symlink(itempath, os.path.join(prettyPackagePath, '..', item))
+                                else:
+                                    os.symlink(itempath, os.path.join(prettyPackagePath, item), os.path.isdir(itempath))
+                            wasDownloadedOrShared = True
+
+                    if not wasDownloadedOrShared and canDownload:
+                        audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
+                        if self.__archive.downloadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose):
+                            self.__statistic.packagesDownloaded += 1
+                            BobState().setInputHashes(prettyPackagePath, packageBuildId)
+                        elif self.__forcedDownload:
+                            raise BuildError("Downloading artifact failed")
+
+                    if wasDownloadedOrShared:
                         BobState().setInputHashes(prettyPackagePath, packageBuildId)
                         packageHash = hashWorkspace(packageStep)
                         workspaceChanged = True
+<<<<<<< c628942e7ed63ce90d680b8ec3038e6aec5b8aa9
                         wasDownloaded = True
                     elif depth >= self.__downloadDepthForce:
                         raise BuildError("Downloading artifact failed")
                 elif oldWasDownloadedOrShared:
                     self._info("   PACKAGE   skipped (already downloaded in {})".format(prettyPackagePath))
                     wasDownloaded = True
+=======
+                        wasDownloadedOrShared = True
+>>>>>>> make installation of shared packages atomic, sharedFolder environment variable in user config files
 
-            if packageStep.isShared() and self.__sharedFolder and not wasDownloaded:
-                if BobState().getResultHash(prettyPackagePath) is None:
-                    sharedpackagepath = os.path.join(self.__sharedFolder, asHexStr(packageBuildId))
-                    # link into dist if shared package available
-                    if self._checkSharedPackage(packageStep, asHexStr(packageBuildId)):
-                        print(colorize("     Link from shared location {}".format(sharedpackagepath), "32"))
-                        dirlist = os.listdir(sharedpackagepath)
-                        cwd = os.getcwd()
-                        os.chdir(prettyPackagePath)
-                        for item in dirlist:
-                            if item == '.installed':
-                                continue
-                            itempath = os.path.join(sharedpackagepath, item)
-                            if item in ['env', 'audit.json.gz']:
-                                os.symlink(itempath, os.path.join(os.getcwd(), '..', item))
-                            else:
-                                os.symlink(itempath, item, os.path.isdir(itempath))
-                        os.chdir(cwd)
-                        wasShared = True
-                        workspaceChanged = True
-                        packageHash = hashWorkspace(packageStep)
                 elif oldWasDownloadedOrShared:
-                    self._info("   PACKAGE   skipped (deterministic output in {})".format(prettyPackagePath))
-                    wasShared = True
+                    self._info("   PACKAGE   skipped (already downloaded or linked in {})".format(prettyPackagePath))
+                    wasDownloadedOrShared = True
 
 
             # Run package step if we have not yet downloaded the package or if
             # downloads are not possible anymore. Even if the package was
             # previously downloaded the oldInputHashes will be None to trigger
             # an actual build.
-            if not wasDownloaded and not wasShared:
+            if not wasDownloadedOrShared:
                 # depth first
                 self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
                            checkoutOnly, depth+1)
@@ -1017,17 +1024,24 @@ esac
                     packageHash = hashWorkspace(packageStep)
                     audit = self._generateAudit(packageStep, depth, packageHash)
                     # copy to shared location if possible
-                    if self.__installShared and packageStep.isShared():
-                        sharedpackagepath = os.path.join(self.__sharedFolder, asHexStr(packageBuildId))
+                    if self.__installShared and packageStep.isShared() and packageStep.isPackageRelocatable() and self.__sharedFolder:
+                        buildidhexstr =  asHexStr(packageBuildId)
+                        sharedpackagepath = os.path.join(self.__sharedFolder, buildidhexstr)
                         print(colorize("     Install in shared location {}".format(sharedpackagepath), "32"))
-                        if os.path.exists(sharedpackagepath):
-                            shutil.rmtree(sharedpackagepath)
+                        # create temp dir
+                        tmpdir = tempfile.mkdtemp()
+                        tmppackagepath = os.path.join(tmpdir, buildidhexstr)
                         # copy all files from workspace - keep symlinks
-                        shutil.copytree(prettyPackagePath, sharedpackagepath, symlinks=True)
-                        # copy env file - important for audit
-                        shutil.copy2(os.path.join(prettyPackagePath, '..', 'env'), sharedpackagepath)
-                        shutil.copy2(os.path.join(prettyPackagePath, '..', 'audit.json.gz'), sharedpackagepath)
-                        open(os.path.join(sharedpackagepath, '.installed'), 'a').close()
+                        shutil.copytree(prettyPackagePath, tmppackagepath, symlinks=True)
+                        # copy audit
+                        shutil.copy2(os.path.join(prettyPackagePath, '..', 'audit.json.gz'), tmppackagepath)
+                        if self._checkSharedPackage(buildidhexstr):
+                            shutil.rmtree(sharedpackagepath)
+                        # move - atomic operation
+                        shutil.move(tmppackagepath, sharedpackagepath)
+                        # cleanup tmpdir
+                        shutil.rmtree(tmpdir)
+
                     workspaceChanged = True
                     self.__statistic.packagesBuilt += 1
                     if packageBuildId and self.__archive.canUploadLocal():
@@ -1038,7 +1052,7 @@ esac
             # Rehash directory if content was changed
             if workspaceChanged:
                 BobState().setResultHash(prettyPackagePath, packageHash)
-                if wasDownloaded or wasShared:
+                if wasDownloadedOrShared:
                     BobState().setInputHashes(prettyPackagePath, packageBuildId)
                 else:
                     BobState().setInputHashes(prettyPackagePath, [packageBuildId] + packageInputHashes)
@@ -1136,11 +1150,10 @@ esac
 
         return ret, predicted
 
-    def _checkSharedPackage(self, step, packageBuildId):
+    def _checkSharedPackage(self, packageBuildId):
          sharedPackagePath = os.path.join(self.__sharedFolder, packageBuildId)
          if os.path.isdir(sharedPackagePath):
-             if os.path.exists(os.path.join(sharedPackagePath, '.installed')):
-                 return True
+             return True
          return False
 
     def _getBuildId(self, step, depth):
@@ -1330,7 +1343,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     builder = LocalBuilder(recipes, cfg.get('verbosity', 0) + args.verbose - args.quiet, args.force,
                            args.no_deps, True if args.build_mode == 'build-only' else False,
                            args.preserve_env, envWhiteList, bobRoot, args.clean,
-                           args.no_logfiles, args.shared, args.installshared)
+                           args.no_logfiles, args.shared if args.shared else recipes.getSharedFolder(), args.dontinstallshared)
 
     builder.setArchiveHandler(getArchiver(recipes))
     builder.setUploadMode(args.upload)
