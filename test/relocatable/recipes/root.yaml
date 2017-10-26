@@ -1,0 +1,18 @@
+root: True
+
+depends:
+    -
+        name: some-tool
+        use: [tools]
+        forward: True
+    -
+        name: some-tool-relocatable
+        use: [tools]
+        forward: True
+    - app
+
+buildScript: |
+    false # must not be exectued
+
+packageScript: |
+    false # must not be executed

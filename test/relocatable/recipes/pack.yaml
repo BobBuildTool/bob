@@ -1,0 +1,10 @@
+checkoutTools: [some-tool-relocatable]
+
+checkoutScript: |
+    some-tool-relocatable > source.txt
+
+buildScript: |
+    false # must not be exectued
+
+packageScript: |
+    false # must not be executed

@@ -1,0 +1,14 @@
+checkoutScript: |
+    cat >some-tool <<EOF
+    echo "Greetz from some-tool"
+    EOF
+    chmod +x some-tool
+
+buildScript: |
+    cp $1/some-tool .
+
+packageScript: |
+    cp $1/some-tool .
+
+provideTools:
+    some-tool: .

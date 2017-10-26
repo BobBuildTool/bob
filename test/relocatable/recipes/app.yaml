@@ -1,0 +1,12 @@
+depends:
+    - lib
+    - pack
+
+checkoutScript: |
+    echo "app" > source.txt
+
+buildScript: |
+    false # must not be exectued
+
+packageScript: |
+    false # must not be executed

@@ -1,0 +1,18 @@
+packageRelocatable: True
+shared: True
+
+checkoutScript: |
+    cat >some-tool-relocatable <<EOF
+    echo "Greetz from some-tool-relocatable"
+    EOF
+    chmod +x some-tool-relocatable
+checkoutDeterministic: True
+
+buildScript: |
+    cp $1/some-tool-relocatable .
+
+packageScript: |
+    cp $1/some-tool-relocatable .
+
+provideTools:
+    some-tool-relocatable: .
