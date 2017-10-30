@@ -1,4 +1,4 @@
-packageRelocatable: True
+relocatable: True
 shared: True
 
 checkoutScript: |

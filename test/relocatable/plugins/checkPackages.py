@@ -4,9 +4,9 @@ from bob.errors import ParseError
 
 def _checkPackages(step):
     if step.isValid() and step.isPackageStep():
-        if not step.isPackageRelocatable() and step.getPackage().getName() == 'some-tool-relocatable':
+        if not step.isRelocatable() and step.getPackage().getName() == 'some-tool-relocatable':
             raise ParseError('Package some-tool-relocatable should be relocatable!')
-        if step.isPackageRelocatable() and step.getPackage().getName() == 'some-tool':
+        if step.isRelocatable() and step.getPackage().getName() == 'some-tool':
             raise ParseError('Package ' + step.getPackage().getName() + 'shouldn\'t be relocatable!')
     for s in step.getAllDepSteps():
         _checkPackages(s)

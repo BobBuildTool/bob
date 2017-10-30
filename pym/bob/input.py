@@ -429,9 +429,9 @@ class CoreStep(metaclass=ABCMeta):
     __slots__ = ( "package", "label", "tools", "digestEnv", "env", "args",
         "shared", "doesProvideTools", "providedEnv", "providedTools",
         "providedDeps", "providedSandbox", "variantId", "sandbox", "sbxVarId",
-        "deterministic", "packageRelocatable" )
+        "deterministic", "relocatable" )
 
-    def __init__(self, step, label, tools, sandbox, digestEnv, env, args, shared, packageRelocatable):
+    def __init__(self, step, label, tools, sandbox, digestEnv, env, args, shared, relocatable):
         package = step.getPackage()
         self.package = package._getCorePackage()
         self.label = label
@@ -441,7 +441,7 @@ class CoreStep(metaclass=ABCMeta):
         self.env = env
         self.args = [ CoreStepRef(package, a) for a in args ]
         self.shared = shared
-        self.packageRelocatable = packageRelocatable
+        self.relocatable = relocatable
         self.doesProvideTools = False
         self.providedEnv = {}
         self.providedTools = {}
@@ -476,7 +476,7 @@ class Step(metaclass=ABCMeta):
     """
 
     def construct(self, package, pathFormatter, sandbox, label, digestEnv=Env(),
-                 env=Env(), tools=Env(), args=[], shared=False, packageRelocatable=False):
+                 env=Env(), tools=Env(), args=[], shared=False, relocatable=False):
         # detach from tracking
         digestEnv = digestEnv.detach()
         env = env.detach()
@@ -498,7 +498,7 @@ class Step(metaclass=ABCMeta):
 
         # will call back to us!
         self._coreStep = self._createCoreStep(label, tools, sandbox, digestEnv,
-            env, args, shared, packageRelocatable)
+            env, args, shared, relocatable)
 
     def reconstruct(self, package, coreStep, pathFormatter, sandbox):
         self.__package = package
@@ -531,7 +531,7 @@ class Step(metaclass=ABCMeta):
         return self.getVariantId() >= other.getVariantId()
 
     @abstractmethod
-    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared, packageRelocatable):
+    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared, relocatable):
         pass
 
     def _getCoreStep(self):
@@ -813,10 +813,10 @@ class Step(metaclass=ABCMeta):
         """
         return self._coreStep.shared
 
-    def isPackageRelocatable(self):
+    def isRelocatable(self):
         """Returns True if the package is relocatable and shareable outside of the sandbox.
         This is default 'True' if there are no tools provided in the corresponding package."""
-        return self._coreStep.packageRelocatable
+        return self._coreStep.relocatable
 
     def _setProvidedEnv(self, provides):
         self._coreStep.providedEnv = provides
@@ -913,8 +913,8 @@ class CheckoutStep(Step):
 
         return self
 
-    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared, packageRelocatable):
-        return CoreCheckoutStep(self, label, tools, sandbox, digestEnv, env, args, shared, packageRelocatable)
+    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared, relocatable):
+        return CoreCheckoutStep(self, label, tools, sandbox, digestEnv, env, args, shared, relocatable)
 
     def isCheckoutStep(self):
         return True
@@ -1011,9 +1011,9 @@ class CheckoutStep(Step):
 
 class RegularStep(Step):
     def construct(self, package, pathFormatter, sandbox, label, script=(None, None),
-                 digestEnv=Env(), env=Env(), tools=Env(), args=[], shared=False, packageRelocatable=False):
+                 digestEnv=Env(), env=Env(), tools=Env(), args=[], shared=False, relocatable=False):
         super().construct(package, pathFormatter, sandbox, label, digestEnv,
-                          env, tools, args, shared, packageRelocatable)
+                          env, tools, args, shared, relocatable)
         self._coreStep.script = script[0]
         self._coreStep.digestScript = script[1]
 
@@ -1041,14 +1041,14 @@ class BuildStep(RegularStep):
                           digestEnv, env, tools, args)
         return self
 
-    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared, packageRelocatable):
-        return CoreBuildStep(self, label, tools, sandbox, digestEnv, env, args, shared, packageRelocatable)
+    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared, relocatable):
+        return CoreBuildStep(self, label, tools, sandbox, digestEnv, env, args, shared, relocatable)
 
     def isBuildStep(self):
         return True
 
 class CorePackageStep(CoreStep):
-    __slots__ = [ "script", "digestScript", "packageRelocatable" ]
+    __slots__ = [ "script", "digestScript", "relocatable" ]
 
     def _createStep(self, package):
         ret = PackageStep()
@@ -1057,13 +1057,13 @@ class CorePackageStep(CoreStep):
 
 class PackageStep(RegularStep):
     def construct(self, package, pathFormatter, sandbox=None, script=(None, None),
-                  digestEnv=Env(), env=Env(), tools=Env(), args=[], shared=False, packageRelocatable=True):
+                  digestEnv=Env(), env=Env(), tools=Env(), args=[], shared=False, relocatable=True):
         super().construct(package, pathFormatter, sandbox, "dist", script,
-                          digestEnv, env, tools, args, shared, packageRelocatable)
+                          digestEnv, env, tools, args, shared, relocatable)
         return self
 
-    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared, packageRelocatable):
-        return CorePackageStep(self, label, tools, sandbox, digestEnv, env, args, shared, packageRelocatable)
+    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared, relocatable):
+        return CorePackageStep(self, label, tools, sandbox, digestEnv, env, args, shared, relocatable)
 
     def isPackageStep(self):
         return True
@@ -1534,7 +1534,7 @@ class Recipe(object):
         self.__toolDepPackage = set(recipe.get("packageTools", []))
         self.__toolDepPackage |= self.__toolDepBuild
         self.__shared = recipe.get("shared", False)
-        self.__packageRelocatable = recipe.get("packageRelocatable", not self.__provideTools)
+        self.__relocatable = recipe.get("relocatable", not self.__provideTools)
         self.__properties = {
             n : p(n in recipe, recipe.get(n))
             for (n, p) in properties.items()
@@ -1837,7 +1837,7 @@ class Recipe(object):
             if self.__packageVarsWeak else packageDigestEnv )
         packageStep = PackageStep().construct(p, pathFormatter, sandbox, self.__package,
             packageDigestEnv, packageEnv, tools.prune(self.__toolDepPackage),
-            [buildStep], self.__shared, self.__packageRelocatable)
+            [buildStep], self.__shared, self.__relocatable)
         p._setPackageStep(packageStep)
 
         # provide environment
@@ -2386,7 +2386,7 @@ class RecipeSet:
             schema.Optional('buildVarsWeak') : [ varNameSchema ],
             schema.Optional('packageVarsWeak') : [ varNameSchema ],
             schema.Optional('checkoutDeterministic') : bool,
-            schema.Optional('packageRelocatable') : bool,
+            schema.Optional('relocatable') : bool,
             schema.Optional('checkoutSCM') : ScmValidator({
                 'git' : GitScm.SCHEMA,
                 'svn' : SvnScm.SCHEMA,

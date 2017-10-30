@@ -281,7 +281,7 @@ esac
         return fmt
 
     def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
-                 envWhiteList, bobRoot, cleanBuild, noLogFile, sharedFolder, installShared):
+                 envWhiteList, bobRoot, cleanBuild, noLogFile, sharedFolder):
         self.__recipes = recipes
         self.__wasRun= {}
         self.__wasSkipped = {}
@@ -304,7 +304,6 @@ esac
         self.__statistic = LocalBuilderStatistic()
         self.__alwaysCheckout = []
         self.__sharedFolder = sharedFolder
-        self.__installShared = installShared
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -900,10 +899,13 @@ esac
             # Create build-id for shared packages, but don't download them
             canLinkShared = False
             canDownload = False
-            if packageStep.doesProvideTools() and (packageStep.getSandbox() is None):
-                if packageStep.isShared() and self.__sharedFolder and packageStep.isPackageRelocatable():
+            if packageStep.getSandbox() is None:
+                if packageStep.isRelocatable():
                     packageBuildId = self._getBuildId(packageStep, depth)
-                    canLinkShared = True
+                    if packageStep.isShared() and self.__sharedFolder:
+                        canLinkShared = True
+                    else:
+                        canDownload = True
                 else:
                     packageBuildId = None
             else:
@@ -943,7 +945,7 @@ esac
             #   build-id changed -> prune and try link/download, fall back to build
             workspaceChanged = False
             wasDownloadedOrShared = False
-            if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ) and (canDownload or canLinkShared):
+            if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ):
                 # prune directory if we previously downloaded/built/linked something different
                 if ((oldInputBuildId is not None) and (oldInputBuildId != packageBuildId)) or self.__force:
                     print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
@@ -958,17 +960,9 @@ esac
                 # empty. If the directory holds a result and was downloaded it
                 # we're done.
                 if BobState().getResultHash(prettyPackagePath) is None:
-                    if packageStep.isShared() and self.__sharedFolder and packageStep.isPackageRelocatable():
-                        if self._checkSharedPackage(asHexStr(packageBuildId)):
-                            sharedpackagepath = os.path.join(self.__sharedFolder, asHexStr(packageBuildId))
-                            print(colorize("     Link from shared location {}".format(sharedpackagepath), "32"))
-                            dirlist = os.listdir(sharedpackagepath)
-                            for item in dirlist:
-                                itempath = os.path.join(sharedpackagepath, item)
-                                if item in ['audit.json.gz']:
-                                    os.symlink(itempath, os.path.join(prettyPackagePath, '..', item))
-                                else:
-                                    os.symlink(itempath, os.path.join(prettyPackagePath, item), os.path.isdir(itempath))
+                    # only try to link if possible
+                    if canLinkShared:
+                        if self.__linkSharedPackage(packageBuildId, packageStep, prettyPackagePath):
                             wasDownloadedOrShared = True
 
                     if not wasDownloadedOrShared and canDownload:
@@ -976,23 +970,14 @@ esac
                         if self.__archive.downloadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose):
                             self.__statistic.packagesDownloaded += 1
                             BobState().setInputHashes(prettyPackagePath, packageBuildId)
-                        elif self.__forcedDownload:
+                            wasDownloadedOrShared = True
+                        elif depth >= self.__downloadDepthForce:
                             raise BuildError("Downloading artifact failed")
 
                     if wasDownloadedOrShared:
                         BobState().setInputHashes(prettyPackagePath, packageBuildId)
                         packageHash = hashWorkspace(packageStep)
                         workspaceChanged = True
-<<<<<<< c628942e7ed63ce90d680b8ec3038e6aec5b8aa9
-                        wasDownloaded = True
-                    elif depth >= self.__downloadDepthForce:
-                        raise BuildError("Downloading artifact failed")
-                elif oldWasDownloadedOrShared:
-                    self._info("   PACKAGE   skipped (already downloaded in {})".format(prettyPackagePath))
-                    wasDownloaded = True
-=======
-                        wasDownloadedOrShared = True
->>>>>>> make installation of shared packages atomic, sharedFolder environment variable in user config files
 
                 elif oldWasDownloadedOrShared:
                     self._info("   PACKAGE   skipped (already downloaded or linked in {})".format(prettyPackagePath))
@@ -1024,28 +1009,11 @@ esac
                     packageHash = hashWorkspace(packageStep)
                     audit = self._generateAudit(packageStep, depth, packageHash)
                     # copy to shared location if possible
-                    if self.__installShared and packageStep.isShared() and packageStep.isPackageRelocatable() and self.__sharedFolder:
-                        buildidhexstr =  asHexStr(packageBuildId)
-                        sharedpackagepath = os.path.join(self.__sharedFolder, buildidhexstr)
-                        print(colorize("     Install in shared location {}".format(sharedpackagepath), "32"))
-                        # create temp dir
-                        tmpdir = tempfile.mkdtemp()
-                        tmppackagepath = os.path.join(tmpdir, buildidhexstr)
-                        # copy all files from workspace - keep symlinks
-                        shutil.copytree(prettyPackagePath, tmppackagepath, symlinks=True)
-                        # copy audit
-                        shutil.copy2(os.path.join(prettyPackagePath, '..', 'audit.json.gz'), tmppackagepath)
-                        if self._checkSharedPackage(buildidhexstr):
-                            shutil.rmtree(sharedpackagepath)
-                        # move - atomic operation
-                        shutil.move(tmppackagepath, sharedpackagepath)
-                        # cleanup tmpdir
-                        shutil.rmtree(tmpdir)
-
+                    self.__installSharedPackage(packageBuildId, packageStep, prettyPackagePath)
                     workspaceChanged = True
                     self.__statistic.packagesBuilt += 1
                     if packageBuildId and self.__archive.canUploadLocal():
-                        if not (packageStep.doesProvideTools() and (packageStep.getSandbox() is None)):
+                        if packageStep.isRelocatable():
                             self.__archive.uploadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose)
 
 
@@ -1057,6 +1025,44 @@ esac
                 else:
                     BobState().setInputHashes(prettyPackagePath, [packageBuildId] + packageInputHashes)
             self._setAlreadyRun(packageStep, False, checkoutOnly)
+
+    def __linkSharedPackage(self, packageBuildId, step, workspace):
+        if step.isShared() and step.isRelocatable() and self.__sharedFolder and self._checkSharedPackage(asHexStr(packageBuildId)):
+            sharedpackagepath = os.path.join(self.__sharedFolder, asHexStr(packageBuildId))
+            print(colorize("     Link from shared location {}".format(sharedpackagepath), "32"))
+            dirlist = os.listdir(sharedpackagepath)
+            for item in dirlist:
+                itempath = os.path.join(sharedpackagepath, item)
+                if item in ['audit.json.gz']:
+                    os.symlink(itempath, os.path.join(workspace, '..', item))
+                else:
+                    os.symlink(itempath, os.path.join(workspace, item), os.path.isdir(itempath))
+            return True
+        return False
+
+    def __installSharedPackage(self, packageBuildId, step, workspace):
+        if step.isShared() and step.isRelocatable() and self.__sharedFolder and not self._checkSharedPackage(asHexStr(packageBuildId)):
+            buildidhexstr = asHexStr(packageBuildId)
+            sharedpackagepath = os.path.join(self.__sharedFolder, buildidhexstr)
+            print(colorize("     Install in shared location {}".format(sharedpackagepath), "32"))
+            # create temp dir
+            try:
+                tmpdir = tempfile.mkdtemp(dir=self.__sharedFolder)
+            except OSError:
+                raise OSError("Temporary directory couldn't be created.")
+            tmppackagepath = os.path.join(tmpdir, buildidhexstr)
+            # copy all files from workspace - keep symlinks
+            shutil.copytree(workspace, tmppackagepath, symlinks=True)
+            # copy audit
+            shutil.copy2(os.path.join(workspace, '..', 'audit.json.gz'), tmppackagepath)
+            # second check
+            if not self._checkSharedPackage(buildidhexstr):
+                # move - atomic operation
+                shutil.move(tmppackagepath, sharedpackagepath)
+            else:
+                print(colorize("     {} already created by a different process.".format(sharedpackagepath),"33"))
+            # cleanup tmpdir
+            shutil.rmtree(tmpdir)
 
     def __queryLiveBuildId(self, step):
         """Predict live build-id of checkout step.
@@ -1343,7 +1349,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     builder = LocalBuilder(recipes, cfg.get('verbosity', 0) + args.verbose - args.quiet, args.force,
                            args.no_deps, True if args.build_mode == 'build-only' else False,
                            args.preserve_env, envWhiteList, bobRoot, args.clean,
-                           args.no_logfiles, args.shared if args.shared else recipes.getSharedFolder(), args.dontinstallshared)
+                           args.no_logfiles, recipes.getSharedFolder())
 
     builder.setArchiveHandler(getArchiver(recipes))
     builder.setUploadMode(args.upload)
