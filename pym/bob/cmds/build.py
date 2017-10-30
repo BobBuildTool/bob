@@ -1344,7 +1344,7 @@ def doDevelop(argv, bobRoot):
 def doProject(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob project", description='Generate Project Files')
     parser.add_argument('projectGenerator', nargs='?', help="Generator to use.")
-    parser.add_argument('packages', nargs='+', help="(Sub-)packages to generate")
+    #parser.add_argument('packages', nargs='+', help="(Sub-)packages to generate")
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for project generator")
 
@@ -1373,6 +1373,14 @@ def doProject(argv, bobRoot):
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
     args = parser.parse_args(argv)
+
+    if not '--' in args.args:
+        inputPackages = args.args
+        generatorArguments = []
+    else:
+        dashindex = args.args.index('--')
+        inputPackages = args.args[:dashindex]
+        generatorArguments = args.args[dashindex+1:]
 
     defines = {}
     for define in args.defines:
@@ -1417,7 +1425,7 @@ def doProject(argv, bobRoot):
             print(g)
         return 0
     else:
-        if not args.packages or not args.projectGenerator:
+        if not inputPackages or not args.projectGenerator:
             raise BobError("The following arguments are required: projectGenerator, package")
 
     try:
@@ -1440,7 +1448,7 @@ def doProject(argv, bobRoot):
 
 
     backlog = []
-    for p in args.packages:
+    for p in inputPackages:
         for package in packages.queryPackagePath(p):
             backlog.append(package)
 
@@ -1457,15 +1465,10 @@ def doProject(argv, bobRoot):
         else:
             doDevelop(devArgs, bobRoot)
 
-    if len(backlog) == 1:
-        print(">>", colorize("/".join(backlog[0].getStack()), "32;1"))
-        print(colorize("   PROJECT   {} ({})".format(backlog[0].getName(), args.projectGenerator), "32"))
-        generator(backlog[0], args.args, extra)
-    else:
-        print(">>", colorize("Generate project for", "32;1"))
-        for package in backlog:
-            print(colorize("   PROJECT   {} ({})".format(package.getName(), args.projectGenerator), "32"))
-        generator(backlog, args.args, extra)
+    print(">>", colorize("Generate project for", "32;1"))
+    for package in backlog:
+        print(colorize("   PROJECT   {} ({})".format(package.getName(), args.projectGenerator), "32"))
+    generator(backlog, generatorArguments, extra)
 
 
 def doStatus(argv, bobRoot):
