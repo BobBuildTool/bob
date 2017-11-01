@@ -428,7 +428,8 @@ class CoreStepRef:
 class CoreStep(metaclass=ABCMeta):
     __slots__ = ( "package", "label", "tools", "digestEnv", "env", "args",
         "shared", "doesProvideTools", "providedEnv", "providedTools",
-        "providedDeps", "providedSandbox", "variantId", "sandbox", "sbxVarId" )
+        "providedDeps", "providedSandbox", "variantId", "sandbox", "sbxVarId",
+        "deterministic" )
 
     def __init__(self, step, label, tools, sandbox, digestEnv, env, args, shared):
         package = step.getPackage()
@@ -571,7 +572,12 @@ class Step(metaclass=ABCMeta):
         sandbox of the step too. That is, the step is only deterministic if all
         its dependencies and this step itself is deterministic.
         """
-        return all(arg.isDeterministic() for arg in self.getAllDepSteps(True))
+        try:
+            ret = self._coreStep.deterministic
+        except AttributeError:
+            ret = self._coreStep.deterministic = all(
+                arg.isDeterministic() for arg in self.getAllDepSteps(True))
+        return ret
 
     def isValid(self):
         """Returns True if this step is valid, False otherwise."""
@@ -852,7 +858,7 @@ class Step(metaclass=ABCMeta):
         return ret
 
 class CoreCheckoutStep(CoreStep):
-    __slots__ = ( "script", "digestScript", "scmList", "deterministic" )
+    __slots__ = ( "script", "digestScript", "scmList", "coDeterministic" )
 
     def _createStep(self, package):
         ret = CheckoutStep()
@@ -869,7 +875,7 @@ class CheckoutStep(Step):
         if checkout:
             self._coreStep.script = checkout[0] if checkout[0] is not None else ""
             self._coreStep.digestScript = checkout[1] if checkout[1] is not None else ""
-            self._coreStep.deterministic = deterministic
+            self._coreStep.coDeterministic = deterministic
 
             # try to merge compatible SCMs
             overrides = package.getRecipe().getRecipeSet().scmOverrides()
@@ -897,7 +903,7 @@ class CheckoutStep(Step):
             self._coreStep.script = None
             self._coreStep.digestScript = None
             self._coreStep.scmList = []
-            self._coreStep.deterministic = True
+            self._coreStep.coDeterministic = True
 
         return self
 
@@ -938,7 +944,7 @@ class CheckoutStep(Step):
         return dirs
 
     def isDeterministic(self):
-        return ( self._coreStep.deterministic and
+        return ( self._coreStep.coDeterministic and
                  all([ s.isDeterministic() for s in self._coreStep.scmList ]) and
                  super().isDeterministic() )
 
@@ -948,7 +954,7 @@ class CheckoutStep(Step):
         This must be supported by all SCMs. Additionally the checkout script
         must be deterministic.
         """
-        return ( self._coreStep.deterministic and
+        return ( self._coreStep.coDeterministic and
                  all(s.hasLiveBuildId() for s in self._coreStep.scmList) and
                  super().isDeterministic() )
 
