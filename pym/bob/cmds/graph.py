@@ -120,6 +120,7 @@ def makeD3Graph(packages, p, filename, options, excludes, highlights, maxdepth):
 </head>
 <meta charset="utf-8">
 <svg width="0" height="0"></svg>
+Highlight packages depending on the selected: <input type="checkbox" id="highlightAll">
 <script src='""")
         f.write(os.path.basename(localLib) if localLib else "https://d3js.org/d3.v4.min.js")
         f.write(
@@ -144,7 +145,11 @@ function getDependencies(node) {
 }
 
 function isDependency(node, link) {
-  return link.source.id === node.id
+  if ( document.getElementById("highlightAll").checked == true) {
+    return (link.source.id === node.id || link.target.id === node.id )
+  } else {
+    return link.source.id === node.id
+  }
 }
 
 function getNodeColor(node, neighbors) {
@@ -170,12 +175,23 @@ function getNodeColor(node, neighbors) {
 }
 
 function getArrow(node, link) {
-  return isDependency(node, link) ? 'url(#arrowhead_green)' :
-      'url(#arrowhead_gray)'
+   if (( document.getElementById("highlightAll").checked == true) && ( link.target.id === node.id )) {
+       return 'url(#arrowhead_dark_magenta)';
+   } else if (link.source.id === node.id ) {
+       return 'url(#arrowhead_green)';
+   } else {
+       return 'url(#arrowhead_gray)';
+   }
 }
 
 function getLinkColor(node, link) {
-  return isDependency(node, link) ? 'green' : '#E5E5E5'
+   if (( document.getElementById("highlightAll").checked == true) && ( link.target.id === node.id )) {
+       return '#8B008B';
+   } else if (link.source.id === node.id ) {
+       return 'green';
+   } else {
+       return '#E5E5E5'
+   }
 }
 
 
@@ -194,7 +210,7 @@ svg.call(zoom)
 window.addEventListener('resize', function(event){
     // resize the svg if the window size changes
     var width = window.innerWidth
-    var height = window.innerHeight
+    var height = window.innerHeight > 200 ? window.innerHeight - 80 : window.innerHeight
     svg.attr('width', width).attr('height', height)
 });
 
@@ -215,13 +231,18 @@ var simulation = d3
   .force('link', linkForce)
   .force("center", d3.forceCenter(width / 2, height / 2))
 
-function selectNode(selectedNode) {
-  var neighbors = getDependencies(selectedNode)
+function updateNodes() {
+  var neighbors = getDependencies(lastSelected)
 
   // we modify the styles to highlight selected nodes
   nodeElements.attr('fill', function (node) { return getNodeColor(node, neighbors) })
-  linkElements.attr('stroke', function (link) { return getLinkColor(selectedNode, link) })
-  linkElements.attr('marker-end', function (link) { return getArrow(selectedNode, link) })
+  linkElements.attr('stroke', function (link) { return getLinkColor(lastSelected, link) })
+  linkElements.attr('marker-end', function (link) { return getArrow(lastSelected, link) })
+}
+
+function selectNode(selectedNode) {
+  lastSelected = selectedNode
+  updateNodes();
 }
 
 // Create Event Handlers for mouse
@@ -295,6 +316,17 @@ svg.append('defs').append('marker')
     .attr('markerHeight',15 )
     .attr('orient', 'auto')
     .attr('fill', 'green')
+    .append('path')
+    .attr('d', 'M 0,0 l 10,5 l -10,5 Z');
+
+svg.append('defs').append('marker')
+    .attr('id', 'arrowhead_dark_magenta')
+    .attr('refX', 100)
+    .attr('refY',  5)
+    .attr('markerWidth', 15)
+    .attr('markerHeight',15 )
+    .attr('orient', 'auto')
+    .attr('fill', '#8B008B')
     .append('path')
     .attr('d', 'M 0,0 l 10,5 l -10,5 Z');
 
@@ -401,14 +433,15 @@ var busy = document.createElement('div');
 busy.setAttribute("id","busy")
 busy.innerHTML = "<p style='font-size:20pt'> Please wait...</p>"
 document.body.appendChild(busy);
-
+d3.select("#highlightAll").on("change",updateNodes);
 simulation.nodes(nodes).on('end', ticked)
 function ticked() {
   busy = document.getElementById("busy")
   if (busy) {
     simulation.nodes(nodes).on('tick', ticked)
     busy.remove();
-    svg.attr('width', width).attr('height', height)
+    // do not make the svg as heigh as the window to see the footer
+    svg.attr('width', width).attr('height', height > 200 ? height - 80 : height)
   }
   nodeElements
     .attr('x', function (node) { return node.x })
