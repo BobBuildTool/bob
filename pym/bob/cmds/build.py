@@ -294,7 +294,7 @@ esac
         self.__currentPackage = None
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
-        self.__forcedDownload = False
+        self.__downloadDepthForce = 0xffff
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
@@ -312,16 +312,20 @@ esac
             self.__archive.wantDownload(True)
             if mode == 'forced':
                 self.__downloadDepth = 0
-                self.__forcedDownload = True
+                self.__downloadDepthForce = 0
             elif self.__archive.canDownloadLocal():
                 self.__downloadDepth = 0
         elif mode in ('deps', 'forced-deps'):
             self.__archive.wantDownload(True)
             if mode == 'forced-deps':
                 self.__downloadDepth = 1
-                self.__forcedDownload = True
+                self.__downloadDepthForce = 1
             elif self.__archive.canDownloadLocal():
                 self.__downloadDepth = 1
+        elif mode == 'forced-fallback':
+            self.__archive.wantDownload(True)
+            self.__downloadDepth = 0
+            self.__downloadDepthForce = 1
         else:
             assert mode == 'no'
             self.__archive.wantDownload(False)
@@ -946,7 +950,7 @@ esac
                         packageHash = hashWorkspace(packageStep)
                         workspaceChanged = True
                         wasDownloaded = True
-                    elif self.__forcedDownload:
+                    elif depth >= self.__downloadDepthForce:
                         raise BuildError("Downloading artifact failed")
                 elif oldWasDownloaded:
                     self._info("   PACKAGE   skipped (already downloaded in {})".format(prettyPackagePath))
@@ -1198,8 +1202,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('--upload', default=None, action='store_true',
         help="Upload to binary archive")
     parser.add_argument('--download', metavar="MODE", default=None,
-        help="Download from binary archive (yes, no, deps, forced, forced-deps)",
-        choices=['yes', 'no', 'deps', 'forced', 'forced-deps'])
+        help="Download from binary archive (yes, no, deps, forced, forced-deps, forced-fallback)",
+        choices=['yes', 'no', 'deps', 'forced', 'forced-deps', 'forced-fallback'])
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=None,
         help="Enable sandboxing")
