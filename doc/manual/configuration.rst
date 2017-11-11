@@ -1274,6 +1274,8 @@ Aliases allow a string to be substituted for the first step of a
 
 See :ref:`manpage-bobpaths-aliases` for the rules that apply to aliases.
 
+.. _configuration-config-commands:
+
 command
 ~~~~~~~
 
@@ -1333,6 +1335,8 @@ options         Dictonary of String key value pairs
 type            "d3" or "dot"
 max_depth       Integer
 =============== ===================================================================
+
+.. _configuration-config-hooks:
 
 hooks
 ~~~~~

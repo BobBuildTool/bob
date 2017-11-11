@@ -1,0 +1,217 @@
+Bob 0.13 Release Notes
+======================
+
+Changes made since Bob 0.12.0 include the following.
+
+New commands
+------------
+
+bob graph - highlevel command for dependency graphs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+``bob graph`` can be used to make package dependencies visible. For now
+`graphviz`_ (dot) graphs and `d3`_ graphs are available, where d3 is the
+default.  D3 graphs are interactive (zoom, drag, clickable, with hover effects)
+graphs using the d3.v4 JavaScript library.
+
+See :ref:`manpage-graph` and :ref:`tut-compile-viz` for more information.
+
+.. _graphviz: http://www.graphviz.org/
+.. _d3: https://d3js.org/
+
+bob archive - manage binary artifacts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+The ``bob archive`` command can be used to manage binary artifact archives. The
+command works on the included audit trails of the artifacts and can be used to
+selectively remove unneeded artifacts from the archive.
+
+See :ref:`manpage-archive` for more information.
+
+New features
+------------
+
+General
+~~~~~~~
+
+* Query language for package selection
+
+  Packages can be selected through a query language starting with Bob 0.13. The
+  language loosely resembles XPath. Almost all Bob commands (except ``bob
+  project``) have been converted to the new syntax. See :ref:`manpage-bobpaths`
+  for more information.
+
+* Introduce policies in ``config.yaml``
+    
+  Introduce a policy scheme where backwards compatibility can be maintained.
+  Unless a matching version is required by
+  :ref:`configuration-bobMinimumVersion` the policies will retain their "old"
+  state to keep backwards compatibility for existing projects.
+  
+  If a policy was neither set implicitly by
+  :ref:`configuration-bobMinimumVersion` nor by an explicit
+  :ref:`configuration-config-policies` entry in config.yaml Bob will warn the
+  user if the policy is used. Typically the user should forward
+  ``bobMinimumVersion`` and set an explicit behaviour.
+
+  See :ref:`policies` for more information.
+
+* Introduce system wide / user Bob configuration
+
+  Beside the existing project specific ``default.yaml`` this enables parsing of
+  a system wide ``bobdefaults.yaml`` (``/etc/bobdefault.yaml``) as well as a
+  user wide ``default.yaml`` (``$XDG_CONFIG_HOME/bob/default.yaml`` or if
+  ``$XDG_CONFIG_HOME`` is not set ``~/.config/bob/default.yaml``).
+  
+  Parse order is from system-wide to workspace, meaning you can override
+  settings from the system wide ``default.yaml`` in your user default's and
+  this can be overridden in the workspace ``default.yaml``.
+
+* git: add remotes property to gitSCM
+
+  The ``remote-*`` property allows adding extra remotes whereas the part after
+  ``remote-`` corresponds to the remote name and the value given corresponds to
+  the remote URL. For example ``remote-my_name`` set to ``some/url.git`` will
+  result in an additional remote named ``my_name`` and the URL set to
+  ``some/url.git``.
+
+  In conjunction with :ref:`configuration-config-scmOverrides` this can provide
+  a convenient development option to automatically add remotes to private
+  repositories.
+
+Bob build / bob dev
+~~~~~~~~~~~~~~~~~~~
+
+* Added :ref:`configuration-config-commands` configuration section in
+  ``default.yaml`` to override Bob's default build arguments.
+
+* Add option (``--no-log``) to disable logfile generation
+    
+  Many tools like ``gcc``, ``ls`` or ``git`` detect whether they are running on
+  a tty to colorize there output. If Bob writes a logfile a pipe is used and
+  these tools do no longer provide a colored output. With the new ``--no-log``
+  option it's possible to switch of logfile generation and get colored output
+  back.
+
+* Create symlinks to dependencies next to workspace
+    
+  This adds a ``deps`` directory next to the workspace that will hold symlinks
+  to all dependencies. The links are sorted by category:
+    
+  * If a sandbox is used the symlink will be called "sandbox"
+  * All tools are linked by their tool name in the "tools" directory
+  * Arguments (i.e. classic dependencies) are linked with their position
+    and name in the "args" directory.
+    
+  This allows a quick traversal of the dependency tree after the build.
+
+* Add option to build provided deps
+    
+  Use ``--with-provided`` to build provided dependencies and
+  ``--without-provided`` to suppress building of provided dependencies (see
+  :ref:`configuration-recipes-providedeps`). In combination with
+  ``--destination``, ``--with-provided`` is default, otherwise
+  ``--without-provided`` is default.  Together with the new path query syntax
+  one has now quite complete control over what will land within the destination
+  folder.
+
+* Pre- and post-scripts
+    
+  Add two optional :ref:`configuration-config-hooks` to ``default.yaml`` et.al.
+  that can be run before (preBuildHook) and after (postBuildHook) the build.
+  The preBuildHook receives the packages that should be built. It will fail the
+  build if it returns with a non-zero status. The postBuildHook will get the
+  status (success/fail) and the paths to the results as arguments.
+
+  An example script for a postBuildHook can be found in ``contrib/notify.sh``.
+
+* Add ``forced-fallback`` download mode
+
+  If the desired is artifact is available it is downloaded, otherwise all
+  dependencies have to be downloaded.
+
+Bob project
+~~~~~~~~~~~
+
+* QtCreator projects learned options to add include directories (``-S``) and
+  compile definitions (``-C``) to a project.
+
+Bob ls
+~~~~~~
+
+* Add option (``-d``) to print package instead of contents
+    
+  The query syntax allows to select many packages with a single line. The new
+  ``-d`` option allows to see the result set directly instead of the
+  dependencies of these packages.
+
+Bob jenkins
+~~~~~~~~~~~
+
+* Add ``scm.ignore-hooks`` extended option
+    
+  Sets the "Ignore post-commit hooks" option on all jobs. This instructs
+  Jenkins to ignore changes notified by SCM post-commit hooks if enabled.
+
+Changed behaviour
+-----------------
+
+Backwards compatible policies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Bob will retain the old behavior unless instructed otherwise. See
+:ref:`policies` for more information.
+
+* Make ``default.yaml`` includes relative to including yaml file. See
+  :ref:`policies-relativeIncludes` policy.
+
+* Do not take white listed variables into initial environment
+    
+  Previously the current set of environment variables during package
+  calculation started with the ones named by ``whitelist`` in ``default.yaml``.
+  This made these variables bound to the value that was set during package
+  calculation. Especially on Jenkins setups this is wrong as the machine that
+  configures the Jenkins may have a different OS environment than the Jenkins
+  executors/slaves.
+  
+  See :ref:`policies-cleanEnvironment` policy for more details.
+
+Other behavioural changes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Add "live-build-id" support
+    
+  Previously binary artifacts required that all involved sources are checked
+  out first. This adds quite a bit of space and time overhead if most of the
+  artifacts are available or if they are updated only sporadically. Now Bob can
+  query git servers and try to download an artifact before any sources are
+  checked out.
+
+  While this can speed up initial builds considerably it comes at the price
+  that the sources are sometimes not checked out at all. Bob ``buid``/``dev``
+  learned the new ``--always-checkout`` option that accepts a regex for package
+  names whose sources are always checked out. See :ref:`manpage-dev` for mroe
+  information.
+
+* Jenkins: 'discard builds' deactivated for 'roots'
+
+  Previously all Jenkins jobs artifacts were discarded if a non-root package is
+  configured as Jenkins root. With this commit the configured roots will keep
+  their artifacts.
+
+* git: prune stale remote tracking branches
+    
+  Always prune stale remote branches. Otherwise branch renames in git
+  repositories may cause jobs to fail.
+
+* cvs: prune empty directories on initial checkout
+    
+  ``cvs co`` does not have a ``-P`` option like ``cvs up`` has.  That option
+  removes empty (=deleted) directories.  We therefore use a ``cvs up`` after
+  the initial ``cvs co``, to get the same behaviour for the initial and
+  subsequent builds.
+  
+  Previously, ``cvs co`` would have created these empty directories, causing
+  Bob to invoke the build step even if nothing changed in the repository
+  between initial and subsequent checkout.
+

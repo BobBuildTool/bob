@@ -21,6 +21,7 @@ Contents
    tutorial/index
    manual/index
    manpages/index
+   releases/index
 
 Copyright
 ---------

@@ -328,6 +328,7 @@ Eclipse specificArgs:
 * ``-I``: additional include directories. They will only be added for indexer
   and will not change the buildresult.
 
+.. _tut-compile-viz:
 
 Visualizing dependencies
 ========================
