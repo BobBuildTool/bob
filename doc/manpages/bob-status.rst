@@ -1,3 +1,5 @@
+.. _manpage-bob-status:
+
 bob-status
 ==========
 

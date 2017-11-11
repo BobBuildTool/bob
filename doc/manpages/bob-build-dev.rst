@@ -30,8 +30,22 @@ Options
 ``--clean-checkout``
     Do a clean checkout if SCM state is unclean.
 
+    Bob will check all SCMs for local changes at the start of a checkout. If a
+    SCM checkout is tainted (e.g. dirty, switchted branch, unpushed commits,
+    ...) Bob will move it into the attic and do a fresh checkout.
+
+    Use this option if you are not sure about the state of the source code. You
+    can also use ':ref:`bob status <manpage-bob-status>`' to check the state
+    without changing it.
+
 ``--destination DEST``
     Destination of build result (will be overwritten!)
+
+    All build results are copied recursively into the given folder. Colliding
+    files will be overwritten but other existing files or directories are kept.
+    Unless ``--without-provided`` is given using this option will implicitly
+    enable ``--with-provided`` to build and copy all provided packages of the
+    built package(s).
 
 ``--download MODE``
     Download from binary archive (yes, no, deps, forced, forced-deps)
@@ -50,16 +64,26 @@ Options
     forced-deps
       like 'deps' above, but fail if any download fails
     forced-fallback
-      combination of forced and forced-deps modes: if forced fails fall back to forced-deps
+      combination of forced and forced-deps modes: if forced fails fall back to
+      forced-deps
 
 ``--incremental``
-    Reuse build directory for incremental builds
+    Reuse build directory for incremental builds.
+
+    This is the inverse option to ``--clean``. Build workspaces will be reused
+    as long as their recipes were not changed. If the recipe did change Bob
+    will still do a clean build automatically.
 
 ``--no-sandbox``
     Disable sandboxing
 
 ``--resume``
-    Resume build where it was previously interrupted
+    Resume build where it was previously interrupted.
+
+    All packges that were built in the previous invocation of Bob are not
+    checked again. In particular changes to the source code of these packages
+    are not considered. Use this option to quickly resume the build if it
+    failed and the error has been corrected in the failing packge.
 
 ``--sandbox``
     Enable sandboxing
@@ -74,22 +98,50 @@ Options
     Override default environment variable
 
 ``-E``
-    Preserve whole environment
+    Preserve whole environment.
+
+    Normally only variables configured in the whitelist are passed unchanged
+    from the environment. With this option all environment variables that are
+    set while invoking Bob are kept. Use with care as this might affect some
+    packages whose recipes are not robust.
 
 ``-b, --build-only``
     Don't checkout, just build and package
 
+    If the sources of a package that needs to be built are missing then Bob
+    will still check them out. This option just prevents updates of existing
+    source workspaces.
+
 ``-c CONFIGFILE``
-    Use config File
+    Use additional configuration file.
+
+    The ``.yaml`` suffix is appended automatically and the configuration file
+    is searched relative to the project root directory unless an absolute path
+    is given. Bob will parse these user configuration files after
+    *default.yaml*. They are using the same schema.
+
+    This option can be given multiple times. The files will be parsed in the
+    order as they appeared on the command line.
 
 ``-e NAME``
-    Preserve environment variable
+    Preserve environment variable.
+
+    Unless ``-E`` this allows the fine grained addition of single environment
+    variables to the whitelist.
 
 ``-f, --force``
-    Force execution of all build steps
+    Force execution of all build steps.
+
+    Usually Bob decides if a build step or any of its input has changed and
+    will skip the execution of it if this is not the case. With this option Bob
+    not use that optimization and will execute all build steps.
 
 ``-n, --no-deps``
-    Don't build dependencies
+    Don't build dependencies.
+
+    Only builds the package that was given on the command line. Bob will not
+    check if the dependencies of that package are available and if they are
+    up-to-date.
 
 ``--no-logfiles``
     Don't write a logfile. Without this bob is creating a logfile in the
@@ -116,4 +168,4 @@ Options
 See also
 --------
 
-:ref:`bobpaths(7) <manpage-bobpaths>`
+:ref:`bobpaths(7) <manpage-bobpaths>` :ref:`bob-status(1) <manpage-bob-status>`
