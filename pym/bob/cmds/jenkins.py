@@ -891,188 +891,175 @@ class JenkinsJob:
                 done.add(key)
 
 
+class AbstractJob:
+    __slots__ = ['pkgs', 'parents', 'childs']
+    def __init__(self, pkgs=[], parents=[]):
+        self.pkgs = set(pkgs)
+        self.parents = set(parents)
+        self.childs = set()
+
 class JobNameCalculator:
     """Utility class to calculate job names for packages.
 
     By default the name of the recipe is used for the job name. Depending on
     the package structure this may lead to cyclic job dependencies. If such
-    cycles are found the package name is used for affected jobs. If this still
-    leads to cycles the package name with an incrementing suffix is used.
+    cycles are found the longes common prefix of the  package names is used for
+    affected jobs. If this still leads to cycles an incrementing suffix is
+    added to the affected job names.
     """
 
     def __init__(self, prefix):
-        self.__prefix = prefix
-        self.__packages = {} # map all known packages to their job names
-        self.__names = {} # map job names to a list of held packages
-        self.__roots = [] # list of root packages
         self.__regexJobName = re.compile(r'[^a-zA-Z0-9-_]', re.DOTALL)
-        self.__splits = set() # names that have been split already
+        self.__prefix = prefix
+        self.__isolate = lambda name: False
+        self.__packageName = {}
+        self.__roots = []
 
     def addPackage(self, package):
-        step = package.getPackageStep()
-        self.__roots.append(step)
-        self.__addStep(step)
-
-    def __addStep(self, step):
-        variantId = step.getVariantId()
-        if variantId not in self.__packages:
-            if step.isPackageStep():
-                name = step.getPackage().getRecipe().getName()
-                self.__packages[variantId] = (step, name)
-                self.__names.setdefault(name, []).append(step)
-            for d in step.getAllDepSteps(True):
-                self.__addStep(d)
+        self.__roots.append(package.getPackageStep())
 
     def isolate(self, regex):
         """Isolate matching packages into separate jobs.
 
-        Any package that is matched is put into a dedicated job. Multiple
-        variants of the same package are still kept in the same job, though.
+        Any package that is matched is put into a dedicated job based on the
+        package name. Multiple variants of the same package are still kept in
+        the same job, though.
         """
-        if not regex: return
-
-        regex = re.compile(regex)
-
-        # find all matching packages that have different names than their recipes
-        matches = [ recipeName for (recipeName, steps) in self.__names.items()
-                    if any((regex.search(s.getPackage().getName()) is not None) for s in steps)
-                  ]
-
-        # single them out
-        for recipeName in matches:
-            packageSteps = self.__names[recipeName]
-
-            # isolate
-            remainingSteps = [ s for s in packageSteps
-                               if (regex.search(s.getPackage().getName()) is None)
-                             ]
-            isolatedSteps = [ s for s in packageSteps
-                              if (regex.search(s.getPackage().getName()) is not None)
-                            ]
-
-            # re-arrange graph
-            if remainingSteps:
-                self.__names[recipeName] = remainingSteps
-            else:
-                # completely smashed job
-                del self.__names[recipeName]
-                self.__splits.add(recipeName)
-            for s in isolatedSteps:
-                pkgName = s.getPackage().getName()
-                self.__splits.add(pkgName)
-                self.__packages[s.getVariantId()] = (s, pkgName)
-                self.__names.setdefault(pkgName, []).append(s)
+        if regex:
+            r = re.compile(regex)
+            self.__isolate = lambda name, r=r: r.search(name) is not None
 
     def sanitize(self):
-        """Make sure jobs are not cyclic.
+        """Calculate job names and make sure jobs are not cyclic.
 
-        We first build a dependency graph of the jobs. As long as we find
-        cycles we split all jobs that were the first node in a given cycle.
+        First span the whole graph and put every distinct package into a
+        separate job. The job name is usually the recipe name unless the
+        package is matched by the "isolate" regex in which case the package
+        name is used. This leads to many jobs sharing the same name.
+
+        As the first optimization as many jobs as possible are merged that
+        share the same name. A merge may not be possible if this would make the
+        resulting graph cyclic. This can be easily tested by comparing the sets
+        of reachable jobs of the candidates.
+
+        If multiple jobs still share the same name the algorithm goes on to
+        calculate new names. They are based on the longest common prefix of all
+        package names in such jobs. This usually gives unique names based on
+        the mulitPackages in the affected recipes.
+
+        If there are still jobs that share the same name a countig number is
+        added as suffix.
         """
-        toSplit = True
-        while toSplit:
-            rootNames = [ self.__packages[p.getVariantId()][1] for p in self.__roots ]
-            depGraph = {}
-            for r in rootNames: self.__buildDepGraph(r, depGraph)
-            toSplit = set()
-            for r in rootNames: toSplit |= self.__findCycle(r, depGraph)
-            for r in toSplit: self.__split(r)
+        vidToJob = {}   # variant-id -> AbstractJob
+        vidToName = {}  # variant-id -> package-name
+        nameToJobs = {} # (job)name -> [ AbstractJob ]
 
-    def __buildDepGraph(self, name, depGraph):
-        """Build a dependency graph.
-
-        Traverse on step level build a graph that holds only the job names.
-        """
-        if name in depGraph: return
-        depGraph[name] = subDeps = set()
-        for packageStep in self.__names[name]:
-            backlog = list(packageStep.getAllDepSteps(True))
-            while backlog:
-                d = backlog.pop(0)
-                if d.isPackageStep():
-                    vid = d.getPackage().getPackageStep().getVariantId()
-                    subName = self.__packages[vid][1]
-                    subDeps.add(subName)
-                    self.__buildDepGraph(subName, depGraph)
+        # Helper function that recursively adds the packages to the graph.
+        # Recursion stops at already known packages.
+        def addStep(step, parentJob):
+            sbxVariantId = step._getSandboxVariantId()
+            job = vidToJob.get(sbxVariantId)
+            if job is None:
+                if step.isPackageStep():
+                    pkg = step.getPackage()
+                    pkgName = pkg.getName()
+                    job = AbstractJob([sbxVariantId], parentJob.pkgs)
+                    vidToJob[sbxVariantId] = job
+                    vidToName[sbxVariantId] = pkgName
+                    name = pkgName if self.__isolate(pkgName) else pkg.getRecipe().getName()
+                    nameToJobs.setdefault(name, []).append(job)
                 else:
-                    backlog.extend(d.getAllDepSteps(True))
+                    job = parentJob
 
-    def __findCycle(self, name, depGraph):
-        """Find cycles in 'depGraph' starting at 'name'.
-
-        This does a depth first traversal of the tree while optimizing for the
-        usual case where no or only a few cycles are found. For that, the set
-        of all reachable nodes from a fully traversed node is cached. This can
-        only be done for sub-trees without cycles, though.
-        """
-        split = set()
-        processed = {}
-        stack = set()
-
-        def walk(n):
-            if n in stack:
-                # Found first node in cycle. Add to split set and prevent
-                # caching of trees above this node.
-                split.add(n)
-                return False, set()
+                # recurse on dependencies
+                for d in step.getAllDepSteps(True):
+                    job.childs |= addStep(d, job)
             else:
-                ret = set()
-                cache = True
-                stack.add(n)
-                if n in processed:
-                    subNodes = processed[n]
-                    if subNodes.isdisjoint(stack):
-                        # Found cached sub-tree. We're done...
-                        stack.remove(n)
-                        return True, subNodes
-                # Descend to sub-nodes, trying to build a cache
-                for d in sorted(depGraph[n]):
-                    ret.add(d)
-                    subCache, subNodes = walk(d)
-                    cache = cache and subCache
-                    ret |= subNodes
-                if cache: processed.setdefault(n, ret)
-                stack.remove(n)
-                return cache, ret
+                job.parents |= parentJob.pkgs
 
-        # I'm walking...
-        walk(name)
-        return split
+            return job.pkgs | job.childs
 
-    def __split(self, name):
-        """Split a job.
+        # Start recursing from the roots and fill the graph. The resulting
+        # graph maps as many jobs to the same name as there are variants of the
+        # same recipe.
+        for r in self.__roots:
+            addStep(r, AbstractJob())
 
-        As a first measure we use the package names trying to separate packages
-        into their own jobs but keep the different variants of each package
-        together.  If that doesn't help we will start adding suffixes.
-        """
-        packageSteps = self.__names[name].copy()
+        # Helper function to amend childs on parents if jobs are collapsed.
+        def addChilds(pkgs, childs):
+            for i in pkgs:
+                j = vidToJob[i]
+                if not childs.issubset(j.childs):
+                    j.childs |= childs
+                    addChilds(j.parents, childs)
 
-        # Does it make sense to split the job?
-        if len(packageSteps) <= 1:
-            return
+        # Try to collapse jobs with same name. The greedy algorithm collapses
+        # all jobs that are not fully reachable wrt. each other. IOW all jobs
+        # are merged that do not provoke a cycle.
+        for name in sorted(nameToJobs.keys()):
+            todo = nameToJobs[name]
+            jobs = []
+            while todo:
+                i = todo.pop(0)
+                remaining = todo
+                todo = []
+                for j in remaining:
+                    if (i.childs >= (j.pkgs|j.childs)) or (j.childs >= (i.pkgs|i.childs)):
+                        todo.append(j)
+                    else:
+                        i.parents |= j.parents
+                        i.pkgs |= j.pkgs
+                        i.childs |= j.childs
+                        addChilds(i.parents, i.pkgs|i.childs)
+                        for k in j.pkgs: vidToJob[k] = i
+                jobs.append(i)
+            nameToJobs[name] = jobs
 
-        # Do we have to add a counting suffix?
-        if name in self.__splits:
-            newNames = [ (p, name+"-"+str(n)) for (p, n) in zip(packageSteps, range(1, 1000)) ]
-        else:
-            newNames = [ (p, p.getPackage().getName()) for p in packageSteps ]
-            self.__splits.add(name)
+        # Helper function to find longest prefix of a number of packages. If
+        # there is more than one package then all names will be split at the
+        # dash. Then we iterate every step as tuple in parallel as long as all
+        # elements of the tuple are the same.
+        def longestPrefix(pkgs):
+            if len(pkgs) == 1:
+                [vid] = pkgs # unpack this way because 'pkgs' is a set()
+                return vidToName[vid]
+            else:
+                common = []
+                for step in zip(*(vidToName[p].split('-') for p in pkgs)):
+                    if len(set(step)) == 1:
+                        common.append(step[0])
+                    else:
+                        break
+                return "-".join(common)
 
-        # re-arrange the naming graph
-        del self.__names[name]
-        for (p, n) in newNames:
-            self.__splits.add(n)
-            self.__packages[p.getVariantId()] = (p, n)
-            self.__names.setdefault(n, []).append(p)
+        # If multiple jobs for the same name remain we try to find the longest
+        # common prefix (until a dash) from the packages of each job. This
+        # hopefully gives a unique name for each job.
+        finalNames = {}
+        for (name, jobs) in sorted(nameToJobs.items()):
+            if len(jobs) > 1:
+                for j in jobs:
+                    finalNames.setdefault(longestPrefix(j.pkgs), []).append(j)
+            else:
+                finalNames.setdefault(name, []).extend(jobs)
+
+        # Create unique job names for all jobs by adding a counting number as
+        # last resort.
+        for (name, jobs) in sorted(finalNames.items()):
+            if len(jobs) == 1:
+                for vid in jobs[0].pkgs:
+                    self.__packageName[vid] = name
+            else:
+                for i, j in zip(range(len(jobs)), jobs):
+                    for vid in j.pkgs:
+                        self.__packageName[vid] = "{}-{}".format(name, i+1)
 
     def getJobDisplayName(self, step):
         if step.isPackageStep():
-            vid = step.getVariantId()
+            vid = step._getSandboxVariantId()
         else:
-            vid = step.getPackage().getPackageStep().getVariantId()
-        (_p, name) = self.__packages[vid]
-        return self.__prefix + name
+            vid = step.getPackage().getPackageStep()._getSandboxVariantId()
+        return self.__prefix + self.__packageName[vid]
 
     def getJobInternalName(self, step):
         return self.__regexJobName.sub('_', self.getJobDisplayName(step)).lower()
