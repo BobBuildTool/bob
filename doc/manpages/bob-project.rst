@@ -13,7 +13,7 @@ Synopsis
 
 ::
 
-    bob project [-h] [--list] [-D DEFINES] [-c CONFIGFILE] [-e NAME] [-E]
+    bob project [-h] [--develop | --release] [--list] [-D DEFINES] [-c CONFIGFILE] [-e NAME] [-E]
                 [--resume] [-n] [-b]
                 [projectGenerator] [package] ...
 
@@ -32,6 +32,9 @@ Options
 ``-D DEFINES``
     Override default environment variable
 
+``--develop``
+    Use developer mode. This is default.
+
 ``-e NAME``
     Preserve environment variable
 
@@ -47,6 +50,9 @@ Options
 
 ``-b``
     Do build only (bob dev -b) before generate project Files. No checkout
+
+``--release``
+    Use release mode
 
 ``--resume``
     Resume build where it was previously interrupted
