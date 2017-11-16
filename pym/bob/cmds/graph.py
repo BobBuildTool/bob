@@ -492,7 +492,7 @@ def makeDotGraph(packages, p, filename, excludes, highlights, maxdepth):
     done = set()
     links = []
     with open(filename + ".dot", "w") as f:
-        f.write("digraph " + p + " {\n")
+        f.write("digraph \"" + p + "\" {\n")
         f.write(" {\n")
         for package in packages.queryPackagePath(p):
             for (t, a, b) in findPackages(package, excludes, highlights, done, maxdepth):
