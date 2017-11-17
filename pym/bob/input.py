@@ -1527,7 +1527,7 @@ class Recipe(object):
         self.__toolDepBuild |= self.__toolDepCheckout
         self.__toolDepPackage = set(recipe.get("packageTools", []))
         self.__toolDepPackage |= self.__toolDepBuild
-        self.__shared = recipe.get("shared", False)
+        self.__shared = recipe.get("shared")
         self.__properties = {
             n : p(n in recipe, recipe.get(n))
             for (n, p) in properties.items()
@@ -1591,6 +1591,7 @@ class Recipe(object):
             self.__filterTools = mergeFilter(self.__filterTools, cls.__filterTools)
             self.__filterSandbox = mergeFilter(self.__filterSandbox, cls.__filterSandbox)
             if self.__root is None: self.__root = cls.__root
+            if self.__shared is None: self.__shared = cls.__shared
             tmp = cls.__provideTools.copy()
             tmp.update(self.__provideTools)
             self.__provideTools = tmp
@@ -1642,6 +1643,9 @@ class Recipe(object):
         # the package step must always be valid
         if self.__package[0] is None:
             self.__package = ("", 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
+
+        # final shared value
+        self.__shared = self.__shared == True
 
         # check provided dependencies
         availDeps = [ d.recipe for d in self.__deps ]
