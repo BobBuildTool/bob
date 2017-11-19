@@ -109,18 +109,21 @@ run_script()
 # make permissions predictable
 umask 0022
 
+_clean={CLEAN}
 _keep_env=0
 _verbose=1
 _no_log=0
 _sandbox={SANDBOX_SETUP}
 _keep_sandbox=0
-_args=`getopt -o nkqvE -- "$@"`
+_args=`getopt -o cinkqvE -- "$@"`
 if [ $? != 0 ] ; then echo "Args parsing failed..." >&2 ; exit 1 ; fi
 eval set -- "$_args"
 
 _args=( )
 while true ; do
     case "$1" in
+        -c) _clean=1 ;;
+        -i) _clean=0 ;;
         -n) _no_log=1 ;;
         -k) _keep_sandbox=1 ;;
         -q) : $(( _verbose-- )) ;;
@@ -142,6 +145,10 @@ trap on_exit EXIT
 
 case "${{1:-run}}" in
     run)
+        if [[ $_clean = 1 ]] ; then
+            rm -rf "${{0%/*}}/workspace"
+            mkdir -p "${{0%/*}}/workspace"
+        fi
         if [[ $_keep_env = 1 ]] ; then
             exec "$0" "${{_args[@]}}" __run
         else
@@ -478,8 +485,9 @@ esac
                                         "{:02}-{}".format(i, a.getPackage().getName())))
                 i += 1
 
-    def _runShell(self, step, scriptName):
+    def _runShell(self, step, scriptName, cleanWorkspace):
         workspacePath = step.getWorkspacePath()
+        if cleanWorkspace: emptyDirectory(workspacePath)
         if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
         self.__linkDependencies(step)
 
@@ -571,7 +579,8 @@ esac
                         quote(a.getExecPath())
                         for a in step.getArguments() ]),
                     SANDBOX_CMD="\n    ".join(sandboxMounts + [" ".join(sandbox)]),
-                    SANDBOX_SETUP=sandboxSetup
+                    SANDBOX_SETUP=sandboxSetup,
+                    CLEAN="1" if cleanWorkspace else "0",
                 ), file=f)
         scriptFile = os.path.join(workspacePath, "..", "script")
         with open(scriptFile, "w") as f:
@@ -775,7 +784,7 @@ esac
 
                     print(colorize("   CHECKOUT  {} {}".format(prettySrcPath, overridesString)
                         , "32"))
-                    self._runShell(checkoutStep, "checkout")
+                    self._runShell(checkoutStep, "checkout", False)
                     self.__statistic.checkouts += 1
                     checkoutExecuted = True
                     # reflect new checkout state
@@ -855,14 +864,13 @@ esac
                     BobState().setResultHash(prettyBuildPath, hashWorkspace(buildStep))
             else:
                 print(colorize("   BUILD     {}".format(prettyBuildPath), "32"))
-                if self.__cleanBuild: emptyDirectory(prettyBuildPath)
                 # Squash state because running the step will change the
                 # content. If the execution fails we have nothing reliable
                 # left and we _must_ run it again.
                 BobState().delInputHashes(prettyBuildPath)
                 BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
                 # build it
-                self._runShell(buildStep, "build")
+                self._runShell(buildStep, "build", self.__cleanBuild)
                 buildHash = hashWorkspace(buildStep)
                 self._generateAudit(buildStep, depth, buildHash)
                 BobState().setResultHash(prettyBuildPath, buildHash)
@@ -973,11 +981,10 @@ esac
                     self._info("   PACKAGE   skipped (unchanged input for {})".format(prettyPackagePath))
                 else:
                     print(colorize("   PACKAGE   {}".format(prettyPackagePath), "32"))
-                    emptyDirectory(prettyPackagePath)
-                    # invalidate result because folder was cleared
+                    # invalidate result because folder will be cleared
                     BobState().delInputHashes(prettyPackagePath)
                     BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
-                    self._runShell(packageStep, "package")
+                    self._runShell(packageStep, "package", True)
                     packageHash = hashWorkspace(packageStep)
                     audit = self._generateAudit(packageStep, depth, packageHash)
                     workspaceChanged = True
