@@ -365,6 +365,16 @@ class SimpleHttpArchive(BaseArchive):
         self.__url = urllib.parse.urlparse(spec["url"])
         self.__connection = None
 
+    def __retry(self, request):
+        retry = True
+        while True:
+            try:
+                return (True, request())
+            except (http.client.HTTPException, OSError) as e:
+                self._resetConnection()
+                if not retry: return (False, e)
+                retry = False
+
     def _makeUrl(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
         return "/".join([self.__url.path, packageResultId[0:2], packageResultId[2:4],
@@ -397,53 +407,70 @@ class SimpleHttpArchive(BaseArchive):
             self.__connection = None
 
     def _openDownloadFile(self, buildId, suffix):
-        retry = True
-        while True:
-            try:
-                connection = self._getConnection()
-                url = self._makeUrl(buildId, suffix)
-                connection.request("GET", url)
-                response = connection.getresponse()
-                if response.status == 200:
-                    return SimpleHttpDownloader(self, response)
-                else:
-                    response.read()
-                    if response.status == 404:
-                        raise ArtifactNotFoundError()
-                    else:
-                        raise ArtifactDownloadError("{} {}".format(response.status,
-                                                                   response.reason))
-            except OSError as e:
-                raise ArtifactDownloadError(str(e))
-            except http.client.HTTPException as e:
-                self._resetConnection()
-                if not retry: raise ArtifactDownloadError(str(e))
-                retry = False
+        (ok, result) = self.__retry(lambda: self.__openDownloadFile(buildId, suffix))
+        if ok:
+            return result
+        else:
+            raise ArtifactDownloadError(str(result))
+
+    def __openDownloadFile(self, buildId, suffix):
+        connection = self._getConnection()
+        url = self._makeUrl(buildId, suffix)
+        connection.request("GET", url)
+        response = connection.getresponse()
+        if response.status == 200:
+            return SimpleHttpDownloader(self, response)
+        else:
+            response.read()
+            if response.status == 404:
+                raise ArtifactNotFoundError()
+            else:
+                raise ArtifactDownloadError("{} {}".format(response.status,
+                                                           response.reason))
 
     def _openUploadFile(self, buildId, suffix):
-        retry = True
-        while True:
-            try:
-                connection = self._getConnection()
-                url = self._makeUrl(buildId, suffix)
+        (ok, result) = self.__retry(lambda: self.__openUploadFile(buildId, suffix))
+        if ok:
+            return result
+        else:
+            raise BuildError("Upload failed: " + str(result))
 
-                # check if already there
-                connection.request("HEAD", url)
-                response = connection.getresponse()
-                response.read()
-                if response.status == 200:
-                    raise ArtifactExistsError()
-                elif response.status != 404:
-                    raise BuildError("Error for HEAD on {}: {} {}"
-                                        .forma(url, response.status, response.reason))
+    def __openUploadFile(self, buildId, suffix):
+        connection = self._getConnection()
+        url = self._makeUrl(buildId, suffix)
 
-                # create temporary file
-                return SimpleHttpUploader(self, url)
+        # check if already there
+        connection.request("HEAD", url)
+        response = connection.getresponse()
+        response.read()
+        if response.status == 200:
+            raise ArtifactExistsError()
+        elif response.status != 404:
+            raise BuildError("Error for HEAD on {}: {} {}"
+                                .forma(url, response.status, response.reason))
 
-            except http.client.HTTPException as e:
-                self._resetConnection()
-                if not retry: raise BuildError("Upload failed: " + str(e))
-                retry = False
+        # create temporary file
+        return SimpleHttpUploader(self, url)
+
+    def _putUploadFile(self, url, tmp):
+        (ok, result) = self.__retry(lambda: self.__putUploadFile(url, tmp))
+        if ok:
+            return result
+        else:
+            raise BuildError("Upload failed: " + str(result))
+
+    def __putUploadFile(self, url, tmp):
+        tmp.seek(0)
+        connection = self._getConnection()
+        connection.request("PUT", url, tmp, headers={ 'If-None-Match' : '*' })
+        response = connection.getresponse()
+        response.read()
+        if response.status == 412:
+            # precondition failed -> lost race with other upload
+            raise ArtifactExistsError()
+        elif response.status not in [200, 201, 204]:
+            raise BuildError("Error uploading {}: {} {}"
+                                .format(url, response.status, response.reason))
 
     def upload(self, step, buildIdFile, tgzFile):
         # only upload if requested
@@ -515,19 +542,9 @@ class SimpleHttpUploader:
         return (None, self.tmp)
     def __exit__(self, exc_type, exc_value, traceback):
         try:
-            # actual upload
+            # do actual upload on regular handle close
             if exc_type is None:
-                self.tmp.seek(0)
-                connection = self.archiver._getConnection()
-                connection.request("PUT", self.url, self.tmp)
-                response = connection.getresponse()
-                response.read()
-                if response.status not in [200, 201]:
-                    raise BuildError("Error uploading {}: {} {}"
-                                        .format(self.url, response.status, response.reason))
-        except http.client.HTTPException as e:
-            self.archiver._resetConnection()
-            raise BuildError("Upload failed: " + str(e))
+                self.archiver._putUploadFile(self.url, self.tmp)
         finally:
             self.tmp.close()
         return False
