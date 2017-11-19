@@ -514,6 +514,11 @@ def doGraph(argv, bobRoot):
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', default=False,
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
     parser.add_argument('--destination', metavar="DEST",
         help="Destination of graph files.")
     parser.add_argument('-e', '--exclude', default=[], action='append', dest="excludes",
@@ -542,7 +547,7 @@ def doGraph(argv, bobRoot):
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    packages = recipes.generatePackages(lambda s,m: "unused", defines)
+    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
 
     cfg = recipes.getCommandConfig().get('graph', {})
     defaults = {
