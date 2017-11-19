@@ -101,8 +101,10 @@ __bob_graph()
 {
    if [[ "$prev" = "-c" ]] ; then
       COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
+   elif [[ "$prev" = "-t" || "$prev" = "--type" ]] ; then
+         __bob_complete_words "d3 dot"
    else
-      __bob_complete_path "-c -D -e --exclude -f --filename -H --highlight -n --max-depth -t --type -o"
+      __bob_complete_path "-c -D -e --exclude -f --filename -H --highlight -n --max-depth -t --type -o --sandbox --no-sandbox"
    fi
 }
 
