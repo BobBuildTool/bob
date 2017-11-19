@@ -532,7 +532,9 @@ class SimpleHttpDownloader:
     def __enter__(self):
         return (None, self.response)
     def __exit__(self, exc_type, exc_value, traceback):
-        self.archiver._resetConnection()
+        # reset connection on abnormal termination
+        if exc_type is not None:
+            self.archiver._resetConnection()
         return False
 
 class SimpleHttpUploader:
