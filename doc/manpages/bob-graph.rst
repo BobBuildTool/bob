@@ -15,9 +15,9 @@ Synopsis
 
 ::
 
-    bob graph [-h] [-D DEFINES] [-c CONFIGFILE] [--destination DEST]
-              [-e EXCLUDES] [-f FILENAME] [-H HIGHLIGHTS] [-n MAX_DEPTH]
-              [-t {d3,dot}] [-o OPTIONS]
+    bob graph [-h] [-D DEFINES] [-c CONFIGFILE] [--sandbox | --no-sandbox]
+              [--destination DEST] [-e EXCLUDES] [-f FILENAME]
+              [-H HIGHLIGHTS] [-n MAX_DEPTH] [-t {d3,dot}] [-o OPTIONS]
               PACKAGE [PACKAGE ...]
 
 Description
@@ -58,6 +58,13 @@ Options
 
 ``-n MAX_DEPTH, --max-depth MAX_DEPTH``
     Max depth. Show only the first ``n`` dependencies of ``package``.
+
+``--no-sandbox``
+    Disable sandboxing. The graph will not have sandbox dependencies. This is
+    the default.
+
+``--sandbox``
+    Enable sandboxing. Include sandbox dependencies in the graph.
 
 ``-t, --type``
     Set the graph type. ``d3`` (default) or ``dot``.
