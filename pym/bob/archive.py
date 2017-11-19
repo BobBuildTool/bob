@@ -309,7 +309,8 @@ class LocalArchive(BaseArchive):
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
-            BOB_UPLOAD_FILE="{DIR}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}){GEN}{SUFFIX}"
+            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
+            BOB_UPLOAD_FILE="{DIR}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
             if [[ ! -e ${{BOB_UPLOAD_FILE}} ]] ; then
                 mkdir -p "${{BOB_UPLOAD_FILE%/*}}"{FIXUP}
                 cp {RESULT} "$BOB_UPLOAD_FILE"{FIXUP}
@@ -326,7 +327,8 @@ class LocalArchive(BaseArchive):
 
         return "\n" + textwrap.dedent("""\
             if [[ ! -e {RESULT} ]] ; then
-                BOB_DOWNLOAD_FILE="{DIR}/$(hexdump -e '2/1 "%02x/" 14/1 "%02x"' {BUILDID}){GEN}{SUFFIX}"
+                BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
+                BOB_DOWNLOAD_FILE="{DIR}/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
                 cp "$BOB_DOWNLOAD_FILE" {RESULT} || echo Download failed: $?
             fi
             """.format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
