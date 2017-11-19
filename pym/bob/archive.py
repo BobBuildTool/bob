@@ -264,8 +264,6 @@ class BaseArchive:
         except ArtifactExistsError:
             if verbose > 0: print("   UPLOAD    skipped (exists in archive)")
             return
-        except tarfile.TarError as e:
-            raise BuildError("Error archiving binary artifact: " + str(e))
         except OSError as e:
             raise BuildError("Cannot upload artifact: " + str(e))
 
