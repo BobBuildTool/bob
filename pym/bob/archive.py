@@ -19,6 +19,7 @@ from .tty import colorize
 from .utils import asHexStr, removePath
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 from pipes import quote
+import gzip
 import os.path
 import subprocess
 import tarfile
@@ -237,10 +238,11 @@ class BaseArchive:
                                     .format(content, self._remoteName(buildId, ARTIFACT_SUFFIX)), "32"))
                 else:
                     print(colorize("   UPLOAD    {}".format(content), "32"))
-                with tarfile.open(name, "w|gz", fileobj=fileobj,
-                                  format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
-                    tar.add(audit, "meta/" + os.path.basename(audit))
-                    tar.add(content, arcname="content")
+                with gzip.open(name or fileobj, 'wb', 6) as gzf:
+                    with tarfile.open(name, "w", fileobj=gzf,
+                                      format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
+                        tar.add(audit, "meta/" + os.path.basename(audit))
+                        tar.add(content, arcname="content")
         except ArtifactExistsError:
             print("   UPLOAD    skipped ({} exists in archive)".format(content))
             return
