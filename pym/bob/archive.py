@@ -595,7 +595,7 @@ class CustomArchive(BaseArchive):
                 tmpName = None
                 return CustomDownloader(ret)
             else:
-                ArtifactDownloadError("failed (exit {})".format(ret))
+                raise ArtifactDownloadError("failed (exit {})".format(ret))
         finally:
             if tmpName is not None: os.unlink(tmpName)
 
