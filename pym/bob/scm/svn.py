@@ -138,7 +138,7 @@ fi
 
         try:
             output = subprocess.check_output(cmdLine, cwd=workspacePath,
-                universal_newlines=True, stderr=subprocess.STDOUT)
+                universal_newlines=True, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             raise BuildError("svn error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
                 os.path.join(workspacePath, self.__dir), " ".join(cmdLine), e.output.rstrip()))

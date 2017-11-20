@@ -32,7 +32,7 @@ def getVersion():
         import subprocess
         try:
             version = subprocess.check_output("git describe --tags --dirty".split(" "),
-                cwd=root, universal_newlines=True, stderr=subprocess.STDOUT)
+                cwd=root, universal_newlines=True, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             pass
 

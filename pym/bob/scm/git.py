@@ -269,7 +269,7 @@ class GitScm(Scm):
         cmdLine.extend(args)
         try:
             output = subprocess.check_output(cmdLine, cwd=os.path.join(os.getcwd(), workspacePath, self.__dir),
-                universal_newlines=True, stderr=subprocess.STDOUT)
+                universal_newlines=True, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             raise BuildError("git error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
                 os.path.join(workspacePath, self.__dir), " ".join(cmdLine), e.output.rstrip()))
@@ -367,7 +367,7 @@ class GitScm(Scm):
         cmdLine = ['git', 'ls-remote', self.__url] + refs
         try:
             output = subprocess.check_output(cmdLine, universal_newlines=True,
-                stderr=subprocess.STDOUT).strip()
+                stderr=subprocess.DEVNULL).strip()
         except subprocess.CalledProcessError as e:
             return [None]
 
