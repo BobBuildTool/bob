@@ -22,9 +22,9 @@ cd "${0%/*}/.."
 USE_COVERAGE=0
 FAILED=0
 RUN_TEST_DIRS=( )
-RUN_UNITTEST_PAT='*'
-RUN_BLACKBOX_PAT='*'
 GEN_HTML=0
+unset RUN_UNITTEST_PAT
+unset RUN_BLACKBOX_PAT
 
 # check if python coverage is installed
 if type -fp coverage3 >/dev/null; then
@@ -51,11 +51,9 @@ while getopts ":hcb:u:" opt; do
 			GEN_HTML=1
 			;;
 		b)
-			RUN_UNITTEST_PAT=''
 			RUN_BLACKBOX_PAT="$OPTARG"
 			;;
 		u)
-			RUN_BLACKBOX_PAT=''
 			RUN_UNITTEST_PAT="$OPTARG"
 			;;
 		\?)
@@ -64,6 +62,15 @@ while getopts ":hcb:u:" opt; do
 			;;
 	esac
 done
+
+# execute everything if nothing was specified
+if [[ -z ${RUN_UNITTEST_PAT+isset} && -z ${RUN_BLACKBOX_PAT+isset} ]] ; then
+	RUN_BLACKBOX_PAT='*'
+	RUN_UNITTEST_PAT='*'
+else
+	: "${RUN_BLACKBOX_PAT=}"
+	: "${RUN_UNITTEST_PAT=}"
+fi
 
 # go to tests directory
 pushd test > /dev/null
