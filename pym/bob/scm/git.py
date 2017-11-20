@@ -375,10 +375,18 @@ class GitScm(Scm):
         if not output:
             return [None]
 
-        # see if we got one of our intended refs
-        output = { ref.strip() : bytes.fromhex(commit.strip())
-            for commit, ref
-            in (line.split('\t') for line in output.split('\n')) }
+        # See if we got one of our intended refs. Git is generating lines with
+        # the following format:
+        #
+        #   <sha1>\t<refname>
+        #
+        # Put the output into a dict with the refname as key. Be extra careful
+        # and strip out lines not matching this pattern.
+        output = {
+            commitAndRef[1].strip() : bytes.fromhex(commitAndRef[0].strip())
+            for commitAndRef
+            in (line.split('\t') for line in output.split('\n'))
+            if len(commitAndRef) == 2 }
         for ref in refs:
             if ref in output: return [output[ref]]
 
