@@ -380,10 +380,14 @@ class LocalArchive(BaseArchive):
 
 class LocalArchiveDownloader:
     def __init__(self, name):
-        self.name = name
+        try:
+            self.fd = open(name, "rb")
+        except OSError as e:
+            raise ArtifactDownloadError(str(e))
     def __enter__(self):
-        return (self.name, None)
+        return (None, self.fd)
     def __exit__(self, exc_type, exc_value, traceback):
+        self.fd.close()
         return False
 
 class LocalArchiveUploader:
