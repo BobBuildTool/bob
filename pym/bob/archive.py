@@ -117,6 +117,10 @@ class ArtifactDownloadError(Exception):
     def __init__(self, reason):
         self.reason = reason
 
+class ArtifactUploadError(Exception):
+    def __init__(self, reason):
+        self.reason = reason
+
 class BaseArchive:
     def __init__(self, spec):
         flags = spec.get("flags", ["upload", "download"])
@@ -196,8 +200,8 @@ class BaseArchive:
                     removePath(content)
                     os.makedirs(content)
                     self.__extractPackage(tar, audit, content)
-                    print(colorize("ok", "32"))
-                    return True
+            print(colorize("ok", "32"))
+            return True
         except ArtifactNotFoundError:
             print(colorize("not found", "33"))
             return False
@@ -211,6 +215,7 @@ class BaseArchive:
             print(colorize("error", "31"))
             raise BuildError("Cannot download artifact: " + str(e))
         except tarfile.TarError as e:
+            print(colorize("error", "31"))
             raise BuildError("Error extracting binary artifact: " + str(e))
 
     def downloadLocalLiveBuildId(self, liveBuildId, verbose):
@@ -241,48 +246,67 @@ class BaseArchive:
         return ret
 
     def _openUploadFile(self, buildId, suffix):
-        raise ArtifactExistsError()
+        raise ArtifactUploadError("not implemented")
 
     def uploadPackage(self, buildId, audit, content, verbose):
         if not self.canUploadLocal():
             return
 
+        shown = False
         try:
             with self._openUploadFile(buildId, ARTIFACT_SUFFIX) as (name, fileobj):
                 pax = { 'bob-archive-vsn' : "1" }
                 if verbose > 0:
-                    print(colorize("   UPLOAD    {} to {}"
-                                    .format(content, self._remoteName(buildId, ARTIFACT_SUFFIX)), "32"))
+                    print(colorize("   UPLOAD    {} to {} .. "
+                                    .format(content, self._remoteName(buildId, ARTIFACT_SUFFIX)), "32"),
+                          end="")
                 else:
-                    print(colorize("   UPLOAD    {}".format(content), "32"))
+                    print(colorize("   UPLOAD    {} .. ".format(content), "32"), end="")
+                shown = True
                 with gzip.open(name or fileobj, 'wb', 6) as gzf:
                     with tarfile.open(name, "w", fileobj=gzf,
                                       format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
                         tar.add(audit, "meta/" + os.path.basename(audit))
                         tar.add(content, arcname="content")
+            print(colorize("ok", "32"))
         except ArtifactExistsError:
-            print("   UPLOAD    skipped ({} exists in archive)".format(content))
-            return
-        except tarfile.TarError as e:
-            raise BuildError("Error archiving binary artifact: " + str(e))
-        except OSError as e:
-            raise BuildError("Cannot upload artifact: " + str(e))
+            if shown:
+                print("skipped ({} exists in archive)".format(content))
+            else:
+                print("   UPLOAD    skipped ({} exists in archive)".format(content))
+        except (ArtifactUploadError, tarfile.TarError, OSError) as e:
+            if shown:
+                if verbose > 0:
+                    print(colorize("error ("+str(e)+")", "31"))
+                else:
+                    print(colorize("error", "31"))
+            if not self.__ignoreErrors:
+                raise BuildError("Cannot upload artifact: " + str(e))
 
     def uploadLocalLiveBuildId(self, liveBuildId, buildId, verbose):
         if not self.canUploadLocal():
             return
 
+        shown = False
         try:
             with self._openUploadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
                 if verbose > 0:
-                    print(colorize("   CACHE     {}"
-                                    .format(self._remoteName(liveBuildId, BUILDID_SUFFIX)), "32"))
+                    print(colorize("   CACHE     {} .. "
+                                    .format(self._remoteName(liveBuildId, BUILDID_SUFFIX)), "32"),
+                          end="")
+                    shown = True
                 writeFileOrHandle(name, fileobj, buildId)
+            if verbose > 0: print(colorize("ok", "32"))
         except ArtifactExistsError:
-            if verbose > 0: print("   UPLOAD    skipped (exists in archive)")
-            return
-        except OSError as e:
-            raise BuildError("Cannot upload artifact: " + str(e))
+            if verbose > 0:
+                if shown:
+                    print("skipped (exists in archive)")
+                else:
+                    print("   CACHE     skipped (exists in archive)")
+        except (ArtifactUploadError, OSError) as e:
+            if shown: print(colorize("error ("+str(e)+")", "31"))
+            if not self.__ignoreErrors:
+                raise BuildError("Cannot upload artifact: " + str(e))
 
 
 class LocalArchive(BaseArchive):
@@ -452,7 +476,7 @@ class SimpleHttpArchive(BaseArchive):
         if ok:
             return result
         else:
-            raise BuildError("Upload failed: " + str(result))
+            raise ArtifactUploadError(str(result))
 
     def __openUploadFile(self, buildId, suffix):
         connection = self._getConnection()
@@ -465,8 +489,7 @@ class SimpleHttpArchive(BaseArchive):
         if response.status == 200:
             raise ArtifactExistsError()
         elif response.status != 404:
-            raise BuildError("Error for HEAD on {}: {} {}"
-                                .forma(url, response.status, response.reason))
+            raise ArtifactUploadError("HEAD {} {}".format(response.status, response.reason))
 
         # create temporary file
         return SimpleHttpUploader(self, url)
@@ -476,7 +499,7 @@ class SimpleHttpArchive(BaseArchive):
         if ok:
             return result
         else:
-            raise BuildError("Upload failed: " + str(result))
+            raise ArtifactUploadError(str(result))
 
     def __putUploadFile(self, url, tmp):
         tmp.seek(0)
@@ -488,8 +511,7 @@ class SimpleHttpArchive(BaseArchive):
             # precondition failed -> lost race with other upload
             raise ArtifactExistsError()
         elif response.status not in [200, 201, 204]:
-            raise BuildError("Error uploading {}: {} {}"
-                                .format(url, response.status, response.reason))
+            raise ArtifactUploadError("PUT {} {}".format(response.status, response.reason))
 
     def upload(self, step, buildIdFile, tgzFile):
         # only upload if requested
@@ -624,7 +646,7 @@ class CustomArchive(BaseArchive):
         (tmpFd, tmpName) = mkstemp()
         os.close(tmpFd)
         return CustomUploader(tmpName, self._makeUrl(buildId, suffix), self.__whiteList,
-            self.__uploadCmd, self._ignoreErrors())
+            self.__uploadCmd)
 
     def __uploadJenkins(self, step, buildIdFile, tgzFile, suffix):
         # only upload if requested
@@ -634,7 +656,7 @@ class CustomArchive(BaseArchive):
         cmd = self.__uploadCmd
         if self._ignoreErrors():
             # wrap in subshell
-            cmd = "( " + cmd + " ) || Upload failed: $?"
+            cmd = "( " + cmd + " ) || echo Upload failed: $?"
 
         return "\n" + textwrap.dedent("""\
             # upload artifact
@@ -676,12 +698,11 @@ class CustomDownloader:
         return False
 
 class CustomUploader:
-    def __init__(self, name, remoteName, whiteList, uploadCmd, ignoreErrors):
+    def __init__(self, name, remoteName, whiteList, uploadCmd):
         self.name = name
         self.remoteName = remoteName
         self.whiteList = whiteList
         self.uploadCmd = uploadCmd
-        self.ignoreErrors = ignoreErrors
 
     def __enter__(self):
         return (self.name, None)
@@ -695,9 +716,8 @@ class CustomUploader:
                 ret = subprocess.call(["/bin/bash", "-ec", self.uploadCmd],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                     cwd="/tmp", env=env)
-                if ret != 0 and not self.ignoreErrors:
-                    raise BuildError("Upload failed: command return with status {}"
-                                        .format(ret))
+                if ret != 0:
+                    raise ArtifactUploadError("command return with status {}".format(ret))
         finally:
             os.unlink(self.name)
         return False
