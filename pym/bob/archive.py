@@ -33,15 +33,15 @@ concurrent uploads the artifact must appear atomically for unrelated readers.
 from .errors import BuildError
 from .tty import colorize
 from .utils import asHexStr, removePath
-from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 from pipes import quote
+from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 import gzip
+import http.client
 import os.path
 import subprocess
 import tarfile
 import textwrap
 import urllib.parse
-import http.client
 
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
