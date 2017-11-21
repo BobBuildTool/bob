@@ -563,9 +563,12 @@ class SimpleHttpArchive(BaseArchive):
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
             BOB_UPLOAD_URL="{URL}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
             if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
-                curl -sSgf -T {RESULT} "$BOB_UPLOAD_URL"{FIXUP}
+                BOB_UPLOAD_RSP=$(curl -sSgf -w '%{{http_code}}' -H 'If-None-Match: *' -T {RESULT} "$BOB_UPLOAD_URL" || true)
+                if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
+                    echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
+                fi
             fi""".format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-                         FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
+                         FAIL="" if self._ignoreErrors() else "; exit 1",
                          GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
 
     def download(self, step, buildIdFile, tgzFile):
