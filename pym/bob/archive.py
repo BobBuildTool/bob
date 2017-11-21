@@ -338,12 +338,22 @@ class LocalArchive(BaseArchive):
             raise ArtifactExistsError()
 
         # open temporary file in destination directory
-        if not os.path.isdir(packageResultPath): os.makedirs(packageResultPath)
+        if not os.path.isdir(packageResultPath):
+            os.makedirs(packageResultPath, exist_ok=True)
         return LocalArchiveUploader(
             NamedTemporaryFile(dir=packageResultPath, delete=False),
             packageResultFile)
 
     def __uploadJenkins(self, step, buildIdFile, resultFile, suffix):
+        """Generate upload shell script.
+
+        We cannot simply copy the artifact to the final location as this is not
+        atomic. Instead we create a temporary file at the repository root, copy
+        the artifact there and hard-link the temporary file at the final
+        location. If the link fails it is usually caused by a concurrent
+        upload. Test that the artifact is readable in this case to distinguish
+        it from other fatal errors.
+        """
         if not self.canUploadJenkins():
             return ""
 
@@ -353,8 +363,16 @@ class LocalArchive(BaseArchive):
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
             BOB_UPLOAD_FILE="{DIR}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
             if [[ ! -e ${{BOB_UPLOAD_FILE}} ]] ; then
-                mkdir -p "${{BOB_UPLOAD_FILE%/*}}"{FIXUP}
-                cp {RESULT} "$BOB_UPLOAD_FILE"{FIXUP}
+                (
+                    set -eE
+                    T="$(mktemp -p {DIR})"
+                    trap 'rm -f $T' EXIT
+                    cp {RESULT} "$T"
+                    mkdir -p "${{BOB_UPLOAD_FILE%/*}}"
+                    if ! ln -T "$T" "$BOB_UPLOAD_FILE" ; then
+                        [[ -r "$BOB_UPLOAD_FILE" ]] || exit 2
+                    fi
+                ){FIXUP}
             fi""".format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(resultFile),
                          FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
                          GEN=ARCHIVE_GENERATION, SUFFIX=suffix))
@@ -400,7 +418,23 @@ class LocalArchiveUploader:
         self.tmp.close()
         # atomically move file to destination at end of upload
         if exc_type is None:
-            os.replace(self.tmp.name, self.destination)
+            if os.name == 'posix':
+                # Cannot use os.rename() because it will unconditionally
+                # replace an existing file. Instead we link the file at the
+                # destination and unlink the temporary file.
+                try:
+                    os.link(self.tmp.name, self.destination)
+                except FileExistsError:
+                    pass # lost race
+                finally:
+                    os.unlink(self.tmp.name)
+            elif os.name == 'nt':
+                try:
+                    os.rename(self.tmp.name, self.destination)
+                except OSError:
+                    os.remove(self.tmp.name) # lost race
+            else:
+                raise ArtifactUploadError("Unsupported platform: " + os.name)
         else:
             os.unlink(self.tmp.name)
         return False
