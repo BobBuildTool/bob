@@ -17,24 +17,33 @@
 from binascii import hexlify
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock
 import http.server
 import os, os.path
 import socketserver
+import stat
 import subprocess
 import tarfile
 import threading
 
-from bob.archive import DummyArchive, LocalArchive, CustomArchive, SimpleHttpArchive
+from bob.archive import DummyArchive, SimpleHttpArchive, getArchiver
 from bob.errors import BuildError
 
 DOWNLOAD_ARITFACT = b'\x00'*20
 NOT_EXISTS_ARTIFACT = b'\x01'*20
 WRONG_VERSION_ARTIFACT = b'\x02'*20
+ERROR_UPLOAD_ARTIFACT = b'\x03'*20
+ERROR_DOWNLOAD_ARTIFACT = b'\x04'*20
 BROKEN_ARTIFACT = b'\xba\xdc\x0f\xfe'*5
 
 UPLOAD1_ARTIFACT = b'\x10'*20
 UPLOAD2_ARTIFACT = b'\x11'*20
+
+def callJenkinsScript(script, workspace):
+    env = os.environ.copy()
+    env["WORKSPACE"] = workspace
+    subprocess.check_call(['/bin/bash', '-eEx', '-c', script],
+        universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace, env=env)
 
 class BaseTester:
 
@@ -64,6 +73,7 @@ class BaseTester:
         os.makedirs(os.path.dirname(name), exist_ok=True)
         with open(name, "wb") as f:
             f.write(b'\x00'*20)
+        return name
 
     def __testArtifact(self, bid):
         bid = hexlify(bid).decode("ascii")
@@ -98,12 +108,41 @@ class BaseTester:
         self.assertTrue(foundAudit)
         self.assertTrue(foundData)
 
+    def __testBuildId(self, bid, content):
+        bid = hexlify(bid).decode("ascii")
+        name = os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.buildid")
+        os.makedirs(os.path.dirname(name), exist_ok=True)
+        with open(name, "rb") as f:
+            self.assertEqual(f.read(), content)
+
     def __testWorkspace(self, audit, workspace):
         with open(audit, "rb") as f:
             self.assertEqual(f.read(), b'AUDIT')
         with open(os.path.join(workspace, "data"), "rb") as f:
             self.assertEqual(f.read(), b'DATA')
 
+    def __getArchiveInstance(self, spec):
+        # let concrete class amend properties
+        self._setArchiveSpec(spec)
+
+        # We create a multi-archive with a dummy backend and the real one. This
+        # way we implicitly test the MultiArchive too.
+        recipes = MagicMock()
+        recipes.archiveSpec = MagicMock()
+        recipes.archiveSpec.return_value = [ { 'backend' : 'none' }, spec ]
+        recipes.envWhiteList = MagicMock()
+        recipes.envWhiteList.return_value = []
+        return getArchiver(recipes)
+
+    def __getSingleArchiveInstance(self, spec):
+        # let concrete class amend properties
+        self._setArchiveSpec(spec)
+        recipes = MagicMock()
+        recipes.archiveSpec = MagicMock()
+        recipes.archiveSpec.return_value = spec
+        recipes.envWhiteList = MagicMock()
+        recipes.envWhiteList.return_value = []
+        return getArchiver(recipes)
 
     def setUp(self):
         # create repo
@@ -114,6 +153,20 @@ class BaseTester:
         self.__createArtifact(WRONG_VERSION_ARTIFACT, "0")
         self.__createBuildId(DOWNLOAD_ARITFACT)
 
+        # create ERROR_DOWNLOAD_ARTIFACT that is there but cannot be opened
+        self.ro_file = self.__createArtifact(ERROR_DOWNLOAD_ARTIFACT)
+        self.ro_file_mode = os.stat(self.ro_file).st_mode
+        os.chmod(self.ro_file, 0)
+        self.ro_bid = self.__createBuildId(ERROR_DOWNLOAD_ARTIFACT)
+        os.chmod(self.ro_bid, 0)
+
+        # make sure ERROR_UPLOAD_ARTIFACT cannot be created
+        bid = hexlify(ERROR_UPLOAD_ARTIFACT).decode("ascii")
+        self.ro_dir = os.path.join(self.repo.name, bid[0:2], bid[2:4])
+        os.makedirs(self.ro_dir, exist_ok=True)
+        self.ro_dir_mode = os.stat(self.ro_dir).st_mode
+        os.chmod(self.ro_dir, 0)
+
         # create broken artifact
         bid = hexlify(BROKEN_ARTIFACT).decode("ascii")
         name = os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.tgz")
@@ -122,33 +175,36 @@ class BaseTester:
             f.write(b'\x00')
 
     def tearDown(self):
+        os.chmod(self.ro_dir, self.ro_dir_mode)
+        os.chmod(self.ro_bid, self.ro_file_mode)
+        os.chmod(self.ro_file, self.ro_file_mode)
         self.repo.cleanup()
 
-    # standard tests for options -> requires _getArchiveInstance
+    # standard tests for options
     def testOptions(self):
         """Test that wantDownload/wantUpload options work"""
 
-        a = self._getArchiveInstance({})
+        a = self.__getArchiveInstance({})
         self.assertFalse(a.canDownloadLocal())
         self.assertFalse(a.canUploadLocal())
         self.assertFalse(a.canDownloadJenkins())
         self.assertFalse(a.canUploadJenkins())
 
-        a = self._getArchiveInstance({})
+        a = self.__getArchiveInstance({})
         a.wantDownload(True)
         self.assertTrue(a.canDownloadLocal())
         self.assertFalse(a.canUploadLocal())
         self.assertTrue(a.canDownloadJenkins())
         self.assertFalse(a.canUploadJenkins())
 
-        a = self._getArchiveInstance({})
+        a = self.__getArchiveInstance({})
         a.wantUpload(True)
         self.assertFalse(a.canDownloadLocal())
         self.assertTrue(a.canUploadLocal())
         self.assertFalse(a.canDownloadJenkins())
         self.assertTrue(a.canUploadJenkins())
 
-        a = self._getArchiveInstance({})
+        a = self.__getArchiveInstance({})
         a.wantDownload(True)
         a.wantUpload(True)
         self.assertTrue(a.canDownloadLocal())
@@ -159,7 +215,7 @@ class BaseTester:
     def testFlags(self):
         """Test that standard flags work"""
 
-        a = self._getArchiveInstance({"flags":[]})
+        a = self.__getArchiveInstance({"flags":[]})
         a.wantDownload(True)
         a.wantUpload(True)
         self.assertFalse(a.canDownloadLocal())
@@ -167,7 +223,7 @@ class BaseTester:
         self.assertFalse(a.canDownloadJenkins())
         self.assertFalse(a.canUploadJenkins())
 
-        a = self._getArchiveInstance({"flags":["download"]})
+        a = self.__getArchiveInstance({"flags":["download"]})
         a.wantDownload(True)
         a.wantUpload(True)
         self.assertTrue(a.canDownloadLocal())
@@ -175,7 +231,7 @@ class BaseTester:
         self.assertFalse(a.canUploadLocal())
         self.assertFalse(a.canUploadJenkins())
 
-        a = self._getArchiveInstance({"flags":["upload"]})
+        a = self.__getArchiveInstance({"flags":["upload"]})
         a.wantDownload(True)
         a.wantUpload(True)
         self.assertFalse(a.canDownloadLocal())
@@ -183,7 +239,7 @@ class BaseTester:
         self.assertTrue(a.canUploadLocal())
         self.assertTrue(a.canUploadJenkins())
 
-        a = self._getArchiveInstance({"flags":["upload"]})
+        a = self.__getArchiveInstance({"flags":["upload"]})
         a.wantDownload(True)
         a.wantUpload(True)
         self.assertFalse(a.canDownloadLocal())
@@ -191,7 +247,7 @@ class BaseTester:
         self.assertTrue(a.canUploadLocal())
         self.assertTrue(a.canUploadJenkins())
 
-        a = self._getArchiveInstance({"flags":["download", "upload", "nolocal"]})
+        a = self.__getArchiveInstance({"flags":["download", "upload", "nolocal"]})
         a.wantDownload(True)
         a.wantUpload(True)
         self.assertFalse(a.canDownloadLocal())
@@ -199,7 +255,7 @@ class BaseTester:
         self.assertTrue(a.canDownloadJenkins())
         self.assertTrue(a.canUploadJenkins())
 
-        a = self._getArchiveInstance({"flags":["download", "upload", "nojenkins"]})
+        a = self.__getArchiveInstance({"flags":["download", "upload", "nojenkins"]})
         a.wantDownload(True)
         a.wantUpload(True)
         self.assertTrue(a.canDownloadLocal())
@@ -209,7 +265,7 @@ class BaseTester:
 
     def testDisabledLocal(self):
         """Disabled local must not do anything"""
-        a = self._getArchiveInstance({})
+        a = self.__getArchiveInstance({})
         self.assertFalse(a.downloadPackage(b'\xcc'*20, "unused", "unused", 0))
         self.assertFalse(a.uploadPackage(b'\xcc'*20, "unused", "unused", 0))
         self.assertEqual(a.downloadLocalLiveBuildId(b'\xcc'*20, 0), None)
@@ -217,7 +273,7 @@ class BaseTester:
 
     def testDisabledJenkins(self):
         """Disabled Jenkins must produce empty strings"""
-        a = self._getArchiveInstance({})
+        a = self.__getArchiveInstance({})
         ret = a.download(None, "unused", "unused")
         self.assertEqual(ret, "")
         ret = a.upload(None, "unused", "unused")
@@ -226,7 +282,7 @@ class BaseTester:
     def testdoDownloadPackage(self):
         """Local download tests"""
 
-        archive = self._getArchiveInstance({})
+        archive = self.__getArchiveInstance({})
         archive.wantDownload(True)
         self.assertTrue(archive.canDownloadLocal())
 
@@ -251,16 +307,20 @@ class BaseTester:
             audit = os.path.join(tmp, "audit.json.gz")
             content = os.path.join(tmp, "workspace")
             self.assertFalse(archive.downloadPackage(NOT_EXISTS_ARTIFACT, audit, content, 1))
+            self.assertFalse(archive.downloadPackage(ERROR_DOWNLOAD_ARTIFACT, audit, content, 1))
+            self.assertFalse(archive.downloadPackage(ERROR_UPLOAD_ARTIFACT, audit, content, 1))
             self.assertEqual(archive.downloadLocalLiveBuildId(NOT_EXISTS_ARTIFACT, 1), None)
+            self.assertEqual(archive.downloadLocalLiveBuildId(ERROR_DOWNLOAD_ARTIFACT, 1), None)
+            self.assertEqual(archive.downloadLocalLiveBuildId(ERROR_UPLOAD_ARTIFACT, 1), None)
             with self.assertRaises(BuildError):
                 archive.downloadPackage(BROKEN_ARTIFACT, audit, content, 1)
             with self.assertRaises(BuildError):
                 archive.downloadPackage(WRONG_VERSION_ARTIFACT, audit, content, 0)
 
-    def testUploadPackage(self):
+    def testUploadPackageNormal(self):
         """Local upload tests"""
 
-        archive = self._getArchiveInstance({})
+        archive = self.__getArchiveInstance({})
         with TemporaryDirectory() as tmp:
             # create simple workspace
             audit = os.path.join(tmp, "audit.json.gz")
@@ -286,15 +346,53 @@ class BaseTester:
             archive.uploadPackage(bid, audit, content, 1)
             self.__testArtifact(bid)
 
+            # Provoke upload failure
+            with self.assertRaises(BuildError):
+                archive.uploadPackage(ERROR_UPLOAD_ARTIFACT, audit, content, 0)
+            with self.assertRaises(BuildError):
+                archive.uploadPackage(ERROR_UPLOAD_ARTIFACT, audit, content, 1)
+
+        # regular live-build-id uploads
         archive.uploadLocalLiveBuildId(DOWNLOAD_ARITFACT, b'\x00', 0) # exists already
         archive.uploadLocalLiveBuildId(DOWNLOAD_ARITFACT, b'\x00', 1) # exists already
         archive.uploadLocalLiveBuildId(UPLOAD1_ARTIFACT, b'\x00', 0)
+        self.__testBuildId(UPLOAD1_ARTIFACT, b'\x00')
         archive.uploadLocalLiveBuildId(UPLOAD2_ARTIFACT, b'\x00', 1)
+        self.__testBuildId(UPLOAD2_ARTIFACT, b'\x00')
+
+        # provoke upload errors
+        with self.assertRaises(BuildError):
+            archive.uploadLocalLiveBuildId(ERROR_UPLOAD_ARTIFACT, b'\x00', 0)
+        with self.assertRaises(BuildError):
+            archive.uploadLocalLiveBuildId(ERROR_UPLOAD_ARTIFACT, b'\x00', 1)
+
+    def testUploadPackageNoFail(self):
+        """The nofail option must prevent fatal error on upload failures"""
+
+        archive = self.__getArchiveInstance({"flags" : ["upload", "download", "nofail"]})
+        archive.wantUpload(True)
+        with TemporaryDirectory() as tmp:
+            # create simple workspace
+            audit = os.path.join(tmp, "audit.json.gz")
+            content = os.path.join(tmp, "workspace")
+            with open(audit, "wb") as f:
+                f.write(b"AUDIT")
+            os.mkdir(content)
+            with open(os.path.join(content, "data"), "wb") as f:
+                f.write(b"DATA")
+
+            # must not throw
+            archive.uploadPackage(ERROR_UPLOAD_ARTIFACT, audit, content, 0)
+            archive.uploadPackage(ERROR_UPLOAD_ARTIFACT, audit, content, 1)
+
+        # also live-build-id upload errors must not throw with nofail
+        archive.uploadLocalLiveBuildId(ERROR_UPLOAD_ARTIFACT, b'\x00', 0)
+        archive.uploadLocalLiveBuildId(ERROR_UPLOAD_ARTIFACT, b'\x00', 1)
 
     def testDownloadJenkins(self):
         """Jenkins download tests"""
 
-        archive = self._getArchiveInstance({})
+        archive = self.__getArchiveInstance({})
         archive.wantDownload(True)
         self.assertTrue(archive.canDownloadJenkins())
 
@@ -302,16 +400,15 @@ class BaseTester:
             with open(os.path.join(workspace, "test.buildid"), "wb") as f:
                 f.write(b'\x00'*20)
             script = archive.download(None, "test.buildid", "result.tgz")
-            subprocess.check_call(['/bin/bash', '-x', '-c', script],
-                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            callJenkinsScript(script, workspace)
             with open(self.dummyFileName, "rb") as f:
                 with open(os.path.join(workspace, "result.tgz"), "rb") as g:
                     self.assertEqual(f.read(), g.read())
 
-    def testUploadJenkins(self):
+    def testUploadJenkinsNormal(self):
         """Jenkins upload tests"""
 
-        archive = self._getArchiveInstance({})
+        archive = self.__getArchiveInstance({})
         archive.wantUpload(True)
         self.assertTrue(archive.canUploadLocal())
 
@@ -319,15 +416,64 @@ class BaseTester:
             bid = b'\x01'*20
             with open(os.path.join(tmp, "test.buildid"), "wb") as f:
                 f.write(bid)
-            dummy = self.__createArtifactByName(os.path.join(tmp, "result.tgz"))
+            self.__createArtifactByName(os.path.join(tmp, "result.tgz"))
 
+            # upload artifact
             script = archive.upload(None, "test.buildid", "result.tgz")
-            env = os.environ.copy()
-            env["WORKSPACE"] = tmp
-            subprocess.check_call(['/bin/bash', '-x', '-c', script],
-                universal_newlines=True, stderr=subprocess.STDOUT, cwd=tmp, env=env)
+            callJenkinsScript(script, tmp)
 
+            # test that artifact was uploaded correctly
             self.__testArtifact(bid)
+
+            # upload live build-id
+            script = archive.uploadJenkinsLiveBuildId(None, "test.buildid", "test.buildid")
+            callJenkinsScript(script, tmp)
+
+            # test that live-build-id is uploaded
+            self.__testBuildId(bid, bid)
+
+            # Provoke artifact upload error. Uploads must fail.
+            with open(os.path.join(tmp, "error.buildid"), "wb") as f:
+                f.write(ERROR_UPLOAD_ARTIFACT)
+            with self.assertRaises(subprocess.CalledProcessError):
+                script = archive.upload(None, "error.buildid", "result.tgz")
+                callJenkinsScript(script, tmp)
+            with self.assertRaises(subprocess.CalledProcessError):
+                script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid")
+                callJenkinsScript(script, tmp)
+
+    def testUploadJenkinsNoFail(self):
+        """The nofail option must prevent fatal error on upload failures"""
+
+        archive = self.__getArchiveInstance({"flags" : ["upload", "download", "nofail"]})
+        archive.wantUpload(True)
+
+        with TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "error.buildid"), "wb") as f:
+                f.write(ERROR_UPLOAD_ARTIFACT)
+            self.__createArtifactByName(os.path.join(tmp, "result.tgz"))
+
+            # these uploads must not fail even though they do not succeed
+            script = archive.upload(None, "error.buildid", "result.tgz")
+            callJenkinsScript(script, tmp)
+            script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid")
+            callJenkinsScript(script, tmp)
+
+    def testDisabled(self):
+        """Test that nothing is done if up/download is disabled"""
+
+        archive = self.__getSingleArchiveInstance({})
+
+        self.assertEqual(archive.download(b'\x00'*20, "unused", "unused"), "")
+
+        self.assertEqual(archive.upload(b'\x00'*20, "unused", "unused"), "")
+        self.assertEqual(archive.uploadJenkinsLiveBuildId(None, "unused", "unused"), "")
+
+        archive.downloadPackage(b'\x00'*20, "unused", "unused", 0)
+        self.assertEqual(archive.downloadLocalLiveBuildId(b'\x00'*20, 0), None)
+        archive.uploadPackage(b'\x00'*20, "unused", "unused", 0)
+        archive.uploadLocalLiveBuildId(b'\x00'*20, b'\x00'*20, 0)
+
 
 class TestDummyArchive(TestCase):
 
@@ -347,19 +493,17 @@ class TestDummyArchive(TestCase):
 
     def testDownloadLocal(self):
         DummyArchive().downloadPackage(b'\x00'*20, "unused", "unused", 0)
+        self.assertEqual(DummyArchive().downloadLocalLiveBuildId(b'\x00'*20, 0), None)
 
     def testUploadJenkins(self):
         ret = DummyArchive().upload(b'\x00'*20, "unused", "unused")
         self.assertEqual(ret, "")
+        ret = DummyArchive().uploadJenkinsLiveBuildId(None, "unused", "unused")
+        self.assertEqual(ret, "")
 
     def testUploadLocal(self):
         DummyArchive().uploadPackage(b'\x00'*20, "unused", "unused", 0)
-
-
-class TestLocalArchive(BaseTester, TestCase):
-    def _getArchiveInstance(self, spec):
-        spec["path"] = self.repo.name
-        return LocalArchive(spec)
+        DummyArchive().uploadLocalLiveBuildId(b'\x00'*20, b'\x00'*20, 0)
 
 
 def createHttpHandler(repoPath):
@@ -370,8 +514,11 @@ def createHttpHandler(repoPath):
             path = repoPath + self.path
             try:
                 f = open(path, "rb")
-            except OSError:
+            except FileNotFoundError:
                 self.send_error(404, "not found")
+                return None
+            except OSError:
+                self.send_error(500, "internal error")
                 return None
 
             self.send_response(200)
@@ -390,6 +537,9 @@ def createHttpHandler(repoPath):
                 f.close()
 
         def do_PUT(self):
+            length = int(self.headers['Content-Length'])
+            content  = self.rfile.read(length)
+
             exists = False
             path = repoPath + self.path
             if os.path.exists(path):
@@ -400,14 +550,23 @@ def createHttpHandler(repoPath):
                 else:
                     exists = True
 
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            length = int(self.headers['Content-Length'])
-            with open(path, "wb") as f:
-                f.write(self.rfile.read(length))
-            self.send_response(200 if exists else 201)
-            self.end_headers()
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "wb") as f:
+                    f.write(content)
+                self.send_response(200 if exists else 201)
+                self.end_headers()
+            except OSError:
+                self.send_error(500, "internal error")
 
     return Handler
+
+class TestLocalArchive(BaseTester, TestCase):
+
+    def _setArchiveSpec(self, spec):
+        spec['backend'] = "file"
+        spec["path"] = self.repo.name
+
 
 class TestHttpArchive(BaseTester, TestCase):
 
@@ -424,15 +583,34 @@ class TestHttpArchive(BaseTester, TestCase):
         self.httpd.server_close()
         super().tearDown()
 
-    def _getArchiveInstance(self, spec):
+    def _setArchiveSpec(self, spec):
+        spec['backend'] = "http"
         spec["url"] = "http://{}:{}".format(self.ip, self.port)
-        return SimpleHttpArchive(spec)
 
+    def testInvalidServer(self):
+        """Test download on non-existent server"""
+
+        spec = { 'url' : "https://127.1.2.3:7257" }
+        archive = SimpleHttpArchive(spec)
+        archive.wantDownload(True)
+        archive.wantUpload(True)
+
+        # Local
+        archive.downloadPackage(b'\x00'*20, "unused", "unused", 0)
+        archive.downloadPackage(b'\x00'*20, "unused", "unused", 1)
+        self.assertEqual(archive.downloadLocalLiveBuildId(b'\x00'*20, 0), None)
+
+        # Jenkins
+        with TemporaryDirectory() as workspace:
+            with open(os.path.join(workspace, "test.buildid"), "wb") as f:
+                f.write(b'\x00'*20)
+            script = archive.download(None, "test.buildid", "result.tgz")
+            callJenkinsScript(script, workspace)
 
 class TestCustomArchive(BaseTester, TestCase):
 
-    def _getArchiveInstance(self, spec):
+    def _setArchiveSpec(self, spec):
+        spec['backend'] = "shell"
         spec["download"] = "cp {}/$BOB_REMOTE_ARTIFACT $BOB_LOCAL_ARTIFACT".format(self.repo.name)
         spec["upload"] = "mkdir -p {P}/${{BOB_REMOTE_ARTIFACT%/*}} && cp $BOB_LOCAL_ARTIFACT {P}/$BOB_REMOTE_ARTIFACT".format(P=self.repo.name)
-        return CustomArchive(spec, [])
 
