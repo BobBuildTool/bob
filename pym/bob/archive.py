@@ -38,6 +38,7 @@ from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 import gzip
 import http.client
 import os.path
+import ssl
 import subprocess
 import tarfile
 import textwrap
