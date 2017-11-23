@@ -421,7 +421,7 @@ class GitAudit(ScmAudit):
     SCHEMA = schema.Schema({
         'type' : 'git',
         'dir' : str,
-        'remotes' : { str : str },
+        'remotes' : { schema.Optional(str) : str },
         'commit' : str,
         'description' : str,
         'dirty' : bool
