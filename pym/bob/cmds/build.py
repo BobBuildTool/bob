@@ -25,6 +25,7 @@ from ..utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirector
 from datetime import datetime
 from glob import glob
 from pipes import quote
+from textwrap import dedent
 import argparse
 import datetime
 import os
@@ -584,13 +585,32 @@ esac
                 ), file=f)
         scriptFile = os.path.join(workspacePath, "..", "script")
         with open(scriptFile, "w") as f:
-            print("set -o errtrace", file=f)
-            print("set -o nounset", file=f)
-            print("set -o pipefail", file=f)
-            print("trap 'RET=$? ; echo \"\x1b[31;1mStep failed on line ${LINENO}: Exit status ${RET}; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m\" >&2 ; exit $RET' ERR", file=f)
-            print("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do rm -f \"$i\" ; done' EXIT", file=f)
-            print("", file=f)
-            print("# Special args:", file=f)
+            f.write(dedent("""\
+                # Error handling
+                bob_handle_error()
+                {
+                    set +x
+                    echo "\x1b[31;1mStep failed with return status $1; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m"
+                    echo "Call stack (most recent call first)"
+                    i=0
+                    while caller $i >/dev/null ; do
+                            j=${BASH_LINENO[$i]}
+                            while [[ $j -ge 0 && -z ${_BOB_SOURCES[$j]:+true} ]] ; do
+                                    : $(( j-- ))
+                            done
+                            echo "    #$i: ${_BOB_SOURCES[$j]}, line $(( BASH_LINENO[$i] - j )), in ${FUNCNAME[$((i+1))]}"
+                            : $(( i++ ))
+                    done
+
+                    exit $1
+                }
+                declare -A _BOB_SOURCES=( [0]="Bob prolog" )
+                trap 'bob_handle_error $? >&2' ERR
+                trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do rm -f "$i" ; done' EXIT
+                set -o errtrace -o nounset -o pipefail
+
+                # Special Bob array variables:
+                """))
             print("declare -A BOB_ALL_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(a.getPackage().getName()),
                                    quote(a.getExecPath()))
@@ -602,6 +622,7 @@ esac
             print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(n), quote(os.path.join(t.getStep().getExecPath(), t.getPath())))
                     for (n,t) in step.getTools().items()] ))), file=f)
+            print("", file=f)
             print("# Environment:", file=f)
             for (k,v) in sorted(stepEnv.items()):
                 print("export {}={}".format(k, quote(v)), file=f)

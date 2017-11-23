@@ -1319,7 +1319,7 @@ class IncludeHelper:
 
             return ret
 
-    def __init__(self, fileLoader, baseDir, varBase):
+    def __init__(self, fileLoader, baseDir, varBase, sourceName):
         self.__pattern = re.compile(r"""
             \$<(?:
                 (?P<escaped>\$)     |
@@ -1331,6 +1331,7 @@ class IncludeHelper:
         self.__baseDir = baseDir
         self.__varBase = re.sub(r'[^a-zA-Z0-9_]', '_', varBase, flags=re.DOTALL)
         self.__fileLoader = fileLoader
+        self.__sourceName = sourceName
 
     def resolve(self, text):
         if isinstance(text, str):
@@ -1339,7 +1340,8 @@ class IncludeHelper:
             t.delimiter = '$<'
             t.pattern = self.__pattern
             ret = t.substitute(resolver)
-            return ("\n".join(resolver.prolog + [ret]), "\n".join(resolver.incDigests))
+            sourceAnchor = "_BOB_SOURCES[$LINENO]=" + quote(self.__sourceName)
+            return ("\n".join(resolver.prolog + [sourceAnchor, ret]), "\n".join(resolver.incDigests))
         else:
             return (None, None)
 
@@ -1442,7 +1444,7 @@ class Recipe(object):
             self.packageStep = packageStep
 
     @staticmethod
-    def loadFromFile(recipeSet, fileName, properties, fileSchema):
+    def loadFromFile(recipeSet, fileName, properties, fileSchema, isRecipe):
         # MultiPackages are handled as separate recipes with an anonymous base
         # class. Ignore first dir in path, which is 'recipes' by default.
         # Following dirs are treated as categories separated by '::'.
@@ -1456,14 +1458,14 @@ class Recipe(object):
 
         nameMap = {}
         def anonNameCalculator(suffix):
-            num = nameMap.setdefault(suffix, 0)
-            nameMap[suffix] = num+1
-            return baseName + "$" + suffix + (("$"+str(num)) if num > 0 else "")
+            num = nameMap.setdefault(suffix, 0) + 1
+            nameMap[suffix] = num
+            return baseName + suffix + "$" + str(num)
 
         def collect(recipe, suffix, anonBaseClass):
             if "multiPackage" in recipe:
                 anonBaseClass = Recipe(recipeSet, recipe, fileName, baseDir,
-                    anonNameCalculator(suffix), baseName, properties,
+                    anonNameCalculator(suffix), baseName, properties, isRecipe,
                     anonBaseClass)
                 return chain.from_iterable(
                     collect(subSpec, suffix + ("-"+subName if subName else ""),
@@ -1472,7 +1474,7 @@ class Recipe(object):
             else:
                 packageName = baseName + suffix
                 return [ Recipe(recipeSet, recipe, fileName, baseDir, packageName,
-                                baseName, properties, anonBaseClass) ]
+                                baseName, properties, isRecipe, anonBaseClass) ]
 
         return list(collect(recipeSet.loadYaml(fileName, fileSchema), "", None))
 
@@ -1489,7 +1491,8 @@ class Recipe(object):
         ret.resolveClasses()
         return ret
 
-    def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName, properties, anonBaseClass=None):
+    def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName,
+                 properties, isRecipe=True, anonBaseClass=None):
         self.__recipeSet = recipeSet
         self.__sources = [ sourceFile ] if anonBaseClass is None else []
         self.__classesResolved = False
@@ -1534,7 +1537,8 @@ class Recipe(object):
         }
         self.__corePackages = []
 
-        incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName)
+        incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName,
+                                  ("Recipe " if isRecipe else "Class  ") + packageName)
 
         (checkoutScript, checkoutDigestScript) = incHelper.resolve(recipe.get("checkoutScript"))
         checkoutSCMs = recipe.get("checkoutSCM", [])
@@ -2289,7 +2293,7 @@ class RecipeSet:
             for path in fnmatch.filter(filenames, "*.yaml"):
                 try:
                     [r] = Recipe.loadFromFile(self, os.path.join(root, path),
-                        self.__properties, self.__classSchema)
+                        self.__properties, self.__classSchema, False)
                     self.__addClass(r)
                 except ParseError as e:
                     e.pushFrame(path)
@@ -2299,7 +2303,8 @@ class RecipeSet:
             for path in fnmatch.filter(filenames, "*.yaml"):
                 try:
                     for r in Recipe.loadFromFile(self,  os.path.join(root, path),
-                                                 self.__properties, self.__recipeSchema):
+                                                 self.__properties, self.__recipeSchema,
+                                                 True):
                         self.__addRecipe(r)
                 except ParseError as e:
                     e.pushFrame(path)

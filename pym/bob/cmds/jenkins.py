@@ -299,6 +299,7 @@ class JenkinsJob:
             cmds.append("set -o pipefail")
             cmds.append("trap 'RET=$? ; echo \"Step failed on line ${LINENO}: Exit status ${RET}; Command: ${BASH_COMMAND}\" >&2 ; exit $RET' ERR")
             cmds.append("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do rm -f \"$i\" ; done' EXIT")
+            cmds.append('declare -A _BOB_SOURCES=( [0]="Bob prolog" )')
             cmds.append("cd \"${BOB_CWD}\"")
             cmds.append("")
             cmds.append("# BEGIN BUILD SCRIPT")
