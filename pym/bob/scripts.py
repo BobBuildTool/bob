@@ -160,7 +160,7 @@ def bob(bobRoot):
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         parser.add_argument('-C', '--directory', dest='directory', action='append', help="Change to DIRECTORY before doing anything", metavar="DIRECTORY")
         parser.add_argument('--version', dest='version', action='store_true', help="Show version")
-        parser.add_argument('--debug',   dest='debug',   action='store_true', help="Enable debug mode")
+        parser.add_argument('--debug',   dest='debug', help="Enable debug modes (shl,pkgck,ngd)")
         parser.add_argument('-i', dest='ignore_commandCfg', default=False, action='store_true',
                 help="Use bob's default argument settings and do not use commands section of the userconfig.")
         parser.add_argument('command', nargs='?', help="Command to execute")
@@ -172,7 +172,7 @@ def bob(bobRoot):
             return 0
 
         if args.debug:
-            _enableDebug()
+            _enableDebug(args.debug)
 
         if args.ignore_commandCfg:
             from .input import RecipeSet

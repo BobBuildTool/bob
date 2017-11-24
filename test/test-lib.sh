@@ -22,14 +22,18 @@ cleanup()
 	rm -rf work dev .bob-*
 }
 
+# Run bob in testing environment. Adds the "package calculation check" (pkgck)
+# and "no global defaults" debug switches.
 run_bob()
 {
-	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" --debug "$@"
+	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" --debug=pkgck,ngd "$@"
 }
 
+# Run bob only with the "no global defaults" debug switch. Used for black box
+# regression tests of the package calculation algorithm.
 run_bob_plain()
 {
-	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" "$@"
+	${RUN:-python3} -m bob.scripts bob "$BOB_ROOT" --debug=ngd "$@"
 }
 
 exec_blackbox_test()

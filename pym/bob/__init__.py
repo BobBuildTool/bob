@@ -67,9 +67,39 @@ except KeyboardInterrupt:
     import sys
     sys.exit(1)
 
-# global debug switch
-DEBUG = False
+# global debug switches
+DEBUG_NO_GLOBAL_DEFAULTS = False
+DEBUG_PKG_CALC = False
 
-def _enableDebug():
-    global DEBUG
-    DEBUG = True
+# interactive debug shell
+def __debugTap(sig, frame):
+    import code, traceback
+
+    """Interrupt running process, and provide a python prompt for
+    interactive debugging."""
+    d={'_frame':frame}         # Allow access to frame object.
+    d.update(frame.f_globals)  # Unless shadowed by global
+    d.update(frame.f_locals)
+
+    i = code.InteractiveConsole(d)
+    message  = "Signal received : entering python shell.\nTraceback:\n"
+    message += ''.join(traceback.format_stack(frame))
+    i.interact(message)
+
+def _enableDebug(enabled):
+    global DEBUG_NO_GLOBAL_DEFAULTS, DEBUG_PKG_CALC
+
+    for e in enabled.split(','):
+        e = e.strip()
+        if e == 'shl':
+            import signal
+            signal.signal(signal.SIGUSR1, __debugTap)
+        elif e == 'pkgck':
+            DEBUG_PKG_CALC = True
+        elif e == 'ngd':
+            DEBUG_NO_GLOBAL_DEFAULTS = True
+        else:
+            import sys
+            print("Invalid debug flag:", e, file=sys.stderr)
+            sys.exit(2)
+
