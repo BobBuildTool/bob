@@ -68,8 +68,11 @@ except KeyboardInterrupt:
     sys.exit(1)
 
 # global debug switches
-DEBUG_NO_GLOBAL_DEFAULTS = False
-DEBUG_PKG_CALC = False
+DEBUG = {
+    'ngd' :  False,     # no-global-defaults
+    'pkgck' : False,    # package-calculation-checks
+    'shl' : False,      # shell-trap
+}
 
 # interactive debug shell
 def __debugTap(sig, frame):
@@ -87,19 +90,17 @@ def __debugTap(sig, frame):
     i.interact(message)
 
 def _enableDebug(enabled):
-    global DEBUG_NO_GLOBAL_DEFAULTS, DEBUG_PKG_CALC
+    global DEBUG
 
     for e in enabled.split(','):
         e = e.strip()
-        if e == 'shl':
-            import signal
-            signal.signal(signal.SIGUSR1, __debugTap)
-        elif e == 'pkgck':
-            DEBUG_PKG_CALC = True
-        elif e == 'ngd':
-            DEBUG_NO_GLOBAL_DEFAULTS = True
+        if e in DEBUG:
+            DEBUG[e] = True
         else:
             import sys
             print("Invalid debug flag:", e, file=sys.stderr)
             sys.exit(2)
 
+    if DEBUG['shl']:
+        import signal
+        signal.signal(signal.SIGUSR1, __debugTap)

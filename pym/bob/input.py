@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG_NO_GLOBAL_DEFAULTS, DEBUG_PKG_CALC
+from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
@@ -1698,7 +1698,7 @@ class Recipe(object):
                 p.reconstruct(m.corePackage, pathFormatter, stack,
                     inputTools.detach(), inputSandbox)
                 m.touch(inputEnv, inputTools)
-                if DEBUG_PKG_CALC: break
+                if DEBUG['pkgck']: break
                 return p, m.subTreePackages
         else:
             reusedPackage = None
@@ -2283,7 +2283,7 @@ class RecipeSet:
             self.__policies[name] = (behaviour, None)
 
         # user config(s)
-        if not DEBUG_NO_GLOBAL_DEFAULTS:
+        if not DEBUG['ngd']:
             self.__parseUserConfig("/etc/bobdefault.yaml", True)
             self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
