@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import BOB_VERSION, _enableDebug
+from . import BOB_VERSION, _enableDebug, DEBUG
 from .errors import BobError
 from .state import finalize
 from .tty import colorize, Unbuffered
@@ -197,7 +197,19 @@ def bob(bobRoot):
                     except OSError as e:
                         print("bob -C: unable to change directory:", str(e), file=sys.stderr)
                         return 1
-            availableCommands[args.command][1](args.args, bobRoot)
+            cmd = availableCommands[args.command][1]
+            if DEBUG['prof']:
+                import cProfile, pstats
+                pr = cProfile.Profile()
+                pr.enable()
+                cmd(args.args, bobRoot)
+                pr.disable()
+                ps = pstats.Stats(pr, stream=sys.stderr).sort_stats('tottime')
+                print("Bob", BOB_VERSION, "profile:", file=sys.stderr)
+                print("Args:", sys.argv[1:], file=sys.stderr)
+                ps.print_stats()
+            else:
+                cmd(args.args, bobRoot)
             return 0
         else:
             print("Don't know what to do for '{}'. Use 'bob -h' for help".format(args.command), file=sys.stderr)

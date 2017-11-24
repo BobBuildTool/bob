@@ -71,6 +71,7 @@ except KeyboardInterrupt:
 DEBUG = {
     'ngd' :  False,     # no-global-defaults
     'pkgck' : False,    # package-calculation-checks
+    'prof' : False,     # profiling
     'shl' : False,      # shell-trap
 }
 
