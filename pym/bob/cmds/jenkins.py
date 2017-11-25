@@ -32,6 +32,7 @@ import hashlib
 import http.client
 import json
 import os.path
+import random
 import re
 import ssl
 import sys
@@ -130,6 +131,9 @@ def getBuildIdSpec(step):
     else:
         return step.getDigest(lambda s: s, True, SpecHasher)
 
+def genUuid():
+    ret = "".join(random.sample("0123456789abcdef", 8))
+    return ret[:4] + '-' + ret[4:]
 
 class JenkinsJob:
     def __init__(self, name, displayName, nameCalculator, recipe, archiveBackend):
@@ -239,6 +243,18 @@ class JenkinsJob:
         cmds.append(self.getShebang(windows))
         headline = "# {} step of {}".format(d.getLabel(), "/".join(d.getPackage().getStack()))
         cmds.extend(["", headline, "# " + "="*(len(headline)-2), ""])
+
+        # sanity check for stale workspaces
+        cmds.append(textwrap.dedent("""\
+            if [ -e {CANARY} ] ; then
+                if [[ $(cat {CANARY}) != {VID} ]] ; then
+                    echo "Workspace contains stale data! Delete it and restart job." ; exit 1
+                fi
+            else
+                echo {VID} > {CANARY}
+            fi
+            """.format(CANARY=JenkinsJob._canaryName(d), VID=asHexStr(d.getVariantId()))
+        ))
 
         if checkIfSkip:
             checkIfSkip = " && ".join(sorted(
@@ -462,6 +478,10 @@ class JenkinsJob:
     @staticmethod
     def _auditName(d):
         return d.getWorkspacePath().replace('/', '_') + ".json.gz"
+
+    @staticmethod
+    def _canaryName(d):
+        return ".state/" + d.getWorkspacePath().replace('/', '_') + ".canary"
 
     def dumpXML(self, orig, nodes, windows, credentials, clean, options, date, authtoken):
         if orig:
@@ -1119,11 +1139,13 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, al
 def jenkinsNameFormatter(step, props):
     return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
 
-def jenkinsNamePersister(jenkins, wrapFmt):
+def jenkinsNamePersister(jenkins, wrapFmt, uuid):
 
     def persist(step, props):
-        return BobState().getJenkinsByNameDirectory(
+        ret = BobState().getJenkinsByNameDirectory(
             jenkins, wrapFmt(step, props), step.getVariantId())
+        if uuid: ret = ret + "-" + uuid
+        return ret
 
     def fmt(step, mode, props):
         if mode == 'workspace':
@@ -1151,7 +1173,7 @@ def genJenkinsJobs(recipes, jenkins):
             raise ParseError("No archive for up and download found but artifacts.copy using archive enabled!")
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
     packages = recipes.generatePackages(
-        jenkinsNamePersister(jenkins, nameFormatter),
+        jenkinsNamePersister(jenkins, nameFormatter, config.get('uuid')),
         config.get('defines', {}),
         config.get('sandbox', False))
     nameCalculator = JobNameCalculator(prefix)
@@ -1276,7 +1298,8 @@ def doJenkinsAdd(recipes, argv):
         "clean" : args.clean,
         "keep" : args.keep,
         "options" : options,
-        "shortdescription" : args.shortdescription
+        "shortdescription" : args.shortdescription,
+        "uuid" : genUuid()
     }
     BobState().addJenkins(args.name, config)
 
