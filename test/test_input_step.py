@@ -60,82 +60,82 @@ class TestCheckoutStep(TestCase):
     def testDigestStable(self):
         """Same input should yield same digest"""
         s1 = CheckoutStep()
-        s1.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         assert s1.getVariantId() == s2.getVariantId()
 
     def testDigestScriptChange(self):
         """Script does influnce the digest"""
         s1 = CheckoutStep()
-        s1.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("evil", "other digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("evil", "other digest", [], []),
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         assert s1.getVariantId() != s2.getVariantId()
 
     def testDigestFullEnv(self):
         """Full env does not change digest. It is only used for SCMs."""
         s1 = CheckoutStep()
-        s1.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             Env(), Env({ "a" : "asdf" }))
         assert s1.getVariantId() == s2.getVariantId()
 
     def testDigestEnv(self):
         """Env changes digest"""
         s1 = CheckoutStep()
-        s1.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "asdf" }))
 
         # different value
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "qwer" }))
         assert s1.getVariantId() != s2.getVariantId()
 
         # added entry
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "asdf", "b" : "qwer" }))
         assert s1.getVariantId() != s2.getVariantId()
 
         # removed entry
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env())
         assert s1.getVariantId() != s2.getVariantId()
 
     def testDigestEnvRotation(self):
         """Rotating characters between key-value pairs must be detected"""
         s1 = CheckoutStep()
-        s1.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "bc", "cd" : "e" }))
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "bcc", "d" : "e" }))
         assert s1.getVariantId() != s2.getVariantId()
 
         s1 = CheckoutStep()
-        s1.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "bb", "c" : "dd", "e" : "ff" }))
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "bbc=dd", "e" : "ff" }))
         assert s1.getVariantId() != s2.getVariantId()
 
     def testDigestEmpyEnv(self):
         """Adding empty entry must be detected"""
         s1 = CheckoutStep()
-        s1.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "b" }))
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             digestEnv=Env({ "a" : "b", "" : "" }))
         assert s1.getVariantId() != s2.getVariantId()
 
@@ -148,12 +148,12 @@ class TestCheckoutStep(TestCase):
         t1.libs = []
 
         s1 = CheckoutStep()
-        s1.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             tools=Env({"a" : t1}))
 
         # tool name has no influence
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             tools=Env({"zz" : t1}))
         assert s1.getVariantId() == s2.getVariantId()
 
@@ -165,7 +165,7 @@ class TestCheckoutStep(TestCase):
         t2.libs = []
 
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             tools=Env({"a" : t2}))
         assert s1.getVariantId() != s2.getVariantId()
 
@@ -175,7 +175,7 @@ class TestCheckoutStep(TestCase):
         t2.libs = []
 
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             tools=Env({"a" : t2}))
         assert s1.getVariantId() != s2.getVariantId()
 
@@ -185,7 +185,7 @@ class TestCheckoutStep(TestCase):
         t2.libs = ["asdf"]
 
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("script", "digest", []),
+        s2.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             tools=Env({"a" : t2}))
         assert s1.getVariantId() != s2.getVariantId()
 
