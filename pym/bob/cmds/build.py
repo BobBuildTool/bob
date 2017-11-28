@@ -1332,7 +1332,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             resultPath = p.getWorkspacePath()
             if resultPath not in results:
                 results.append(resultPath)
-            success = True
+        success = True
     finally:
         builder.saveBuildState()
         runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
