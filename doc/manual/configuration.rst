@@ -1375,3 +1375,22 @@ postBuildHook
 
     The return status of the hook is ignored.
 
+ui
+~~
+
+Type: Dictionary
+
+Specifies options of user interface.
+
+color
+    Color mode of console output. Can be also overridden by command line
+    option ``--color``.
+
+    ``never``
+        No colors in output
+
+    ``always``
+        Use colors in output
+
+    ``auto``
+        Use colors only when TTY console detected (default)
