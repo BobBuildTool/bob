@@ -17,7 +17,7 @@
 from . import BOB_VERSION, _enableDebug, DEBUG
 from .errors import BobError
 from .state import finalize
-from .tty import colorize, Unbuffered
+from .tty import colorize, Unbuffered, setColorMode
 from .utils import asHexStr, hashPath
 import argparse
 import sys
@@ -163,6 +163,9 @@ def bob(bobRoot):
         parser.add_argument('--debug',   dest='debug', help="Enable debug modes (shl,pkgck,ngd)")
         parser.add_argument('-i', dest='ignore_commandCfg', default=False, action='store_true',
                 help="Use bob's default argument settings and do not use commands section of the userconfig.")
+        parser.add_argument('--color', dest='color_mode',
+                help="Color mode of console output (default: auto)",
+                choices=['never', 'always', 'auto'])
         parser.add_argument('command', nargs='?', help="Command to execute")
         parser.add_argument('args', nargs=argparse.REMAINDER, help="Arguments to command")
 
@@ -177,6 +180,10 @@ def bob(bobRoot):
         if args.ignore_commandCfg:
             from .input import RecipeSet
             RecipeSet.ignoreCommandCfg()
+
+        if args.color_mode:
+            from .input import RecipeSet
+            RecipeSet.setColorModeCfg(args.color_mode)
 
         if args.command is None:
             print("No command specified. Use 'bob -h' for help.", file=sys.stderr)

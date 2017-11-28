@@ -63,5 +63,17 @@ class WarnOnce(ShowOnce):
 # module initialization
 
 __onTTY = False
-if sys.stdout.isatty() and sys.stderr.isatty():
-    __onTTY = True
+
+def setColorMode(mode):
+    global __onTTY
+    if mode == 'never':
+        __onTTY = False
+    elif mode == 'always':
+        __onTTY = True
+    elif mode == 'auto':
+        if sys.stdout.isatty() and sys.stderr.isatty():
+            __onTTY = True
+        else:
+            __onTTY = False
+# auto is the default
+setColorMode('auto')
