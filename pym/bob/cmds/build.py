@@ -21,7 +21,8 @@ from ..errors import BobError, BuildError, ParseError
 from ..input import RecipeSet
 from ..state import BobState
 from ..tty import colorize
-from ..utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirectory, copyTree
+from ..utils import asHexStr, hashDirectory, hashFile, removePath, \
+    emptyDirectory, copyTree, isWindows
 from datetime import datetime
 from glob import glob
 from pipes import quote
@@ -447,7 +448,7 @@ esac
         """Create symlinks to the dependency workspaces"""
 
         # this will only work on POSIX
-        if os.name != 'posix': return
+        if isWindows(): return
 
         # always re-create the deps directory
         basePath = os.getcwd()

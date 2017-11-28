@@ -32,7 +32,7 @@ concurrent uploads the artifact must appear atomically for unrelated readers.
 
 from .errors import BuildError
 from .tty import colorize
-from .utils import asHexStr, removePath
+from .utils import asHexStr, removePath, isWindows
 from pipes import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 import gzip
@@ -418,7 +418,7 @@ class LocalArchiveUploader:
         self.tmp.close()
         # atomically move file to destination at end of upload
         if exc_type is None:
-            if os.name == 'posix':
+            if not isWindows():
                 # Cannot use os.rename() because it will unconditionally
                 # replace an existing file. Instead we link the file at the
                 # destination and unlink the temporary file.
@@ -428,13 +428,11 @@ class LocalArchiveUploader:
                     pass # lost race
                 finally:
                     os.unlink(self.tmp.name)
-            elif os.name == 'nt':
+            else:
                 try:
                     os.rename(self.tmp.name, self.destination)
                 except OSError:
                     os.remove(self.tmp.name) # lost race
-            else:
-                raise ArtifactUploadError("Unsupported platform: " + os.name)
         else:
             os.unlink(self.tmp.name)
         return False
