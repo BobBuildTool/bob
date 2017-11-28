@@ -20,7 +20,7 @@ from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
-from .tty import colorize, InfoOnce, WarnOnce
+from .tty import colorize, InfoOnce, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
@@ -2044,6 +2044,9 @@ class RecipeSet:
                 schema.Optional('preBuildHook') : str,
                 schema.Optional('postBuildHook') : str,
             }),
+            schema.Optional('ui') : schema.Schema({
+                schema.Optional('color') : schema.Or('never', 'always', 'auto')
+            }),
         })
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
@@ -2059,6 +2062,11 @@ class RecipeSet:
     @classmethod
     def ignoreCommandCfg(cls):
         cls._ignoreCmdConfig = True
+
+    _colorModeConfig = None
+    @classmethod
+    def setColorModeCfg(cls, mode):
+        cls._colorModeConfig = mode
 
     def __init__(self):
         self.__defaultEnv = {}
@@ -2077,6 +2085,7 @@ class RecipeSet:
         self.__stringFunctions = DEFAULT_STRING_FUNS.copy()
         self.__plugins = {}
         self.__commandConfig = {}
+        self.__uiConfig = {}
         self.__policies = {
             'relativeIncludes' : (
                 "0.13",
@@ -2280,6 +2289,10 @@ class RecipeSet:
             os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
         self.__parseUserConfig("default.yaml")
 
+        # color mode provided in cmd line takes precedence
+        # (if no color mode provided by user, default one will be used)
+        setColorMode(self._colorModeConfig or self.__uiConfig.get('color', 'auto'))
+
         # finally parse recipes
         for root, dirnames, filenames in os.walk('classes'):
             for path in fnmatch.filter(filenames, "*.yaml"):
@@ -2329,6 +2342,7 @@ class RecipeSet:
         if not self._ignoreCmdConfig:
             self.__commandConfig = updateDicRecursive(self.__commandConfig, cfg.get("command", {}))
         self.__buildHooks.update(cfg.get("hooks", {}))
+        self.__uiConfig = updateDicRecursive(self.__uiConfig, cfg.get("ui", {}))
         for p in cfg.get("include", []):
             p = os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p
             self.__parseUserConfig(p + ".yaml", relativeIncludes)
