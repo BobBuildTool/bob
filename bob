@@ -1,6 +1,12 @@
-#!/bin/sh
-D="$(dirname "$(readlink -f "${0}")")"
-export PYTHONPATH="$D/pym:${PYTHONPATH}"
-exec python3 -c "import sys
+#!/usr/bin/env python3
+
+import os
+import sys
+
+scr_path = os.path.dirname(os.path.realpath(__file__))
+pym_path = os.path.join(scr_path, 'pym')
+sys.path.insert(0, pym_path)
+
 from bob.scripts import bob
-sys.exit(bob(\"$D\"))" "$@"
+
+sys.exit(bob(scr_path))
