@@ -107,6 +107,19 @@ def compareVersion(origLeft, origRight):
         raise ParseError("Cannot compare version numbers ('{}' vs. '{}'): bad format!"
                             .format(origLeft, origRight))
 
+def isWindows():
+    """Check if we run on a windows platform.
+
+    We have to rule out MSYS(2) and Cygwin as they are advertised a POSIX but
+    in fact cannot truly hide the underlying system.
+    """
+    if os.name == 'posix':
+        p = sys.platform
+        if p.startswith('msys'): return True
+        if p.startswith('cygwin'): return True
+        return False
+    return True
+
 ### directory hashing ###
 
 def hashFile(path):
