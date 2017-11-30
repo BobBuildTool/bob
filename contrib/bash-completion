@@ -32,13 +32,40 @@ __bob_complete_words()
    done
 }
 
+# Complete a directory while obeying "-C" parameters.
+__bob_complete_dir()
+{
+   local IFS=$'\n'
+   COMPREPLY=( $(for i in "${chroot[@]}" ; do eval cd "$i" || exit ; done
+                 compgen -d -P "$2" -S / -- "$1" ) )
+}
+
 __bob_commands="build dev clean graph help jenkins ls project status  query-scm query-recipe query-path query-meta"
 
+# Complete a Bob path
+#
+# We effectively call "bob ls" to get the list of possible completions. What
+# makes this a bit complicated is that we have to use the same settings as the
+# original command, namely the sandbox, config files and defines.
+#
+# To make things even more complicated we have to handle "-C" where we change
+# the root directory. Apparently bash passes us the quoted or escaped strings
+# so we have to use "eval" for tilde expansion and un-escaping. This feels
+# really bad, though.
+#
+# BUG: "compgen" does not produce correctly escaped strings. This breaks file
+# names with spaces. :'(
 __bob_complete_path()
 {
-   local i prefix result
+   local h i prefix result
+   declare -a cmd_settings=( )
+   declare -a global_settings=( )
+   local IFS=$'\n'
 
-   for i in "${COMP_WORDS[@]}"; do
+   # Take over sandbox (--(no-)sandbox), config files (-c <file>, -c<file>) and
+   # defines (-D FOO=bar, -DFOO=bar). They
+   # influence parsing and must be passed to "bob ls".
+   for i in "${words[@]}"; do
       case "$i" in
          --sandbox)
             sandbox="--sandbox"
@@ -46,42 +73,69 @@ __bob_complete_path()
          --no-sandbox)
             sandbox="--no-sandbox"
             ;;
+		 -c?* | -D?*)
+		    cmd_settings+=( "$i" )
+			;;
+		 *)
+		    case "$h" in
+		       -c | -D)
+			      cmd_settings+=( "$h" "$i" )
+				  ;;
+			esac
       esac
+	  h="$i"
    done
 
-   case "$cur" in
-      -*)
-         __bob_complete_words "-h --help $1"
-         ;;
-      *)
-         if [[ $cur == */* ]] ; then
-            prefix="${cur%/*}/"
-         else
-            prefix=""
-         fi
-         result="$($bob ls $sandbox $prefix 2>/dev/null)"
-         __bob_complete_words "$result" "$prefix" "/"
-         ;;
-   esac
+   # Auto complete config files. They can be in directories and their '.yaml'
+   # suffix is implicitly added by Bob. The file name might directly start
+   # after '-c' making it a bit more complicated.
+   if [[ $prev = "-c" || $cur = -c?* ]] ; then
+	  if [[ $cur = -c?* ]] ; then
+	     prefix="-c"
+		 cur="${cur:2}"
+	  else
+		 prefix=
+	  fi
+      __bob_complete_dir "$cur" "$prefix"
+	  for i in $(for i in "${chroot[@]}" ; do eval cd "$i" || exit ; done
+                 compgen -f -P "$prefix" -S " " -X "!*.yaml" -- "$cur" )
+      do
+         COMPREPLY+=( "${i%.yaml }" )
+	  done
+   else
+      case "$cur" in
+         -*)
+            __bob_complete_words "-h --help $1"
+            ;;
+         *)
+            if [[ $cur == */* ]] ; then
+               prefix="${cur%/*}/"
+            else
+               prefix=""
+            fi
+            for i in "${chroot[@]}" ; do global_settings+=( "-C" "$i" ) ; done
+            result="$(eval $bob "${global_settings[@]}" ls $sandbox "${cmd_settings[@]}" $prefix 2>/dev/null)"
+            __bob_complete_words "$result" "$prefix" "/"
+            ;;
+      esac
+   fi
 }
 
 __bob_clean()
 {
-   __bob_complete_words "-h --help --dry-run -v --verbose"
+   __bob_complete_words "-h --help --dry-run -s --src -v --verbose"
 }
 
 __bob_cook()
 {
    if [[ "$prev" = "--destination" ]] ; then
-      COMPREPLY=( $(compgen -o dirnames "$cur") )
+      __bob_complete_dir "$cur"
    elif [[ "$prev" = "--download" ]] ; then
-         __bob_complete_words "yes no deps"
-   elif [[ "$prev" = "-c" ]] ; then
-      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
+         __bob_complete_words "yes no deps forced forced-deps forced-fallback"
    elif [[ "$prev" = "--always-checkout" ]] ; then
       COMPREPLY=( )
    else
-      __bob_complete_path "--destination -e -f --force --clean-checkout -n --no-deps -b --build-only --clean --incremental --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose --no-logfiles --always-checkout"
+      __bob_complete_path "-c --destination -e -f --force --clean-checkout -n --no-deps -b --build-only --clean --incremental --resume -q --quiet --upload --download --sandbox --no-sandbox -v --verbose --no-logfiles --always-checkout"
    fi
 }
 
@@ -99,9 +153,7 @@ __bob_dev()
 
 __bob_graph()
 {
-   if [[ "$prev" = "-c" ]] ; then
-      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
-   elif [[ "$prev" = "-t" || "$prev" = "--type" ]] ; then
+   if [[ "$prev" = "-t" || "$prev" = "--type" ]] ; then
          __bob_complete_words "d3 dot"
    else
       __bob_complete_path "-c -D -e --exclude -f --filename -H --highlight -n --max-depth -t --type -o --sandbox --no-sandbox"
@@ -115,7 +167,7 @@ __bob_help()
 
 __bob_ls()
 {
-   __bob_complete_path "-a --all -r --recursive --sandbox --no-sandbox"
+   __bob_complete_path "-a --all -c -r --recursive --sandbox --no-sandbox"
 }
 
 __bob_jenkins_add()
@@ -165,7 +217,7 @@ __bob_jenkins_export()
          if [[ -z $jenkins ]] ; then
             __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
          elif [[ -z $dir ]] ; then
-            COMPREPLY=( $(compgen -o dirnames "$cur") )
+            __bob_complete_dir "$cur"
          fi
          ;;
    esac
@@ -284,49 +336,47 @@ __bob_project()
 
 __bob_query_scm()
 {
-    __bob_complete_path "-f --default -r"
+    __bob_complete_path "-c -f --default -r"
 }
 
 __bob_query_path()
 {
-   if [[ "$prev" = "-c" ]] ; then
-      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
-   else
-      __bob_complete_path "-f -D -c --sandbox --no-sandbox --develop --release"
-   fi
+  __bob_complete_path "-f -D -c --sandbox --no-sandbox --develop --release"
 }
 
 __bob_query_meta()
 {
-   if [[ "$prev" = "-c" ]] ; then
-      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
-   else
-      __bob_complete_path "-r -D -c"
-   fi
+  __bob_complete_path " -c -D -r"
 }
 
 __bob_query_recipe()
 {
-    __bob_complete_path
+    __bob_complete_path "-c -D"
 }
 
 __bob_status()
 {
-   if [[ "$prev" = "-c" ]] ; then
-      COMPREPLY=( $(compgen -a -f -o dirnames "$cur" | cut -f 1 -d '.' ) )
-   else
-      __bob_complete_path "-r --recursive -D -c --build --release -e -E -v --show-overrides"
-   fi
+  __bob_complete_path "-r --recursive -D -c --build --release -e -E -v --show-overrides"
 }
 
 __bob_subcommands()
 {
    local i c command completion_func
+   declare -a chroot
 
    while [[ $parse_pos -lt $COMP_CWORD ]] ; do
       c="${COMP_WORDS[parse_pos]}"
       : $((parse_pos++))
       case "$c" in
+         -C)
+            if [[ $parse_pos -lt $COMP_CWORD ]] ; then
+               chroot+=( "${COMP_WORDS[parse_pos]}" )
+               : $((parse_pos++))
+            fi
+            ;;
+         -C?*)
+            chroot+=( "${c:2}" )
+            ;;
          -*) ;;
          *) command="$c" ; break ;;
       esac
@@ -334,11 +384,18 @@ __bob_subcommands()
 
    if [[ -z "$command" ]] ; then
       case "$cur" in
+         -C?*)
+            __bob_complete_dir "${cur:2}" "-C"
+            ;;
          -*)
-            __bob_complete_words "-h --help"
+            __bob_complete_words "-h --help -i --version -C"
             ;;
          *)
-            __bob_complete_words "$1"
+            if [[ $prev == "-C" ]] ; then
+               __bob_complete_dir "$cur"
+            else
+               __bob_complete_words "$1"
+            fi
             ;;
       esac
    else
@@ -353,6 +410,7 @@ __bob()
 {
     local parse_pos=1 bob="$1" cur="$2" prev="$3"
     local sandbox=""
+    local words=( "${COMP_WORDS[@]}" )
 
    __bob_subcommands "$__bob_commands"
 }
@@ -360,10 +418,10 @@ else
 # Top level completion function for bash.
 __bob()
 {
-    local parse_pos=1 bob="$1" cur prev
+    local parse_pos=1 bob="$1" cur prev words
     local sandbox=""
 
-   _get_comp_words_by_ref -n : cur prev
+   _get_comp_words_by_ref -n ':=' cur prev words
 
    __bob_subcommands "$__bob_commands"
 
