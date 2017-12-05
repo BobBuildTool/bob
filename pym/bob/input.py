@@ -42,6 +42,8 @@ import sys
 import yaml
 
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
+warnDepends = WarnOnce("The same package is named multiple times as dependency!",
+    help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
 
 def overlappingPaths(p1, p2):
     p1 = os.path.normcase(os.path.normpath(p1)).split(os.sep)
@@ -1396,6 +1398,22 @@ class ScmValidator:
 RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]+$')
 MULTIPACKAGE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]*$')
 
+class UniquePackageList:
+    def __init__(self, errorHandler):
+        self.errorHandler = errorHandler
+        self.ret = []
+        self.cache = {}
+
+    def append(self, p):
+        p2 = self.cache.setdefault(p.getPackage().getName(), p)
+        if p2 is p:
+            self.ret.append(p)
+        elif p2.getVariantId() != p.getVariantId():
+            self.errorHandler(p, p2)
+
+    def result(self):
+        return self.ret
+
 class Recipe(object):
     """Representation of a single recipe
 
@@ -1450,16 +1468,6 @@ class Recipe(object):
             return chain.from_iterable(
                 Recipe.Dependency.__parseEntry(dep, env, fwd, use, cond)
                 for dep in deps )
-
-    class InjectedDep:
-        def __init__(self, packageStep):
-            self.provideGlobal = False
-            self.use = ["result"]
-            self.useEnv = False
-            self.useTools = False
-            self.useBuildResult = True
-            self.useSandbox = False
-            self.packageStep = packageStep
 
     @staticmethod
     def loadFromFile(recipeSet, fileName, properties, fileSchema, isRecipe):
@@ -1752,48 +1760,45 @@ class Recipe(object):
         depTools = tools.derive()
         depSandbox = sandbox
         depStates = { n : s.copy() for (n,s) in states.items() }
-        allDeps = self.__deps[:]
         thisDeps = {}
-        i = 0
-        while i < len(allDeps):
-            dep = allDeps[i]
-            i += 1
+        for dep in self.__deps:
             env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
                 "tools" : tools })
 
-            if isinstance(dep, Recipe.Dependency):
-                if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
-                r = self.__recipeSet.getRecipe(dep.recipe)
-                try:
-                    if r.__packageName in stack:
-                        raise ParseError("Recipes are cyclic (1st package in cylce)")
-                    depStack = stack + [r.__packageName]
-                    p, s = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
-                                     sandboxEnabled, depStates, depSandbox, depTools,
-                                     depStack)
-                    subTreePackages.add(p.getName())
-                    subTreePackages.update(s)
-                    p = p.getPackageStep()
-                except ParseError as e:
-                    e.pushFrame(r.getPackageName())
-                    raise e
+            if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
+            r = self.__recipeSet.getRecipe(dep.recipe)
+            try:
+                if r.__packageName in stack:
+                    raise ParseError("Recipes are cyclic (1st package in cylce)")
+                depStack = stack + [r.__packageName]
+                p, s = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
+                                 sandboxEnabled, depStates, depSandbox, depTools,
+                                 depStack)
+                subTreePackages.add(p.getName())
+                subTreePackages.update(s)
+                p = p.getPackageStep()
+            except ParseError as e:
+                e.pushFrame(r.getPackageName())
+                raise e
 
-                thisDeps[dep.recipe] = p
-                if dep.useDeps:
-                    # add provided dependencies at the end
-                    providedDeps = p._getProvidedDeps()
-                    allDeps.extend(Recipe.InjectedDep(d) for d in providedDeps)
+            p2 = thisDeps.setdefault(dep.recipe, p)
+            if p2 is p:
+                # new pacakage
                 directPackages.append(p)
+                # add provided dependencies at the end
+                if dep.useDeps: indirectPackages.extend(p._getProvidedDeps())
+                # result is only picked once
+                if dep.useBuildResult: results.append(p)
+            elif p.getVariantId() != p2.getVariantId():
+                self.__raiseIncompatibleLocal(p)
             else:
-                p = dep.packageStep
-                indirectPackages.append(p)
+                warnDepends.show("{} -> {}".format(self.__packageName, dep.recipe))
 
+            # pick up various other results of package
             for (n, s) in states.items():
                 if n in dep.use:
                     s.onUse(p.getPackage()._getStates()[n])
                     if dep.provideGlobal: depStates[n].onUse(p.getPackage()._getStates()[n])
-            if dep.useBuildResult:
-                results.append(p)
             if dep.useTools:
                 tools.update(p._getProvidedTools())
                 if dep.provideGlobal: depTools.update(p._getProvidedTools())
@@ -1803,6 +1808,17 @@ class Recipe(object):
             if dep.useSandbox:
                 sandbox = p._getProvidedSandbox()
                 if dep.provideGlobal: depSandbox = p._getProvidedSandbox()
+
+        # filter indirect packages and add to result list
+        tmp = indirectPackages
+        indirectPackages = []
+        for p in tmp:
+            p2 = thisDeps.setdefault(p.getPackage().getName(), p)
+            if p2 is p:
+                results.append(p)
+                indirectPackages.append(p)
+            elif p.getVariantId() != p2.getVariantId():
+                self.__raiseIncompatibleProvided(p, p2)
 
         # apply private environment
         env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
@@ -1814,9 +1830,6 @@ class Recipe(object):
 
         # meta variables override existing variables but can not be substituted
         env.update(self.__metaEnv)
-
-        # filter duplicate results, fail on different variants of same package
-        results = self.__filterDuplicateSteps(results)
 
         # record used environment and tools
         env.touch(self.__packageVars | self.__packageVarsWeak)
@@ -1872,14 +1885,14 @@ class Recipe(object):
         packageStep._setProvidedTools(provideTools)
 
         # provide deps (direct and indirect deps)
-        provideDeps = []
+        provideDeps = UniquePackageList(self.__raiseIncompatibleProvided)
         for dep in self.__deps:
             if dep.recipe not in self.__provideDeps: continue
             subDep = thisDeps.get(dep.recipe)
             if subDep is not None:
                 provideDeps.append(subDep)
                 for d in subDep._getProvidedDeps(): provideDeps.append(d)
-        packageStep._setProvidedDeps(self.__filterDuplicateSteps(provideDeps))
+        packageStep._setProvidedDeps(provideDeps.result())
 
         # provide Sandbox
         if self.__provideSandbox:
@@ -1907,23 +1920,22 @@ class Recipe(object):
 
         return p, subTreePackages
 
-    def __filterDuplicateSteps(self, results):
-        cache = {}
-        ret = []
-        for r in results:
-            r2 = cache.setdefault(r.getPackage().getName(), r)
-            if r2 is r:
-                ret.append(r)
-            elif r.getVariantId() != r2.getVariantId():
-                raise ParseError("Incompatibe variants of package: {} vs. {}"
-                    .format("/".join(r.getPackage().getStack()),
-                            "/".join(r2.getPackage().getStack())),
-                    help=
+    def __raiseIncompatibleProvided(self, r, r2):
+        raise ParseError("Incompatible variants of package: {} vs. {}"
+            .format("/".join(r.getPackage().getStack()),
+                    "/".join(r2.getPackage().getStack())),
+            help=
 """This error is caused by '{PKG}' that is passed upwards via 'provideDeps' from multiple dependencies of '{CUR}'.
 These dependencies constitute different variants of '{PKG}' and can therefore not be used in '{CUR}'."""
     .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
 
-        return ret
+    def __raiseIncompatibleLocal(self, r):
+        raise ParseError("Multiple incompatible dependencies to package: {}"
+            .format(r.getPackage().getName()),
+            help=
+"""This error is caused by naming '{PKG}' multiple times in the recipe with incompatible variants.
+Every dependency must only be given once."""
+    .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
 
 
 class PackageList:
