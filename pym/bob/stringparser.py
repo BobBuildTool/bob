@@ -16,6 +16,7 @@
 
 from .errors import ParseError
 from collections.abc import MutableMapping
+from types import MappingProxyType
 import fnmatch
 import re
 
@@ -261,6 +262,9 @@ class Env(MutableMapping):
 
     def detach(self):
         return self.data.copy()
+
+    def inspect(self):
+        return MappingProxyType(self.data)
 
     def setFuns(self, funs):
         self.funs = funs

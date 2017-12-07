@@ -1536,7 +1536,7 @@ class Recipe(object):
             n : p(n in recipe, recipe.get(n))
             for (n, p) in properties.items()
         }
-        self.__corePackages = []
+        self.__corePackages = PackageList()
 
         incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName,
                                   ("Recipe " if isRecipe else "Class  ") + packageName)
@@ -1691,15 +1691,16 @@ class Recipe(object):
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
                 inputTools=Env(), stack=[]):
         # already calculated?
-        for m in self.__corePackages:
-            if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox):
-                if set(stack) & m.subTreePackages:
-                    raise ParseError("Recipes are cyclic")
-                reusedPackage = p = Package()
-                p.reconstruct(m.corePackage, pathFormatter, stack,
-                    inputTools.detach(), inputSandbox)
-                m.touch(inputEnv, inputTools)
-                if DEBUG['pkgck']: break
+        env = inputEnv.inspect()
+        tools = inputTools.inspect()
+        m = self.__corePackages.find(env, tools, inputStates, inputSandbox)
+        if m is not None:
+            if set(stack) & m.subTreePackages:
+                raise ParseError("Recipes are cyclic")
+            reusedPackage = p = Package()
+            p.reconstruct(m.corePackage, pathFormatter, stack, inputTools.detach(), inputSandbox)
+            m.touch(inputEnv, inputTools)
+            if not DEBUG['pkgck']:
                 return p, m.subTreePackages
         else:
             reusedPackage = None
@@ -1877,8 +1878,8 @@ class Recipe(object):
 
         # remember calculated package
         if reusedPackage is None:
-            self.__corePackages.append(PackageMatcher(p, inputEnv, inputTools,
-                inputStates, inputSandbox, subTreePackages))
+            self.__corePackages.addPackage(p, inputEnv, inputTools, inputStates,
+                inputSandbox, subTreePackages)
         elif packageStep._getResultId() != reusedPackage.getPackageStep()._getResultId():
             #print("original", sorted(packageStep.getEnv()))
             #print("reused", sorted(reusedPackage.getPackageStep().getEnv()))
@@ -1907,12 +1908,187 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
 
         return ret
 
+
+class PackageList:
+    """Search tree of computed packages.
+
+    Used to find already computed packages and reuse them. The packages are
+    held in PackageMatchList lists. If the number of packages grows we try to
+    form a tree where intermediate nodes are comprised of PackageDiscriminator
+    instances that do selective search based on a certain attribute (env key,
+    tools key, sanbox). The leaves of the tree are always PackageMatchList.
+    """
+
+    __slots__ = ('__matchers',)
+
+    def __init__(self):
+        self.__matchers = PackageMatchList([])
+
+    def addPackage(self, package, env, tools, states, sandbox, subTreePackages):
+        m = PackageMatcher(package, env, tools, states, sandbox, subTreePackages)
+        self.__matchers = self.__matchers.addPackage(m)
+
+    def find(self, inputEnv, inputTools, inputStates, inputSandbox):
+        """Find already computed package.
+
+        Returns None if no such package can be found or an instance of
+        PackageMatcher.
+        """
+        return self.__matchers.matches(inputEnv, inputTools, inputStates, inputSandbox)
+
+
+class PackageDiscriminator:
+    """Intermediate list of packages that tries to do keyed searching.
+
+    Sorts the packages based on the given mode and key. Upon construction a
+    suitable criteria must have already been deducted and the given `matchers`
+    are filed according to the mode.
+    """
+
+    __slots__ = ('__extract', '__find', '__matchers')
+
+    def __init__(self, mode, matchers, key):
+        """Initialize for given match list based on certain mode.
+
+        The mode can either be 'env', 'tools', or 'sandbox'. For 'env' and
+        'tools' the `key` must be given which names the env/tools name that
+        divides the packages in subsets.
+        """
+        if mode == 'env':
+            self.__extract = lambda x: x.env.get(key)
+            self.__find = lambda e, t, s: self.__matchers.get(e.get(key))
+        elif mode == 'tools':
+            self.__extract = lambda x: x.tools.get(key)
+            self.__find = lambda e, t, s: self.__matchers.get(t.get(key))
+        else:
+            self.__extract = lambda x: x.sandbox
+            self.__find = lambda e, t, s: self.__matchers.get(s)
+        self.__matchers = { k : PackageMatchList(m) for k,m in matchers.items() }
+        self.__matchers.setdefault(None, PackageMatchList([]))
+        #print(mode, key, { k : len(v) for k,v in matchers.items() })
+
+    def addPackage(self, m):
+        """Add new package.
+
+        Might result in a further tree split. This is invisible for the caller
+        and handled internally.
+        """
+        v = self.__extract(m)
+        sub = self.__matchers.get(v)
+        if sub is None:
+            newSub = PackageMatchList([m])
+        else:
+            newSub = sub.addPackage(m)
+        if newSub is not sub:
+            self.__matchers[v] = newSub
+        return self
+
+    def matches(self, inputEnv, inputTools, inputStates, inputSandbox):
+        """See if matching package is found.
+
+        Checks the mode/key to find a package list that can be further queried
+        (tree descent).  If the key is not known to us we have to search in the
+        "unknown" (None) sub-tree where it might still be found. Otherwise we
+        won't find packages that have invariants on some keys.
+        """
+        sub = self.__find(inputEnv, inputTools, inputSandbox)
+        if sub is not None:
+            return sub.matches(inputEnv, inputTools, inputStates, inputSandbox)
+        else:
+            return self.__matchers[None].matches(inputEnv, inputTools, inputStates, inputSandbox)
+
+
+class PackageMatchList:
+    """Package match list.
+
+    These are always the leaves of the match tree that is hold by PackageList.
+    If a certain threshold is passed the class tries to find a criteria based
+    on environment keys, tools or the sandbox (in this order) to split the
+    packages into disjunct sets. If such criteria is found the node is split
+    and replaced by a PackageDiscriminator instance. Otherwise the threshold is
+    doubled.
+    """
+
+    __slots__ = ('matchers', 'threshold')
+
+    def __init__(self, matchers):
+        self.matchers = matchers
+        self.threshold = 8
+
+    def addPackage(self, m):
+        matchers = self.matchers
+        matchers.append(m)
+        if len(matchers) > self.threshold:
+            # find discriminating env key
+            keys = set(matchers[0].env.keys())
+            for m in matchers[1:]: keys.update(m.env.keys())
+            for k in keys:
+                v = matchers[0].env.get(k)
+                for m in matchers[1:]:
+                    if m.env.get(k) != v:
+                        return self.__splitEnvKey(k)
+
+            # otherwise find discriminating tools key
+            keys = set(matchers[0].tools.keys())
+            for m in matchers[1:]: keys.update(m.tools.keys())
+            for k in keys:
+                v = matchers[0].tools.get(k)
+                for m in matchers[1:]:
+                    if m.tools.get(k) != v:
+                        return self.__splitToolsKey(k)
+
+            # that didn't work, try with the sandbox
+            v = matchers[0].sandbox
+            for m in matchers[1:]:
+                if m.sandbox != v:
+                    return self.__splitSandbox()
+
+            # worst case: only states are different. NIY
+            self.threshold *= 2
+            return self
+        else:
+            return self
+
+    def matches(self, inputEnv, inputTools, inputStates, inputSandbox):
+        for m in self.matchers:
+            if m.matches(inputEnv, inputTools, inputStates, inputSandbox):
+                return m
+        return None
+
+    def __splitEnvKey(self, key):
+        d = { }
+        for m in self.matchers:
+            d.setdefault(m.env.get(key), []).append(m)
+        return PackageDiscriminator('env', d, key)
+
+    def __splitToolsKey(self, key):
+        d = { }
+        for m in self.matchers:
+            d.setdefault(m.tools.get(key), []).append(m)
+        return PackageDiscriminator('tools', d, key)
+
+    def __splitSandbox(self):
+        d = { }
+        for m in self.matchers:
+            d.setdefault(m.sandbox, []).append(m)
+        return PackageDiscriminator('sandbox', d, None)
+
+
 class PackageMatcher:
+    """Matcher that can find compatible packages.
+
+    For a given package the touched environment variables, tools, plugin states
+    and sandbox are stored. This data is then compared to judge if another
+    environment is compatible to this package.
+    """
+
+    __slots__ = ('corePackage', 'env', 'tools', 'states', 'sandbox', 'subTreePackages')
+
     def __init__(self, package, env, tools, states, sandbox, subTreePackages):
         self.corePackage = package._getCorePackage()
-        envData = env.detach()
+        envData = env.inspect()
         self.env = { name : envData.get(name) for name in env.touchedKeys() }
-        toolsData = tools.detach()
+        toolsData = tools.inspect()
         self.tools = { name : (tool.getStep().getVariantId() if tool is not None else None)
             for (name, tool) in ( (n, toolsData.get(n)) for n in tools.touchedKeys() ) }
         self.states = { n : s.copy() for (n,s) in states.items() }
@@ -1920,7 +2096,6 @@ class PackageMatcher:
         self.subTreePackages = subTreePackages
 
     def matches(self, inputEnv, inputTools, inputStates, inputSandbox):
-        if self.states != inputStates: return False
         for (name, env) in self.env.items():
             if env != inputEnv.get(name): return False
         for (name, tool) in self.tools.items():
@@ -1930,6 +2105,7 @@ class PackageMatcher:
         match = inputSandbox.getStep().getVariantId() \
             if inputSandbox is not None else None
         if self.sandbox != match: return False
+        if self.states != inputStates: return False
         return True
 
     def touch(self, inputEnv, inputTools):
@@ -2496,7 +2672,7 @@ class RecipeSet:
         h.update(BOB_INPUT_HASH)
         h.update(self.__cache.getDigest())
         h.update(struct.pack("<I", len(env)))
-        for (key, val) in sorted(env.detach().items()):
+        for (key, val) in sorted(env.inspect().items()):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
         h.update(b'\x01' if sandboxEnabled else b'\x00')
