@@ -133,7 +133,21 @@ class PluginState:
 
     State trackers are used by plugins to compute the value of one or more
     properties as the dependency tree of all recipes is traversed.
+
+    .. attention::
+        Objects of this class are tested for equivalence. The default
+        implementation compares all members of the involved objects. If custom
+        types are stored in the object you have to provide a suitable
+        ``__eq__`` and ``__ne__`` implementation because Python falls back to
+        object identity which might not be correct.  If these operators are not
+        working correctly then Bob may slow down considerably.
     """
+
+    def __eq__(self, other):
+        return vars(self) == vars(other)
+
+    def __ne__(self, other):
+        return vars(self) != vars(other)
 
     def copy(self):
         """Return a copy of the object.
