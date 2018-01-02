@@ -192,6 +192,27 @@ jobs.isolate
     that common checkout and build steps might be duplicated to multiple jobs,
     though.
 
+jobs.policy
+    Controls how downstream jobs are triggered and which artifacts of the
+    upstream jobs are used. By default only stable jobs trigger further
+    downstream builds. The following settings are available:
+
+    stable
+        Downstream jobs are triggered only if the build was stable. Likewise,
+        only the artifacts of stable upstream builds are used. This is the
+        default.
+
+    unstable
+        Downstream jobs are triggered on successful builds, that is stable and
+        unstable builds. The downstream jobs will also use the last build that
+        succeeded, even if that build was unstable.
+
+    always
+        Downstream jobs are triggered regardless of the build result, even on
+        failed builds. The artifacts are taken from the last completed build of
+        the upstream job which might not necessarily have published one because
+        it failed before archiving them.
+
 scm.git.shallow
     Instruct the Jenkins git plugin to create shallow clones with a history
     truncated to the specified number of commits. If the parameter is unset
