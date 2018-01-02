@@ -619,6 +619,7 @@ class JenkinsJob:
 
         deps = sorted(self.__deps.values())
         if deps:
+            policy = options.get("jobs.policy", "stable")
             revBuild = xml.etree.ElementTree.SubElement(
                 triggers, "jenkins.triggers.ReverseBuildTrigger")
             xml.etree.ElementTree.SubElement(revBuild, "spec").text = ""
@@ -626,9 +627,20 @@ class JenkinsJob:
                 revBuild, "upstreamProjects").text = ", ".join(
                     [ self.__getJobName(d) for d in deps ])
             threshold = xml.etree.ElementTree.SubElement(revBuild, "threshold")
-            xml.etree.ElementTree.SubElement(threshold, "name").text = "SUCCESS"
-            xml.etree.ElementTree.SubElement(threshold, "ordinal").text = "0"
-            xml.etree.ElementTree.SubElement(threshold, "color").text = "BLUE"
+            if policy == "stable":
+                xml.etree.ElementTree.SubElement(threshold, "name").text = "SUCCESS"
+                xml.etree.ElementTree.SubElement(threshold, "ordinal").text = "0"
+                xml.etree.ElementTree.SubElement(threshold, "color").text = "BLUE"
+            elif policy == "unstable":
+                xml.etree.ElementTree.SubElement(threshold, "name").text = "UNSTABLE"
+                xml.etree.ElementTree.SubElement(threshold, "ordinal").text = "1"
+                xml.etree.ElementTree.SubElement(threshold, "color").text = "YELLOW"
+            elif policy == "always":
+                xml.etree.ElementTree.SubElement(threshold, "name").text = "FAILURE"
+                xml.etree.ElementTree.SubElement(threshold, "ordinal").text = "2"
+                xml.etree.ElementTree.SubElement(threshold, "color").text = "RED"
+            else:
+                raise ParseError("Invalid value of extended option jobs.policy: " + policy)
             xml.etree.ElementTree.SubElement(threshold, "completeBuild").text = "true"
 
             # copy deps into workspace
@@ -680,10 +692,18 @@ class JenkinsJob:
                     cp, "target").text = ""
                 xml.etree.ElementTree.SubElement(
                     cp, "excludes").text = ""
-                xml.etree.ElementTree.SubElement(
-                    cp, "selector", attrib={
-                        "class" : "hudson.plugins.copyartifact.StatusBuildSelector"
-                    })
+                if policy in ["stable", "unstable"]:
+                    selector = xml.etree.ElementTree.SubElement(
+                        cp, "selector", attrib={
+                            "class" : "hudson.plugins.copyartifact.StatusBuildSelector"
+                        })
+                    if policy == "stable":
+                        xml.etree.ElementTree.SubElement(selector, "stable").text = "true"
+                else:
+                    xml.etree.ElementTree.SubElement(
+                        cp, "selector", attrib={
+                            "class" : "hudson.plugins.copyartifact.LastCompletedBuildSelector"
+                        })
                 xml.etree.ElementTree.SubElement(
                     cp, "doNotFingerprintArtifacts").text = "true"
 
