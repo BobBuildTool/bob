@@ -184,7 +184,7 @@ __bob_jenkins_add()
                __bob_complete_path
                ;;
             -o)
-               __bob_complete_words "artifacts.copy jobs.isolate scm.git.shallow scm.ignore-hooks scm.poll shared.dir" "" "="
+               __bob_complete_words "artifacts.copy jobs.isolate jobs.policy scm.git.shallow scm.ignore-hooks scm.poll shared.dir" "" "="
                ;;
          esac
    esac
