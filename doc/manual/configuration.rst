@@ -547,6 +547,8 @@ url While not a real SCM it      | ``url``: File that should be downloaded
     extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
                                  | ``extract``: Extract directive (optional, default: auto)
                                  | ``fileName``: Local file name (optional, default: url file name)
+                                 | ``stripComponents``: Number of leading components stripped from file name
+                                                        (optional, tar files only)
 === ============================ =======================================================================================
 
 .. _Git: http://git-scm.com/
@@ -601,7 +603,9 @@ Otherwise the URL will be checked in each build for updates. Based on the file
 name ending Bob will try to extract the downloaded file. You may prevent this
 by setting the ``extract`` attribute to ``no`` or ``False``. If the heuristic
 fails the extraction tool may be specified as ``tar``, ``gzip``, ``xz``, ``7z``
-or ``zip`` directly.
+or ``zip`` directly. For ``tar`` files it is possible to strip a configurable
+number of leading components from file names on extraction by the
+``stripComponents`` attribute.
 
 .. note::
     Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy) the whole
