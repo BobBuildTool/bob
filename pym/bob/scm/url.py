@@ -57,7 +57,7 @@ class UrlScm(Scm):
         "zip"  : "unzip -o",
     }
 
-    def __init__(self, spec, overrides=[]):
+    def __init__(self, spec, overrides=[], tidy=None):
         super().__init__(overrides)
         self.__recipe = spec['recipe']
         self.__url = spec["url"]
@@ -76,6 +76,7 @@ class UrlScm(Scm):
         if not self.__fn:
             self.__fn = self.__url.split("/")[-1]
         self.__extract = spec.get("extract", "auto")
+        self.__tidy = tidy
 
     def getProperties(self):
         return [{
@@ -148,7 +149,7 @@ fi
         return False
 
     def getDirectories(self):
-        fn = os.path.join(self.__dir, self.__fn)
+        fn = self.__dir if self.__tidy else os.path.join(self.__dir, self.__fn)
         return { fn : hashString(self.asDigestScript()) }
 
     def isDeterministic(self):

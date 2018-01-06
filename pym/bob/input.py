@@ -192,7 +192,7 @@ class PluginState:
         """
         pass
 
-def Scm(spec, env, overrides):
+def Scm(spec, env, overrides, recipeSet):
     # resolve with environment
     spec = { k : ( env.substitute(v, "checkoutSCM::"+k) if isinstance(v, str) else v)
         for (k, v) in spec.items() }
@@ -213,7 +213,7 @@ def Scm(spec, env, overrides):
     elif scm == "cvs":
         return CvsScm(spec, matchedOverrides)
     elif scm == "url":
-        return UrlScm(spec, matchedOverrides)
+        return UrlScm(spec, matchedOverrides, recipeSet.getPolicy('tidyUrlScm'))
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))
 
@@ -878,8 +878,9 @@ class CheckoutStep(Step):
             self._coreStep.coDeterministic = deterministic
 
             # try to merge compatible SCMs
-            overrides = package.getRecipe().getRecipeSet().scmOverrides()
-            checkoutSCMs = [ Scm(scm, fullEnv, overrides) for scm in checkout[2]
+            recipeSet = package.getRecipe().getRecipeSet()
+            overrides = recipeSet.scmOverrides()
+            checkoutSCMs = [ Scm(scm, fullEnv, overrides, recipeSet) for scm in checkout[2]
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
             mergedCheckoutSCMs = []
             while checkoutSCMs:
@@ -2063,6 +2064,7 @@ class RecipeSet:
         schema.Optional('policies') : {
             schema.Optional('relativeIncludes') : bool,
             schema.Optional('cleanEnvironment') : bool,
+            schema.Optional('tidyUrlScm') : bool,
         }
     })
 
@@ -2104,6 +2106,11 @@ class RecipeSet:
                 "0.13",
                 InfoOnce("cleanEnvironment policy not set. Initial environment tainted by whitelisted variables!",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#cleanenvironment for more information.")
+            ),
+            'tidyUrlScm' : (
+                "0.14",
+                InfoOnce("tidyUrlScm policy not set. Updating URL SCMs in develop build mode is not entirely safe!",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#tidyUrlScm for more information.")
             ),
         }
         self.__buildHooks = {}
