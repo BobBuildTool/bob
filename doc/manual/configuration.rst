@@ -603,6 +603,11 @@ by setting the ``extract`` attribute to ``no`` or ``False``. If the heuristic
 fails the extraction tool may be specified as ``tar``, ``gzip``, ``xz``, ``7z``
 or ``zip`` directly.
 
+.. note::
+    Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy) the whole
+    directory where the file is downloaded is claimed by the SCM. It is not
+    possible to fetch multiple files in the same directory. This is done to
+    separate possibly extracted files safely from other checkouts.
 
 depends
 ~~~~~~~

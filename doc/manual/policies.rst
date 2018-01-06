@@ -174,3 +174,40 @@ New behavior
     package computation. White listed variables are only available while
     building packages and are taken verbatim from the current OS execution
     environment.
+
+.. _policies-tidyUrlScm:
+
+tidyUrlScm
+~~~~~~~~~~
+
+Introduced in: 0.14
+
+Historically the URL SCM was not tracking the checkout directory but the individual
+files that are downloaded by the SCM. This has the advantage that it is possible
+to download more than one file into the same directory. There are a couple of
+major disadvantages, though:
+
+1. When extracting multiple archives in the same directory it might be possible
+   that some files are overwritten.
+2. Any extracted files are not tracked by Bob and will be left untouched in
+   develop mode when the recipe is updated. This leads to stale files in the
+   src-directory and will typically prevent that matching binary artifacts are
+   found.
+3. Trying to reliably apply patches across SCM updates is tricky because files
+   are only overwritten and never garbage collected.
+
+Starting with 0.14 Bob will manage the whole checkout directory. This unifies
+the behaviour with the other SCMs and solves the above disadvantages. This
+change might break existing projects because with the new behaviour it is not
+possible to put multiple URL SCMs into the same directory.
+
+Old behavior
+    Bob tracks only the downloaded file across recipe updates. Upon changes only
+    the involved file is moved away and the new one is downloaded. Extracted
+    files from archives stay in workspace.
+
+New behavior
+    The whole directory where the URL SCM is checked out is tracked by Bob.
+    Changing the recipe will move away the whole checkout directory, including
+    any possibly extracted files.
+
