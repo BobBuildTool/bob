@@ -33,7 +33,8 @@ class UrlScm(Scm):
         schema.Optional('digestSHA1') : str,
         schema.Optional('digestSHA256') : str,
         schema.Optional('extract') : schema.Or(bool, str),
-        schema.Optional('fileName') : str
+        schema.Optional('fileName') : str,
+        schema.Optional('stripComponents') : int,
     })
 
     EXTENSIONS = [
@@ -50,11 +51,11 @@ class UrlScm(Scm):
     ]
 
     EXTRACTORS = {
-        "tar"  : "tar xf",
-        "gzip" : "gunzip -kf",
-        "xz"   : "unxz -kf",
-        "7z"   : "7z x -y",
-        "zip"  : "unzip -o",
+        "tar"  : ("tar xf", "--strip-components={}"),
+        "gzip" : ("gunzip -kf", None),
+        "xz"   : ("unxz -kf", None),
+        "7z"   : ("7z x -y", None),
+        "zip"  : ("unzip -o", None),
     }
 
     def __init__(self, spec, overrides=[], tidy=None):
@@ -77,6 +78,7 @@ class UrlScm(Scm):
             self.__fn = self.__url.split("/")[-1]
         self.__extract = spec.get("extract", "auto")
         self.__tidy = tidy
+        self.__strip = spec.get("stripComponents", 0)
 
     def getProperties(self):
         return [{
@@ -87,7 +89,8 @@ class UrlScm(Scm):
             'digestSHA256' : self.__digestSha256,
             'dir' : self.__dir,
             'fileName' : self.__fn,
-            'extract' : self.__extract
+            'extract' : self.__extract,
+            'stripComponents' : self.__strip,
         }]
 
     def asScript(self):
@@ -126,12 +129,18 @@ fi
             raise ParseError("Invalid extract mode: " + self.__extract)
 
         if extractor:
+            if self.__strip > 0:
+                if extractor[1] is None:
+                    raise ParseError("Extractor does not support 'stripComponents'!")
+                strip = " " + extractor[1].format(self.__strip)
+            else:
+                strip = ""
             ret += """
 if [ {FILE} -nt .{FILE}.extracted ] ; then
-    {TOOL} {FILE}
+    {TOOL} {FILE}{STRIP}
     touch .{FILE}.extracted
 fi
-""".format(FILE=quote(self.__fn), TOOL=extractor)
+""".format(FILE=quote(self.__fn), TOOL=extractor[0], STRIP=strip)
 
         return ret
 
@@ -139,11 +148,13 @@ fi
         """Return forward compatible stable string describing this url.
 
         The format is "digest dir extract" if a SHA checksum was specified.
-        Otherwise it is "url dir extract".
+        Otherwise it is "url dir extract". A "s#" is appended if leading paths
+        are stripped where # is the number of stripped elements.
         """
         return ( self.__digestSha256 if self.__digestSha256
                  else (self.__digestSha1 if self.__digestSha1 else self.__url)
-                    ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract)
+                    ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
+                    ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
 
     def merge(self, other):
         return False
