@@ -995,8 +995,13 @@ esac
                 self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
                            checkoutOnly, depth+1)
 
+                # Take checkout step into account because it is guaranteed to
+                # be available and the build step might reference it (think of
+                # "make -C" or cross-workspace symlinks.
+                packageInputs = [ packageStep.getPackage().getCheckoutStep() ]
+                packageInputs.extend(packageStep.getArguments())
                 packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
-                    for i in packageStep.getArguments() if i.isValid() ]
+                    for i in packageInputs if i.isValid() ]
                 if checkoutOnly:
                     self._info("   PACKAGE   skipped due to --checkout-only ({})".format(prettyPackagePath))
                 elif (not self.__force) and (oldInputHashes == packageInputHashes):
