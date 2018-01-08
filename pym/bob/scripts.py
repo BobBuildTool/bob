@@ -20,6 +20,7 @@ from .state import finalize
 from .tty import colorize, Unbuffered, setColorMode
 from .utils import asHexStr, hashPath
 import argparse
+import logging
 import sys
 import traceback
 import os
@@ -158,6 +159,7 @@ Please open an issue at https://github.com/BobBuildTool/bob with the following b
 def bob(bobRoot):
     origSysStdOut = sys.stdout
     origSysStdErr = sys.stderr
+    logging.disable(logging.ERROR)
 
     # Prevent any buffering. Even on a tty Python is doing line buffering.
     sys.stdout = Unbuffered(sys.stdout)
