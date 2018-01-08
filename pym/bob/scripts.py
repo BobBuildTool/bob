@@ -148,11 +148,9 @@ def bob(bobRoot):
     origSysStdOut = sys.stdout
     origSysStdErr = sys.stderr
 
-    # prevent buffering if we are not on a tty
-    if not sys.stdout.isatty():
-        sys.stdout = Unbuffered(sys.stdout)
-    if not sys.stderr.isatty():
-        sys.stderr = Unbuffered(sys.stderr)
+    # Prevent any buffering. Even on a tty Python is doing line buffering.
+    sys.stdout = Unbuffered(sys.stdout)
+    sys.stderr = Unbuffered(sys.stderr)
 
     def cmd():
         parser = argparse.ArgumentParser(prog="bob",
