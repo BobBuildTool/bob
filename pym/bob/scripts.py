@@ -81,28 +81,28 @@ def __querypath(*args, **kwargs):
      doQueryPath(*args, **kwargs)
 
 availableCommands = {
-    "archive"       : (True, __archive, "Manage binary artifact archives"),
-    "build"         : (True, __build, "Build (sub-)packages in release mode"),
-    "dev"           : (True, __develop, "Build (sub-)packages in development mode"),
-    "clean"         : (True, __clean, "Delete unused src/build/dist paths of release builds"),
-    "graph"         : (True, __graph, "Make a interactive dependency graph"),
-    "help"          : (True, __help, "Display help information about command"),
-    "jenkins"       : (True, __jenkins, "Configure Jenkins server"),
-    "ls"            : (True, __ls, "List package hierarchy"),
-    "project"       : (True, __project, "Create project files"),
-    "status"        : (True, __status, "Show SCM status"),
+    "archive"       : ('hl', __archive, "Manage binary artifact archives"),
+    "build"         : ('hl', __build, "Build (sub-)packages in release mode"),
+    "dev"           : ('hl', __develop, "Build (sub-)packages in development mode"),
+    "clean"         : ('hl', __clean, "Delete unused src/build/dist paths of release builds"),
+    "graph"         : ('hl', __graph, "Make a interactive dependency graph"),
+    "help"          : ('hl', __help, "Display help information about command"),
+    "jenkins"       : ('hl', __jenkins, "Configure Jenkins server"),
+    "ls"            : ('hl', __ls, "List package hierarchy"),
+    "project"       : ('hl', __project, "Create project files"),
+    "status"        : ('hl', __status, "Show SCM status"),
 
-    "query-scm"     : (False, __queryscm, "Query SCM information"),
-    "query-recipe"  : (False, __queryrecipe, "Query package sources"),
-    "query-path"    : (False, __querypath, "Query path information"),
-    "query-meta"    : (False, __querymeta, "Query Package meta information"),
+    "query-scm"     : ('ll', __queryscm, "Query SCM information"),
+    "query-recipe"  : ('ll', __queryrecipe, "Query package sources"),
+    "query-path"    : ('ll', __querypath, "Query path information"),
+    "query-meta"    : ('ll', __querymeta, "Query Package meta information"),
 }
 
 def describeCommands():
     hlCmds = "\n".join(sorted([ "  {:16s}{}".format(k, v[2])
-        for (k,v) in availableCommands.items() if v[0] ]))
+        for (k,v) in availableCommands.items() if v[0] == 'hl' ]))
     llCmds = "\n".join(sorted([ "  {:16s}{}".format(k, v[2])
-        for (k,v) in availableCommands.items() if not v[0] ]))
+        for (k,v) in availableCommands.items() if v[0] == 'll' ]))
     return """
 The following high level commands are available:
 
