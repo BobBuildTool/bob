@@ -1187,6 +1187,11 @@ the following table for supported backends and their configuration.
 Backend     Description
 =========== ===================================================================
 none        Do not use a binary repository (default).
+azure       Microsoft Azure Blob storage backend. The account must be specified
+            in the ``account`` key. Either a ``key`` or a ``sasToken`` may
+            be set to authenticate, otherwise an anonymous access is used.
+            Finally the container must be given in ``container``. Requires the
+            ``azure-storage-blob`` Python3 library to be installed.
 file        Use a local directory as binary artifact repository. The directory
             is specified in the ``path`` key as absolute path.
 http        Uses a HTTP server as binary artifact repository. The server has to
@@ -1201,7 +1206,7 @@ shell       This backend can be used to execute commands that do the actual up-
             example below for a possible use with ``scp``.
 =========== ===================================================================
 
-The directory layouts of the ``file``, ``http`` and ``shell``
+The directory layouts of the ``azure``, ``file``, ``http`` and ``shell``
 (``$BOB_REMOTE_ARTIFACT``) backends are compatible. If multiple download
 backends are available they will be tried in order until a matching artifact is
 found. All available upload backends are used for uploading artifacts. Any
@@ -1230,6 +1235,25 @@ It is also possible to use separate methods for upload and download::
             upload: "scp -q ${BOB_LOCAL_ARTIFACT} localhost:archive/${BOB_REMOTE_ARTIFACT}"
             download: "scp -q localhost:archive/${BOB_REMOTE_ARTIFACT} ${BOB_LOCAL_ARTIFACT}"
             flags: [upload]
+
+The azure backend can also be used in conjunction with the http backend in case
+of publicly readable containers. Given a typical configuration like this::
+
+    archive:
+        backend: azure
+        account: <account>
+        container: <container name>
+        key: <access key>
+
+the anonymous access to the container can be used like this::
+
+    archive:
+        backend: http
+        url: https://<account>.blob.core.windows.net/<container name>
+        flags: [download]
+
+The ``flags: [download]`` makes sure that Bob does not try to upload artifacts
+in case other backends are configured too.
 
 .. _configuration-config-scmOverrides:
 
