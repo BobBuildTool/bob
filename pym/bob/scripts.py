@@ -80,6 +80,14 @@ def __querypath(*args, **kwargs):
      from .cmds.build import doQueryPath
      doQueryPath(*args, **kwargs)
 
+def __download(*args, **kwargs):
+    from .archive import doDownload
+    doDownload(*args, **kwargs)
+
+def __upload(*args, **kwargs):
+    from .archive import doUpload
+    doUpload(*args, **kwargs)
+
 availableCommands = {
     "archive"       : ('hl', __archive, "Manage binary artifact archives"),
     "build"         : ('hl', __build, "Build (sub-)packages in release mode"),
@@ -96,6 +104,9 @@ availableCommands = {
     "query-recipe"  : ('ll', __queryrecipe, "Query package sources"),
     "query-path"    : ('ll', __querypath, "Query path information"),
     "query-meta"    : ('ll', __querymeta, "Query Package meta information"),
+
+    "_download"     : (None, __download, ""),
+    "_upload"       : (None, __upload, ""),
 }
 
 def describeCommands():

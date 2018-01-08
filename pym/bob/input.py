@@ -1939,7 +1939,7 @@ class PackageMatcher:
 
 class ArchiveValidator:
     def __init__(self):
-        self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http', 'shell')},
+        self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http', 'shell', 'azure')},
             ignore_extra_keys=True)
         baseArchive = {
             'backend' : str,
@@ -1955,11 +1955,19 @@ class ArchiveValidator:
             schema.Optional('download') : str,
             schema.Optional('upload') : str,
         })
+        azureArchive = baseArchive.copy()
+        azureArchive.update({
+            'account' : str,
+            'container' : str,
+            schema.Optional('key') : str,
+            schema.Optional('sasToken"') : str,
+        })
         self.__backends = {
             'none' : schema.Schema(baseArchive),
             'file' : schema.Schema(fileArchive),
             'http' : schema.Schema(httpArchive),
             'shell' : schema.Schema(shellArchive),
+            'azure' : schema.Schema(azureArchive),
         }
 
     def validate(self, data):

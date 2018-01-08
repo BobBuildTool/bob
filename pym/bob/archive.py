@@ -35,6 +35,7 @@ from .tty import colorize
 from .utils import asHexStr, removePath, isWindows
 from pipes import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
+import argparse
 import gzip
 import http.client
 import os.path
@@ -762,6 +763,208 @@ class CustomUploader:
         return False
 
 
+class AzureArchive(BaseArchive):
+    def __init__(self, spec):
+        super().__init__(spec)
+        self.__container = spec['container']
+        self.__account = spec['account']
+        self.__key = spec.get('key')
+        self.__sasToken = spec.get('sasToken')
+        try:
+            from azure.storage.blob import BlockBlobService
+        except ImportError:
+            raise BuildError("azure-storage-blob Python3 library not installed!")
+        self.__service = BlockBlobService(account_name=self.__account,
+            account_key=self.__key, sas_token=self.__sasToken, socket_timeout=6000)
+
+    @staticmethod
+    def __makeBlobName(buildId, suffix):
+        packageResultId = buildIdToName(buildId)
+        return "/".join([packageResultId[0:2], packageResultId[2:4],
+            packageResultId[4:] + suffix])
+
+    def _remoteName(self, buildId, suffix):
+        return "https://{}.blob.core.windows.net/{}/{}".format(self.__account,
+            self.__container, self.__makeBlobName(buildId, suffix))
+
+    def _openDownloadFile(self, buildId, suffix):
+        from azure.common import AzureException, AzureMissingResourceHttpError
+        (tmpFd, tmpName) = mkstemp()
+        try:
+            os.close(tmpFd)
+            self.__service.get_blob_to_path(self.__container,
+                self.__makeBlobName(buildId, suffix), tmpName)
+            ret = tmpName
+            tmpName = None
+            return AzureDownloader(ret)
+        except AzureMissingResourceHttpError:
+            raise ArtifactNotFoundError()
+        except AzureException as e:
+            raise ArtifactDownloadError(str(e))
+        finally:
+            if tmpName is not None: os.unlink(tmpName)
+
+    def _openUploadFile(self, buildId, suffix):
+        from azure.common import AzureException
+
+        blobName = self.__makeBlobName(buildId, suffix)
+        try:
+            if self.__service.exists(self.__container, blobName):
+                raise ArtifactExistsError()
+        except AzureException as e:
+            raise ArtifactUploadError(str(e))
+        (tmpFd, tmpName) = mkstemp()
+        os.close(tmpFd)
+        return AzureUploader(self.__service, self.__container, tmpName, blobName)
+
+    def upload(self, step, buildIdFile, tgzFile):
+        if not self.canUploadJenkins():
+            return ""
+
+        args = []
+        if self.__key: args.append("--key=" + self.__key)
+        if self.__sasToken: args.append("--sas-token=" + self.__sasToken)
+
+        return "\n" + textwrap.dedent("""\
+            # upload artifact
+            cd $WORKSPACE
+            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {BUILDID} {SUFFIX} {RESULT}{FIXUP}
+            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=self.__account,
+                       CONTAINER=self.__container, BUILDID=quote(buildIdFile),
+                       RESULT=quote(tgzFile),
+                       FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
+                       SUFFIX=ARTIFACT_SUFFIX))
+
+    def download(self, step, buildIdFile, tgzFile):
+        if not self.canDownloadJenkins():
+            return ""
+
+        args = []
+        if self.__key: args.append("--key=" + self.__key)
+        if self.__sasToken: args.append("--sas-token=" + self.__sasToken)
+
+        return "\n" + textwrap.dedent("""\
+            if [[ ! -e {RESULT} ]] ; then
+                bob _download azure {ARGS} {ACCOUNT} {CONTAINER} {BUILDID} {SUFFIX} {RESULT} || echo Download failed: $?
+            fi
+            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=self.__account,
+                       CONTAINER=self.__container, BUILDID=quote(buildIdFile),
+                       RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
+
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+        if not self.canUploadJenkins():
+            return ""
+
+        args = []
+        if self.__key: args.append("--key=" + self.__key)
+        if self.__sasToken: args.append("--sas-token=" + self.__sasToken)
+
+        return "\n" + textwrap.dedent("""\
+            # upload live build-id
+            cd $WORKSPACE
+            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {LIVEBUILDID} {SUFFIX} {BUILDID}{FIXUP}
+            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=self.__account,
+                       CONTAINER=self.__container, LIVEBUILDID=quote(liveBuildId),
+                       BUILDID=quote(buildId),
+                       FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
+                       SUFFIX=BUILDID_SUFFIX))
+
+    @staticmethod
+    def scriptDownload(args):
+        service, container, remoteBlob, localFile = AzureArchive.scriptGetService(args)
+        from azure.common import AzureException
+
+        # Download into temporary file and rename if downloaded successfully
+        tmpName = None
+        try:
+            (tmpFd, tmpName) = mkstemp(dir=".")
+            os.close(tmpFd)
+            service.get_blob_to_path(container, remoteBlob, tmpName)
+            os.rename(tmpName, localFile)
+            tmpName = None
+        except (OSError, AzureException) as e:
+            raise BuildError("Download failed: " + str(e))
+        finally:
+            if tmpName is not None: os.unlink(tmpName)
+
+    @staticmethod
+    def scriptUpload(args):
+        service, container, remoteBlob, localFile = AzureArchive.scriptGetService(args)
+        from azure.common import AzureException, AzureConflictHttpError
+        try:
+            service.create_blob_from_path(container, remoteBlob, localFile, if_none_match="*")
+            print("OK")
+        except AzureConflictHttpError:
+            print("skipped")
+        except (OSError, AzureException) as e:
+            raise BuildError("Upload failed: " + str(e))
+
+    @staticmethod
+    def scriptGetService(args):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('account')
+        parser.add_argument('container')
+        parser.add_argument('buildid')
+        parser.add_argument('suffix')
+        parser.add_argument('file')
+        parser.add_argument('--key')
+        parser.add_argument('--sas-token')
+        args = parser.parse_args(args)
+
+        try:
+            from azure.storage.blob import BlockBlobService
+        except ImportError:
+            raise BuildError("azure-storage-blob Python3 library not installed!")
+
+        service = BlockBlobService(account_name=args.account, account_key=args.key,
+            sas_token=args.sas_token, socket_timeout=6000)
+
+        try:
+            with open(args.buildid, 'rb') as f:
+                remoteBlob = AzureArchive.__makeBlobName(f.read(), args.suffix)
+        except OSError as e:
+            raise BuildError(str(e))
+
+        return (service, args.container, remoteBlob, args.file)
+
+class AzureDownloader:
+    def __init__(self, name):
+        self.name = name
+    def __enter__(self):
+        return (self.name, None)
+    def __exit__(self, exc_type, exc_value, traceback):
+        os.unlink(self.name)
+        return False
+
+class AzureUploader:
+    def __init__(self, service, container, name, remoteName):
+        self.__service = service
+        self.__container = container
+        self.__name = name
+        self.__remoteName = remoteName
+
+    def __enter__(self):
+        return (self.__name, None)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            if exc_type is None:
+                self.__upload()
+        finally:
+            os.unlink(self.__name)
+        return False
+
+    def __upload(self):
+        from azure.common import AzureException, AzureConflictHttpError
+        try:
+            self.__service.create_blob_from_path(self.__container,
+                self.__remoteName, self.__name, if_none_match="*")
+        except AzureConflictHttpError:
+            raise ArtifactExistsError()
+        except AzureException as e:
+            raise ArtifactUploadError(str(e))
+
+
 class MultiArchive:
     def __init__(self, archives):
         self.__archives = archives
@@ -832,6 +1035,8 @@ def getSingleArchiver(recipes, archiveSpec):
         return SimpleHttpArchive(archiveSpec)
     elif archiveBackend == "shell":
         return CustomArchive(archiveSpec, recipes.envWhiteList())
+    elif archiveBackend == "azure":
+        return AzureArchive(archiveSpec)
     elif archiveBackend == "none":
         return DummyArchive()
     else:
@@ -843,3 +1048,17 @@ def getArchiver(recipes):
         return MultiArchive([ getSingleArchiver(recipes, i) for i in archiveSpec ])
     else:
         return getSingleArchiver(recipes, archiveSpec)
+
+def doDownload(args, bobRoot):
+    archiveBackend = args[0]
+    if archiveBackend == "azure":
+        AzureArchive.scriptDownload(args[1:])
+    else:
+        raise BuildError("Invalid archive backend: "+archiveBackend)
+
+def doUpload(args, bobRoot):
+    archiveBackend = args[0]
+    if archiveBackend == "azure":
+        AzureArchive.scriptUpload(args[1:])
+    else:
+        raise BuildError("Invalid archive backend: "+archiveBackend)
