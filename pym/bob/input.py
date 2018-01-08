@@ -2118,7 +2118,7 @@ class RecipeSet:
             'tidyUrlScm' : (
                 "0.14",
                 InfoOnce("tidyUrlScm policy not set. Updating URL SCMs in develop build mode is not entirely safe!",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#tidyUrlScm for more information.")
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#tidyurlscm for more information.")
             ),
         }
         self.__buildHooks = {}
