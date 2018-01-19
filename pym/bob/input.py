@@ -1348,13 +1348,16 @@ class IncludeHelper:
         self.__fileLoader = fileLoader
         self.__sourceName = sourceName
 
-    def resolve(self, text):
+    def resolve(self, text, section):
         if isinstance(text, str):
             resolver = IncludeHelper.Resolver(self.__fileLoader, self.__baseDir, self.__varBase, text)
             t = Template(text)
             t.delimiter = '$<'
             t.pattern = self.__pattern
-            ret = t.substitute(resolver)
+            try:
+                ret = t.substitute(resolver)
+            except ValueError as e:
+                raise ParseError("Bad substiturion in {}: {}".format(section, str(e)))
             sourceAnchor = "_BOB_SOURCES[$LINENO]=" + quote(self.__sourceName)
             return ("\n".join(resolver.prolog + [sourceAnchor, ret]), "\n".join(resolver.incDigests))
         else:
@@ -1555,7 +1558,7 @@ class Recipe(object):
         incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName,
                                   ("Recipe " if isRecipe else "Class  ") + packageName)
 
-        (checkoutScript, checkoutDigestScript) = incHelper.resolve(recipe.get("checkoutScript"))
+        (checkoutScript, checkoutDigestScript) = incHelper.resolve(recipe.get("checkoutScript"), "checkoutScript")
         checkoutSCMs = recipe.get("checkoutSCM", [])
         if isinstance(checkoutSCMs, dict):
             checkoutSCMs = [checkoutSCMs]
@@ -1566,8 +1569,8 @@ class Recipe(object):
             scm["recipe"] = "{}#{}".format(sourceFile, i)
             i += 1
         self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs)
-        self.__build = incHelper.resolve(recipe.get("buildScript"))
-        self.__package = incHelper.resolve(recipe.get("packageScript"))
+        self.__build = incHelper.resolve(recipe.get("buildScript"), "buildScript")
+        self.__package = incHelper.resolve(recipe.get("packageScript"), "packageScript")
 
         # Consider checkout deterministic by default if no checkout script is
         # involved.
