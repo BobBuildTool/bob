@@ -11,7 +11,7 @@ from ..input import RecipeSet
 from ..state import BobState
 from ..tty import colorize
 from ..utils import asHexStr, hashDirectory, hashFile, removePath, \
-    emptyDirectory, copyTree, isWindows
+emptyDirectory, copyTree, isWindows
 from datetime import datetime
 from glob import glob
 from pipes import quote
@@ -33,68 +33,68 @@ import time
 #    ==  2: package name, package steps, stderr, stdout, set -x
 
 def hashWorkspace(step):
-    return hashDirectory(step.getWorkspacePath(),
-        os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
+return hashDirectory(step.getWorkspacePath(),
+    os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
 
 def runHook(recipes, hook, args):
-    hookCmd = recipes.getBuildHook(hook)
-    ret = True
-    if hookCmd:
-        try:
-            hookCmd = os.path.expanduser(hookCmd)
-            ret = subprocess.call([hookCmd] + args) == 0
-        except OSError as e:
-            raise BuildError(hook + ": cannot run '" + hookCmd + ": " + str(e))
+hookCmd = recipes.getBuildHook(hook)
+ret = True
+if hookCmd:
+    try:
+        hookCmd = os.path.expanduser(hookCmd)
+        ret = subprocess.call([hookCmd] + args) == 0
+    except OSError as e:
+        raise BuildError(hook + ": cannot run '" + hookCmd + ": " + str(e))
 
-    return ret
+return ret
 
 class RestartBuildException(Exception):
-    pass
+pass
 
 class LocalBuilderStatistic:
-    def __init__(self):
-        self.__activeOverrides = set()
-        self.checkouts = 0
-        self.packagesBuilt = 0
-        self.packagesDownloaded = 0
+def __init__(self):
+    self.__activeOverrides = set()
+    self.checkouts = 0
+    self.packagesBuilt = 0
+    self.packagesDownloaded = 0
 
-    def addOverrides(self, overrides):
-        self.__activeOverrides.update(overrides)
+def addOverrides(self, overrides):
+    self.__activeOverrides.update(overrides)
 
-    def getActiveOverrides(self):
-        return self.__activeOverrides
+def getActiveOverrides(self):
+    return self.__activeOverrides
 
 class LocalBuilder:
 
-    RUN_TEMPLATE = """#!/bin/bash
+RUN_TEMPLATE = """#!/bin/bash
 
 on_exit()
 {{
-     if [[ -n "$_sandbox" ]] ; then
-          if [[ $_keep_sandbox = 0 ]] ; then
-                rm -rf "$_sandbox"
-          else
-                echo "Keeping sandbox in $_sandbox" >&2
-          fi
-     fi
+ if [[ -n "$_sandbox" ]] ; then
+      if [[ $_keep_sandbox = 0 ]] ; then
+            rm -rf "$_sandbox"
+      else
+            echo "Keeping sandbox in $_sandbox" >&2
+      fi
+ fi
 }}
 
 run()
 {{
-    {SANDBOX_CMD} "$@"
+{SANDBOX_CMD} "$@"
 }}
 
 run_script()
 {{
-    local ret=0 trace=""
-    if [[ $_verbose -ge 3 ]] ; then trace="-x" ; fi
+local ret=0 trace=""
+if [[ $_verbose -ge 3 ]] ; then trace="-x" ; fi
 
-    echo "### START: `date`"
-    run /bin/bash $trace -- ../script {ARGS}
-    ret=$?
-    echo "### END($ret): `date`"
+echo "### START: `date`"
+run /bin/bash $trace -- ../script {ARGS}
+ret=$?
+echo "### END($ret): `date`"
 
-    return $ret
+return $ret
 }}
 
 # make permissions predictable
@@ -112,730 +112,738 @@ eval set -- "$_args"
 
 _args=( )
 while true ; do
-    case "$1" in
-        -c) _clean=1 ;;
-        -i) _clean=0 ;;
-        -n) _no_log=1 ;;
-        -k) _keep_sandbox=1 ;;
-        -q) : $(( _verbose-- )) ;;
-        -v) : $(( _verbose++ )) ;;
-        -E) _keep_env=1 ;;
-        --) shift ; break ;;
-        *) echo "Internal error!" ; exit 1 ;;
-    esac
-    _args+=("$1")
-    shift
+case "$1" in
+    -c) _clean=1 ;;
+    -i) _clean=0 ;;
+    -n) _no_log=1 ;;
+    -k) _keep_sandbox=1 ;;
+    -q) : $(( _verbose-- )) ;;
+    -v) : $(( _verbose++ )) ;;
+    -E) _keep_env=1 ;;
+    --) shift ; break ;;
+    *) echo "Internal error!" ; exit 1 ;;
+esac
+_args+=("$1")
+shift
 done
 
 if [[ $# -gt 1 ]] ; then
-    echo "Unexpected arguments!" >&2
-    exit 1
+echo "Unexpected arguments!" >&2
+exit 1
 fi
 
 trap on_exit EXIT
 
 case "${{1:-run}}" in
-    run)
-        if [[ $_clean = 1 ]] ; then
-            rm -rf "${{0%/*}}/workspace"
-            mkdir -p "${{0%/*}}/workspace"
-        fi
-        if [[ $_keep_env = 1 ]] ; then
-            exec "$0" "${{_args[@]}}" __run
-        else
-            exec /usr/bin/env -i {WHITELIST} "$0" "${{_args[@]}}" __run
-        fi
-        ;;
-    __run)
-        cd "${{0%/*}}/workspace"
-        if [[ $_no_log = 0 ]] ; then
-            case "$_verbose" in
-                0)
-                    run_script >> ../log.txt 2>&1
-                    ;;
-                1)
-                    set -o pipefail
+run)
+    if [[ $_clean = 1 ]] ; then
+        rm -rf "${{0%/*}}/workspace"
+        mkdir -p "${{0%/*}}/workspace"
+    fi
+    if [[ $_keep_env = 1 ]] ; then
+        exec "$0" "${{_args[@]}}" __run
+    else
+        exec /usr/bin/env -i {WHITELIST} "$0" "${{_args[@]}}" __run
+    fi
+    ;;
+__run)
+    cd "${{0%/*}}/workspace"
+    if [[ $_no_log = 0 ]] ; then
+        case "$_verbose" in
+            0)
+                run_script >> ../log.txt 2>&1
+                ;;
+            1)
+                set -o pipefail
+                {{
                     {{
-                        {{
-                            run_script | tee -a ../log.txt
-                        }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
-                    }} 1>&2- 2>/dev/null
-                    ;;
-                *)
-                    set -o pipefail
+                        run_script | tee -a ../log.txt
+                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
+                }} 1>&2- 2>/dev/null
+                ;;
+            *)
+                set -o pipefail
+                {{
                     {{
-                        {{
-                            run_script | tee -a ../log.txt
-                        }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
-                    }} 3>&1 1>&2- 2>&3-
-                    ;;
-            esac
-        else
-            case "$_verbose" in
-                0)
-                    run_script 2>&1 > /dev/null
-                    ;;
-                1)
-                    run_script > /dev/null
-                    ;;
-                *)
-                    run_script
-                    ;;
-            esac
-        fi
-        ;;
-    shell)
-        if [[ $_keep_env = 1 ]] ; then
-            exec /usr/bin/env {ENV} "$0" "${{_args[@]}}" __shell
-        else
-            exec /usr/bin/env -i {WHITELIST} {ENV} "$0" "${{_args[@]}}" __shell
-        fi
-        ;;
-    __shell)
-        cd "${{0%/*}}/workspace"
-        rm -f ../audit.json.gz
-        if [[ $_keep_env = 1 ]] ; then
-            run /bin/bash -s {ARGS}
-        else
-            run /bin/bash --norc -s {ARGS}
-        fi
-        ;;
-    *)
-        echo "Unknown command" ; exit 1 ;;
+                        run_script | tee -a ../log.txt
+                    }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
+                }} 3>&1 1>&2- 2>&3-
+                ;;
+        esac
+    else
+        case "$_verbose" in
+            0)
+                run_script 2>&1 > /dev/null
+                ;;
+            1)
+                run_script > /dev/null
+                ;;
+            *)
+                run_script
+                ;;
+        esac
+    fi
+    ;;
+shell)
+    if [[ $_keep_env = 1 ]] ; then
+        exec /usr/bin/env {ENV} "$0" "${{_args[@]}}" __shell
+    else
+        exec /usr/bin/env -i {WHITELIST} {ENV} "$0" "${{_args[@]}}" __shell
+    fi
+    ;;
+__shell)
+    cd "${{0%/*}}/workspace"
+    rm -f ../audit.json.gz
+    if [[ $_keep_env = 1 ]] ; then
+        run /bin/bash -s {ARGS}
+    else
+        run /bin/bash --norc -s {ARGS}
+    fi
+    ;;
+*)
+    echo "Unknown command" ; exit 1 ;;
 esac
 """
 
-    @staticmethod
-    def releaseNameFormatter(step, props):
-        if step.isCheckoutStep():
-            base = step.getPackage().getRecipe().getName()
+@staticmethod
+def releaseNameFormatter(step, props):
+    if step.isCheckoutStep():
+        base = step.getPackage().getRecipe().getName()
+    else:
+        base = step.getPackage().getName()
+    return os.path.join("work", base.replace('::', os.sep), step.getLabel())
+
+@staticmethod
+def releaseNamePersister(wrapFmt):
+
+    def fmt(step, props):
+        return BobState().getByNameDirectory(
+            wrapFmt(step, props),
+            asHexStr(step.getVariantId()),
+            step.isCheckoutStep())
+
+    return fmt
+
+@staticmethod
+def releaseNameInterrogator(step, props):
+    return BobState().getExistingByNameDirectory(asHexStr(step.getVariantId()))
+
+@staticmethod
+def developNameFormatter(step, props):
+    if step.isCheckoutStep():
+        base = step.getPackage().getRecipe().getName()
+    else:
+        base = step.getPackage().getName()
+    return os.path.join("dev", step.getLabel(), base.replace('::', os.sep))
+
+@staticmethod
+def developNamePersister(wrapFmt):
+    """Creates a separate directory for every recipe and step variant.
+
+    Only identical steps of the same recipe are put into the same
+    directory. In contrast to the releaseNamePersister() identical steps of
+    different recipes are put into distinct directories.
+    """
+    dirs = {}
+
+    def fmt(step, props):
+        baseDir = wrapFmt(step, props)
+        digest = (step.getPackage().getRecipe().getName(), step.getVariantId())
+        if digest in dirs:
+            res = dirs[digest]
         else:
-            base = step.getPackage().getName()
-        return os.path.join("work", base.replace('::', os.sep), step.getLabel())
+            num = dirs.setdefault(baseDir, 0) + 1
+            res = os.path.join(baseDir, str(num))
+            dirs[baseDir] = num
+            dirs[digest] = res
+        return res
 
-    @staticmethod
-    def releaseNamePersister(wrapFmt):
+    return fmt
 
-        def fmt(step, props):
-            return BobState().getByNameDirectory(
-                wrapFmt(step, props),
-                asHexStr(step.getVariantId()),
-                step.isCheckoutStep())
+@staticmethod
+def makeRunnable(wrapFmt):
+    baseDir = os.getcwd()
 
-        return fmt
-
-    @staticmethod
-    def releaseNameInterrogator(step, props):
-        return BobState().getExistingByNameDirectory(asHexStr(step.getVariantId()))
-
-    @staticmethod
-    def developNameFormatter(step, props):
-        if step.isCheckoutStep():
-            base = step.getPackage().getRecipe().getName()
+    def fmt(step, mode, props):
+        if mode == 'workspace':
+            ret = wrapFmt(step, props)
         else:
-            base = step.getPackage().getName()
-        return os.path.join("dev", step.getLabel(), base.replace('::', os.sep))
-
-    @staticmethod
-    def developNamePersister(wrapFmt):
-        """Creates a separate directory for every recipe and step variant.
-
-        Only identical steps of the same recipe are put into the same
-        directory. In contrast to the releaseNamePersister() identical steps of
-        different recipes are put into distinct directories.
-        """
-        dirs = {}
-
-        def fmt(step, props):
-            baseDir = wrapFmt(step, props)
-            digest = (step.getPackage().getRecipe().getName(), step.getVariantId())
-            if digest in dirs:
-                res = dirs[digest]
+            assert mode == 'exec'
+            if step.getSandbox() is None:
+                ret = os.path.join(baseDir, wrapFmt(step, props))
             else:
-                num = dirs.setdefault(baseDir, 0) + 1
-                res = os.path.join(baseDir, str(num))
-                dirs[baseDir] = num
-                dirs[digest] = res
-            return res
+                ret = os.path.join("/bob", asHexStr(step.getVariantId()))
+        return os.path.join(ret, "workspace") if ret is not None else None
 
-        return fmt
+    return fmt
 
-    @staticmethod
-    def makeRunnable(wrapFmt):
-        baseDir = os.getcwd()
+def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
+             envWhiteList, bobRoot, cleanBuild, noLogFile):
+    self.__recipes = recipes
+    self.__wasRun= {}
+    self.__wasSkipped = {}
+    self.__verbose = max(-2, min(3, verbose))
+    self.__noLogFile = noLogFile
+    self.__force = force
+    self.__skipDeps = skipDeps
+    self.__buildOnly = buildOnly
+    self.__preserveEnv = preserveEnv
+    self.__envWhiteList = envWhiteList
+    self.__currentPackage = None
+    self.__archive = DummyArchive()
+    self.__downloadDepth = 0xffff
+    self.__downloadDepthForce = 0xffff
+    self.__bobRoot = bobRoot
+    self.__cleanBuild = cleanBuild
+    self.__cleanCheckout = False
+    self.__srcBuildIds = {}
+    self.__buildDistBuildIds = {}
+    self.__statistic = LocalBuilderStatistic()
+    self.__alwaysCheckout = []
+    self.__licenseScanners = []
 
-        def fmt(step, mode, props):
-            if mode == 'workspace':
-                ret = wrapFmt(step, props)
-            else:
-                assert mode == 'exec'
-                if step.getSandbox() is None:
-                    ret = os.path.join(baseDir, wrapFmt(step, props))
-                else:
-                    ret = os.path.join("/bob", asHexStr(step.getVariantId()))
-            return os.path.join(ret, "workspace") if ret is not None else None
+def setArchiveHandler(self, archive):
+    self.__archive = archive
 
-        return fmt
-
-    def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
-                 envWhiteList, bobRoot, cleanBuild, noLogFile):
-        self.__recipes = recipes
-        self.__wasRun= {}
-        self.__wasSkipped = {}
-        self.__verbose = max(-2, min(3, verbose))
-        self.__noLogFile = noLogFile
-        self.__force = force
-        self.__skipDeps = skipDeps
-        self.__buildOnly = buildOnly
-        self.__preserveEnv = preserveEnv
-        self.__envWhiteList = envWhiteList
-        self.__currentPackage = None
-        self.__archive = DummyArchive()
-        self.__downloadDepth = 0xffff
-        self.__downloadDepthForce = 0xffff
-        self.__bobRoot = bobRoot
-        self.__cleanBuild = cleanBuild
-        self.__cleanCheckout = False
-        self.__srcBuildIds = {}
-        self.__buildDistBuildIds = {}
-        self.__statistic = LocalBuilderStatistic()
-        self.__alwaysCheckout = []
-
-    def setArchiveHandler(self, archive):
-        self.__archive = archive
-
-    def setDownloadMode(self, mode):
-        self.__downloadDepth = 0xffff
-        if mode in ('yes', 'forced'):
-            self.__archive.wantDownload(True)
-            if mode == 'forced':
-                self.__downloadDepth = 0
-                self.__downloadDepthForce = 0
-            elif self.__archive.canDownloadLocal():
-                self.__downloadDepth = 0
-        elif mode in ('deps', 'forced-deps'):
-            self.__archive.wantDownload(True)
-            if mode == 'forced-deps':
-                self.__downloadDepth = 1
-                self.__downloadDepthForce = 1
-            elif self.__archive.canDownloadLocal():
-                self.__downloadDepth = 1
-        elif mode == 'forced-fallback':
-            self.__archive.wantDownload(True)
+def setDownloadMode(self, mode):
+    self.__downloadDepth = 0xffff
+    if mode in ('yes', 'forced'):
+        self.__archive.wantDownload(True)
+        if mode == 'forced':
             self.__downloadDepth = 0
+            self.__downloadDepthForce = 0
+        elif self.__archive.canDownloadLocal():
+            self.__downloadDepth = 0
+    elif mode in ('deps', 'forced-deps'):
+        self.__archive.wantDownload(True)
+        if mode == 'forced-deps':
+            self.__downloadDepth = 1
             self.__downloadDepthForce = 1
-        else:
-            assert mode == 'no'
-            self.__archive.wantDownload(False)
+        elif self.__archive.canDownloadLocal():
+            self.__downloadDepth = 1
+    elif mode == 'forced-fallback':
+        self.__archive.wantDownload(True)
+        self.__downloadDepth = 0
+        self.__downloadDepthForce = 1
+    else:
+        assert mode == 'no'
+        self.__archive.wantDownload(False)
 
-    def setUploadMode(self, mode):
-        self.__archive.wantUpload(mode)
+def setUploadMode(self, mode):
+    self.__archive.wantUpload(mode)
 
-    def setCleanCheckout(self, clean):
-        self.__cleanCheckout = clean
+def setLicenseScanners(self, licenseScanners):
+    self.__licenseScanners = licenseScanners
 
-    def setAlwaysCheckout(self, alwaysCheckout):
-        self.__alwaysCheckout = [ re.compile(e) for e in alwaysCheckout ]
+def setCleanCheckout(self, clean):
+    self.__cleanCheckout = clean
 
-    def saveBuildState(self):
-        state = {}
-        # Save 'wasRun' as plain dict. Skipped steps are dropped because they
-        # were not really executed. Either they are simply skipped again or, if
-        # the user changes his mind, they will finally be executed.
-        state['wasRun'] = { path : (vid, isCheckoutStep)
-            for path, (vid, isCheckoutStep) in self.__wasRun.items()
-            if not self.__wasSkipped.get(path, False) }
-        # Save all predicted src build-ids. In case of a resume we won't ask
-        # the server again for a live-build-id. Regular src build-ids are
-        # cached by the usual 'wasRun' and 'resultHash' states.
-        state['predictedBuidId'] = { (path, vid) : bid
-            for (path, vid), (bid, predicted) in self.__srcBuildIds.items()
-            if predicted }
-        BobState().setBuildState(state)
+def setAlwaysCheckout(self, alwaysCheckout):
+    self.__alwaysCheckout = [ re.compile(e) for e in alwaysCheckout ]
 
-    def loadBuildState(self):
-        state = BobState().getBuildState()
-        self.__wasRun = dict(state['wasRun'])
-        self.__srcBuildIds = { (path, vid) : (bid, True)
-            for (path, vid), bid in state['predictedBuidId'].items() }
+def saveBuildState(self):
+    state = {}
+    # Save 'wasRun' as plain dict. Skipped steps are dropped because they
+    # were not really executed. Either they are simply skipped again or, if
+    # the user changes his mind, they will finally be executed.
+    state['wasRun'] = { path : (vid, isCheckoutStep)
+        for path, (vid, isCheckoutStep) in self.__wasRun.items()
+        if not self.__wasSkipped.get(path, False) }
+    # Save all predicted src build-ids. In case of a resume we won't ask
+    # the server again for a live-build-id. Regular src build-ids are
+    # cached by the usual 'wasRun' and 'resultHash' states.
+    state['predictedBuidId'] = { (path, vid) : bid
+        for (path, vid), (bid, predicted) in self.__srcBuildIds.items()
+        if predicted }
+    BobState().setBuildState(state)
 
-    def _wasAlreadyRun(self, step, skippedOk=False):
-        path = step.getWorkspacePath()
-        if path in self.__wasRun:
-            digest = self.__wasRun[path][0]
-            # invalidate invalid cached entries
-            if digest != step.getVariantId():
-                del self.__wasRun[path]
-                return False
-            elif (not skippedOk) and self.__wasSkipped.get(path, False):
-                return False
-            else:
-                return True
-        else:
+def loadBuildState(self):
+    state = BobState().getBuildState()
+    self.__wasRun = dict(state['wasRun'])
+    self.__srcBuildIds = { (path, vid) : (bid, True)
+        for (path, vid), bid in state['predictedBuidId'].items() }
+
+def _wasAlreadyRun(self, step, skippedOk=False):
+    path = step.getWorkspacePath()
+    if path in self.__wasRun:
+        digest = self.__wasRun[path][0]
+        # invalidate invalid cached entries
+        if digest != step.getVariantId():
+            del self.__wasRun[path]
             return False
-
-    def _setAlreadyRun(self, step, isCheckoutStep, skipped=False):
-        path = step.getWorkspacePath()
-        self.__wasRun[path] = (step.getVariantId(), isCheckoutStep)
-        self.__wasSkipped[path] = skipped
-
-    def _clearWasRun(self):
-        """Clear "was-run" info for build- and package-steps."""
-        self.__wasRun = { path : (vid, isCheckoutStep)
-            for path, (vid, isCheckoutStep) in self.__wasRun.items()
-            if isCheckoutStep }
-
-    def _constructDir(self, step, label):
-        created = False
-        workDir = step.getWorkspacePath()
-        if not os.path.isdir(workDir):
-            os.makedirs(workDir)
-            created = True
-        return (workDir, created)
-
-    def _generateAudit(self, step, depth, resultHash, executed=True):
-        audit = Audit.create(step.getVariantId(), self._getBuildId(step, depth), resultHash)
-        audit.addDefine("bob", BOB_VERSION)
-        audit.addDefine("recipe", step.getPackage().getRecipe().getName())
-        audit.addDefine("package", "/".join(step.getPackage().getStack()))
-        audit.addDefine("step", step.getLabel())
-        for var, val in step.getPackage().getMetaEnv().items():
-            audit.addMetaEnv(var, val)
-        audit.setRecipesAudit(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
-
-        # The following things make only sense if we just executed the step
-        if executed:
-            audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
-            for (name, tool) in sorted(step.getTools().items()):
-                audit.addTool(name,
-                    os.path.join(tool.getStep().getWorkspacePath(), "..", "audit.json.gz"))
-            sandbox = step.getSandbox()
-            if sandbox is not None:
-                audit.setSandbox(os.path.join(sandbox.getStep().getWorkspacePath(), "..", "audit.json.gz"))
-            for dep in step.getArguments():
-                if dep.isValid():
-                    audit.addArg(os.path.join(dep.getWorkspacePath(), "..", "audit.json.gz"))
-
-        # Always check for SCMs but don't fail if we did not execute the step
-        if step.isCheckoutStep():
-            for scm in step.getScmList():
-                auditSpec = scm.getAuditSpec()
-                if auditSpec is not None:
-                    (typ, dir) = auditSpec
-                    try:
-                        audit.addScm(typ, step.getWorkspacePath(), dir)
-                    except BobError as e:
-                        if executed: raise
-                        print(colorize("   WARNING: cannot audit SCM: {} ({})"
-                                            .format(e.slogan, dir),
-                                       "33"))
-
-        auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
-        audit.save(auditPath)
-        return auditPath
-
-    def __linkDependencies(self, step):
-        """Create symlinks to the dependency workspaces"""
-
-        # this will only work on POSIX
-        if isWindows(): return
-
-        # always re-create the deps directory
-        basePath = os.getcwd()
-        depsPath = os.path.join(basePath, step.getWorkspacePath(), "..", "deps")
-        removePath(depsPath)
-        os.makedirs(depsPath)
-
-        def linkTo(dest, linkName):
-            os.symlink(os.path.relpath(os.path.join(basePath, dest, ".."),
-                                       os.path.join(linkName, "..")),
-                       linkName)
-
-        # there can only be one sandbox
-        if step.getSandbox() is not None:
-            sandboxPath = os.path.join(depsPath, "sandbox")
-            linkTo(step.getSandbox().getStep().getWorkspacePath(), sandboxPath)
-
-        # link tools by name
-        tools = step.getTools()
-        if tools:
-            toolsPath = os.path.join(depsPath, "tools")
-            os.makedirs(toolsPath)
-            for (n,t) in tools.items():
-                linkTo(t.getStep().getWorkspacePath(), os.path.join(toolsPath, n))
-
-        # link dependencies by position and name
-        args = step.getArguments()
-        if args:
-            argsPath = os.path.join(depsPath, "args")
-            os.makedirs(argsPath)
-            i = 1
-            for a in args:
-                if a.isValid():
-                    linkTo(a.getWorkspacePath(),
-                           os.path.join(argsPath,
-                                        "{:02}-{}".format(i, a.getPackage().getName())))
-                i += 1
-
-    def _runShell(self, step, scriptName, cleanWorkspace):
-        workspacePath = step.getWorkspacePath()
-        if cleanWorkspace: emptyDirectory(workspacePath)
-        if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
-        self.__linkDependencies(step)
-
-        # construct environment
-        stepEnv = step.getEnv().copy()
-        if step.getSandbox() is None:
-            stepEnv["PATH"] = ":".join(step.getPaths() + [os.environ["PATH"]])
+        elif (not skippedOk) and self.__wasSkipped.get(path, False):
+            return False
         else:
-            stepEnv["PATH"] = ":".join(step.getPaths() + step.getSandbox().getPaths())
-        stepEnv["LD_LIBRARY_PATH"] = ":".join(step.getLibraryPaths())
-        stepEnv["BOB_CWD"] = step.getExecPath()
+            return True
+    else:
+        return False
 
-        # filter runtime environment
-        if self.__preserveEnv:
-            runEnv = os.environ.copy()
-        else:
-            runEnv = { k:v for (k,v) in os.environ.items()
-                                     if k in self.__envWhiteList }
-        runEnv.update(stepEnv)
+def _setAlreadyRun(self, step, isCheckoutStep, skipped=False):
+    path = step.getWorkspacePath()
+    self.__wasRun[path] = (step.getVariantId(), isCheckoutStep)
+    self.__wasSkipped[path] = skipped
 
-        # sandbox
-        if step.getSandbox() is not None:
-            sandboxSetup = "\"$(mktemp -d)\""
-            sandboxMounts = [ "declare -a mounts=( )" ]
-            sandbox = [ quote(os.path.join(self.__bobRoot, "bin", "namespace-sandbox")) ]
-            if self.__verbose >= 3:
-                sandbox.append('-D')
-            sandbox.extend(["-S", "\"$_sandbox\""])
-            sandbox.extend(["-W", quote(step.getExecPath())])
-            sandbox.extend(["-H", "bob"])
-            sandbox.extend(["-d", "/tmp"])
-            sandboxRootFs = os.path.abspath(
-                step.getSandbox().getStep().getWorkspacePath())
-            for f in os.listdir(sandboxRootFs):
-                sandboxMounts.append("mounts+=( -M {} -m /{} )".format(
-                    quote(os.path.join(sandboxRootFs, f)), quote(f)))
-            for (hostPath, sndbxPath, options) in step.getSandbox().getMounts():
-                if "nolocal" in options: continue # skip for local builds?
-                line = "-M " + hostPath
-                if "rw" in options:
-                    line += " -w " + sndbxPath
-                elif hostPath != sndbxPath:
-                    line += " -m " + sndbxPath
-                line = "mounts+=( " + line + " )"
-                if "nofail" in options:
-                    sandboxMounts.append(
-                        """if [[ -e {HOST} ]] ; then {MOUNT} ; fi"""
-                            .format(HOST=hostPath, MOUNT=line)
-                        )
-                else:
-                    sandboxMounts.append(line)
-            sandboxMounts.append("mounts+=( -M {} -w {} )".format(
-                quote(os.path.abspath(os.path.join(
-                    step.getWorkspacePath(), ".."))),
-                quote(os.path.normpath(os.path.join(
-                    step.getExecPath(), ".."))) ))
-            addDep = lambda s: (sandboxMounts.append("mounts+=( -M {} -m {} )".format(
-                    quote(os.path.abspath(s.getWorkspacePath())),
-                    quote(s.getExecPath()) )) if s.isValid() else None)
-            for s in step.getAllDepSteps(): addDep(s)
-            # special handling to mount all previous steps of current package
-            s = step
-            while s.isValid():
-                if len(s.getArguments()) > 0:
-                    s = s.getArguments()[0]
-                    addDep(s)
-                else:
-                    break
-            sandbox.append('"${mounts[@]}"')
-            sandbox.append("--")
-        else:
-            sandbox = []
-            sandboxMounts = []
-            sandboxSetup = ""
+def _clearWasRun(self):
+    """Clear "was-run" info for build- and package-steps."""
+    self.__wasRun = { path : (vid, isCheckoutStep)
+        for path, (vid, isCheckoutStep) in self.__wasRun.items()
+        if isCheckoutStep }
 
-        # write scripts
-        runFile = os.path.join("..", scriptName+".sh")
-        absRunFile = os.path.normpath(os.path.join(workspacePath, runFile))
-        absRunFile = os.path.join(".", absRunFile)
-        with open(absRunFile, "w") as f:
-            print(LocalBuilder.RUN_TEMPLATE.format(
-                    ENV=" ".join(sorted([
-                        "{}={}".format(key, quote(value))
-                        for (key, value) in stepEnv.items() ])),
-                    WHITELIST=" ".join(sorted([
-                        '${'+key+'+'+key+'="$'+key+'"}'
-                        for key in self.__envWhiteList ])),
-                    ARGS=" ".join([
-                        quote(a.getExecPath())
-                        for a in step.getArguments() ]),
-                    SANDBOX_CMD="\n    ".join(sandboxMounts + [" ".join(sandbox)]),
-                    SANDBOX_SETUP=sandboxSetup,
-                    CLEAN="1" if cleanWorkspace else "0",
-                ), file=f)
-        scriptFile = os.path.join(workspacePath, "..", "script")
-        with open(scriptFile, "w") as f:
-            f.write(dedent("""\
-                # Error handling
-                bob_handle_error()
-                {
-                    set +x
-                    echo "\x1b[31;1mStep failed with return status $1; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m"
-                    echo "Call stack (most recent call first)"
-                    i=0
-                    while caller $i >/dev/null ; do
-                            j=${BASH_LINENO[$i]}
-                            while [[ $j -ge 0 && -z ${_BOB_SOURCES[$j]:+true} ]] ; do
-                                    : $(( j-- ))
-                            done
-                            echo "    #$i: ${_BOB_SOURCES[$j]}, line $(( BASH_LINENO[$i] - j )), in ${FUNCNAME[$((i+1))]}"
-                            : $(( i++ ))
-                    done
+def _constructDir(self, step, label):
+    created = False
+    workDir = step.getWorkspacePath()
+    if not os.path.isdir(workDir):
+        os.makedirs(workDir)
+        created = True
+    return (workDir, created)
 
-                    exit $1
-                }
-                declare -A _BOB_SOURCES=( [0]="Bob prolog" )
-                trap 'bob_handle_error $? >&2' ERR
-                trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do rm -f "$i" ; done' EXIT
-                set -o errtrace -o nounset -o pipefail
+def _generateAudit(self, step, depth, resultHash, executed=True):
+    audit = Audit.create(step.getVariantId(), self._getBuildId(step, depth), resultHash)
+    audit.addDefine("bob", BOB_VERSION)
+    audit.addDefine("recipe", step.getPackage().getRecipe().getName())
+    audit.addDefine("package", "/".join(step.getPackage().getStack()))
+    audit.addDefine("step", step.getLabel())
+    for var, val in step.getPackage().getMetaEnv().items():
+        audit.addMetaEnv(var, val)
+    audit.setRecipesAudit(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
 
-                # Special Bob array variables:
-                """))
-            print("declare -A BOB_ALL_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(a.getPackage().getName()),
-                                   quote(a.getExecPath()))
-                    for a in step.getAllDepSteps() ] ))), file=f)
-            print("declare -A BOB_DEP_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(a.getPackage().getName()),
-                                   quote(a.getExecPath()))
-                    for a in step.getArguments() if a.isValid() ] ))), file=f)
-            print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(n), quote(os.path.join(t.getStep().getExecPath(), t.getPath())))
-                    for (n,t) in step.getTools().items()] ))), file=f)
-            print("", file=f)
-            print("# Environment:", file=f)
-            for (k,v) in sorted(stepEnv.items()):
-                print("export {}={}".format(k, quote(v)), file=f)
-            print("declare -p > ../env", file=f)
-            print("", file=f)
-            print("# BEGIN BUILD SCRIPT", file=f)
-            print(step.getScript(), file=f)
-            print("# END BUILD SCRIPT", file=f)
-        os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
-            stat.S_IROTH | stat.S_IWOTH)
-        cmdLine = ["/bin/bash", runFile, "__run"]
-        if self.__verbose < 0:
-            cmdLine.append('-q')
-        elif self.__verbose == 1:
-            cmdLine.append('-v')
-        elif self.__verbose >= 2:
-            cmdLine.append('-vv')
-        if self.__noLogFile:
-            cmdLine.append('-n')
+    # The following things make only sense if we just executed the step
+    if executed:
+        audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
+        for (name, tool) in sorted(step.getTools().items()):
+            audit.addTool(name,
+                os.path.join(tool.getStep().getWorkspacePath(), "..", "audit.json.gz"))
+        sandbox = step.getSandbox()
+        if sandbox is not None:
+            audit.setSandbox(os.path.join(sandbox.getStep().getWorkspacePath(), "..", "audit.json.gz"))
+        for dep in step.getArguments():
+            if dep.isValid():
+                audit.addArg(os.path.join(dep.getWorkspacePath(), "..", "audit.json.gz"))
 
-        try:
-            proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv)
-            if proc.wait() != 0:
-                raise BuildError("Build script {} returned with {}"
-                                    .format(absRunFile, proc.returncode),
-                                 help="You may resume at this point with '--resume' after fixing the error.")
-        except OSError as e:
-            raise BuildError("Cannot execute build script {}: {}".format(absRunFile, str(e)))
-        except KeyboardInterrupt:
-            raise BuildError("User aborted while running {}".format(absRunFile),
-                             help = "Run again with '--resume' to skip already built packages.")
+    # Always check for SCMs but don't fail if we did not execute the step
+    if step.isCheckoutStep():
+        for scm in step.getScmList():
+            auditSpec = scm.getAuditSpec()
+            if auditSpec is not None:
+                (typ, dir) = auditSpec
+                try:
+                    audit.addScm(typ, step.getWorkspacePath(), dir)
+                except BobError as e:
+                    if executed: raise
+                    print(colorize("   WARNING: cannot audit SCM: {} ({})"
+                                        .format(e.slogan, dir),
+                                   "33"))
 
-    def _info(self, *args, **kwargs):
-        if self.__verbose >= -1:
-            print(*args, **kwargs)
+    auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
+    audit.save(auditPath)
+    return auditPath
 
-    def getStatistic(self):
-        return self.__statistic
+def __linkDependencies(self, step):
+    """Create symlinks to the dependency workspaces"""
 
-    def cook(self, step, checkoutOnly):
-        done = False
-        while not done:
-            try:
-                self._cook([step], step.getPackage(), checkoutOnly)
-                done = True
-            except RestartBuildException:
-                print(colorize("** Restart build due to wrongly predicted sources.", "33"))
-                self.__currentPackage = None
+    # this will only work on POSIX
+    if isWindows(): return
 
-    def _cook(self, steps, parentPackage, checkoutOnly, depth=0):
-        currentPackage = self.__currentPackage
+    # always re-create the deps directory
+    basePath = os.getcwd()
+    depsPath = os.path.join(basePath, step.getWorkspacePath(), "..", "deps")
+    removePath(depsPath)
+    os.makedirs(depsPath)
 
-        # skip everything except the current package
-        if self.__skipDeps:
-            steps = [ s for s in steps if s.getPackage() == parentPackage ]
+    def linkTo(dest, linkName):
+        os.symlink(os.path.relpath(os.path.join(basePath, dest, ".."),
+                                   os.path.join(linkName, "..")),
+                   linkName)
 
-        for step in reversed(steps):
-            # skip if already processed steps
-            if self._wasAlreadyRun(step):
-                continue
+    # there can only be one sandbox
+    if step.getSandbox() is not None:
+        sandboxPath = os.path.join(depsPath, "sandbox")
+        linkTo(step.getSandbox().getStep().getWorkspacePath(), sandboxPath)
 
-            # update if package changes
-            newPackage = "/".join(step.getPackage().getStack())
-            if newPackage != self.__currentPackage:
-                self.__currentPackage = newPackage
-                print(">>", colorize(self.__currentPackage, "32;1"))
+    # link tools by name
+    tools = step.getTools()
+    if tools:
+        toolsPath = os.path.join(depsPath, "tools")
+        os.makedirs(toolsPath)
+        for (n,t) in tools.items():
+            linkTo(t.getStep().getWorkspacePath(), os.path.join(toolsPath, n))
 
-            # execute step
-            try:
-                if step.isCheckoutStep():
-                    if step.isValid():
-                        self._cookCheckoutStep(step, depth)
-                elif step.isBuildStep():
-                    if step.isValid():
-                        self._cookBuildStep(step, checkoutOnly, depth)
-                else:
-                    assert step.isPackageStep() and step.isValid()
-                    self._cookPackageStep(step, checkoutOnly, depth)
-            except BuildError as e:
-                e.setStack(step.getPackage().getStack())
-                raise e
+    # link dependencies by position and name
+    args = step.getArguments()
+    if args:
+        argsPath = os.path.join(depsPath, "args")
+        os.makedirs(argsPath)
+        i = 1
+        for a in args:
+            if a.isValid():
+                linkTo(a.getWorkspacePath(),
+                       os.path.join(argsPath,
+                                    "{:02}-{}".format(i, a.getPackage().getName())))
+            i += 1
 
-        # back to original package
-        if currentPackage != self.__currentPackage:
-            self.__currentPackage = currentPackage
-            if currentPackage:
-                print(">>", colorize(self.__currentPackage, "32;1"))
+def _runShell(self, step, scriptName, cleanWorkspace):
+    workspacePath = step.getWorkspacePath()
+    if cleanWorkspace: emptyDirectory(workspacePath)
+    if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
+    self.__linkDependencies(step)
 
-    def _cookCheckoutStep(self, checkoutStep, depth):
-        overrides = set()
-        scmList = checkoutStep.getScmList()
-        for scm in scmList:
-            overrides.update(scm.getActiveOverrides())
-        self.__statistic.addOverrides(overrides)
-        overrides = len(overrides)
-        overridesString = ("(" + str(overrides) + " scm " + ("overrides" if overrides > 1 else "override") +")") if overrides else ""
+    # construct environment
+    stepEnv = step.getEnv().copy()
+    if step.getSandbox() is None:
+        stepEnv["PATH"] = ":".join(step.getPaths() + [os.environ["PATH"]])
+    else:
+        stepEnv["PATH"] = ":".join(step.getPaths() + step.getSandbox().getPaths())
+    stepEnv["LD_LIBRARY_PATH"] = ":".join(step.getLibraryPaths())
+    stepEnv["BOB_CWD"] = step.getExecPath()
 
-        checkoutDigest = checkoutStep.getVariantId()
-        if self._wasAlreadyRun(checkoutStep):
-            prettySrcPath = checkoutStep.getWorkspacePath()
-            self._info("   CHECKOUT  skipped (reuse {}) {}".format(prettySrcPath, overridesString))
-        else:
-            # depth first
-            self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
-                      False, depth+1)
+    # filter runtime environment
+    if self.__preserveEnv:
+        runEnv = os.environ.copy()
+    else:
+        runEnv = { k:v for (k,v) in os.environ.items()
+                                 if k in self.__envWhiteList }
+    runEnv.update(stepEnv)
 
-            # get directory into shape
-            (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
-            oldCheckoutState = BobState().getDirectoryState(prettySrcPath, {})
-            if created:
-                # invalidate result if folder was created
-                BobState().delInputHashes(prettySrcPath)
-                BobState().delResultHash(prettySrcPath)
-                oldCheckoutState = {}
-                BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
-
-            checkoutExecuted = False
-            checkoutState = checkoutStep.getScmDirectories().copy()
-            checkoutState[None] = checkoutDigest
-            if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
-                if checkoutState != oldCheckoutState:
-                    print(colorize("   CHECKOUT  WARNING: recipe changed but skipped due to --build-only ({})"
-                        .format(prettySrcPath), "33"))
-                else:
-                    self._info("   CHECKOUT  skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString))
+    # sandbox
+    if step.getSandbox() is not None:
+        sandboxSetup = "\"$(mktemp -d)\""
+        sandboxMounts = [ "declare -a mounts=( )" ]
+        sandbox = [ quote(os.path.join(self.__bobRoot, "bin", "namespace-sandbox")) ]
+        if self.__verbose >= 3:
+            sandbox.append('-D')
+        sandbox.extend(["-S", "\"$_sandbox\""])
+        sandbox.extend(["-W", quote(step.getExecPath())])
+        sandbox.extend(["-H", "bob"])
+        sandbox.extend(["-d", "/tmp"])
+        sandboxRootFs = os.path.abspath(
+            step.getSandbox().getStep().getWorkspacePath())
+        for f in os.listdir(sandboxRootFs):
+            sandboxMounts.append("mounts+=( -M {} -m /{} )".format(
+                quote(os.path.join(sandboxRootFs, f)), quote(f)))
+        for (hostPath, sndbxPath, options) in step.getSandbox().getMounts():
+            if "nolocal" in options: continue # skip for local builds?
+            line = "-M " + hostPath
+            if "rw" in options:
+                line += " -w " + sndbxPath
+            elif hostPath != sndbxPath:
+                line += " -m " + sndbxPath
+            line = "mounts+=( " + line + " )"
+            if "nofail" in options:
+                sandboxMounts.append(
+                    """if [[ -e {HOST} ]] ; then {MOUNT} ; fi"""
+                        .format(HOST=hostPath, MOUNT=line)
+                    )
             else:
-                if self.__cleanCheckout:
-                    # check state of SCMs and invalidate if the directory is dirty
-                    stats = {}
-                    for scm in checkoutStep.getScmList():
-                        stats.update({ dir : scm for dir in scm.getDirectories().keys() })
-                    for (scmDir, scmDigest) in oldCheckoutState.copy().items():
-                        if scmDir is None: continue
-                        if scmDigest != checkoutState.get(scmDir): continue
-                        status = stats[scmDir].status(checkoutStep.getWorkspacePath())[0]
-                        if (status == 'dirty') or (status == 'error'):
-                            oldCheckoutState[scmDir] = None
+                sandboxMounts.append(line)
+        sandboxMounts.append("mounts+=( -M {} -w {} )".format(
+            quote(os.path.abspath(os.path.join(
+                step.getWorkspacePath(), ".."))),
+            quote(os.path.normpath(os.path.join(
+                step.getExecPath(), ".."))) ))
+        addDep = lambda s: (sandboxMounts.append("mounts+=( -M {} -m {} )".format(
+                quote(os.path.abspath(s.getWorkspacePath())),
+                quote(s.getExecPath()) )) if s.isValid() else None)
+        for s in step.getAllDepSteps(): addDep(s)
+        # special handling to mount all previous steps of current package
+        s = step
+        while s.isValid():
+            if len(s.getArguments()) > 0:
+                s = s.getArguments()[0]
+                addDep(s)
+            else:
+                break
+        sandbox.append('"${mounts[@]}"')
+        sandbox.append("--")
+    else:
+        sandbox = []
+        sandboxMounts = []
+        sandboxSetup = ""
 
-                checkoutInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
-                    for i in checkoutStep.getAllDepSteps() if i.isValid() ]
-                if (self.__force or (not checkoutStep.isDeterministic()) or
-                    (BobState().getResultHash(prettySrcPath) is None) or
-                    (checkoutState != oldCheckoutState) or
-                    (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
-                    # move away old or changed source directories
-                    for (scmDir, scmDigest) in oldCheckoutState.copy().items():
-                        if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
-                            scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
-                            if os.path.exists(scmPath):
-                                atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
-                                print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
-                                atticPath = os.path.join(prettySrcPath, "..", "attic")
-                                if not os.path.isdir(atticPath):
-                                    os.makedirs(atticPath)
-                                os.rename(scmPath, os.path.join(atticPath, atticName))
-                            del oldCheckoutState[scmDir]
-                            BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
+    # write scripts
+    runFile = os.path.join("..", scriptName+".sh")
+    absRunFile = os.path.normpath(os.path.join(workspacePath, runFile))
+    absRunFile = os.path.join(".", absRunFile)
+    with open(absRunFile, "w") as f:
+        print(LocalBuilder.RUN_TEMPLATE.format(
+                ENV=" ".join(sorted([
+                    "{}={}".format(key, quote(value))
+                    for (key, value) in stepEnv.items() ])),
+                WHITELIST=" ".join(sorted([
+                    '${'+key+'+'+key+'="$'+key+'"}'
+                    for key in self.__envWhiteList ])),
+                ARGS=" ".join([
+                    quote(a.getExecPath())
+                    for a in step.getArguments() ]),
+                SANDBOX_CMD="\n    ".join(sandboxMounts + [" ".join(sandbox)]),
+                SANDBOX_SETUP=sandboxSetup,
+                CLEAN="1" if cleanWorkspace else "0",
+            ), file=f)
+    scriptFile = os.path.join(workspacePath, "..", "script")
+    with open(scriptFile, "w") as f:
+        f.write(dedent("""\
+            # Error handling
+            bob_handle_error()
+            {
+                set +x
+                echo "\x1b[31;1mStep failed with return status $1; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m"
+                echo "Call stack (most recent call first)"
+                i=0
+                while caller $i >/dev/null ; do
+                        j=${BASH_LINENO[$i]}
+                        while [[ $j -ge 0 && -z ${_BOB_SOURCES[$j]:+true} ]] ; do
+                                : $(( j-- ))
+                        done
+                        echo "    #$i: ${_BOB_SOURCES[$j]}, line $(( BASH_LINENO[$i] - j )), in ${FUNCNAME[$((i+1))]}"
+                        : $(( i++ ))
+                done
 
-                    # Check that new checkouts do not collide with old stuff in
-                    # workspace. Do it before we store the new SCM state to
-                    # check again if the step is rerun.
-                    for scmDir in checkoutState.keys():
-                        if scmDir is None or scmDir == ".": continue
-                        if oldCheckoutState.get(scmDir) is not None: continue
+                exit $1
+            }
+            declare -A _BOB_SOURCES=( [0]="Bob prolog" )
+            trap 'bob_handle_error $? >&2' ERR
+            trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do rm -f "$i" ; done' EXIT
+            set -o errtrace -o nounset -o pipefail
+
+            # Special Bob array variables:
+            """))
+        print("declare -A BOB_ALL_PATHS=( {} )".format(" ".join(sorted(
+            [ "[{}]={}".format(quote(a.getPackage().getName()),
+                               quote(a.getExecPath()))
+                for a in step.getAllDepSteps() ] ))), file=f)
+        print("declare -A BOB_DEP_PATHS=( {} )".format(" ".join(sorted(
+            [ "[{}]={}".format(quote(a.getPackage().getName()),
+                               quote(a.getExecPath()))
+                for a in step.getArguments() if a.isValid() ] ))), file=f)
+        print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
+            [ "[{}]={}".format(quote(n), quote(os.path.join(t.getStep().getExecPath(), t.getPath())))
+                for (n,t) in step.getTools().items()] ))), file=f)
+        print("", file=f)
+        print("# Environment:", file=f)
+        for (k,v) in sorted(stepEnv.items()):
+            print("export {}={}".format(k, quote(v)), file=f)
+        print("declare -p > ../env", file=f)
+        print("", file=f)
+        print("# BEGIN BUILD SCRIPT", file=f)
+        print(step.getScript(), file=f)
+        print("# END BUILD SCRIPT", file=f)
+    os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
+        stat.S_IROTH | stat.S_IWOTH)
+    cmdLine = ["/bin/bash", runFile, "__run"]
+    if self.__verbose < 0:
+        cmdLine.append('-q')
+    elif self.__verbose == 1:
+        cmdLine.append('-v')
+    elif self.__verbose >= 2:
+        cmdLine.append('-vv')
+    if self.__noLogFile:
+        cmdLine.append('-n')
+
+    try:
+        proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv)
+        if proc.wait() != 0:
+            raise BuildError("Build script {} returned with {}"
+                                .format(absRunFile, proc.returncode),
+                             help="You may resume at this point with '--resume' after fixing the error.")
+    except OSError as e:
+        raise BuildError("Cannot execute build script {}: {}".format(absRunFile, str(e)))
+    except KeyboardInterrupt:
+        raise BuildError("User aborted while running {}".format(absRunFile),
+                         help = "Run again with '--resume' to skip already built packages.")
+
+def _info(self, *args, **kwargs):
+    if self.__verbose >= -1:
+        print(*args, **kwargs)
+
+def getStatistic(self):
+    return self.__statistic
+
+def cook(self, step, checkoutOnly):
+    done = False
+    while not done:
+        try:
+            self._cook([step], step.getPackage(), checkoutOnly)
+            done = True
+        except RestartBuildException:
+            print(colorize("** Restart build due to wrongly predicted sources.", "33"))
+            self.__currentPackage = None
+
+def _cook(self, steps, parentPackage, checkoutOnly, depth=0):
+    currentPackage = self.__currentPackage
+
+    # skip everything except the current package
+    if self.__skipDeps:
+        steps = [ s for s in steps if s.getPackage() == parentPackage ]
+
+    for step in reversed(steps):
+        # skip if already processed steps
+        if self._wasAlreadyRun(step):
+            continue
+
+        # update if package changes
+        newPackage = "/".join(step.getPackage().getStack())
+        if newPackage != self.__currentPackage:
+            self.__currentPackage = newPackage
+            print(">>", colorize(self.__currentPackage, "32;1"))
+
+        # execute step
+        try:
+            if step.isCheckoutStep():
+                if step.isValid():
+                    self._cookCheckoutStep(step, depth)
+            elif step.isBuildStep():
+                if step.isValid():
+                    self._cookBuildStep(step, checkoutOnly, depth)
+            else:
+                assert step.isPackageStep() and step.isValid()
+                self._cookPackageStep(step, checkoutOnly, depth)
+        except BuildError as e:
+            e.setStack(step.getPackage().getStack())
+            raise e
+
+    # back to original package
+    if currentPackage != self.__currentPackage:
+        self.__currentPackage = currentPackage
+        if currentPackage:
+            print(">>", colorize(self.__currentPackage, "32;1"))
+
+def _cookCheckoutStep(self, checkoutStep, depth):
+    overrides = set()
+    scmList = checkoutStep.getScmList()
+    for scm in scmList:
+        overrides.update(scm.getActiveOverrides())
+    self.__statistic.addOverrides(overrides)
+    overrides = len(overrides)
+    overridesString = ("(" + str(overrides) + " scm " + ("overrides" if overrides > 1 else "override") +")") if overrides else ""
+
+    checkoutDigest = checkoutStep.getVariantId()
+    if self._wasAlreadyRun(checkoutStep):
+        prettySrcPath = checkoutStep.getWorkspacePath()
+        self._info("   CHECKOUT  skipped (reuse {}) {}".format(prettySrcPath, overridesString))
+    else:
+        # depth first
+        self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
+                  False, depth+1)
+
+        # get directory into shape
+        (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
+        oldCheckoutState = BobState().getDirectoryState(prettySrcPath, {})
+        if created:
+            # invalidate result if folder was created
+            BobState().delInputHashes(prettySrcPath)
+            BobState().delResultHash(prettySrcPath)
+            oldCheckoutState = {}
+            BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
+
+        checkoutExecuted = False
+        checkoutState = checkoutStep.getScmDirectories().copy()
+        checkoutState[None] = checkoutDigest
+        if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
+            if checkoutState != oldCheckoutState:
+                print(colorize("   CHECKOUT  WARNING: recipe changed but skipped due to --build-only ({})"
+                    .format(prettySrcPath), "33"))
+            else:
+                self._info("   CHECKOUT  skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString))
+        else:
+            if self.__cleanCheckout:
+                # check state of SCMs and invalidate if the directory is dirty
+                stats = {}
+                for scm in checkoutStep.getScmList():
+                    stats.update({ dir : scm for dir in scm.getDirectories().keys() })
+                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                    if scmDir is None: continue
+                    if scmDigest != checkoutState.get(scmDir): continue
+                    status = stats[scmDir].status(checkoutStep.getWorkspacePath())[0]
+                    if (status == 'dirty') or (status == 'error'):
+                        oldCheckoutState[scmDir] = None
+
+            checkoutInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
+                for i in checkoutStep.getAllDepSteps() if i.isValid() ]
+            if (self.__force or (not checkoutStep.isDeterministic()) or
+                (BobState().getResultHash(prettySrcPath) is None) or
+                (checkoutState != oldCheckoutState) or
+                (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
+                # move away old or changed source directories
+                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                    if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                         if os.path.exists(scmPath):
-                            raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
-                                                .format(scmDir, prettySrcPath))
+                            atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
+                            print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
+                            atticPath = os.path.join(prettySrcPath, "..", "attic")
+                            if not os.path.isdir(atticPath):
+                                os.makedirs(atticPath)
+                            os.rename(scmPath, os.path.join(atticPath, atticName))
+                        del oldCheckoutState[scmDir]
+                        BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
-                    # Store new SCM checkout state. The script state is not stored
-                    # so that this step will run again if it fails. OTOH we must
-                    # record the SCM directories as some checkouts might already
-                    # succeeded before the step ultimately fails.
-                    BobState().setDirectoryState(prettySrcPath,
-                        { d:s for (d,s) in checkoutState.items() if d is not None })
+                # Check that new checkouts do not collide with old stuff in
+                # workspace. Do it before we store the new SCM state to
+                # check again if the step is rerun.
+                for scmDir in checkoutState.keys():
+                    if scmDir is None or scmDir == ".": continue
+                    if oldCheckoutState.get(scmDir) is not None: continue
+                    scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                    if os.path.exists(scmPath):
+                        raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
+                                            .format(scmDir, prettySrcPath))
 
-                    # Forge checkout result before we run the step again.
-                    # Normally the correct result is set directly after the
-                    # checkout finished. But if the step fails and the user
-                    # re-runs with "build-only" the dependent steps should
-                    # trigger.
-                    if BobState().getResultHash(prettySrcPath) is not None:
-                        BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
+                # Store new SCM checkout state. The script state is not stored
+                # so that this step will run again if it fails. OTOH we must
+                # record the SCM directories as some checkouts might already
+                # succeeded before the step ultimately fails.
+                BobState().setDirectoryState(prettySrcPath,
+                    { d:s for (d,s) in checkoutState.items() if d is not None })
 
-                    print(colorize("   CHECKOUT  {} {}".format(prettySrcPath, overridesString)
-                        , "32"))
-                    self._runShell(checkoutStep, "checkout", False)
-                    self.__statistic.checkouts += 1
-                    checkoutExecuted = True
-                    # reflect new checkout state
-                    BobState().setDirectoryState(prettySrcPath, checkoutState)
-                    BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
-                else:
-                    self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
+                # Forge checkout result before we run the step again.
+                # Normally the correct result is set directly after the
+                # checkout finished. But if the step fails and the user
+                # re-runs with "build-only" the dependent steps should
+                # trigger.
+                if BobState().getResultHash(prettySrcPath) is not None:
+                    BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
 
-            # We always have to rehash the directory as the user might have
-            # changed the source code manually.
-            oldCheckoutHash = BobState().getResultHash(prettySrcPath)
-            checkoutHash = hashWorkspace(checkoutStep)
-            BobState().setResultHash(prettySrcPath, checkoutHash)
+                print(colorize("   CHECKOUT  {} {}".format(prettySrcPath, overridesString)
+                    , "32"))
+                self._runShell(checkoutStep, "checkout", False)
+                self.__statistic.checkouts += 1
+                checkoutExecuted = True
+                # reflect new checkout state
+                BobState().setDirectoryState(prettySrcPath, checkoutState)
+                BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
+            else:
+                self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
 
-            self._setAlreadyRun(checkoutStep, True)
+        # We always have to rehash the directory as the user might have
+        # changed the source code manually.
+        oldCheckoutHash = BobState().getResultHash(prettySrcPath)
+        checkoutHash = hashWorkspace(checkoutStep)
+        BobState().setResultHash(prettySrcPath, checkoutHash)
 
-            # Generate audit trail. Has to be done _after_ setResultHash()
-            # because the result is needed to calculate the buildId.
-            if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
-                self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
+        self._setAlreadyRun(checkoutStep, True)
 
-            # upload live build-id cache in case of fresh checkout
-            if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
-                liveBId = checkoutStep.calcLiveBuildId()
-                if liveBId is not None:
-                    self.__archive.uploadLocalLiveBuildId(liveBId, checkoutHash, self.__verbose)
+        # Generate audit trail. Has to be done _after_ setResultHash()
+        # because the result is needed to calculate the buildId.
+        if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
+            self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
-            # Predicted build-id and real one after checkout do not need to
-            # match necessarily. Handle it as some build results might be
-            # inconsistent to the sources now.
-            buildId, predicted = self.__srcBuildIds.get((prettySrcPath, checkoutDigest),
-                (checkoutHash, False))
-            if buildId != checkoutHash:
-                assert predicted, "Non-predicted incorrect Build-Id found!"
-                self.__handleChangedBuildId(checkoutStep, checkoutHash)
+        # upload live build-id cache in case of fresh checkout
+        if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
+            liveBId = checkoutStep.calcLiveBuildId()
+            if liveBId is not None:
+                self.__archive.uploadLocalLiveBuildId(liveBId, checkoutHash, self.__verbose)
+
+        # Predicted build-id and real one after checkout do not need to
+        # match necessarily. Handle it as some build results might be
+        # inconsistent to the sources now.
+        buildId, predicted = self.__srcBuildIds.get((prettySrcPath, checkoutDigest),
+            (checkoutHash, False))
+        if buildId != checkoutHash:
+            assert predicted, "Non-predicted incorrect Build-Id found!"
+            self.__handleChangedBuildId(checkoutStep, checkoutHash)
+
+            # Trigger spdx generation
+            for s in self.__licenseScanners:
+                s.getLicenseFile(self.__currentPackage, prettySrcPath)
 
     def _cookBuildStep(self, buildStep, checkoutOnly, depth):
         # Include actual directories of dependencies in buildDigest.
@@ -1240,6 +1248,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Disable sandboxing")
     parser.add_argument('--clean-checkout', action='store_true', default=None, dest='clean_checkout',
         help="Do a clean checkout if SCM state is dirty.")
+    parser.add_argument('--licenseScan', default=False, action='store_true',
+        help="Run License Scanners.")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -1278,6 +1288,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             'sandbox' : not develop,
             'clean_checkout' : False,
             'no_logfiles' : False,
+            'licenseScan' : False
         }
 
     for a in vars(args):
@@ -1305,6 +1316,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                            args.no_logfiles)
 
     builder.setArchiveHandler(getArchiver(recipes))
+    if args.licenseScan:
+        from ..licenseScanners.fossyScanner import FossologyLicenseScanner
+        scanners = [ FossologyLicenseScanner ]
+        scanners.extend(recipes.getLicenseScanners())
+        builder.setLicenseScanners(scanners)
     builder.setUploadMode(args.upload)
     builder.setDownloadMode(args.download)
     builder.setCleanCheckout(args.clean_checkout)

@@ -2315,6 +2315,7 @@ class RecipeSet:
         self.__scmOverrides = []
         self.__hooks = {}
         self.__projectGenerators = {}
+        self.__licenseScanners = []
         self.__configFiles = []
         self.__properties = {}
         self.__states = {}
@@ -2406,6 +2407,12 @@ class RecipeSet:
             raise ParseError("Plugin '"+name+"': 'projectGenerators' has wrong type!")
         self.__projectGenerators.update(projectGenerators)
 
+        licenseScanners = manifest.get('licenseScanners', {})
+        if not isinstance(licenseScanners, dict):
+            raise ParseError("Plugin '"+name+"': 'licenseScanners' has wrong type!")
+        for (name, scanner) in licenseScanners.items():
+            self.__licenseScanners.append(scanner)
+
         properties = manifest.get('properties', {})
         if not isinstance(properties, dict):
             raise ParseError("Plugin '"+name+"': 'properties' has wrong type!")
@@ -2461,6 +2468,9 @@ class RecipeSet:
 
     def getProjectGenerators(self):
         return self.__projectGenerators
+
+    def getLicenseScanners(self):
+        return self.__licenseScanners
 
     def envWhiteList(self):
         return set(self.__whiteList)

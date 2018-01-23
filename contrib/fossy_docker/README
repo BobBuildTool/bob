@@ -1,0 +1,10 @@
+This folder contains Dockerfiles to build fossology license scanner
+to use along with bob
+
+To build:
+
+1) add you id_rsa.pub to ssh_keys/authorized_keys
+# cat ~/.ssh/id_rsa.pub >> ssh_keys/authorized_keys
+
+2) run docker-compose
+docker-compose up

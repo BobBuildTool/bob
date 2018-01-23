@@ -1,0 +1,28 @@
+version: "2.0" 
+
+services:
+    fossology:
+        ports:
+            - "8081:80"
+            - "8082:22"
+        restart: unless-stopped
+        environment:
+          - FOSSOLOGY_DB_HOST=fossology-db
+          - FOSSOLOGY_DB_NAME=fossology
+          - FOSSOLOGY_DB_USER=fossy
+          - FOSSOLOGY_DB_PASSWORD=fossy
+        links:
+          - fossology-db
+        build: .
+        volumes:
+            - ./ssh_keys:/home/bob/.ssh
+
+
+    fossology-db:
+        image: postgres
+        restart: unless-stopped
+        environment:
+            - POSTGRES_DB=fossology
+            - POSTGRES_USER=fossy
+            - POSTGRES_PASSWORD=fossy
+            - POSTGRES_INITDB_ARGS='-E SQL_ASCII'
