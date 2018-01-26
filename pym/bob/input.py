@@ -2262,11 +2262,14 @@ class RecipeSet:
     STATIC_CONFIG_SCHEMA = schema.Schema({
         schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}$'),
         schema.Optional('plugins') : [str],
-        schema.Optional('policies') : {
-            schema.Optional('relativeIncludes') : bool,
-            schema.Optional('cleanEnvironment') : bool,
-            schema.Optional('tidyUrlScm') : bool,
-        }
+        schema.Optional('policies') : schema.Schema(
+            {
+                schema.Optional('relativeIncludes') : bool,
+                schema.Optional('cleanEnvironment') : bool,
+                schema.Optional('tidyUrlScm') : bool,
+            },
+            error="Invalid policy specified! Maybe your Bob is too old?"
+        )
     })
 
     _ignoreCmdConfig = False
