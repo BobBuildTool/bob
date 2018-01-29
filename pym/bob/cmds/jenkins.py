@@ -1208,6 +1208,7 @@ def genJenkinsJobs(recipes, jenkins):
                         config.get('shortdescription', False))
         rootJenkinsJob.makeRoot()
 
+    packages.close()
     return jobs
 
 def genJenkinsBuildOrder(jobs):

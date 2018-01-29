@@ -559,6 +559,11 @@ class PkgGraphNode:
         except sqlite3.Error as e:
             raise BobError("Cannot save internal state: " + str(e))
 
+    def close(self):
+        self.__db.close()
+        self.__db.connection.close()
+        del self.__db
+
     def __repr__(self):
         return "Node({})".format(self.__key)
 
@@ -834,6 +839,11 @@ class PackageSet:
         else:
             root = self.__getGraphRoot()
             return (set([root]), set([root]))
+
+    def close(self):
+        if self.__graph is not None:
+            self.__graph.close()
+            self.__graph = None
 
     def getAliases(self):
         return list(self.__aliases.keys())
