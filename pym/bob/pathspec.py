@@ -20,9 +20,9 @@ from collections import OrderedDict
 from itertools import chain
 from fnmatch import fnmatchcase
 from functools import lru_cache
-import dbm
 import pickle
 import pyparsing
+import sqlite3
 
 # need to enable this for nested expression parsing performance
 pyparsing.ParserElement.enablePackrat()
@@ -518,37 +518,45 @@ class PkgGraphEdge:
 class PkgGraphNode:
     __slots__ = ['__db', '__name', '__key', '__parents', '__childs']
 
-    def __init__(self, db, key):
+    def __init__(self, db, key, node=None):
         self.__db = db
         self.__key = key
-        (self.__name, self.__parents, self.__childs) = pickle.loads(db[key])
+        try:
+            if node is None:
+                db.execute("SELECT node FROM graph WHERE key=?", (key,))
+                node = db.fetchone()[0]
+            (self.__name, self.__parents, self.__childs) = pickle.loads(node)
+        except sqlite3.Error as e:
+            raise BobError("Cannot load internal state: " + str(e))
 
     @classmethod
-    def load(cls, cacheName, cacheKey):
+    def init(cls, cacheName, cacheKey, rootGenerator):
         try:
-            db = dbm.open(cacheName, "r")
-            persistedCacheKey = db.get(b'vsn')
-            if cacheKey == persistedCacheKey:
-                return cls(db, db[b'root'])
+            db = sqlite3.connect(cacheName, isolation_level=None).cursor()
+            db.execute("CREATE TABLE IF NOT EXISTS meta(key PRIMARY KEY, value)")
+            db.execute("CREATE TABLE IF NOT EXISTS graph(key PRIMARY KEY, node)")
+
+            # check if Bob was changed
+            db.execute("BEGIN")
+            db.execute("SELECT value FROM meta WHERE key='vsn'")
+            vsn = db.fetchone()
+            if (vsn is None) or (vsn[0] != cacheKey):
+                # Database was changed or created
+                db.execute("DELETE FROM graph")
+                root = PkgGraphNode.__convertPackageToGraph(db, rootGenerator())
+                db.execute("INSERT OR REPLACE INTO meta VALUES ('vsn', ?), ('root', ?)",
+                    (cacheKey, root))
+                # Commit and start new read-only transaction
+                db.execute("END")
+                db.execute("BEGIN")
             else:
-                db.close()
-        except OSError:
-            pass
-        except dbm.error:
-            pass
-        return None
+                # Database is valid. Use it...
+                db.execute("SELECT value FROM meta WHERE key='root'")
+                root = db.fetchone()[0]
 
-    @classmethod
-    def create(cls, cacheName, cacheKey, root):
-        try:
-            db = dbm.open(cacheName, 'n')
-            try:
-                db[b'root'] = rootKey = PkgGraphNode.__convertPackageToGraph(db, root)
-                db[b'vsn'] = cacheKey
-            finally:
-                db.close()
-            return cls(dbm.open(cacheName, 'r'), rootKey)
-        except dbm.error as e:
+            return cls(db, root)
+
+        except sqlite3.Error as e:
             raise BobError("Cannot save internal state: " + str(e))
 
     def __repr__(self):
@@ -593,8 +601,9 @@ class PkgGraphNode:
                      if (queryIndirect or d) )
 
     def allNodes(self):
-        return iter( PkgGraphNode(self.__db, i) for i in self.__db.keys()
-                     if ((i != b'root') and (i != b'vsn')) )
+        self.__db.execute("SELECT key FROM graph")
+        keys = self.__db.fetchall()
+        return iter( PkgGraphNode(self.__db, i) for (i,) in keys )
 
     def getName(self):
         return self.__name
@@ -604,15 +613,17 @@ class PkgGraphNode:
         # a parent is flipping between direct and indirect.
         if parent not in self.__parents:
             self.__parents[parent] = direct
-            self.__db[self.__key] = pickle.dumps(
-                (self.__name, self.__parents, self.__childs),
-                -1)
+            node = (self.__name, self.__parents, self.__childs)
+            self.__db.execute("INSERT OR REPLACE INTO graph VALUES (?, ?)",
+                (self.__key, pickle.dumps(node, -1)))
 
     @staticmethod
     def __convertPackageToGraph(db, pkg, parent=None, directParent=True):
         name = pkg.getName()
-        key = pkg._getId().to_bytes(4, 'little')
-        if key not in db:
+        key = pkg._getId()
+        db.execute("SELECT node FROM graph WHERE key=?", (key,))
+        node = db.fetchone()
+        if node is None:
             # recurse
             childs = OrderedDict()
             for d in pkg.getDirectDepSteps():
@@ -629,10 +640,11 @@ class PkgGraphNode:
                     ".." + "/".join(subPkg.getStack())[prefixLen:] )
             # create node
             node = ( name, ({parent:directParent} if parent is not None else {}), childs )
-            db[key] = pickle.dumps(node, -1)
+            db.execute("INSERT INTO graph VALUES (?, ?)",
+                (key, pickle.dumps(node, -1)))
         elif parent is not None:
             # add as parent
-            PkgGraphNode(db, key).__addParent(parent, directParent)
+            PkgGraphNode(db, key, node[0]).__addParent(parent, directParent)
 
         return key
 
@@ -769,13 +781,10 @@ class PackageSet:
     def __getGraphRoot(self):
         """Get root node of package graph"""
         if self.__graph is None:
-            # try to load persisted graph
-            cacheName = ".bob-tree.dbm"
-            self.__graph = PkgGraphNode.load(cacheName, self.__cacheKey)
-            if self.__graph is None:
-                # generate, convert and save
-                root = self.getRootPackage()
-                self.__graph = PkgGraphNode.create(cacheName, self.__cacheKey, root)
+            # Try to load persisted graph. If the graph does not exist or does
+            # not match it will be generated and saved.
+            self.__graph = PkgGraphNode.init(".bob-tree.sqlite3", self.__cacheKey,
+                self.getRootPackage)
 
         return self.__graph
 

@@ -16,10 +16,10 @@
 
 from .errors import ParseError
 import copy
-import dbm
 import errno
 import os
 import pickle
+import sqlite3
 
 class _BobState():
     # Bump CUR_VERSION if internal state is made backwards incompatible, that is
@@ -137,17 +137,27 @@ class _BobState():
         else:
             self.__dirty = True
 
-    def __getBIdCache(self):
+    def __openBIdCache(self):
         if self.__buildIdCache is None:
-            self.__buildIdCache = dbm.open(".bob-buildids.dbm", 'c')
-            #self.__buildIdCache = {}
-        return self.__buildIdCache
+            try:
+                self.__buildIdCache = sqlite3.connect(".bob-buildids.sqlite3", isolation_level=None).cursor()
+                self.__buildIdCache.execute("CREATE TABLE IF NOT EXISTS buildids(key PRIMARY KEY, value)")
+                self.__buildIdCache.execute("BEGIN")
+            except sqlite3.Error as e:
+                self.__buildIdCache = None
+                raise ParseError("Cannot access buildid cache: " + str(e))
 
     def finalize(self):
         assert (self.__asynchronous == 0) and not self.__dirty
         if self.__buildIdCache is not None:
-            self.__buildIdCache.close()
-            self.__buildIdCache = None
+            try:
+                self.__buildIdCache.execute("END")
+                self.__buildIdCache.close()
+                self.__buildIdCache.connection.close()
+                self.__buildIdCache = None
+            except sqlite3.Error as e:
+                print(colorize("Warning: cannot commit buildid cache: "+str(e), "33"),
+                    file=stderr)
         if self.__lock:
             try:
                 os.unlink(self.__lock)
@@ -285,13 +295,27 @@ class _BobState():
         return copy.deepcopy(self.__buildState)
 
     def getBuildId(self, key):
-        return self.__getBIdCache().get(key, None)
+        self.__openBIdCache()
+        try:
+            self.__buildIdCache.execute("SELECT value FROM buildids WHERE key=?", (key,))
+            ret = self.__buildIdCache.fetchone()
+            return ret and ret[0]
+        except sqlite3.Error as e:
+            raise ParseError("Cannot access buildid cache: " + str(e))
 
     def setBuildId(self, key, val):
-        self.__getBIdCache()[key] = val
+        self.__openBIdCache()
+        try:
+            self.__buildIdCache.execute("INSERT OR REPLACE INTO buildids VALUES (?, ?)", (key, val))
+        except sqlite3.Error as e:
+            raise ParseError("Cannot access buildid cache: " + str(e))
 
     def delBuildId(self, key):
-        del self.__getBIdCache()[key]
+        self.__openBIdCache()
+        try:
+            self.__buildIdCache.execute("DELETE FROM buildids WHERE key=?", (key,))
+        except sqlite3.Error as e:
+            raise ParseError("Cannot access buildid cache: " + str(e))
 
 def BobState():
     if _BobState.instance is None:

@@ -36,7 +36,7 @@ import os, os.path
 import pickle
 import re
 import schema
-import shelve
+import sqlite3
 import struct
 import sys
 import yaml
@@ -2752,11 +2752,37 @@ class RecipeSet:
 class YamlCache:
 
     def open(self):
-        self.__shelve = shelve.open(".bob-cache.shelve")
+        try:
+            self.__con = sqlite3.connect(".bob-cache.sqlite3", isolation_level=None)
+            self.__cur = self.__con.cursor()
+            self.__cur.execute("CREATE TABLE IF NOT EXISTS meta(key PRIMARY KEY, value)")
+            self.__cur.execute("CREATE TABLE IF NOT EXISTS yaml(name PRIMARY KEY, stat, digest, data)")
+
+            # check if Bob was changed
+            self.__cur.execute("BEGIN")
+            self.__cur.execute("SELECT value FROM meta WHERE key='vsn'")
+            vsn = self.__cur.fetchone()
+            if (vsn is None) or (vsn[0] != BOB_INPUT_HASH):
+                # Bob was changed or new workspace -> purge cache
+                self.__cur.execute("INSERT OR REPLACE INTO meta VALUES ('vsn', ?)", (BOB_INPUT_HASH,))
+                self.__cur.execute("DELETE FROM yaml")
+                self.__hot = False
+            else:
+                # This could work
+                self.__hot = True
+        except sqlite3.Error as e:
+            raise ParseError("Cannot access cache: " + str(e),
+                help="You probably executed Bob concurrently in the same workspace. Try again later.")
         self.__files = {}
 
     def close(self):
-        self.__shelve.close()
+        try:
+            self.__cur.execute("END")
+            self.__cur.close()
+            self.__con.close()
+        except sqlite3.Error as e:
+            raise ParseError("Cannot commit cache: " + str(e),
+                help="You probably executed Bob concurrently in the same workspace. Try again later.")
         h = hashlib.sha1()
         for (name, data) in sorted(self.__files.items()):
             h.update(struct.pack("<I", len(name)))
@@ -2768,35 +2794,39 @@ class YamlCache:
         return self.__digest
 
     def loadYaml(self, name, yamlSchema, default):
-        bs = binStat(name)
-        if name in self.__shelve:
-            cached = self.__shelve[name]
-            if ((cached['lstat'] == bs) and
-                (cached.get('vsn') == BOB_INPUT_HASH)):
-                self.__files[name] = cached['digest']
-                return cached['data']
-
-        with open(name, "r") as f:
-            try:
-                rawData = f.read()
-                data = yaml.safe_load(rawData)
-                digest = hashlib.sha1(rawData.encode('utf8')).digest()
-            except Exception as e:
-                raise ParseError("Error while parsing {}: {}".format(name, str(e)))
-
-        if data is None: data = default
         try:
-            data = yamlSchema.validate(data)
-        except schema.SchemaError as e:
-            raise ParseError("Error while validating {}: {}".format(name, str(e)))
+            bs = binStat(name)
+            if self.__hot:
+                self.__cur.execute("SELECT digest, data FROM yaml WHERE name=? AND stat=?",
+                                    (name, bs))
+                cached = self.__cur.fetchone()
+                if cached is not None:
+                    self.__files[name] = cached[0]
+                    return pickle.loads(cached[1])
 
-        self.__files[name] = digest
-        self.__shelve[name] = {
-            'lstat' : bs,
-            'data' : data,
-            'vsn' : BOB_INPUT_HASH,
-            'digest' : digest
-        }
+            with open(name, "r") as f:
+                try:
+                    rawData = f.read()
+                    data = yaml.safe_load(rawData)
+                    digest = hashlib.sha1(rawData.encode('utf8')).digest()
+                except Exception as e:
+                    raise ParseError("Error while parsing {}: {}".format(name, str(e)))
+
+            if data is None: data = default
+            try:
+                data = yamlSchema.validate(data)
+            except schema.SchemaError as e:
+                raise ParseError("Error while validating {}: {}".format(name, str(e)))
+
+            self.__files[name] = digest
+            self.__cur.execute("INSERT OR REPLACE INTO yaml VALUES (?, ?, ?, ?)",
+                (name, bs, digest, pickle.dumps(data)))
+        except sqlite3.Error as e:
+            raise ParseError("Cannot access cache: " + str(e),
+                help="You probably executed Bob concurrently in the same workspace. Try again later.")
+        except OSError as e:
+            raise ParseError("Error loading yaml file: " + str(e))
+
         return data
 
     def loadBinary(self, name):
