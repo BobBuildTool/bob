@@ -735,6 +735,7 @@ esac
             oldCheckoutState = BobState().getDirectoryState(prettySrcPath, {})
             if created:
                 # invalidate result if folder was created
+                BobState().delInputHashes(prettySrcPath)
                 BobState().delResultHash(prettySrcPath)
                 oldCheckoutState = {}
                 BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
@@ -761,9 +762,12 @@ esac
                         if (status == 'dirty') or (status == 'error'):
                             oldCheckoutState[scmDir] = None
 
+                checkoutInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
+                    for i in checkoutStep.getAllDepSteps() if i.isValid() ]
                 if (self.__force or (not checkoutStep.isDeterministic()) or
                     (BobState().getResultHash(prettySrcPath) is None) or
-                    (checkoutState != oldCheckoutState)):
+                    (checkoutState != oldCheckoutState) or
+                    (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
                     # move away old or changed source directories
                     for (scmDir, scmDigest) in oldCheckoutState.copy().items():
                         if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
@@ -811,6 +815,7 @@ esac
                     checkoutExecuted = True
                     # reflect new checkout state
                     BobState().setDirectoryState(prettySrcPath, checkoutState)
+                    BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
                 else:
                     self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
 
@@ -875,7 +880,7 @@ esac
 
             # run build if input has changed
             buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
-                for i in buildStep.getArguments() if i.isValid() ]
+                for i in buildStep.getAllDepSteps() if i.isValid() ]
             if checkoutOnly:
                 self._info("   BUILD     skipped due to --checkout-only ({})".format(prettyBuildPath))
             elif (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
@@ -999,7 +1004,7 @@ esac
                 # be available and the build step might reference it (think of
                 # "make -C" or cross-workspace symlinks.
                 packageInputs = [ packageStep.getPackage().getCheckoutStep() ]
-                packageInputs.extend(packageStep.getArguments())
+                packageInputs.extend(packageStep.getAllDepSteps())
                 packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                     for i in packageInputs if i.isValid() ]
                 if checkoutOnly:
