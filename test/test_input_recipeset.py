@@ -275,3 +275,37 @@ class TestDependencies(TestCase):
         recipes.parse()
         packages = recipes.generatePackages(lambda x,y: "unused")
         self.assertRaises(ParseError, packages.getRootPackage)
+
+    def testIncompatibleNamedTwice(self):
+        """Test that it is impossible to name the same dependency twice with
+           different variants."""
+
+        self.writeRecipe("root", """\
+            multiPackage:
+                "":
+                    root: True
+
+                    depends:
+                        - name: root-lib
+                          environment:
+                            FOO: bar
+                        - name: root-lib
+                          use: [tools]
+                          environment:
+                            FOO: baz
+
+                    buildScript: "true"
+                    packageScript: "true"
+
+                lib:
+                    packageVars: [FOO]
+                    packageScript: "true"
+                    provideTools:
+                        t: "."
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda x,y: "unused")
+        self.assertRaises(ParseError, packages.getRootPackage)
+
