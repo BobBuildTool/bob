@@ -803,7 +803,7 @@ class Step(metaclass=ABCMeta):
         This includes the direct input to the Step as well as indirect inputs
         such as the used tools or the sandbox.
         """
-        return self.getArguments() + sorted([ d.step for d in self.getTools().values() ]) + (
+        return self.getArguments() + [ d.step for n,d in sorted(self.getTools().items()) ] + (
             [self.__sandbox.getStep()]
                 if (self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox))
                 else [])
