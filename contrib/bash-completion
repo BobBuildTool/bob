@@ -114,7 +114,7 @@ __bob_complete_path()
                prefix=""
             fi
             for i in "${chroot[@]}" ; do global_settings+=( "-C" "$i" ) ; done
-            result="$(eval $bob "${global_settings[@]}" ls $sandbox "${cmd_settings[@]}" $prefix 2>/dev/null)"
+            result="$(eval $bob --color=never "${global_settings[@]}" ls $sandbox "${cmd_settings[@]}" $prefix 2>/dev/null)"
             __bob_complete_words "$result" "$prefix" "/"
             ;;
       esac
@@ -215,7 +215,7 @@ __bob_jenkins_export()
          ;;
       *)
          if [[ -z $jenkins ]] ; then
-            __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
+            __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
          elif [[ -z $dir ]] ; then
             __bob_complete_dir "$cur"
          fi
@@ -235,7 +235,7 @@ __bob_jenkins_prune()
          __bob_complete_words "-h --help"
          ;;
       *)
-         __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
+         __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
          ;;
    esac
 }
@@ -247,7 +247,7 @@ __bob_jenkins_push()
          __bob_complete_words "-h --help -f --force --no-trigger"
          ;;
       *)
-         __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
+         __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
          ;;
    esac
 }
@@ -259,7 +259,7 @@ __bob_jenkins_rm()
          __bob_complete_words "-h --help -f --force"
          ;;
       *)
-         __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
+         __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
          ;;
    esac
 }
@@ -271,7 +271,7 @@ __bob_jenkins_set_url()
          __bob_complete_words "-h --help"
          ;;
       *)
-         __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
+         __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
          ;;
    esac
 }
@@ -296,7 +296,7 @@ __bob_jenkins_set_options()
                __bob_complete_words "artifacts.copy jobs.isolate scm.git.shallow scm.ignore-hooks scm.poll shared.dir" "" "="
                ;;
             *)
-               __bob_complete_words "$($bob jenkins ls 2>/dev/null)"
+               __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
                ;;
          esac
    esac
@@ -326,7 +326,7 @@ __bob_project()
             __bob_complete_words "-D -E -e -n -c"
             ;;
          *)
-            __bob_complete_words "$($bob project --list 2>/dev/null)"
+            __bob_complete_words "$($bob --color=never project --list 2>/dev/null)"
             ;;
       esac
    else
