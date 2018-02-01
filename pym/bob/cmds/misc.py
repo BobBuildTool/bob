@@ -37,22 +37,27 @@ except UnicodeEncodeError:
     LS_SEP_4 = "|   "
 
 
-def doLS(argv, bobRoot):
-    def showTree(package, showAll, showOrigin, prefix=""):
+class PackagePrinter:
+    def __init__(self, showAll, showOrigin, recurse=False):
+        self.showAll = showAll
+        self.showOrigin = showOrigin
+        self.recurse = recurse
+
+    def showTree(self, package, prefix=""):
         i = 0
-        if showAll:
+        if self.showAll:
             packages = { name : (child.node, child.origin) for (name, child) in package.items() }
         else:
             packages = { name : (child.node, child.origin) for (name, child) in package.items() if child.direct }
         for n,(p,o) in sorted(packages.items()):
             last = (i >= len(packages)-1)
             print("{}{}{}{}".format(prefix, LS_SEP_1 if last else LS_SEP_2, n,
-                " ({})".format(o) if (showOrigin and o) else ""))
-            showTree(p, showAll, showOrigin, prefix + (LS_SEP_3 if last else LS_SEP_4))
+                " ({})".format(o) if (self.showOrigin and o) else ""))
+            self.showTree(p, prefix + (LS_SEP_3 if last else LS_SEP_4))
             i += 1
 
-    def showPrefixed(package, recurse, showAll, showOrigin, showAliases, stack, level=0):
-        if showAll:
+    def showPrefixed(self, package, showAliases, stack=[], level=0):
+        if self.showAll:
             packages = { name : (child.node, child.origin) for (name, child) in package.items() }
         else:
             packages = { name : (child.node, child.origin) for (name, child) in package.items() if child.direct }
@@ -61,10 +66,12 @@ def doLS(argv, bobRoot):
             newStack = stack[:]
             newStack.append(n)
             print("{}{}".format("/".join(newStack),
-                                " ({})".format(o) if (showOrigin and o) else ""))
-            if recurse:
-                showPrefixed(p, recurse, showAll, showOrigin, [], newStack, level+1)
+                                " ({})".format(o) if (self.showOrigin and o) else ""))
+            if self.recurse:
+                self.showPrefixed(p, [], newStack, level+1)
 
+
+def doLS(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob ls", description='List packages.')
     parser.add_argument('package', type=str, nargs='?', default="",
                         help="Sub-package to start listing from")
@@ -104,21 +111,20 @@ def doLS(argv, bobRoot):
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
 
-    showAll = args.all
-    showOrigin = args.origin
     packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
     showAliases = packages.getAliases() if args.package == "" else []
 
+    printer = PackagePrinter(args.all, args.origin, args.recursive)
     for (stack, root) in packages.queryTreePath(args.package):
         if args.prefixed:
-            showPrefixed(root, args.recursive, showAll, showOrigin, showAliases, stack)
+            printer.showPrefixed(root, showAliases, stack)
         elif args.direct:
             print("/".join(stack) if stack else "/")
         elif args.recursive:
             print("/".join(stack) if stack else "/")
-            showTree(root, showAll, showOrigin)
+            printer.showTree(root)
         else:
-            showPrefixed(root, False, showAll, showOrigin, showAliases, [])
+            printer.showPrefixed(root, showAliases)
 
 class Default(dict):
     def __init__(self, default, *args, **kwargs):
