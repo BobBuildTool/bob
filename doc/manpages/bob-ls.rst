@@ -13,7 +13,7 @@ Synopsis
 
 ::
 
-    bob ls [-h] [-a] [-o] [-r] [-p | -d] [-D DEFINES] [-c CONFIGFILE]
+    bob ls [-h] [-a] [-o] [-r] [-u] [-p | -d] [-D DEFINES] [-c CONFIGFILE]
            [--sandbox | --no-sandbox]
            [package]
 
@@ -85,6 +85,10 @@ Options
 
 ``--sandbox``
     Enable sandboxing
+
+``-u, --unsorted``
+    Show the packages in the order they were named in the recipe. By default
+    they are sorted by name for better readability.
 
 See also
 --------
