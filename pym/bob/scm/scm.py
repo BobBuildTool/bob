@@ -70,14 +70,111 @@ class ScmOverride:
                 + (("set: " + str(self.__set)+ "\n") if self.__set else "")
                 + (("replace: " + str(self.__replaceRaw)) if self.__replaceRaw else "")).rstrip()
 
-class Scm(object):
+class Scm(metaclass=ABCMeta):
     def __init__(self, overrides=[]):
         self.__overrides = overrides
 
+    @abstractmethod
+    def getProperties(self):
+        return [ ]
+
+    @abstractmethod
+    def asScript(self):
+        """Return bash script fragment that does the checkout."""
+        return ""
+
+    @abstractmethod
+    def asDigestScript(self):
+        """Return forward compatible stable string describing this SCM.
+
+        The string should represent what the SCM checks out. This is different
+        from the actual actions that are returned by asScript() or asJenkins()
+        which might evolve in future versions. The returned string is used to
+        compute the various IDs and to detect changes to the SDM.
+        """
+        return ""
+
+    def asJenkins(self, workPath, credentials, options):
+        """Return Jenkins xml.etree.ElementTree fragment that does the checkout.
+
+        This is only called if hasJenkinsPlugin() returns True. In this case
+        asScript() is not used on Jenkins.
+        """
+        return None
+
+    def hasJenkinsPlugin(self):
+        """Does this SCM use a Jenins plugin?"""
+        return False
+
+    @abstractmethod
+    def getDirectories(self):
+        return { }
+
+    @abstractmethod
+    def isDeterministic(self):
+        """Return whether the SCM is deterministic."""
+        return False
+
+    def merge(self, other):
+        return False
+
+    def status(self, workspacePath, dir):
+        """Get SCM work-space status.
+
+        The purpose of this method is to return the status of the given
+        directory in the work-space. The returned value is used for 'bob
+        status' and to implement --clean-checkout. Shall return a tuple with
+        three values:
+
+            status, taintFlags, longStatus
+
+        where 'status' is a string that can have one of the following values:
+
+         - error: The SCM is in a error state. Use this if the SCM command
+                  returned a error code or something unexpected happened while
+                  gathering the status.
+         - dirty: SCM is dirty. Could be: modified files, switched to another
+                  branch/tag/commit/repo, unpushed commits.
+         - clean: Same branch/tag/commit as specified in the recipe and no
+                  local changes.
+         - empty: Directory is not existing. This is not an error as the
+                  checkout script might not have run yet.
+
+        This method is called when building with --clean-checkout. 'error' and
+        'dirty' SCMs are moved to attic, while empty and clean directories are
+        not.
+
+        The 'taintFlags' is a short string of single letters that indicate
+        certain states of the SCM. Common flags are as follows.  Each SCM might
+        define furhter flags as appropriate.
+
+         - M: "modified" - the SCM has been modified locally
+         - S: "switched" - the SCM branch/tag/commit was changed by the user
+
+        The 'longStatus' field should hold any output from the SCM that is
+        interesting to the user to judge the SCM status. This is only shown in
+        very verbose output mode.
+        """
+
+        return 'clean', '', ''
+
     def getActiveOverrides(self):
+        """Return list of ScmOverride objects that matched this SCM."""
         return self.__overrides
 
     def statusOverrides(self, workspacePath, dir):
+        """Return user visible status about SCM overrides.
+
+        Returns a tuple of three elements:
+
+          overridden, taintFlags, longStatus
+
+        were 'overridden' is a boolean that is True if at least one override
+        matched. The 'taintFlags' are single letters that indicate certain
+        overrides. Only 'O' for 'overridded' is defined at the moment. Each SCM
+        might define further flags. The 'longStatus' is shown in very verbose
+        output modes and should contain the gory details.
+        """
         overrides = self.getActiveOverrides()
         if len(overrides):
             status = "O"
@@ -87,6 +184,16 @@ class Scm(object):
                 longStatus += "    > Overridden by:\n       {}\n".format(overrideText)
             return True, status, longStatus
         return False, '', ''
+
+    @abstractmethod
+    def getAuditSpec(self):
+        """Return spec for audit trail generation.
+
+        Must return a tuple of two elements. The first element is a string that
+        is used to find the right Audit class (see bob.audit.Artifact.SCMS).
+        The second element is a list of directories that must be audited.
+        """
+        return ("unknown", [])
 
     def hasLiveBuildId(self):
         """Check if live build-ids are supported."""
