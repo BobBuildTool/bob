@@ -174,18 +174,12 @@ class TestGitScm(TestCase):
         self.assertEqual(s1.isDeterministic(), False)
 
         s2 = createGitScm({'branch' : "foobar", 'dir' : "sub/dir"})
-        self.assertEqual(s2.merge(...), False)
-        self.assertEqual(s2.merge(s1), False)
         self.assertEqual(s2.hasJenkinsPlugin(), True)
         self.assertEqual(s2.isDeterministic(), False)
         s2 = createGitScm({'tag' : "asdf"})
-        self.assertEqual(s2.merge(...), False)
-        self.assertEqual(s2.merge(s1), False)
         self.assertEqual(s2.hasJenkinsPlugin(), True)
         self.assertEqual(s2.isDeterministic(), True)
         s2 = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
-        self.assertEqual(s2.merge(...), False)
-        self.assertEqual(s2.merge(s1), False)
         self.assertEqual(s2.hasJenkinsPlugin(), True)
         self.assertEqual(s2.isDeterministic(), True)
 

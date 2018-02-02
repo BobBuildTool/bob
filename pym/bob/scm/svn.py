@@ -116,13 +116,6 @@ fi
 
         return scm
 
-    def merge(self, other):
-        if not isinstance(other, SvnScm):
-            return False
-
-        self.__modules.extend(other.__modules)
-        return True
-
     def getDirectories(self):
         return { m['dir'] : hashString(SvnScm.__moduleAsDigestScript(m)) for m in self.__modules }
 

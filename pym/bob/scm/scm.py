@@ -115,9 +115,6 @@ class Scm(metaclass=ABCMeta):
         """Return whether the SCM is deterministic."""
         return False
 
-    def merge(self, other):
-        return False
-
     def status(self, workspacePath, dir):
         """Get SCM work-space status.
 
