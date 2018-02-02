@@ -156,21 +156,12 @@ fi
                     ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
                     ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
 
-    def merge(self, other):
-        return False
-
     def getDirectories(self):
         fn = self.__dir if self.__tidy else os.path.join(self.__dir, self.__fn)
         return { fn : hashString(self.asDigestScript()) }
 
     def isDeterministic(self):
         return (self.__digestSha1 is not None) or (self.__digestSha256 is not None)
-
-    def hasJenkinsPlugin(self):
-        return False
-
-    def status(self, workspacePath, dir):
-        return 'clean','',''
 
     def getAuditSpec(self):
         return ("url", [os.path.join(self.__dir, self.__fn)])

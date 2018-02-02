@@ -252,9 +252,6 @@ class GitScm(Scm):
 
         return scm
 
-    def merge(self, other):
-        return False
-
     def getDirectories(self):
         return { self.__dir : hashString(self.asDigestScript()) }
 

@@ -100,9 +100,6 @@ fi
                                                           module=self.__module,
                                                           dir=self.__dir)
 
-    def merge(self, other):
-        return False
-
     def getDirectories(self):
         return {self.__dir: hashString(self.asDigestScript())}
 
@@ -110,9 +107,6 @@ fi
         # We cannot know whether this step is deterministic because we
         # don't know whether the given revision (if any) refers to a
         # tag or branch.
-        return False
-
-    def hasJenkinsPlugin(self):
         return False
 
     # CvsScm status.
