@@ -893,17 +893,11 @@ class CheckoutStep(Step):
             self._coreStep.digestScript = checkout[1] if checkout[1] is not None else ""
             self._coreStep.coDeterministic = deterministic
 
-            # try to merge compatible SCMs
             recipeSet = package.getRecipe().getRecipeSet()
             overrides = recipeSet.scmOverrides()
-            checkoutSCMs = [ Scm(scm, fullEnv, overrides, recipeSet) for scm in checkout[2]
+            self._coreStep.scmList = [ Scm(scm, fullEnv, overrides, recipeSet)
+                for scm in checkout[2]
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
-            mergedCheckoutSCMs = []
-            while checkoutSCMs:
-                head = checkoutSCMs.pop(0)
-                checkoutSCMs = [ s for s in checkoutSCMs if not head.merge(s) ]
-                mergedCheckoutSCMs.append(head)
-            self._coreStep.scmList = mergedCheckoutSCMs
 
             # Validate that SCM paths do not overlap
             knownPaths = []
