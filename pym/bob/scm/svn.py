@@ -16,7 +16,7 @@
 
 from ..errors import BuildError
 from ..tty import colorize
-from ..utils import hashString, joinScripts
+from ..utils import hashString
 from .scm import Scm, ScmAudit
 import os, os.path
 import schema
@@ -35,15 +35,23 @@ class SvnScm(Scm):
 
     def __init__(self, spec, overrides=[]):
         super().__init__(overrides)
-        self.__modules = [{
-            "recipe" : spec['recipe'],
-            "url" : spec["url"],
-            "dir" : spec.get("dir"),
-            "revision" : spec.get("revision")
-        }]
+        self.__recipe = spec['recipe']
+        self.__url = spec["url"]
+        self.__dir = spec.get("dir", ".")
+        self.__revision = spec.get("revision")
 
-    @staticmethod
-    def __moduleAsScript(m):
+    def getProperties(self):
+        ret = {
+            'scm' : 'svn',
+            "recipe" : self.__recipe,
+            "url" : self.__url,
+            "dir" : self.__dir,
+        }
+        if self.__revision:
+            ret["revision"] = self.__revision
+        return ret
+
+    def asScript(self):
         return """
 if [[ -d "{SUBDIR}/.svn" ]] ; then
     if [[ "{URL}" != */tags/* ]] ; then
@@ -56,30 +64,18 @@ else
     fi
 fi
 """.format(
-          URL=m["url"],
-          SUBDIR=m["dir"] if m["dir"] else ".",
-          REVISION_ARG=(("-r " + str( m["revision"] ) ) if m["revision"] else '')
+          URL=self.__url, SUBDIR=self.__dir,
+          REVISION_ARG=(("-r " + str( self.__revision ) ) if self.__revision else '')
           )
 
-    @staticmethod
-    def __moduleAsDigestScript(m):
-        return (m["url"] + ( ("@"+str(m["revision"])) if m["revision"] else "" ) + " > "
-                + (m["dir"] if m["dir"] else "."))
-
-    def getProperties(self):
-        ret = [ m.copy() for m in self.__modules ]
-        for m in ret: m['scm'] = "svn"
-        return ret
-
-    def asScript(self):
-        return joinScripts([ SvnScm.__moduleAsScript(m) for m in self.__modules ])
 
     def asDigestScript(self):
-        """Return forward compatible stable string describing this/these svn module(s).
+        """Return forward compatible stable string describing this svn module.
 
-        Each module has its own line where the module is represented as "url[@rev] > dir".
+        The module is represented as "url[@rev] > dir".
         """
-        return "\n".join([ SvnScm.__moduleAsDigestScript(m) for m in self.__modules ])
+        return (self.__url + ( ("@"+str(self.__revision)) if self.__revision else "" ) + " > "
+                + self.__dir)
 
     def asJenkins(self, workPath, credentials, options):
         scm = ElementTree.Element("scm", attrib={
@@ -88,39 +84,38 @@ fi
         })
 
         locations = ElementTree.SubElement(scm, "locations")
-        for m in self.__modules:
-            location = ElementTree.SubElement(locations,
-                "hudson.scm.SubversionSCM_-ModuleLocation")
+        location = ElementTree.SubElement(locations,
+            "hudson.scm.SubversionSCM_-ModuleLocation")
 
-            url = m[ "url" ]
-            if m["revision"]:
-                url += ( "@" + m["revision"] )
+        url = self.__url
+        if self.__revision:
+            url += ( "@" + str(self.__revision) )
 
-            ElementTree.SubElement(location, "remote").text = url
-            credentialsId = ElementTree.SubElement(location, "credentialsId")
-            if credentials: credentialsId.text = credentials
-            ElementTree.SubElement(location, "local").text = (
-                os.path.join(workPath, m["dir"]) if m["dir"] else workPath )
-            ElementTree.SubElement(location, "depthOption").text = "infinity"
-            ElementTree.SubElement(location, "ignoreExternalsOption").text = "true"
+        ElementTree.SubElement(location, "remote").text = url
+        credentialsId = ElementTree.SubElement(location, "credentialsId")
+        if credentials: credentialsId.text = credentials
+        ElementTree.SubElement(location, "local").text = (
+            os.path.normpath(os.path.join(workPath, self.__dir)) )
+        ElementTree.SubElement(location, "depthOption").text = "infinity"
+        ElementTree.SubElement(location, "ignoreExternalsOption").text = "true"
 
-            ElementTree.SubElement(scm, "excludedRegions")
-            ElementTree.SubElement(scm, "includedRegions")
-            ElementTree.SubElement(scm, "excludedUsers")
-            ElementTree.SubElement(scm, "excludedRevprop")
-            ElementTree.SubElement(scm, "excludedCommitMessages")
-            ElementTree.SubElement(scm, "workspaceUpdater",
-                attrib={"class":"hudson.scm.subversion.UpdateUpdater"})
-            ElementTree.SubElement(scm, "ignoreDirPropChanges").text = "false"
-            ElementTree.SubElement(scm, "filterChangelog").text = "false"
+        ElementTree.SubElement(scm, "excludedRegions")
+        ElementTree.SubElement(scm, "includedRegions")
+        ElementTree.SubElement(scm, "excludedUsers")
+        ElementTree.SubElement(scm, "excludedRevprop")
+        ElementTree.SubElement(scm, "excludedCommitMessages")
+        ElementTree.SubElement(scm, "workspaceUpdater",
+            attrib={"class":"hudson.scm.subversion.UpdateUpdater"})
+        ElementTree.SubElement(scm, "ignoreDirPropChanges").text = "false"
+        ElementTree.SubElement(scm, "filterChangelog").text = "false"
 
         return scm
 
     def getDirectories(self):
-        return { m['dir'] : hashString(SvnScm.__moduleAsDigestScript(m)) for m in self.__modules }
+        return { self.__dir : hashString(self.asDigestScript()) }
 
     def isDeterministic(self):
-        return all([ str(m['revision']).isnumeric() for m in self.__modules ])
+        return str(self.__revision).isnumeric()
 
     def hasJenkinsPlugin(self):
         return True
@@ -152,10 +147,6 @@ fi
         if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
             return 'empty','',''
 
-        for m in self.__modules:
-            if m['dir'] == dir:
-                break;
-
         status = 'clean'
         shortStatus = ''
         longStatus = ''
@@ -181,10 +172,10 @@ fi
             url = entry.find('url').text
             revision = entry.attrib['revision']
 
-            if m['url'] != url:
-                setStatus('S', colorize("> URLs do not match!\n     recipe:\t{}\n     svn info:\t{}".format(m['url'], url), "33"))
-            if m['revision'] is not None and int(revision) != int(m['revision']):
-                setStatus('S', colorize("> wrong revision: recipe: {} svn info: {}".format(m['revision'], revision), "33"))
+            if self.__url != url:
+                setStatus('S', colorize("> URLs do not match!\n     recipe:\t{}\n     svn info:\t{}".format(self.__url, url), "33"))
+            if self.__revision is not None and int(revision) != int(self.__revision):
+                setStatus('S', colorize("> wrong revision: recipe: {} svn info: {}".format(self.__revision, revision), "33"))
 
         except BuildError as e:
             print(e)
@@ -193,7 +184,7 @@ fi
         return status, shortStatus, longStatus
 
     def getAuditSpec(self):
-        return ("svn", [ m["dir"] for m in self.__modules ])
+        return ("svn", self.__dir)
 
 
 class SvnAudit(ScmAudit):

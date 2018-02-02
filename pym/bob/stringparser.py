@@ -393,8 +393,7 @@ def funMatchScm(args, **options):
         raise ParseError('matchScm can only be used for queries')
 
     for scm in pkg.getCheckoutStep().getScmList():
-        for props in scm.getProperties():
-            if fnmatch.fnmatchcase(props.get(name), val): return "true"
+        if fnmatch.fnmatchcase(scm.getProperties().get(name), val): return "true"
 
     return "false"
 

@@ -60,7 +60,7 @@ class TestLiveBuildId(TestCase):
         with tempfile.TemporaryDirectory() as workspace:
             subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
                 universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
-            [spec] = scm.getLiveBuildIdSpec(workspace)
+            spec = scm.getLiveBuildIdSpec(workspace)
             if spec is None:
                 self.assertEqual(None, expected)
             else:
@@ -88,19 +88,19 @@ class TestLiveBuildId(TestCase):
     def testPredictLiveBildId(self):
         """Predict live-build-id"""
         s = self.createUrlScm()
-        self.assertEqual(s.predictLiveBuildId(), [None])
+        self.assertEqual(s.predictLiveBuildId(), None)
         s = self.createUrlScm({'digestSHA1' : self.urlSha1})
-        self.assertEqual(s.predictLiveBuildId(), [bytes.fromhex(self.urlSha1)])
+        self.assertEqual(s.predictLiveBuildId(), bytes.fromhex(self.urlSha1))
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
-        self.assertEqual(s.predictLiveBuildId(), [bytes.fromhex(self.urlSha256)])
+        self.assertEqual(s.predictLiveBuildId(), bytes.fromhex(self.urlSha256))
 
     def testCalcLiveBuildId(self):
         s = self.createUrlScm()
-        self.assertEqual(self.callCalcLiveBuildId(s), [None])
+        self.assertEqual(self.callCalcLiveBuildId(s), None)
         s = self.createUrlScm({'digestSHA1' : self.urlSha1})
-        self.assertEqual(self.callCalcLiveBuildId(s), [bytes.fromhex(self.urlSha1)])
+        self.assertEqual(self.callCalcLiveBuildId(s), bytes.fromhex(self.urlSha1))
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
-        self.assertEqual(self.callCalcLiveBuildId(s), [bytes.fromhex(self.urlSha256)])
+        self.assertEqual(self.callCalcLiveBuildId(s), bytes.fromhex(self.urlSha256))
 
     def testHashEngine(self):
         s = self.createUrlScm()

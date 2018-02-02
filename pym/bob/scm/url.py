@@ -81,7 +81,7 @@ class UrlScm(Scm):
         self.__strip = spec.get("stripComponents", 0)
 
     def getProperties(self):
-        return [{
+        return {
             'recipe' : self.__recipe,
             'scm' : 'url',
             'url' : self.__url,
@@ -91,7 +91,7 @@ class UrlScm(Scm):
             'fileName' : self.__fn,
             'extract' : self.__extract,
             'stripComponents' : self.__strip,
-        }]
+        }
 
     def asScript(self):
         ret = """
@@ -164,29 +164,29 @@ fi
         return (self.__digestSha1 is not None) or (self.__digestSha256 is not None)
 
     def getAuditSpec(self):
-        return ("url", [os.path.join(self.__dir, self.__fn)])
+        return ("url", os.path.join(self.__dir, self.__fn))
 
     def hasLiveBuildId(self):
         return self.isDeterministic()
 
     def predictLiveBuildId(self):
         if self.__digestSha256:
-            return [ bytes.fromhex(self.__digestSha256) ]
+            return bytes.fromhex(self.__digestSha256)
         elif self.__digestSha1:
-            return [ bytes.fromhex(self.__digestSha1) ]
+            return bytes.fromhex(self.__digestSha1)
         else:
-            return [None]
+            return None
 
     def calcLiveBuildId(self, workspacePath):
         return self.predictLiveBuildId()
 
     def getLiveBuildIdSpec(self, workspacePath):
         if self.__digestSha256:
-            return [ "=" + self.__digestSha256 ]
+            return "=" + self.__digestSha256
         elif self.__digestSha1:
-            return [ "=" + self.__digestSha1 ]
+            return "=" + self.__digestSha1
         else:
-            return [None]
+            return None
 
 
 class UrlAudit(ScmAudit):

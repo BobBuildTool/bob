@@ -76,7 +76,7 @@ class Scm(metaclass=ABCMeta):
 
     @abstractmethod
     def getProperties(self):
-        return [ ]
+        return { }
 
     @abstractmethod
     def asScript(self):
@@ -182,15 +182,18 @@ class Scm(metaclass=ABCMeta):
             return True, status, longStatus
         return False, '', ''
 
-    @abstractmethod
     def getAuditSpec(self):
         """Return spec for audit trail generation.
 
         Must return a tuple of two elements. The first element is a string that
         is used to find the right Audit class (see bob.audit.Artifact.SCMS).
-        The second element is a list of directories that must be audited.
+        The second element is a relative directory in the workspace that must
+        be audited.
+
+        If the SCM does not support audit trail generation then None shall be
+        returned.
         """
-        return ("unknown", [])
+        return None
 
     def hasLiveBuildId(self):
         """Check if live build-ids are supported."""
@@ -198,11 +201,11 @@ class Scm(metaclass=ABCMeta):
 
     def predictLiveBuildId(self):
         """Query server to predict live build-id."""
-        return [None]
+        return None
 
     def calcLiveBuildId(self, workspacePath):
         """Calculate live build-id from workspace."""
-        return [None]
+        return None
 
     def getLiveBuildIdSpec(self, workspacePath):
         """Generate spec lines for bob-hash-engine."""

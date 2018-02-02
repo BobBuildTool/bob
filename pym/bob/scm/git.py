@@ -81,7 +81,7 @@ class GitScm(Scm):
                 self.__remotes.update({stripped_key : val})
 
     def getProperties(self):
-        properties = [{
+        properties = {
             'recipe' : self.__recipe,
             'scm' : 'git',
             'url' : self.__url,
@@ -93,9 +93,9 @@ class GitScm(Scm):
                 (("refs/tags/" + self.__tag) if self.__tag else
                     ("refs/heads/" + self.__branch))
             )
-        }]
+        }
         for key, val in self.__remotes.items():
-            properties[0].update({GitScm.REMOTE_PREFIX+key : val})
+            properties.update({GitScm.REMOTE_PREFIX+key : val})
         return properties
 
     def asScript(self):
@@ -347,14 +347,14 @@ class GitScm(Scm):
         return status, shortStatus, longStatus
 
     def getAuditSpec(self):
-        return ("git", [self.__dir])
+        return ("git", self.__dir)
 
     def hasLiveBuildId(self):
         return True
 
     def predictLiveBuildId(self):
         if self.__commit:
-            return [ bytes.fromhex(self.__commit) ]
+            return bytes.fromhex(self.__commit)
 
         if self.__tag:
             # Annotated tags are objects themselves. We need the commit object!
@@ -366,11 +366,11 @@ class GitScm(Scm):
             output = subprocess.check_output(cmdLine, universal_newlines=True,
                 stderr=subprocess.DEVNULL).strip()
         except subprocess.CalledProcessError as e:
-            return [None]
+            return None
 
         # have we found anything at all?
         if not output:
-            return [None]
+            return None
 
         # See if we got one of our intended refs. Git is generating lines with
         # the following format:
@@ -385,23 +385,23 @@ class GitScm(Scm):
             in (line.split('\t') for line in output.split('\n'))
             if len(commitAndRef) == 2 }
         for ref in refs:
-            if ref in output: return [output[ref]]
+            if ref in output: return output[ref]
 
         # uhh, should not happen...
-        return [None]
+        return None
 
     def calcLiveBuildId(self, workspacePath):
         if self.__commit:
-            return [ bytes.fromhex(self.__commit) ]
+            return bytes.fromhex(self.__commit)
         else:
             output = self.callGit(workspacePath, 'rev-parse', 'HEAD').strip()
-            return [ bytes.fromhex(output) ]
+            return bytes.fromhex(output)
 
     def getLiveBuildIdSpec(self, workspacePath):
         if self.__commit:
-            return [ "=" + self.__commit ]
+            return "=" + self.__commit
         else:
-            return [ "g" + os.path.join(workspacePath, self.__dir) ]
+            return "g" + os.path.join(workspacePath, self.__dir)
 
     @staticmethod
     def processLiveBuildIdSpec(dir):

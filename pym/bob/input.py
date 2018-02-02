@@ -979,9 +979,9 @@ class CheckoutStep(Step):
         h = hashlib.sha1()
         h.update(self._getSandboxVariantId())
         for s in self._coreStep.scmList:
-            for liveBId in s.predictLiveBuildId():
-                if liveBId is None: return None
-                h.update(liveBId)
+            liveBId = s.predictLiveBuildId()
+            if liveBId is None: return None
+            h.update(liveBId)
         return h.digest()
 
     def calcLiveBuildId(self):
@@ -992,9 +992,9 @@ class CheckoutStep(Step):
         h = hashlib.sha1()
         h.update(self._getSandboxVariantId())
         for s in self._coreStep.scmList:
-            for liveBId in s.calcLiveBuildId(workspacePath):
-                if liveBId is None: return None
-                h.update(liveBId)
+            liveBId = s.calcLiveBuildId(workspacePath)
+            if liveBId is None: return None
+            h.update(liveBId)
         return h.digest()
 
     def getLiveBuildIdSpec(self):
@@ -1007,9 +1007,9 @@ class CheckoutStep(Step):
         workspacePath = self.getWorkspacePath()
         lines = [ "{sha1", "=" + asHexStr(self._getSandboxVariantId()) ]
         for s in self._coreStep.scmList:
-            for liveBIdSpec in s.getLiveBuildIdSpec(workspacePath):
-                if liveBIdSpec is None: return None
-                lines.append(liveBIdSpec)
+            liveBIdSpec = s.getLiveBuildIdSpec(workspacePath)
+            if liveBIdSpec is None: return None
+            lines.append(liveBIdSpec)
         lines.append("}")
         return "\n".join(lines)
 

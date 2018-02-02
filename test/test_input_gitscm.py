@@ -34,7 +34,7 @@ class TestGitScm(TestCase):
     def testDefault(self):
         """The default branch must be master"""
         s = createGitScm()
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['branch'], "master")
         self.assertEqual(p['dir'], ".")
         self.assertEqual(p['rev'], "refs/heads/master")
@@ -42,32 +42,32 @@ class TestGitScm(TestCase):
     def testRev(self):
         """Check variants of rev property"""
         s = createGitScm({ 'rev' : "0123456789abcdef0123456789abcdef01234567" })
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "0123456789abcdef0123456789abcdef01234567")
         self.assertEqual(p['commit'], "0123456789abcdef0123456789abcdef01234567")
 
         s = createGitScm({'rev' : "refs/tags/v1.2.3"})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "refs/tags/v1.2.3")
         self.assertEqual(p['tag'], "v1.2.3")
 
         s = createGitScm({'rev' : "refs/heads/develop"})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "refs/heads/develop")
         self.assertEqual(p['branch'], "develop")
 
     def testRevInverseMap(self):
         """Test that rev property reflects all possible specs"""
         s = createGitScm({'branch' : "foobar"})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "refs/heads/foobar")
 
         s = createGitScm({'tag' : "asdf"})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "refs/tags/asdf")
 
         s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "0123456789abcdef0123456789abcdef01234567")
 
     def testRevLeastPriority(self):
@@ -75,49 +75,49 @@ class TestGitScm(TestCase):
         # commit
         s = createGitScm({ 'rev' : "0123456789abcdef0123456789abcdef01234567",
                            'branch' : 'bar' })
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "0123456789abcdef0123456789abcdef01234567")
 
         s = createGitScm({ 'rev' : "0123456789abcdef0123456789abcdef01234567",
                            'tag' : 'foo' })
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "0123456789abcdef0123456789abcdef01234567")
 
         s = createGitScm({ 'rev' : "0123456789abcdef0123456789abcdef01234567",
                            'commit' : '0000000000000000000000000000000000000000' })
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "0000000000000000000000000000000000000000")
 
         # tag
         s = createGitScm({'rev' : "refs/tags/v1.2.3",
                           'branch' : 'bar'})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "refs/tags/v1.2.3")
 
         s = createGitScm({'rev' : "refs/tags/v1.2.3",
                           'tag' : 'asdf'})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "refs/tags/asdf")
 
         s = createGitScm({ 'rev' : "refs/tags/v1.2.3",
                            'commit' : '0000000000000000000000000000000000000000' })
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "0000000000000000000000000000000000000000")
 
         # branch
         s = createGitScm({'rev' : "refs/heads/develop",
                           'branch' : 'bar'})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "refs/heads/bar")
 
         s = createGitScm({'rev' : "refs/heads/develop",
                           'tag' : 'asdf'})
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "refs/tags/asdf")
 
         s = createGitScm({'rev' : "refs/heads/develop",
                           'commit' : '0000000000000000000000000000000000000000' })
-        p = s.getProperties()[0]
+        p = s.getProperties()
         self.assertEqual(p['rev'], "0000000000000000000000000000000000000000")
 
     def testScripts(self):
@@ -186,8 +186,8 @@ class TestGitScm(TestCase):
     def testRemotesSetAndGet(self):
         """Test setting and getting remotes as they are stored in a different format internally"""
         s1 = createGitScm({'remote-test_user' : "test/url", 'remote-other_user' : "other/url"})
-        self.assertEqual(s1.getProperties()[0]['remote-test_user'], "test/url")
-        self.assertEqual(s1.getProperties()[0]['remote-other_user'], "other/url")
+        self.assertEqual(s1.getProperties()['remote-test_user'], "test/url")
+        self.assertEqual(s1.getProperties()['remote-other_user'], "other/url")
 
     def testRemotesSetOrigin(self):
         """A remote calle origin should result in an error, because this is the default remote name"""
@@ -254,7 +254,7 @@ class TestGitRemotes(RealGitRepositoryTestCase):
         subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
             universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
         remotes = subprocess.check_output(["git", "remote", "-v"],
-            cwd=os.path.join(workspace, scm.getProperties()[0]['dir']),
+            cwd=os.path.join(workspace, scm.getProperties()['dir']),
             universal_newlines=True).split("\n")
         remotes = (r[:-8].split("\t") for r in remotes if r.endswith("(fetch)"))
         return { remote:url for (remote,url) in remotes }
@@ -326,7 +326,7 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
         with tempfile.TemporaryDirectory() as workspace:
             subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
                 universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
-            [spec] = scm.getLiveBuildIdSpec(workspace)
+            spec = scm.getLiveBuildIdSpec(workspace)
             if spec.startswith('='):
                 self.assertEqual(bytes.fromhex(spec[1:]), expected)
             else:
@@ -342,15 +342,15 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
     def testPredictBranch(self):
         """See if we can predict remote branches correctly"""
         s = self.createGitScm()
-        self.assertEqual(s.predictLiveBuildId(), [self.commit_master])
+        self.assertEqual(s.predictLiveBuildId(), self.commit_master)
 
         s = self.createGitScm({ 'branch' : 'foobar' })
-        self.assertEqual(s.predictLiveBuildId(), [self.commit_foobar])
+        self.assertEqual(s.predictLiveBuildId(), self.commit_foobar)
 
     def testPredictLightweightTags(self):
         """Lightweight tags are just like branches"""
         s = self.createGitScm({ 'tag' : 'lightweight' })
-        self.assertEqual(s.predictLiveBuildId(), [self.commit_lightweight])
+        self.assertEqual(s.predictLiveBuildId(), self.commit_lightweight)
 
     def testPredictAnnotatedTags(self):
         """Predict commit object of annotated tags.
@@ -358,43 +358,43 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
         Annotated tags are separate git objects that point to a commit object.
         We have to predict the commit object, not the tag object."""
         s = self.createGitScm({ 'tag' : 'annotated' })
-        self.assertEqual(s.predictLiveBuildId(), [self.commit_annotated])
+        self.assertEqual(s.predictLiveBuildId(), self.commit_annotated)
 
     def testPredictCommit(self):
         """Predictions of explicit commit-ids are easy."""
         s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
-        self.assertEqual(s.predictLiveBuildId(), [self.commit_foobar])
+        self.assertEqual(s.predictLiveBuildId(), self.commit_foobar)
 
     def testPredictBroken(self):
         """Predictions of broken URLs must not fail"""
         s = self.createGitScm({ 'url' : '/does/not/exist' })
-        self.assertEqual(s.predictLiveBuildId(), [None])
+        self.assertEqual(s.predictLiveBuildId(), None)
 
     def testPredictDeleted(self):
         """Predicting deleted branches/tags must not fail"""
         s = self.createGitScm({ 'branch' : 'nx' })
-        self.assertEqual(s.predictLiveBuildId(), [None])
+        self.assertEqual(s.predictLiveBuildId(), None)
         s = self.createGitScm({ 'tag' : 'nx' })
-        self.assertEqual(s.predictLiveBuildId(), [None])
+        self.assertEqual(s.predictLiveBuildId(), None)
 
     def testCalcBranch(self):
         """Clone branch and calculate live-build-id"""
         s = self.createGitScm()
-        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_master])
+        self.assertEqual(self.callCalcLiveBuildId(s), self.commit_master)
         s = self.createGitScm({ 'branch' : 'foobar' })
-        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_foobar])
+        self.assertEqual(self.callCalcLiveBuildId(s), self.commit_foobar)
 
     def testCalcTags(self):
         """Clone tag and calculate live-build-id"""
         s = self.createGitScm({ 'tag' : 'annotated' })
-        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_annotated])
+        self.assertEqual(self.callCalcLiveBuildId(s), self.commit_annotated)
         s = self.createGitScm({ 'tag' : 'lightweight' })
-        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_lightweight])
+        self.assertEqual(self.callCalcLiveBuildId(s), self.commit_lightweight)
 
     def testCalcCommit(self):
         """Clone commit and calculate live-build-id"""
         s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
-        self.assertEqual(self.callCalcLiveBuildId(s), [self.commit_foobar])
+        self.assertEqual(self.callCalcLiveBuildId(s), self.commit_foobar)
 
     def testHashEngine(self):
         """Calculate live-build-id via bob-hash-engine spec"""

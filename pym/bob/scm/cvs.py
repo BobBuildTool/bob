@@ -45,14 +45,14 @@ class CvsScm(Scm):
         self.__dir = spec.get("dir", ".")
 
     def getProperties(self):
-        return [{
+        return {
             'recipe' : self.__recipe,
             'scm' : 'cvs',
             'cvsroot' : self.__cvsroot,
             'module' : self.__module,
             'rev' : self.__rev,
             'dir' : self.__dir
-        }]
+        }
 
     def asScript(self):
         # If given a ":ssh:" cvsroot, translate that to CVS_RSH using ssh, and ":ext:"
@@ -203,8 +203,3 @@ fi
                 return f.read().rstrip('\r\n')
         except OSError:
             return ''
-
-    def getAuditSpec(self):
-        # FIXME: not supported yet
-        #return ("cvs", [self.__dir])
-        return ("cvs", [])

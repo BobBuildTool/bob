@@ -430,8 +430,9 @@ esac
         # Always check for SCMs but don't fail if we did not execute the step
         if step.isCheckoutStep():
             for scm in step.getScmList():
-                (typ, dirs) = scm.getAuditSpec()
-                for dir in dirs:
+                auditSpec = scm.getAuditSpec()
+                if auditSpec is not None:
+                    (typ, dir) = auditSpec
                     try:
                         audit.addScm(typ, step.getWorkspacePath(), dir)
                     except BobError as e:
