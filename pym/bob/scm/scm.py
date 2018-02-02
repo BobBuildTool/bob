@@ -115,7 +115,7 @@ class Scm(metaclass=ABCMeta):
         """Return whether the SCM is deterministic."""
         return False
 
-    def status(self, workspacePath, dir):
+    def status(self, workspacePath):
         """Get SCM work-space status.
 
         The purpose of this method is to return the status of the given
@@ -159,7 +159,7 @@ class Scm(metaclass=ABCMeta):
         """Return list of ScmOverride objects that matched this SCM."""
         return self.__overrides
 
-    def statusOverrides(self, workspacePath, dir):
+    def statusOverrides(self, workspacePath):
         """Return user visible status about SCM overrides.
 
         Returns a tuple of three elements:

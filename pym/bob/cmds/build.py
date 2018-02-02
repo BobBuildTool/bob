@@ -759,7 +759,7 @@ esac
                     for (scmDir, scmDigest) in oldCheckoutState.copy().items():
                         if scmDir is None: continue
                         if scmDigest != checkoutState.get(scmDir): continue
-                        status = stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir)[0]
+                        status = stats[scmDir].status(checkoutStep.getWorkspacePath())[0]
                         if (status == 'dirty') or (status == 'error'):
                             oldCheckoutState[scmDir] = None
 
@@ -1563,7 +1563,7 @@ def doStatus(argv, bobRoot):
                 for (scmDir, scmDigest) in sorted(oldCheckoutState.copy().items(), key=lambda a:'' if a[0] is None else a[0]):
                     if scmDir is None: continue
                     if scmDigest != checkoutState.get(scmDir): continue
-                    status, shortStatus, longStatus = stats[scmDir].status(checkoutStep.getWorkspacePath(), scmDir)
+                    status, shortStatus, longStatus = stats[scmDir].status(checkoutStep.getWorkspacePath())
                     if (status == 'clean') or (status == 'empty'):
                         if (verbose >= 3):
                             print(colorize("   STATUS      {0}".format(os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "32"))
@@ -1573,7 +1573,7 @@ def doStatus(argv, bobRoot):
                             for line in longStatus.splitlines():
                                 print('   ' + line)
                     if args.show_overrides:
-                        overridden, shortStatus, longStatus = stats[scmDir].statusOverrides(checkoutStep.getWorkspacePath(), scmDir)
+                        overridden, shortStatus, longStatus = stats[scmDir].statusOverrides(checkoutStep.getWorkspacePath())
                         if overridden:
                             print(colorize("   STATUS {0: <4} {1}".format(shortStatus, os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "32"))
                             if (verbose >= 2) and (longStatus != ""):

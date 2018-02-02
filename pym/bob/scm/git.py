@@ -264,12 +264,13 @@ class GitScm(Scm):
     def callGit(self, workspacePath, *args):
         cmdLine = ['git']
         cmdLine.extend(args)
+        cwd = os.path.join(workspacePath, self.__dir)
         try:
-            output = subprocess.check_output(cmdLine, cwd=os.path.join(os.getcwd(), workspacePath, self.__dir),
+            output = subprocess.check_output(cmdLine, cwd=cwd,
                 universal_newlines=True, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             raise BuildError("git error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
-                os.path.join(workspacePath, self.__dir), " ".join(cmdLine), e.output.rstrip()))
+                cwd, " ".join(cmdLine), e.output.rstrip()))
         return output
 
     # Get GitSCM status. The purpose of this function is to return the status of the given directory
@@ -282,9 +283,8 @@ class GitScm(Scm):
     #
     # This function is called when build with --clean-checkout. 'error' and 'dirty' SCMs are moved to attic,
     # while empty and clean directories are not.
-    def status(self, workspacePath, dir):
-        scmdir = os.path.join(workspacePath, dir)
-        if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
+    def status(self, workspacePath):
+        if not os.path.exists(os.path.join(workspacePath, self.__dir)):
             return 'empty','',''
 
         status = 'clean'

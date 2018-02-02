@@ -116,9 +116,9 @@ fi
     # - error: workspace does not contain CVS checkout, or other bad things happen
     # - clean: no local and no remote changes
     # - dirty: local or remote changes (cannot easily distinguish between both with CVS)
-    def status(self, workspacePath, dir):
+    def status(self, workspacePath):
         # Check directories
-        workDir = os.path.join(workspacePath, dir)
+        workDir = os.path.join(workspacePath, self.__dir)
         cvsDir = os.path.join(workDir, 'CVS')
         if not os.path.exists(workDir):
             return 'empty','',''

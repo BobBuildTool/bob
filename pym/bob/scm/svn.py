@@ -123,13 +123,13 @@ fi
     def callSubversion(self, workspacePath, *args):
         cmdLine = ['svn']
         cmdLine.extend(args)
-
+        cwd = os.path.join(workspacePath, self.__dir)
         try:
-            output = subprocess.check_output(cmdLine, cwd=workspacePath,
+            output = subprocess.check_output(cmdLine, cwd=cwd,
                 universal_newlines=True, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             raise BuildError("svn error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
-                os.path.join(workspacePath, self.__dir), " ".join(cmdLine), e.output.rstrip()))
+                cwd, " ".join(cmdLine), e.output.rstrip()))
         return output
 
     # Get SvnSCM status. The purpose of this function is to return the status of the given directory
@@ -142,9 +142,8 @@ fi
     #
     # This function is called when build with --clean-checkout. 'error' and 'dirty' scm's are moved to attic,
     # while empty and clean directories are not.
-    def status(self, workspacePath, dir):
-        scmdir = os.path.join(workspacePath, dir)
-        if not os.path.exists(os.path.join(os.getcwd(), scmdir)):
+    def status(self, workspacePath):
+        if not os.path.exists(os.path.join(workspacePath, self.__dir)):
             return 'empty','',''
 
         status = 'clean'
@@ -159,14 +158,14 @@ fi
                 status = 'dirty'
 
         try:
-            svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, dir), 'status')
+            svnoutput = self.callSubversion(workspacePath, 'status')
             if len(svnoutput):
                 longMsg = colorize("> modified:\n", "33")
                 for line in svnoutput.split('\n'):
                     longMsg += '  '+line.rstrip()
                 setStatus('M', longMsg)
 
-            svnoutput = self.callSubversion(os.path.join(os.getcwd(), workspacePath, dir), 'info', '--xml')
+            svnoutput = self.callSubversion(workspacePath, 'info', '--xml')
             info = ElementTree.fromstring(svnoutput)
             entry = info.find('entry')
             url = entry.find('url').text

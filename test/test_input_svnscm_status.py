@@ -52,25 +52,25 @@ class TestSvnScmStatus(TestCase):
 
     def testClean(self):
         s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk', 'recipe' : "foo.yaml#0" })
-        self.assertEqual(s.status(self.repodir_local, '')[0], 'clean')
+        self.assertEqual(s.status(self.repodir_local)[0], 'clean')
 
     def testEmpty(self):
         removePath(self.repodir_local)
         s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk', 'recipe' : "foo.yaml#0" })
-        self.assertEqual(s.status(self.repodir_local, '')[0], 'empty')
+        self.assertEqual(s.status(self.repodir_local)[0], 'empty')
 
     def testModified(self):
         f = open(os.path.join(self.repodir_local, "test_input_svnscm_status.py"), "w")
         f.write("test modified")
         f.close()
         s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk', 'recipe' : "foo.yaml#0" })
-        self.assertEqual(s.status(self.repodir_local, '')[0], 'dirty')
+        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
 
     def testRevision(self):
         s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk', 'revision' : '2', 'recipe' : "foo.yaml#0" })
-        self.assertEqual(s.status(self.repodir_local, '')[0], 'dirty')
+        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
 
     def testUrl(self):
         s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/branches/abc', 'recipe' : "foo.yaml#0" })
-        self.assertEqual(s.status(self.repodir_local, '')[0], 'dirty')
+        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
 
