@@ -1480,7 +1480,7 @@ class Recipe(object):
         def anonNameCalculator(suffix):
             num = nameMap.setdefault(suffix, 0) + 1
             nameMap[suffix] = num
-            return baseName + suffix + "$" + str(num)
+            return baseName + suffix + "#" + str(num)
 
         def collect(recipe, suffix, anonBaseClass):
             if "multiPackage" in recipe:
