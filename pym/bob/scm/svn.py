@@ -34,25 +34,25 @@ class SvnScm(Scm):
     })
 
     def __init__(self, spec, overrides=[]):
-        super().__init__(overrides)
-        self.__recipe = spec['recipe']
+        super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
         self.__revision = spec.get("revision")
 
     def getProperties(self):
-        ret = {
+        ret = super().getProperties()
+        ret.update({
             'scm' : 'svn',
-            "recipe" : self.__recipe,
             "url" : self.__url,
             "dir" : self.__dir,
-        }
+        })
         if self.__revision:
             ret["revision"] = self.__revision
         return ret
 
     def asScript(self):
         return """
+{HEADER}
 if [[ -d "{SUBDIR}/.svn" ]] ; then
     if [[ "{URL}" != */tags/* ]] ; then
         svn up {REVISION_ARG} "{SUBDIR}"
@@ -64,6 +64,7 @@ else
     fi
 fi
 """.format(
+          HEADER=super().asScript(),
           URL=self.__url, SUBDIR=self.__dir,
           REVISION_ARG=(("-r " + str( self.__revision ) ) if self.__revision else '')
           )

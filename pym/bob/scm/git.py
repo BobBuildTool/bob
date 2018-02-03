@@ -44,8 +44,7 @@ class GitScm(Scm):
     REMOTE_PREFIX = "remote-"
 
     def __init__(self, spec, overrides=[]):
-        super().__init__(overrides)
-        self.__recipe = spec['recipe']
+        super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__branch = None
         self.__tag = None
@@ -81,8 +80,8 @@ class GitScm(Scm):
                 self.__remotes.update({stripped_key : val})
 
     def getProperties(self):
-        properties = {
-            'recipe' : self.__recipe,
+        properties = super().getProperties()
+        properties.update({
             'scm' : 'git',
             'url' : self.__url,
             'branch' : self.__branch,
@@ -93,7 +92,7 @@ class GitScm(Scm):
                 (("refs/tags/" + self.__tag) if self.__tag else
                     ("refs/heads/" + self.__branch))
             )
-        }
+        })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
         return properties
@@ -133,8 +132,10 @@ class GitScm(Scm):
                 done
             )""").format(REMOTES_ARRAY="\n    ".join(remotes_array))
 
+        header = super().asScript()
         if self.__tag or self.__commit:
             return dedent("""\
+                {HEADER}
                 export GIT_SSL_NO_VERIFY=true
                 if [ ! -d {DIR}/.git ] ; then
                     git init {DIR}
@@ -146,12 +147,14 @@ class GitScm(Scm):
                     git fetch -t origin '+refs/heads/*:refs/remotes/origin/*'
                     git checkout -q {REF}
                 fi
-                """).format(URL=self.__url,
+                """).format(HEADER=header,
+                            URL=self.__url,
                             REF=self.__commit if self.__commit else "tags/"+self.__tag,
                             DIR=self.__dir,
                             REMOTES=remotes_script)
         else:
             return dedent("""\
+                {HEADER}
                 export GIT_SSL_NO_VERIFY=true
                 if [ -d {DIR}/.git ] ; then
                     cd {DIR}
@@ -169,7 +172,8 @@ class GitScm(Scm):
                     cd {DIR}
                 fi
                 {REMOTES}
-                """).format(URL=self.__url,
+                """).format(HEADER=header,
+                            URL=self.__url,
                             BRANCH=self.__branch,
                             DIR=self.__dir,
                             REMOTES=remotes_script)

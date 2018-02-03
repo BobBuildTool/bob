@@ -72,6 +72,7 @@ class TestLiveBuildId(TestCase):
             'scm' : 'url',
             'url' : self.url,
             'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
         }
         s.update(spec)
         return UrlScm(s)

@@ -37,22 +37,22 @@ class CvsScm(Scm):
     # - mandatory parameters: cvsroot, module
     # - optional parameters: rev, dir (dir is required if there are multiple checkouts)
     def __init__(self, spec, overrides=[]):
-        super().__init__(overrides)
-        self.__recipe = spec['recipe']
+        super().__init__(spec, overrides)
         self.__cvsroot = spec["cvsroot"]
         self.__module = spec["module"]
         self.__rev = spec.get("rev")
         self.__dir = spec.get("dir", ".")
 
     def getProperties(self):
-        return {
-            'recipe' : self.__recipe,
+        ret = super().getProperties()
+        ret.update({
             'scm' : 'cvs',
             'cvsroot' : self.__cvsroot,
             'module' : self.__module,
             'rev' : self.__rev,
             'dir' : self.__dir
-        }
+        })
+        return ret
 
     def asScript(self):
         # If given a ":ssh:" cvsroot, translate that to CVS_RSH using ssh, and ":ext:"
@@ -65,6 +65,7 @@ class CvsScm(Scm):
             prefix=""
             rootarg=self.__cvsroot
         revarg = "-r {rev}".format(rev=self.__rev) if self.__rev != None else "-A"
+        header = super().asScript()
 
         # Workaround: CVS 1.12.13 refuses to checkout with '-d .' when using remote access
         #   cvs checkout: existing repository /home/stefan/cvsroot does not match /home/stefan/cvsroot/cxxtest
@@ -75,6 +76,7 @@ class CvsScm(Scm):
         # We therefore use a 'cvs up' after the initial 'cvs co', to get the same behaviour for the initial and subsequent builds.
         if re.match('^:ext:', rootarg) and self.__dir == '.':
             return """
+{header}
 # Checkout or update
 if ! [ -d CVS ]; then
    ln -s . __tmp$$
@@ -82,15 +84,16 @@ if ! [ -d CVS ]; then
    rm __tmp$$
 fi
 {prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} .
-""".format(prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module)
+""".format(header=header, prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module)
         else:
             return """
+{header}
 # Checkout or update
 if ! [ -d {dir}/CVS ]; then
    {prefix}cvs -qz3 -d '{rootarg}' co {revarg} -d {dir} '{module}'
 fi
 {prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} {dir}
-""".format(prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module, dir=self.__dir)
+""".format(header=header, prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module, dir=self.__dir)
 
     def asDigestScript(self):
         # Describe what we do: just all the parameters concatenated.

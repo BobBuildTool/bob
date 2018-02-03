@@ -25,7 +25,8 @@ from bob.errors import ParseError
 from bob.utils import asHexStr
 
 def createGitScm(spec = {}):
-    s = { 'scm' : "git", 'url' : "MyURL", 'recipe' : "foo.yaml#0" }
+    s = { 'scm' : "git", 'url' : "MyURL", 'recipe' : "foo.yaml#0",
+        '__source' : "Recipe foo" }
     s.update(spec)
     return GitScm(s)
 
@@ -243,6 +244,7 @@ class RealGitRepositoryTestCase(TestCase):
             'scm' : "git",
             'url' : self.repodir,
             'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
         }
         s.update(spec)
         return GitScm(s)

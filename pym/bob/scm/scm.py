@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from abc import ABCMeta, abstractmethod
+from pipes import quote
 import fnmatch
 import re
 
@@ -71,17 +72,25 @@ class ScmOverride:
                 + (("replace: " + str(self.__replaceRaw)) if self.__replaceRaw else "")).rstrip()
 
 class Scm(metaclass=ABCMeta):
-    def __init__(self, overrides=[]):
+    def __init__(self, spec, overrides):
+        # Recipe foobar, checkoutSCM dir:., url:asdf
+        self.__source = spec["__source"] + " in checkoutSCM: dir:" + \
+            spec.get("dir", ".") + ", url:" + spec.get("url", "?")
+        self.__recipe = spec["recipe"]
         self.__overrides = overrides
 
-    @abstractmethod
     def getProperties(self):
-        return { }
+        return {
+            "recipe" : self.__recipe
+        }
 
-    @abstractmethod
     def asScript(self):
-        """Return bash script fragment that does the checkout."""
-        return ""
+        """Return bash script fragment that does the checkout.
+
+        The base class returns just the header. The deriving class has to
+        append the acutal script.
+        """
+        return "_BOB_SOURCES[$LINENO]=" + quote(self.__source)
 
     @abstractmethod
     def asDigestScript(self):

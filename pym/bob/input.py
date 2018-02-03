@@ -1557,8 +1557,9 @@ class Recipe(object):
         }
         self.__corePackages = PackageList()
 
+        sourceName = ("Recipe " if isRecipe else "Class  ") + packageName
         incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName,
-                                  ("Recipe " if isRecipe else "Class  ") + packageName)
+                                  sourceName)
 
         (checkoutScript, checkoutDigestScript) = incHelper.resolve(recipe.get("checkoutScript"), "checkoutScript")
         checkoutSCMs = recipe.get("checkoutSCM", [])
@@ -1568,6 +1569,7 @@ class Recipe(object):
             raise ParseError("checkoutSCM must be a dict or a list")
         i = 0
         for scm in checkoutSCMs:
+            scm["__source"] = sourceName
             scm["recipe"] = "{}#{}".format(sourceFile, i)
             i += 1
         self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs)

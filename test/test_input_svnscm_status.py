@@ -28,6 +28,12 @@ class TestSvnScmStatus(TestCase):
     repodir_root = ""
     repodir_local = ""
 
+    def createSvnScm(self, spec = {}):
+        s = { 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk',
+            'recipe' : "foo.yaml#0", '__source' : "Recipe foo" }
+        s.update(spec)
+        return SvnScm(s)
+
     def callSubversion(self, *arg, **kwargs):
         try:
             subprocess.check_output(*arg, shell=True, universal_newlines=True, stderr=subprocess.STDOUT, **kwargs)
@@ -51,26 +57,25 @@ class TestSvnScmStatus(TestCase):
         self.callSubversion('svn co file://' + self.repodir + '/trunk ' + self.repodir_local, cwd='/tmp')
 
     def testClean(self):
-        s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk', 'recipe' : "foo.yaml#0" })
+        s = self.createSvnScm()
         self.assertEqual(s.status(self.repodir_local)[0], 'clean')
 
     def testEmpty(self):
         removePath(self.repodir_local)
-        s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk', 'recipe' : "foo.yaml#0" })
+        s = self.createSvnScm()
         self.assertEqual(s.status(self.repodir_local)[0], 'empty')
 
     def testModified(self):
-        f = open(os.path.join(self.repodir_local, "test_input_svnscm_status.py"), "w")
-        f.write("test modified")
-        f.close()
-        s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk', 'recipe' : "foo.yaml#0" })
+        with open(os.path.join(self.repodir_local, "test_input_svnscm_status.py"), "w") as f:
+            f.write("test modified")
+        s = self.createSvnScm()
         self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
 
     def testRevision(self):
-        s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk', 'revision' : '2', 'recipe' : "foo.yaml#0" })
+        s = self.createSvnScm({ 'revision' : '2' })
         self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
 
     def testUrl(self):
-        s = SvnScm({ 'scm' : "svn", 'url' : 'file://'+self.repodir+'/branches/abc', 'recipe' : "foo.yaml#0" })
+        s = self.createSvnScm({ 'url' : 'file://'+self.repodir+'/branches/abc' })
         self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
 

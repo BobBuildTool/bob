@@ -59,8 +59,7 @@ class UrlScm(Scm):
     }
 
     def __init__(self, spec, overrides=[], tidy=None):
-        super().__init__(overrides)
-        self.__recipe = spec['recipe']
+        super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
         if self.__digestSha1:
@@ -81,8 +80,8 @@ class UrlScm(Scm):
         self.__strip = spec.get("stripComponents", 0)
 
     def getProperties(self):
-        return {
-            'recipe' : self.__recipe,
+        ret = super().getProperties()
+        ret.update({
             'scm' : 'url',
             'url' : self.__url,
             'digestSHA1' : self.__digestSha1,
@@ -91,10 +90,12 @@ class UrlScm(Scm):
             'fileName' : self.__fn,
             'extract' : self.__extract,
             'stripComponents' : self.__strip,
-        }
+        })
+        return ret
 
     def asScript(self):
         ret = """
+{HEADER}
 mkdir -p {DIR}
 cd {DIR}
 if [ -e {FILE} ] ; then
@@ -108,7 +109,7 @@ else
         mv $F {FILE}
     )
 fi
-""".format(DIR=quote(self.__dir), URL=quote(self.__url), FILE=quote(self.__fn))
+""".format(HEADER=super().asScript(), DIR=quote(self.__dir), URL=quote(self.__url), FILE=quote(self.__fn))
 
         if self.__digestSha1:
             ret += "echo {DIGEST}\ \ {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
