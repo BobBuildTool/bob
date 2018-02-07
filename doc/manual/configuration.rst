@@ -987,6 +987,22 @@ in the :ref:`configuration-config-whitelist` to be available to the shell.
     mounts will neither automatically cause a rebuild of the sandbox (and affected
     packages) nor will binary artifacts be re-fetched.
 
+relocatable
+~~~~~~~~~~~
+
+Type: Boolean
+
+If ``True`` Bob can assume that the package result is independent of the actual
+location in the file system. Usually all packages should be relocatable as this
+is a fundamental assumption of Bob's working model. There might be particular
+tools, though, that depend on their installed location. For such tools the
+property should be set to ``False``.
+
+If the property is not set the default will be ``True`` unless the recipe
+defines at least one tool. In this case the default value is ``False``.
+Inherited values from a class will be overwritten by the recipe or inheriting
+class.
+
 root
 ~~~~
 
