@@ -828,6 +828,10 @@ class Step(metaclass=ABCMeta):
         """
         return self._coreStep.shared
 
+    def isRelocatable(self):
+        """Returns True if the step is relocatable."""
+        return False
+
     def _setProvidedEnv(self, provides):
         self._coreStep.providedEnv = provides
 
@@ -1073,6 +1077,10 @@ class PackageStep(RegularStep):
     def isPackageStep(self):
         return True
 
+    def isRelocatable(self):
+        """Returns True if the package step is relocatable."""
+        return self.getPackage().isRelocatable()
+
 
 class CorePackage:
     __slots__ = ("name", "recipe", "directDepSteps", "indirectDepSteps",
@@ -1283,6 +1291,10 @@ class Package(object):
 
     def _getStates(self):
         return self.__corePackage.states
+
+    def isRelocatable(self):
+        """Returns True if the packages is relocatable."""
+        return self.__corePackage.recipe.isRelocatable()
 
 
 # FIXME: implement this on our own without the Template class. How to do proper
@@ -1551,6 +1563,7 @@ class Recipe(object):
         self.__toolDepPackage = set(recipe.get("packageTools", []))
         self.__toolDepPackage |= self.__toolDepBuild
         self.__shared = recipe.get("shared")
+        self.__relocatable = recipe.get("relocatable")
         self.__properties = {
             n : p(n in recipe, recipe.get(n))
             for (n, p) in properties.items()
@@ -1618,6 +1631,7 @@ class Recipe(object):
             self.__filterSandbox = mergeFilter(self.__filterSandbox, cls.__filterSandbox)
             if self.__root is None: self.__root = cls.__root
             if self.__shared is None: self.__shared = cls.__shared
+            if self.__relocatable is None: self.__relocatable = cls.__relocatable
             tmp = cls.__provideTools.copy()
             tmp.update(self.__provideTools)
             self.__provideTools = tmp
@@ -1673,6 +1687,12 @@ class Recipe(object):
         # final shared value
         self.__shared = self.__shared == True
 
+        # Either 'relocatable' was set in the recipe/class(es) or it defaults
+        # to True unless a tool is defined. This was the legacy behaviour.
+        self.__relocatable = (not self.__provideTools) \
+            if self.__relocatable is None \
+            else self.__relocatable
+
         # check provided dependencies
         availDeps = [ d.recipe for d in self.__deps ]
         providedDeps = set()
@@ -1708,6 +1728,10 @@ class Recipe(object):
     def isRoot(self):
         """Returns True if this is a root recipe."""
         return self.__root == True
+
+    def isRelocatable(self):
+        """Returns True if the packages of this recipe are relocatable."""
+        return self.__relocatable
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
                 inputTools=Env(), stack=[]):
@@ -2658,7 +2682,8 @@ class RecipeSet:
                     error="provideSandbox: invalid 'mount' property")
             }),
             schema.Optional('root') : bool,
-            schema.Optional('shared') : bool
+            schema.Optional('shared') : bool,
+            schema.Optional('relocatable') : bool,
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
