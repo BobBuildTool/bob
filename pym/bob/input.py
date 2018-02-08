@@ -1688,10 +1688,12 @@ class Recipe(object):
         self.__shared = self.__shared == True
 
         # Either 'relocatable' was set in the recipe/class(es) or it defaults
-        # to True unless a tool is defined. This was the legacy behaviour.
-        self.__relocatable = (not self.__provideTools) \
-            if self.__relocatable is None \
-            else self.__relocatable
+        # to True unless a tool is defined. This was the legacy behaviour
+        # before Bob 0.14. If the allRelocatable policy is enabled we always
+        # default to True.
+        if self.__relocatable is None:
+            self.__relocatable = self.__recipeSet.getPolicy('allRelocatable') \
+                or not self.__provideTools
 
         # check provided dependencies
         availDeps = [ d.recipe for d in self.__deps ]
@@ -2347,6 +2349,11 @@ class RecipeSet:
                 "0.14",
                 InfoOnce("tidyUrlScm policy not set. Updating URL SCMs in develop build mode is not entirely safe!",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#tidyurlscm for more information.")
+            ),
+            'allRelocatable' : (
+                "0.14",
+                InfoOnce("allRelocatable policy not set. Packages that define tools are not up- or downloaded.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#allrelocatable for more information.")
             ),
         }
         self.__buildHooks = {}

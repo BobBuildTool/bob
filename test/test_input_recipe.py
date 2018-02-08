@@ -154,11 +154,12 @@ class TestDependencies(TestCase):
 
 class TestRelocatable(TestCase):
 
-    def parseAndPrepare(self, name, recipe, classes={}):
+    def parseAndPrepare(self, name, recipe, classes={}, allRelocatable=None):
 
         cwd = os.getcwd()
         recipeSet = MagicMock()
         recipeSet.loadBinary = MagicMock()
+        recipeSet.getPolicy = lambda x: allRelocatable if x == 'allRelocatable' else None
 
         cc = { n : Recipe(recipeSet, r, n+".yaml", cwd, n, n, {}, False)
             for n, r in classes.items() }
@@ -279,4 +280,24 @@ class TestRelocatable(TestCase):
             "relocatable" : True,
         }
         p = self.parseAndPrepare("foo", recipe, classes)
+        self.assertTrue(p.isRelocatable())
+
+    def testAllRelocatablePolicy(self):
+        """Setting allRelocatable policy will make all packages relocatable"""
+
+        # normal package
+        recipe = {
+            "packageScript" : "asdf"
+        }
+        p = self.parseAndPrepare("foo", recipe, allRelocatable=True)
+        self.assertTrue(p.isRelocatable())
+
+        # tool package
+        recipe = {
+            "packageScript" : "asdf",
+            "provideTools" : {
+                "foo" : "bar"
+            }
+        }
+        p = self.parseAndPrepare("foo", recipe, allRelocatable=True)
         self.assertTrue(p.isRelocatable())
