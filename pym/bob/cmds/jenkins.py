@@ -821,8 +821,8 @@ class JenkinsJob:
         # download if possible
         downloadCmds = []
         for d in sorted(self.__packageSteps.values()):
-            # only download tools if built in sandbox
-            if d.doesProvideTools() and (d.getSandbox() is None):
+            # only download non-relocatable packages if built in sandbox
+            if not d.isRelocatable() and (d.getSandbox() is None):
                 continue
             cmd = self.__archive.download(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             if not cmd: continue
@@ -865,7 +865,7 @@ class JenkinsJob:
                     TGZ=JenkinsJob._tgzName(d),
                     AUDIT=JenkinsJob._auditName(d),
                     WSP_PATH=d.getWorkspacePath()),
-                "" if d.doesProvideTools() and (d.getSandbox() is None) and (options.get("artifacts.copy", "jenkins") == "jenkins")
+                "" if not d.isRelocatable() and (d.getSandbox() is None) and (options.get("artifacts.copy", "jenkins") == "jenkins")
                     else self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             ])
             if options.get("artifacts.copy", "jenkins") == "jenkins":

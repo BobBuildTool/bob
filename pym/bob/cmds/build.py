@@ -926,13 +926,13 @@ esac
             if packageDigest != oldPackageDigest:
                 BobState().setDirectoryState(prettyPackagePath, packageDigest)
 
-            # Can we theoretically download the result? Exclude packages that
-            # provide host tools when not building in a sandbox. Try to
-            # determine a build-id for all other artifacts.
-            if packageStep.doesProvideTools() and (packageStep.getSandbox() is None):
-                packageBuildId = None
-            else:
+            # Can we theoretically download the result? This requires a
+            # relocatable package or that we're building in a sandbox with
+            # stable paths. Try to determine a build-id for these artifacts.
+            if packageStep.isRelocatable() or (packageStep.getSandbox() is not None):
                 packageBuildId = self._getBuildId(packageStep, depth)
+            else:
+                packageBuildId = None
 
             # If we download the package in the last run the Build-Id is stored
             # as input hash. Otherwise the input hashes of the package step is
