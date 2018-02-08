@@ -211,3 +211,33 @@ New behavior
     Changing the recipe will move away the whole checkout directory, including
     any possibly extracted files.
 
+.. _policies-allRelocatable:
+
+allRelocatable
+~~~~~~~~~~~~~~
+
+Introduced in: 0.14
+
+When up- or downloading binary artifacts Bob has to make sure that the artifact
+is independent of the actual location in the file system. This is not always
+the case for tools that are executed on the build host. Historically Bob
+assumed that all packages that were created from recipes that define at least
+one tool are not relocatable. Such packages were not up- or downloaded except
+when building in a sandbox because the sandbox virtualises the paths and makes
+them deterministic everywhere.
+
+Starting with Bob 0.14 the :ref:`configuration-recipes-relocatable` property
+allows to specify this more fine grained. To not break existing recipes the
+``relocatable`` property has a default value compatible to the old behaviour
+described above. Because this heuristic is quite pessimistic and almost always
+wrong the ``allRelocatable`` policy switches the default to *always
+relocatable*.
+
+Old behavior
+    The default value of the :ref:`configuration-recipes-relocatable` property
+    is ``True`` unless the recipe defines at least one tool. In this case the
+    default value is ``False``.
+
+New behavior
+    The default value of the :ref:`configuration-recipes-relocatable` property
+    is always ``True``.

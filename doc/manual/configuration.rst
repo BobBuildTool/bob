@@ -987,6 +987,8 @@ in the :ref:`configuration-config-whitelist` to be available to the shell.
     mounts will neither automatically cause a rebuild of the sandbox (and affected
     packages) nor will binary artifacts be re-fetched.
 
+.. _configuration-recipes-relocatable:
+
 relocatable
 ~~~~~~~~~~~
 
@@ -999,9 +1001,10 @@ tools, though, that depend on their installed location. For such tools the
 property should be set to ``False``.
 
 If the property is not set the default will be ``True`` unless the recipe
-defines at least one tool. In this case the default value is ``False``.
-Inherited values from a class will be overwritten by the recipe or inheriting
-class.
+defines at least one tool. In this case the default value is ``False`` if the
+:ref:`policies-allRelocatable` policy is unset or disabled. If the policy is
+set the default value is always ``True``.  Inherited values from a class will
+be overwritten by the recipe or inheriting class.
 
 root
 ~~~~
