@@ -1,9 +1,11 @@
 
 from unittest import TestCase
+from unittest.mock import MagicMock
 import os
 
-from bob.input import Recipe
 from bob.errors import ParseError
+from bob.input import Recipe
+from bob.stringparser import Env
 
 class TestDependencies(TestCase):
 
@@ -149,3 +151,132 @@ class TestDependencies(TestCase):
         self.cmpEntry(res[3], "d", fwd=True)
         self.cmpEntry(res[4], "e")
 
+
+class TestRelocatable(TestCase):
+
+    def parseAndPrepare(self, name, recipe, classes={}):
+
+        cwd = os.getcwd()
+        recipeSet = MagicMock()
+        recipeSet.loadBinary = MagicMock()
+
+        cc = { n : Recipe(recipeSet, r, n+".yaml", cwd, n, n, {}, False)
+            for n, r in classes.items() }
+        recipeSet.getClass = lambda x, cc=cc: cc[x]
+
+        r = recipe.copy()
+        r["root"] = True
+        ret = Recipe(recipeSet, recipe, name+".yaml", cwd, name, name, {})
+        ret.resolveClasses()
+        return ret.prepare(None, Env({}), False, {})[0]
+
+    def testNormalRelocatable(self):
+        """Normal recipes are relocatable by default"""
+
+        recipe = {
+            "packageScript" : "asdf"
+        }
+        p = self.parseAndPrepare("foo", recipe)
+        self.assertTrue(p.isRelocatable())
+
+    def testToolsNonRelocatable(self):
+        """Recipes providing tools are not relocatable by default"""
+
+        recipe = {
+            "packageScript" : "asdf",
+            "provideTools" : {
+                "foo" : "bar"
+            }
+        }
+        p = self.parseAndPrepare("foo", recipe)
+        self.assertFalse(p.isRelocatable())
+
+    def testCheckoutAndBuildStep(self):
+        """Checkout and build steps are never relocatable"""
+
+        recipe = {
+            "checkoutScript" : "asdf",
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        p = self.parseAndPrepare("foo", recipe)
+        self.assertFalse(p.getCheckoutStep().isRelocatable())
+        self.assertFalse(p.getBuildStep().isRelocatable())
+        self.assertTrue(p.getPackageStep().isRelocatable())
+
+    def testToolRelocatable(self):
+        """Test that tool can be marked relocable"""
+
+        recipe = {
+            "packageScript" : "asdf",
+            "provideTools" : {
+                "foo" : "bar"
+            },
+            "relocatable" : True
+        }
+        p = self.parseAndPrepare("foo", recipe)
+        self.assertTrue(p.isRelocatable())
+
+    def testNotRelocatable(self):
+        """Normal recipes can be marked as not relocatable"""
+
+        recipe = {
+            "packageScript" : "asdf",
+            "relocatable" : False
+        }
+        p = self.parseAndPrepare("foo", recipe)
+        self.assertFalse(p.isRelocatable())
+
+    def testClassCanSetRelocatable(self):
+        """Classes can set relocatable flag too"""
+
+        # single inheritence
+        recipe = {
+            "inherit" : [ "bar" ]
+        }
+        classes = {
+            "bar" : {
+                "relocatable" : False
+            }
+        }
+        p = self.parseAndPrepare("foo", recipe, classes)
+        self.assertFalse(p.isRelocatable())
+
+        # two-stage inheritence
+        classes = {
+            "bar" : {
+                "inherit" : [ "baz" ],
+            },
+            "baz" : {
+                "relocatable" : False,
+            }
+        }
+        p = self.parseAndPrepare("foo", recipe, classes)
+        self.assertFalse(p.isRelocatable())
+
+    def testClassOverride(self):
+        """Inheriting recipe/class overrides inherited relocatable property"""
+
+        # two-stage inheritence
+        recipe = {
+            "inherit" : [ "bar" ],
+        }
+        classes = {
+            "bar" : {
+                "inherit" : [ "baz" ],
+                "relocatable" : False,
+            },
+            "baz" : {
+                "relocatable" : True,
+            }
+        }
+        p = self.parseAndPrepare("foo", recipe, classes)
+        self.assertFalse(p.isRelocatable())
+
+        # recipe overrides classes
+        recipe = {
+            "inherit" : [ "bar" ],
+            "relocatable" : True,
+        }
+        p = self.parseAndPrepare("foo", recipe, classes)
+        self.assertTrue(p.isRelocatable())
