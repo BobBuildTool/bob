@@ -1403,6 +1403,9 @@ def doProject(argv, bobRoot):
         help="Enable sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--develop', action='store_true',  dest='develop', help="Use developer mode", default=True)
+    group.add_argument('--release', action='store_false', dest='develop', help="Use release mode")
     args = parser.parse_args(argv)
 
     defines = {}
@@ -1416,6 +1419,7 @@ def doProject(argv, bobRoot):
             parser.error("Malformed define: "+define)
 
     recipes = RecipeSet()
+    recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
     recipes.defineHook('developNamePersister', LocalBuilder.developNamePersister)
     recipes.setConfigFiles(args.configFile)
@@ -1424,9 +1428,13 @@ def doProject(argv, bobRoot):
     envWhiteList = recipes.envWhiteList()
     envWhiteList |= set(args.white_list)
 
-    nameFormatter = recipes.getHook('developNameFormatter')
-    developPersister = recipes.getHook('developNamePersister')
-    nameFormatter = developPersister(nameFormatter)
+    if args.develop:
+        nameFormatter = recipes.getHook('developNameFormatter')
+        developPersister = recipes.getHook('developNamePersister')
+        nameFormatter = developPersister(nameFormatter)
+    else:
+        nameFormatter = recipes.getHook('releaseNameFormatter')
+        nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
     packages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=args.sandbox)
     touch(packages)
