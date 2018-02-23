@@ -1,0 +1,20 @@
+root: True
+
+checkoutScript: |
+    cp $<<src/gpl3.txt>> gpl3.txt
+
+checkoutAssert:
+    - 
+      file: gpl3.txt
+      start: 1 
+      end: 4
+      digestSHA1: 158b94393dfdad277ff26017663c1c56676aaa84
+    - 
+      file: gpl3.txt
+      digestSHA1: 08481bca10b37e1d13d9163515522f774c262cdb
+
+buildScript: |
+    true
+
+packageScript: |
+    true
