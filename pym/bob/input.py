@@ -2114,6 +2114,7 @@ class RecipeSet:
                 schema.Optional('relativeIncludes') : bool,
                 schema.Optional('cleanEnvironment') : bool,
                 schema.Optional('tidyUrlScm') : bool,
+                schema.Optional('allRelocatable') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         )
