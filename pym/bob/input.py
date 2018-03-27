@@ -198,6 +198,82 @@ class PluginState:
         """
         pass
 
+class PluginSetting:
+    """Base class for plugin settings.
+
+    Plugins can be configured in the user configuration of a project. The
+    plugin must derive from this class, create an object with the default value
+    and assign it to 'settings' in the plugin manifest. The default
+    constructor will just store the passed value in the ``settings`` member.
+
+    :param settings: The default settings
+    """
+
+    def __init__(self, settings):
+        self.settings = settings
+
+    def merge(self, other):
+        """Merge other settings into current ones.
+
+        This method is called when other configuration files with a higher
+        precedence have been parsed. The settings in these files are first
+        validated by invoking the ``validate`` static method. Then this method
+        is called that should update the current object with the value of
+        *other*.
+
+        The default implementation implements the following policy:
+
+        * Dictionaries are merged recursively on a key-by-key basis
+        * Lists are appended to each other
+        * Everything else in *other* reuucplaces the current settings
+
+        It is assumed that the actual settings are stored in the ``settings``
+        member variable.
+
+        :param other: Other settings with higher precedence
+        """
+        if isinstance(self.settings, dict) and isinstance(other, dict):
+            self.settings = updateDicRecursive(self.settings, other)
+        elif isinstance(self.settings, list) and isinstance(other, list):
+            self.settings = self.settings + other
+        else:
+            self.settings = other
+
+    def getSettings(self):
+        """Getter for settings data."""
+        return self.settings
+
+    @staticmethod
+    def validate(data):
+        """Validate type of settings.
+
+        Ususally the plugin will reimplement this method and return True only
+        if *data* has the expected type. The default implementation will always
+        return True.
+
+        :param data: Parsed settings data from user configuration
+        :return: True if data has expected type, otherwise False.
+        """
+        return True
+
+
+class BuiltinSetting(PluginSetting):
+    """Tiny wrapper to define Bob built-in settings"""
+
+    def __init__(self, schema, updater):
+        self.__schema = schema
+        self.__updater = updater
+
+    def merge(self, other):
+        self.__updater(other)
+
+    def validate(self, data):
+        try:
+            self.__schema.validate(data)
+            return True
+        except schema.SchemaError:
+            return False
+
 def Scm(spec, env, overrides, recipeSet):
     # resolve with environment
     spec = { k : ( env.substitute(v, "checkoutSCM::"+k) if isinstance(v, str) else v)
@@ -2105,50 +2181,6 @@ class RecipeSet:
             schema.Optional('max_depth') : int,
         })
 
-    USER_CONFIG_SCHEMA = schema.Schema(
-        {
-            schema.Optional('environment') : schema.Schema({
-                schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') : str
-            }),
-            schema.Optional('alias') : schema.Schema({
-                schema.Regex(r'^[0-9A-Za-z_-]+$') : str
-            }),
-            schema.Optional('whitelist') : schema.Schema([
-                schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
-            ]),
-            schema.Optional('archive') : schema.Or(
-                ArchiveValidator(),
-                schema.Schema( [ArchiveValidator()] )
-            ),
-            schema.Optional('include') : schema.Schema([str]),
-            schema.Optional('scmOverrides') : [ schema.Schema({
-                schema.Optional('match') : schema.Schema({ str: str }),
-                schema.Optional('del') : [
-                    "branch", "commit", "digestSHA1", "digestSHA256", "dir",
-                    "extract", "fileName", "if", "rev", "revision", "tag"
-                ],
-                schema.Optional('set') : schema.Schema({ str : str }),
-                schema.Optional('replace') : schema.Schema({
-                    str : schema.Schema({
-                        'pattern' : str,
-                        'replacement' : str
-                    })
-                })
-            }) ],
-            schema.Optional('command') : schema.Schema({
-                schema.Optional('dev') : BUILD_DEV_SCHEMA,
-                schema.Optional('build') : BUILD_DEV_SCHEMA,
-                schema.Optional('graph') : GRAPH_SCHEMA
-            }),
-            schema.Optional('hooks') : schema.Schema({
-                schema.Optional('preBuildHook') : str,
-                schema.Optional('postBuildHook') : str,
-            }),
-            schema.Optional('ui') : schema.Schema({
-                schema.Optional('color') : schema.Or('never', 'always', 'auto')
-            }),
-        })
-
     STATIC_CONFIG_SCHEMA = schema.Schema({
         schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}$'),
         schema.Optional('plugins') : [str],
@@ -2214,6 +2246,68 @@ class RecipeSet:
             ),
         }
         self.__buildHooks = {}
+
+        def updateArchive(x): self.__archive = x
+
+        self.__settings = {
+            "alias" : BuiltinSetting(
+                schema.Schema({ schema.Regex(r'^[0-9A-Za-z_-]+$') : str }),
+                lambda x: self.__aliases.update(x)
+            ),
+            "archive" : BuiltinSetting(
+                schema.Or(
+                    ArchiveValidator(),
+                    schema.Schema( [ArchiveValidator()] )
+                ),
+                updateArchive
+            ),
+            "command" : BuiltinSetting(
+                schema.Schema({
+                    schema.Optional('dev') : self.BUILD_DEV_SCHEMA,
+                    schema.Optional('build') : self.BUILD_DEV_SCHEMA,
+                    schema.Optional('graph') : self.GRAPH_SCHEMA
+                }),
+                lambda x: updateDicRecursive(self.__commandConfig, x) if self._ignoreCmdConfig else None
+            ),
+            "environment" : BuiltinSetting(
+                schema.Schema({ schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') : str }),
+                lambda x: self.__defaultEnv.update(x)
+            ),
+            "hooks" : BuiltinSetting(
+                schema.Schema({
+                    schema.Optional('preBuildHook') : str,
+                    schema.Optional('postBuildHook') : str,
+                }),
+                lambda x: self.__buildHooks.update(x)
+            ),
+            "scmOverrides" : BuiltinSetting(
+                schema.Schema([{
+                    schema.Optional('match') : schema.Schema({ str: str }),
+                    schema.Optional('del') : [
+                        "branch", "commit", "digestSHA1", "digestSHA256", "dir",
+                        "extract", "fileName", "if", "rev", "revision", "tag"
+                    ],
+                    schema.Optional('set') : schema.Schema({ str : str }),
+                    schema.Optional('replace') : schema.Schema({
+                        str : schema.Schema({
+                            'pattern' : str,
+                            'replacement' : str
+                        })
+                    })
+                }]),
+                lambda x: self.__scmOverrides.extend([ ScmOverride(o) for o in x ])
+            ),
+            "ui" : BuiltinSetting(
+                schema.Schema({
+                    schema.Optional('color') : schema.Or('never', 'always', 'auto')
+                }),
+                lambda x: updateDicRecursive(self.__uiConfig, x)
+            ),
+            "whitelist" : BuiltinSetting(
+                schema.Schema([ schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') ]),
+                lambda x: self.__whiteList.update(x)
+            ),
+        }
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -2309,6 +2403,20 @@ class RecipeSet:
             if i in self.__stringFunctions:
                 raise ParseError("Plugin '"+fileName+"': string function '" +i+"' already defined by other plugin!")
         self.__stringFunctions.update(funs)
+
+        settings = manifest.get('settings', {})
+        if not isinstance(settings, dict):
+            raise ParseError("Plugin '"+fileName+"': 'settings' has wrong type!")
+        for (i,j) in settings.items():
+            if not isinstance(i, str):
+                raise ParseError("Plugin '"+fileName+"': settings name must be a string!")
+            if i[:1].islower():
+                raise ParseError("Plugin '"+fileName+"': settings name must not start lower case!")
+            if not isinstance(j, PluginSetting):
+                raise ParseError("Plugin '"+fileName+"': setting '"+i+"' has wrong type!")
+            if i in self.__settings:
+                raise ParseError("Plugin '"+fileName+"': setting '"+i+"' already defined by other plugin!")
+        self.__settings.update(settings)
 
         return mod
 
@@ -2449,17 +2557,9 @@ class RecipeSet:
     def __parseUserConfig(self, fileName, relativeIncludes=None):
         if relativeIncludes is None:
             relativeIncludes = self.getPolicy("relativeIncludes")
-        cfg = self.loadYaml(fileName, RecipeSet.USER_CONFIG_SCHEMA)
-        self.__defaultEnv.update(cfg.get("environment", {}))
-        self.__whiteList |= set(cfg.get("whitelist", []))
-        if "archive" in cfg:
-            self.__archive = cfg["archive"]
-        self.__scmOverrides.extend([ ScmOverride(o) for o in cfg.get("scmOverrides", []) ])
-        self.__aliases.update(cfg.get("alias", {}))
-        if not self._ignoreCmdConfig:
-            self.__commandConfig = updateDicRecursive(self.__commandConfig, cfg.get("command", {}))
-        self.__buildHooks.update(cfg.get("hooks", {}))
-        self.__uiConfig = updateDicRecursive(self.__uiConfig, cfg.get("ui", {}))
+        cfg = self.loadYaml(fileName, self.__userConfigSchema)
+        for (name, value) in cfg.items():
+            if name != "include": self.__settings[name].merge(value)
         for p in cfg.get("include", []):
             p = os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p
             self.__parseUserConfig(p + ".yaml", relativeIncludes)
@@ -2561,6 +2661,15 @@ class RecipeSet:
             MULTIPACKAGE_NAME_SCHEMA : recipeSchemaSpec
         })
         self.__recipeSchema = schema.Schema(recipeSchemaSpec)
+
+        userConfigSchemaSpec = {
+            schema.Optional('include') : schema.Schema([str]),
+        }
+        for (name, setting) in self.__settings.items():
+            userConfigSchemaSpec[schema.Optional(name)] = schema.Schema(setting.validate,
+                error="setting '"+name+"' has an invalid type")
+        self.__userConfigSchema = schema.Schema(userConfigSchemaSpec)
+
 
     def getRecipe(self, packageName):
         if packageName not in self.__recipes:
