@@ -2233,81 +2233,81 @@ class RecipeSet:
             if not os.path.exists(name):
                 raise ParseError("Plugin '"+name+"' not found!")
             mangledName = "__bob_plugin_"+p
-            self.__plugins[mangledName] = self.__loadPlugin(mangledName, name)
+            self.__plugins[mangledName] = self.__loadPlugin(mangledName, name, p)
 
-    def __loadPlugin(self, mangledName, name):
+    def __loadPlugin(self, mangledName, fileName, name):
         # dummy load file to hash state
-        self.loadBinary(name)
+        self.loadBinary(fileName)
         try:
             from importlib.machinery import SourceFileLoader
-            loader = SourceFileLoader(mangledName, name)
+            loader = SourceFileLoader(mangledName, fileName)
             mod = loader.load_module()
         except SyntaxError as e:
             import traceback
-            raise ParseError("Error loading plugin "+name+": "+str(e),
+            raise ParseError("Error loading plugin "+fileName+": "+str(e),
                              help=traceback.format_exc())
         except Exception as e:
-            raise ParseError("Error loading plugin "+name+": "+str(e))
+            raise ParseError("Error loading plugin "+fileName+": "+str(e))
 
         try:
             manifest = mod.manifest
         except AttributeError:
-            raise ParseError("Plugin '"+name+"' did not define 'manifest'!")
+            raise ParseError("Plugin '"+fileName+"' did not define 'manifest'!")
         apiVersion = manifest.get('apiVersion')
         if apiVersion is None:
-            raise ParseError("Plugin '"+name+"' did not define 'apiVersion'!")
+            raise ParseError("Plugin '"+fileName+"' did not define 'apiVersion'!")
         if compareVersion(BOB_VERSION, apiVersion) < 0:
-            raise ParseError("Your Bob is too old. Plugin '"+name+"' requires at least version "+apiVersion+"!")
+            raise ParseError("Your Bob is too old. Plugin '"+fileName+"' requires at least version "+apiVersion+"!")
 
         hooks = manifest.get('hooks', {})
         if not isinstance(hooks, dict):
-            raise ParseError("Plugin '"+name+"': 'hooks' has wrong type!")
+            raise ParseError("Plugin '"+fileName+"': 'hooks' has wrong type!")
         for (hook, fun) in hooks.items():
             if not isinstance(hook, str):
-                raise ParseError("Plugin '"+name+"': hook name must be a string!")
+                raise ParseError("Plugin '"+fileName+"': hook name must be a string!")
             if not callable(fun):
-                raise ParseError("Plugin '"+name+"': "+hook+": hook must be callable!")
+                raise ParseError("Plugin '"+fileName+"': "+hook+": hook must be callable!")
             self.__hooks.setdefault(hook, []).append(fun)
 
         projectGenerators = manifest.get('projectGenerators', {})
         if not isinstance(projectGenerators, dict):
-            raise ParseError("Plugin '"+name+"': 'projectGenerators' has wrong type!")
+            raise ParseError("Plugin '"+fileName+"': 'projectGenerators' has wrong type!")
         self.__projectGenerators.update(projectGenerators)
 
         properties = manifest.get('properties', {})
         if not isinstance(properties, dict):
-            raise ParseError("Plugin '"+name+"': 'properties' has wrong type!")
+            raise ParseError("Plugin '"+fileName+"': 'properties' has wrong type!")
         for (i,j) in properties.items():
             if not isinstance(i, str):
-                raise ParseError("Plugin '"+name+"': property name must be a string!")
+                raise ParseError("Plugin '"+fileName+"': property name must be a string!")
             if not issubclass(j, PluginProperty):
-                raise ParseError("Plugin '"+name+"': property '" +i+"' has wrong type!")
+                raise ParseError("Plugin '"+fileName+"': property '" +i+"' has wrong type!")
             if i in self.__properties:
-                raise ParseError("Plugin '"+name+"': property '" +i+"' already defined by other plugin!")
+                raise ParseError("Plugin '"+fileName+"': property '" +i+"' already defined by other plugin!")
         self.__properties.update(properties)
 
         states = manifest.get('state', {})
         if not isinstance(states, dict):
-            raise ParseError("Plugin '"+name+"': 'states' has wrong type!")
+            raise ParseError("Plugin '"+fileName+"': 'states' has wrong type!")
         for (i,j) in states.items():
             if not isinstance(i, str):
-                raise ParseError("Plugin '"+name+"': state tracker name must be a string!")
+                raise ParseError("Plugin '"+fileName+"': state tracker name must be a string!")
             if i in ["environment", "tools", "result", "deps", "sandbox"]:
-                raise ParseError("Plugin '"+name+"': state tracker has reserved name!")
+                raise ParseError("Plugin '"+fileName+"': state tracker has reserved name!")
             if not issubclass(j, PluginState):
-                raise ParseError("Plugin '"+name+"': state tracker '" +i+"' has wrong type!")
+                raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' has wrong type!")
             if i in self.__states:
-                raise ParseError("Plugin '"+name+"': state tracker '" +i+"' already defined by other plugin!")
+                raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' already defined by other plugin!")
         self.__states.update(states)
 
         funs = manifest.get('stringFunctions', {})
         if not isinstance(funs, dict):
-            raise ParseError("Plugin '"+name+"': 'stringFunctions' has wrong type!")
+            raise ParseError("Plugin '"+fileName+"': 'stringFunctions' has wrong type!")
         for (i,j) in funs.items():
             if not isinstance(i, str):
-                raise ParseError("Plugin '"+name+"': string function name must be a string!")
+                raise ParseError("Plugin '"+fileName+"': string function name must be a string!")
             if i in self.__stringFunctions:
-                raise ParseError("Plugin '"+name+"': string function '" +i+"' already defined by other plugin!")
+                raise ParseError("Plugin '"+fileName+"': string function '" +i+"' already defined by other plugin!")
         self.__stringFunctions.update(funs)
 
         return mod
