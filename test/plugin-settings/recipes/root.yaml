@@ -1,0 +1,8 @@
+root: True
+
+environment:
+    SETTINGS: "$(get-settings)"
+
+packageVars: [SETTINGS]
+packageScript: |
+    echo "$SETTINGS" > result.txt
