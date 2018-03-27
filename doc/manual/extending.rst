@@ -50,6 +50,9 @@ internal and might change without notice.
 .. autoclass:: bob.input.PluginProperty
    :members:
 
+.. autoclass:: bob.input.PluginSetting
+   :members:
+
 .. autoclass:: bob.input.PluginState()
    :members:
 
@@ -267,3 +270,50 @@ A simple generator may look like::
         }
     }
 
+.. _extending-settings:
+
+Plugin settings
+---------------
+
+Sometimes plugin behaviour needs to be configurable by the user. On the other
+hand Bob expects plugins to be deterministic. To have a common interface for
+such settings it is possible for a plugin to define additional keywords in the
+:ref:`configuration-config-usr`. This provides Bob with the information to
+validate the settings and detect changes in a reliable manner.
+
+To define such settings the plugin must derive from
+:class:`bob.input.PluginSetting`, create an instance of that class and store it
+in the manifest under ``settings``. A minimal example looks like the
+following::
+
+    from bob.input import PluginSetting
+
+    class MySettings(PluginSetting):
+        @staticmethod
+        def validate(data):
+            return isinstance(data, str)
+
+    mySettings = MySettings("")
+
+    manifest = {
+        'apiVersion' : "0.14",
+        'settings' : {
+            'MySettings' : mySettings
+        }
+    }
+
+This will define a new, optional "MySettings" keyword for the user
+configuration that will accept any string. The default, if nothing is
+configured in ``default.yaml``, is an empty string.
+
+.. attention::
+    Do not configure your plugins by any other means. Bob will not detect
+    changes and, due to aggressive caching, might not call the plugin again to
+    process the new settings. So reading external files or using environment
+    variables results in undefined behavior.
+
+It is not possible to re-define already existing setting keywords. This applies
+both to Bob built-in settings as well as settings defined by other plugins.
+Because Bob is expected to define new settings in the future a plugin defined
+setting must not start with a lower case letter. These names are reserved for
+Bob.

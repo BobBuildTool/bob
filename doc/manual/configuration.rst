@@ -1111,6 +1111,8 @@ Example::
 
 This will explicitly request old behaviour for the `relativeIncludes` policy.
 
+.. _configuration-config-usr:
+
 User configuration (default.yaml)
 ---------------------------------
 
@@ -1148,6 +1150,11 @@ specified without the .yaml extension::
     :ref:`policies-relativeIncludes` policy is disabled. In this case files
     included by ``default.yaml`` and by the command line use the project root
     directory as base directory.
+
+It is possible for plugins to define additional settings. See
+:ref:`extending-settings` for more information. Their meaning and typing is
+completely controlled by the respective plugin and Bob will just pass the data
+as-is without further interpretation.
 
 .. _configuration-config-environment:
 
