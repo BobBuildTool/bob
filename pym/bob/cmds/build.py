@@ -1602,6 +1602,8 @@ invocations.  By default only 'build' and 'package' steps are evicted. Adding
 pushed) all your changes, tough. When in doubt add '--dry-run' to see what
 would get removed without actually deleting that already.
 """)
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="Don't delete, just print what would be deleted")
     parser.add_argument('-s', '--src', default=False, action='store_true',
@@ -1612,6 +1614,7 @@ would get removed without actually deleting that already.
 
     recipes = RecipeSet()
     recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
+    recipes.setConfigFiles(args.configFile)
     recipes.parse()
 
     nameFormatter = LocalBuilder.makeRunnable(LocalBuilder.releaseNameInterrogator)
