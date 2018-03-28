@@ -1593,6 +1593,8 @@ would get removed without actually deleting that already.
 """)
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="Don't delete, just print what would be deleted")
     parser.add_argument('-s', '--src', default=False, action='store_true',
@@ -1600,6 +1602,8 @@ would get removed without actually deleting that already.
     parser.add_argument('-v', '--verbose', default=False, action='store_true',
         help="Print what is done")
     args = parser.parse_args(argv)
+
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
@@ -1610,9 +1614,9 @@ would get removed without actually deleting that already.
 
     # collect all used paths (with and without sandboxing)
     usedPaths = set()
-    packages = recipes.generatePackages(nameFormatter, sandboxEnabled=True)
+    packages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=True)
     usedPaths |= collectPaths(packages.getRootPackage())
-    packages = recipes.generatePackages(nameFormatter, sandboxEnabled=False)
+    packages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=False)
     usedPaths |= collectPaths(packages.getRootPackage())
 
     # get all known existing paths

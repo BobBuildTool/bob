@@ -112,7 +112,7 @@ __bob_complete_path()
 
 __bob_clean()
 {
-   __bob_complete_words "-c -h --help --dry-run -s --src -v --verbose"
+   __bob_complete_words "-c -D -h --help --dry-run -s --src -v --verbose"
 }
 
 __bob_cook()

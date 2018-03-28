@@ -13,7 +13,7 @@ Synopsis
 
 ::
 
-    bob clean [-c CONFIGFILE] [-h] [--dry-run] [-s] [-v]
+    bob clean [-c CONFIGFILE] [-D DEFINES] [-h] [--dry-run] [-s] [-v]
 
 
 Description
@@ -32,6 +32,9 @@ Options
 
 ``-c CONFIGFILE``
     Use additional configuration file.
+
+``-D DEFINES``
+    Override default environment variables.
 
 ``--dry-run``
     Don't delete, just print what would be deleted
