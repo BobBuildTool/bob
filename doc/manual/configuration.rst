@@ -468,6 +468,28 @@ If a step depends on a certain variable then the result of the following step
 is already indirectly dependent on this variable. Thus it can be set during the
 following step anyway.
 
+
+checkoutAssert
+~~~~~~~~~~~~~~
+
+Type: List of checkoutAssertions
+
+Using checkoutAsserts you can make a build fail if a file content has
+been changed. This is especially useful to detect modifications in
+License files.
+
+The following properties are known:
+
+================= ==================================================================
+Property           Description
+================= ==================================================================
+file              | The file in the workspace to check.
+digestSHA1        | Digest of the file / part. Either pre calculate it using
+                  | `sha1sum` command or take the output of the first (failing) run.
+start             | Optionally. Defaults to 1.
+end               | Optionally. Defaults to last line of file.
+================= ==================================================================
+
 checkoutDeterministic
 ~~~~~~~~~~~~~~~~~~~~~
 

@@ -18,6 +18,7 @@ from glob import glob
 from pipes import quote
 from os.path import expanduser
 from string import Template
+from textwrap import dedent
 import copy
 import hashlib
 import fnmatch
@@ -221,6 +222,37 @@ def Scm(spec, env, overrides, recipeSet):
         return UrlScm(spec, matchedOverrides, recipeSet.getPolicy('tidyUrlScm'))
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))
+
+class CheckoutAssert:
+    SCHEMA = schema.Schema({
+        'file' : str,
+        'digestSHA1' : str,
+        schema.Optional('start') : int,
+        schema.Optional('end') : int,
+    })
+
+    def __init__(self, spec):
+        self.__file = spec['file']
+        self.__digestSHA1 = spec['digestSHA1']
+        self.__start = spec.get('start', 1)
+        self.__end = spec.get('end', '$')
+
+    def asScript(self):
+        return dedent("""\
+            COMPUTED_SHA1=$(sed -n '{START},{END}p' {FILE} | \
+                    sha1sum | cut -d ' ' -f1)
+            if [[ "$COMPUTED_SHA1" != "{SHA1SUM}" ]]; then
+                echo "Error: CheckoutAssert {FILE} checksums did not match!" 1>&2
+                echo "Specified: {SHA1SUM}" 1>&2
+                echo "Now: $COMPUTED_SHA1" 1>&2
+                exit 1
+            fi
+            """).format(START=str(self.__start),
+                    END=str(self.__end),
+                    FILE=self.__file, SHA1SUM=self.__digestSHA1)
+
+    def asDigestScript(self):
+        return self.__file + " " + self.__digestSHA1 + " " + str(self.__start) + " " + str(self.__end)
 
 class AbstractTool:
     __slots__ = ("path", "libs")
@@ -867,7 +899,7 @@ class Step(metaclass=ABCMeta):
         return ret
 
 class CoreCheckoutStep(CoreStep):
-    __slots__ = ( "script", "digestScript", "scmList", "coDeterministic" )
+    __slots__ = ( "script", "digestScript", "scmList", "coDeterministic", "cAsserts" )
 
     def _createStep(self, package):
         ret = CheckoutStep()
@@ -892,6 +924,8 @@ class CheckoutStep(Step):
                 for scm in checkout[2]
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
 
+            self._coreStep.cAsserts = [ CheckoutAssert(cassert) for cassert in checkout[3] ]
+
             # Validate that SCM paths do not overlap
             knownPaths = []
             for s in self._coreStep.scmList:
@@ -908,6 +942,7 @@ class CheckoutStep(Step):
             self._coreStep.digestScript = None
             self._coreStep.scmList = []
             self._coreStep.coDeterministic = True
+            self._coreStep.cAsserts = []
 
         return self
 
@@ -920,17 +955,20 @@ class CheckoutStep(Step):
     def getScript(self):
         script = self._coreStep.script
         if script is not None:
-            return joinScripts([s.asScript() for s in self._coreStep.scmList] + [script])
+            return joinScripts([s.asScript() for s in self._coreStep.scmList] + [script]
+                    + [s.asScript() for s in self._coreStep.cAsserts] )
         else:
             return None
 
     def getJenkinsScript(self):
         return joinScripts([ s.asScript() for s in self._coreStep.scmList if not s.hasJenkinsPlugin() ]
-            + [self._coreStep.script])
+            + [self._coreStep.script]
+            + [s.asScript() for s in self._coreStep.cAsserts] )
 
     def getDigestScript(self):
         if self._coreStep.script is not None:
-            return "\n".join([s.asDigestScript() for s in self._coreStep.scmList] + [self._coreStep.digestScript])
+            return "\n".join([s.asDigestScript() for s in self._coreStep.scmList] + [self._coreStep.digestScript]
+                    + [s.asDigestScript() for s in self._coreStep.cAsserts])
         else:
             return None
 
@@ -1574,7 +1612,8 @@ class Recipe(object):
             scm["__source"] = sourceName
             scm["recipe"] = "{}#{}".format(sourceFile, i)
             i += 1
-        self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs)
+        checkoutAsserts = recipe.get("checkoutAssert", [])
+        self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts)
         self.__build = incHelper.resolve(recipe.get("buildScript"), "buildScript")
         self.__package = incHelper.resolve(recipe.get("packageScript"), "packageScript")
 
@@ -1647,7 +1686,7 @@ class Recipe(object):
             self.__toolDepCheckout |= cls.__toolDepCheckout
             self.__toolDepBuild |= cls.__toolDepBuild
             self.__toolDepPackage |= cls.__toolDepPackage
-            (checkoutScript, checkoutDigestScript, checkoutSCMs) = self.__checkout
+            (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts) = self.__checkout
             self.__checkoutDeterministic = self.__checkoutDeterministic and cls.__checkoutDeterministic
             # merge scripts
             checkoutScript = joinScripts([cls.__checkout[0], checkoutScript])
@@ -1656,8 +1695,12 @@ class Recipe(object):
             scms = cls.__checkout[2][:]
             scms.extend(checkoutSCMs)
             checkoutSCMs = scms
+            # merge CheckoutAsserts
+            casserts = cls.__checkout[3][:]
+            casserts.extend(checkoutAsserts)
+            checkoutAsserts = casserts
             # store result
-            self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs)
+            self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts)
             self.__build = (
                 joinScripts([cls.__build[0], self.__build[0]]),
                 joinScripts([cls.__build[1], self.__build[1]], "\n")
@@ -1851,7 +1894,7 @@ class Recipe(object):
             inputSandbox, sandbox, tools.touchedKeys(), self.__metaEnv, uidGen())
 
         # optional checkout step
-        if self.__checkout != (None, None, []):
+        if self.__checkout != (None, None, [], []):
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
@@ -2468,6 +2511,7 @@ class RecipeSet:
                 'cvs' : CvsScm.SCHEMA,
                 'url' : UrlScm.SCHEMA
             }),
+            schema.Optional('checkoutAssert') : [ CheckoutAssert.SCHEMA ],
             schema.Optional('depends') : dependsClause,
             schema.Optional('environment') : schema.Schema({
                 varNameSchema : str
