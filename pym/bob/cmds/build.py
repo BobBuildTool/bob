@@ -48,6 +48,19 @@ def runHook(recipes, hook, args):
 
     return ret
 
+def processDefines(defs):
+    # Process defines
+    defines = {}
+    for define in defs:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+    return defines
+
 class RestartBuildException(Exception):
     pass
 
@@ -1242,15 +1255,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Do a clean checkout if SCM state is dirty.")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     startTime = time.time()
 
@@ -1405,15 +1410,7 @@ def doProject(argv, bobRoot):
         help="Disable sandboxing")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
@@ -1501,15 +1498,7 @@ def doStatus(argv, bobRoot):
         help="Show scm override status")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
@@ -1683,16 +1672,7 @@ been executed or does not exist), the line is omitted.
     if args.sandbox == None:
         args.sandbox = not args.dev
 
-    # Process defines
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     # Process the recipes
     recipes = RecipeSet()
