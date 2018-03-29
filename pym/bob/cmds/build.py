@@ -48,6 +48,19 @@ def runHook(recipes, hook, args):
 
     return ret
 
+def processDefines(defs):
+    # Process defines
+    defines = {}
+    for define in defs:
+        d = define.split("=")
+        if len(d) == 1:
+            defines[d[0]] = ""
+        elif len(d) == 2:
+            defines[d[0]] = d[1]
+        else:
+            parser.error("Malformed define: "+define)
+    return defines
+
 class RestartBuildException(Exception):
     pass
 
@@ -1242,15 +1255,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Do a clean checkout if SCM state is dirty.")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     startTime = time.time()
 
@@ -1405,15 +1410,7 @@ def doProject(argv, bobRoot):
         help="Disable sandboxing")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
@@ -1501,15 +1498,7 @@ def doStatus(argv, bobRoot):
         help="Show scm override status")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
@@ -1602,6 +1591,10 @@ invocations.  By default only 'build' and 'package' steps are evicted. Adding
 pushed) all your changes, tough. When in doubt add '--dry-run' to see what
 would get removed without actually deleting that already.
 """)
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="Don't delete, just print what would be deleted")
     parser.add_argument('-s', '--src', default=False, action='store_true',
@@ -1610,17 +1603,20 @@ would get removed without actually deleting that already.
         help="Print what is done")
     args = parser.parse_args(argv)
 
+    defines = processDefines(args.defines)
+
     recipes = RecipeSet()
     recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
+    recipes.setConfigFiles(args.configFile)
     recipes.parse()
 
     nameFormatter = LocalBuilder.makeRunnable(LocalBuilder.releaseNameInterrogator)
 
     # collect all used paths (with and without sandboxing)
     usedPaths = set()
-    packages = recipes.generatePackages(nameFormatter, sandboxEnabled=True)
+    packages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=True)
     usedPaths |= collectPaths(packages.getRootPackage())
-    packages = recipes.generatePackages(nameFormatter, sandboxEnabled=False)
+    packages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=False)
     usedPaths |= collectPaths(packages.getRootPackage())
 
     # get all known existing paths
@@ -1680,16 +1676,7 @@ been executed or does not exist), the line is omitted.
     if args.sandbox == None:
         args.sandbox = not args.dev
 
-    # Process defines
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     # Process the recipes
     recipes = RecipeSet()

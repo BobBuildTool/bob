@@ -13,7 +13,10 @@ for cmd, (hl, func, help) in sorted(availableCommands.items()):
 
 for c in $cmds; do
 	case "$c" in
-		archive | clean | jenkins | help | _*)
+		archive | jenkins | help | _*)
+			;;
+        clean)
+			run_bob $c -DBAR=1 -c testconfig
 			;;
 		project)
 			run_bob project -DBAR=1 -c testconfig qt-creator root --kit=none
