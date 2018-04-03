@@ -198,11 +198,6 @@ class _BobState():
             self.__results[stepDigest] = hash
             self.__save()
 
-    def delResultHash(self, stepDigest):
-        if stepDigest in self.__results:
-            del self.__results[stepDigest]
-            self.__save()
-
     def getInputHashes(self, path):
         return self.__inputs.get(path)
 
@@ -222,6 +217,17 @@ class _BobState():
     def setDirectoryState(self, path, digest):
         self.__dirStates[path] = digest
         self.__save()
+
+    def delWorkspaceState(self, path):
+        needSave = False
+        if path in self.__results:
+            del self.__results[path]
+            needSave = True
+        if path in self.__inputs:
+            del self.__inputs[path]
+            needSave = True
+        if needSave:
+            self.__save()
 
     def getAllJenkins(self):
         return self.__jenkins.keys()

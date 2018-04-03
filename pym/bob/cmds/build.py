@@ -738,8 +738,7 @@ esac
             oldCheckoutState = BobState().getDirectoryState(prettySrcPath, {})
             if created:
                 # invalidate result if folder was created
-                BobState().delInputHashes(prettySrcPath)
-                BobState().delResultHash(prettySrcPath)
+                BobState().delWorkspaceState(prettySrcPath)
                 oldCheckoutState = {}
                 BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
@@ -875,8 +874,7 @@ esac
                     print(colorize("   PRUNE     {} (recipe changed)".format(prettyBuildPath), "33"))
                     emptyDirectory(prettyBuildPath)
                 # invalidate build step
-                BobState().delInputHashes(prettyBuildPath)
-                BobState().delResultHash(prettyBuildPath)
+                BobState().delWorkspaceState(prettyBuildPath)
 
             if buildDigest != oldBuildDigest:
                 BobState().setDirectoryState(prettyBuildPath, buildDigest)
@@ -922,8 +920,7 @@ esac
                     print(colorize("   PRUNE     {} (recipe changed)".format(prettyPackagePath), "33"))
                     emptyDirectory(prettyPackagePath)
                 # invalidate result if folder was created
-                BobState().delInputHashes(prettyPackagePath)
-                BobState().delResultHash(prettyPackagePath)
+                BobState().delWorkspaceState(prettyPackagePath)
 
             if packageDigest != oldPackageDigest:
                 BobState().setDirectoryState(prettyPackagePath, packageDigest)
@@ -972,8 +969,7 @@ esac
                     print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
                             "build forced" if self.__force else "build-id changed"), "33"))
                     emptyDirectory(prettyPackagePath)
-                    BobState().delInputHashes(prettyPackagePath)
-                    BobState().delResultHash(prettyPackagePath)
+                    BobState().delWorkspaceState(prettyPackagePath)
                     oldInputBuildId = None
                     oldInputHashes = None
 
