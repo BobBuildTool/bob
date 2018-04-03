@@ -36,6 +36,7 @@ class _BobState():
         self.__buildState = {}
         self.__lock = None
         self.__buildIdCache = None
+        self.__variantIds = {}
 
         # lock state
         lockFile = ".bob-state.lock"
@@ -76,6 +77,7 @@ class _BobState():
                 self.__jenkins = state.get("jenkins", {})
                 self.__dirStates = state.get("dirStates", {})
                 self.__buildState = state.get("buildState", {})
+                self.__variantIds = state.get("variantIds", {})
 
                 # version upgrades
                 if state["version"] == 2:
@@ -112,6 +114,7 @@ class _BobState():
                 "jenkins" : self.__jenkins,
                 "dirStates" : self.__dirStates,
                 "buildState" : self.__buildState,
+                "variantIds" : self.__variantIds,
             }
             tmpFile = self.__path+".new"
             try:
@@ -218,6 +221,14 @@ class _BobState():
         self.__dirStates[path] = digest
         self.__save()
 
+    def getVariantId(self, path):
+        return self.__variantIds.get(path)
+
+    def setVariantId(self, path, variantId):
+        if self.getVariantId(path) != variantId:
+            self.__variantIds[path] = variantId
+            self.__save()
+
     def delWorkspaceState(self, path):
         needSave = False
         if path in self.__results:
@@ -228,6 +239,9 @@ class _BobState():
             needSave = True
         if path in self.__dirStates:
             del self.__dirStates[path]
+            needSave = True
+        if path in self.__variantIds:
+            del self.__variantIds[path]
             needSave = True
         if needSave:
             self.__save()

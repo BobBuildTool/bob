@@ -818,6 +818,7 @@ esac
                     # reflect new checkout state
                     BobState().setDirectoryState(prettySrcPath, checkoutState)
                     BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
+                    BobState().setVariantId(prettySrcPath, self.__getIncrementalVariantId(checkoutStep))
                 else:
                     self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
 
@@ -850,13 +851,6 @@ esac
                 self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
     def _cookBuildStep(self, buildStep, checkoutOnly, depth):
-        # Include actual directories of dependencies in buildDigest.
-        # Directories are reused in develop build mode and thus might change
-        # even though the variant id of this step is stable. As most tools rely
-        # on stable input directories we have to make a clean build if any of
-        # the dependency directories change.
-        buildDigest = [buildStep.getVariantId()] + [
-            i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
         if self._wasAlreadyRun(buildStep, checkoutOnly):
             prettyBuildPath = buildStep.getWorkspacePath()
             self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
@@ -864,6 +858,14 @@ esac
             # depth first
             self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
                        checkoutOnly, depth+1)
+
+            # Include actual directories of dependencies in buildDigest.
+            # Directories are reused in develop build mode and thus might change
+            # even though the variant id of this step is stable. As most tools rely
+            # on stable input directories we have to make a clean build if any of
+            # the dependency directories change.
+            buildDigest = [self.__getIncrementalVariantId(buildStep)] + [
+                i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
 
             # get directory into shape
             (prettyBuildPath, created) = self._constructDir(buildStep, "build")
@@ -902,6 +904,7 @@ esac
                 buildHash = hashWorkspace(buildStep)
                 self._generateAudit(buildStep, depth, buildHash)
                 BobState().setResultHash(prettyBuildPath, buildHash)
+                BobState().setVariantId(prettyBuildPath, buildDigest[0])
                 BobState().setInputHashes(prettyBuildPath, buildInputHashes)
             self._setAlreadyRun(buildStep, False, checkoutOnly)
 
@@ -1017,6 +1020,7 @@ esac
                     BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
                     self._runShell(packageStep, "package", True)
                     packageHash = hashWorkspace(packageStep)
+                    packageDigest = self.__getIncrementalVariantId(packageStep)
                     audit = self._generateAudit(packageStep, depth, packageHash)
                     workspaceChanged = True
                     self.__statistic.packagesBuilt += 1
@@ -1026,6 +1030,7 @@ esac
             # Rehash directory if content was changed
             if workspaceChanged:
                 BobState().setResultHash(prettyPackagePath, packageHash)
+                BobState().setVariantId(prettyPackagePath, packageDigest)
                 if wasDownloaded:
                     BobState().setInputHashes(prettyPackagePath, packageBuildId)
                 else:
@@ -1177,6 +1182,34 @@ esac
 
         # start from scratch
         raise RestartBuildException()
+
+    def __getIncrementalVariantId(self, step):
+        """Calculate the variant-id with respect to workspace state.
+
+        The real variant-id can be calculated solely by looking at the recipes.
+        But as we allow the user to build single packages, skip dependencies
+        and support checkout-/build-only builds the actual variant-id is
+        dependent on the current project state.
+
+        For every workspace we store the variant-id of the last build. When
+        calculating the incremental variant-id of a step we take these stored
+        variant-ids for the dependencies. If no variant-id was stored we take
+        the real one because this is typically an old workspace where we want
+        to prevent useless rebuilds. It could also be that the workspace was
+        deleted.
+
+        Important: this method can only work reliably if the dependent steps
+        have been cooked. Otherwise the state may have stale data.
+        """
+
+        def getStoredVId(dep):
+            ret = BobState().getVariantId(dep.getWorkspacePath())
+            if ret is None:
+                ret = dep.getVariantId()
+            return ret
+
+        r = step.getDigest(getStoredVId)
+        return r
 
 
 def touch(packages):
