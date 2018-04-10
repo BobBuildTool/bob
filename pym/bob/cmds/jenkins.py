@@ -359,6 +359,7 @@ class JenkinsJob:
                 sandbox.extend(["-W", quote(d.getExecPath())])
                 sandbox.extend(["-H", "bob"])
                 sandbox.extend(["-d", "/tmp"])
+                if not d.hasNetAccess(): sandbox.append('-n')
                 sandbox.append("\"${mounts[@]}\"")
                 sandbox.extend(["-M", "$WORKSPACE", "-w", "/workspace"])
                 sandbox.append("--")
