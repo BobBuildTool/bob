@@ -468,6 +468,27 @@ If a step depends on a certain variable then the result of the following step
 is already indirectly dependent on this variable. Thus it can be set during the
 following step anyway.
 
+.. _configuration-recipes-netAccess:
+
+{build,package}NetAccess
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: Boolean
+
+By default the external network is not accessible during build or package steps
+when building inside a sandbox. Checkout steps always have network access. If
+such access is still needed a recipe may set the ``buildNetAccess`` or the
+``packageNetAccess`` to ``True``.
+
+.. warning::
+   Bob assumes that build and package steps are deterministic. Do not rely on
+   external state that changes the behavior of the build. Unless the input of a
+   package changes (sources, dependencies) Bob will not re-build a package.
+
+.. note::
+    Before Bob 0.14 (see :ref:`policies-offlineBuild` policy) the network
+    access was always possbible. The policy will determine the default value of
+    this property.
 
 checkoutAssert
 ~~~~~~~~~~~~~~

@@ -241,3 +241,27 @@ Old behavior
 New behavior
     The default value of the :ref:`configuration-recipes-relocatable` property
     is always ``True``.
+
+.. _policies-offlineBuild:
+
+offlineBuild
+~~~~~~~~~~~~
+
+Introduced in: 0.14
+
+Bob assumes that build and package steps are always deterministic. It is
+therefore usually not a good idea to access the network other than in the
+checkout step where the external source code is fetched. Bob has the ability to
+isolate the network when building a package in a sandbox. If the network must
+still be accessible during build and/or package steps the recipe might set the
+respective properties (see :ref:`configuration-recipes-netAccess`).
+
+Old behavior
+    External network access is always possible.
+
+New behavior
+    During checkout steps the external network is always accessible. When
+    building inside a sandbox the network will be isolated during build and
+    package steps by default. A recipe might override this to still allow
+    network access if required.
+
