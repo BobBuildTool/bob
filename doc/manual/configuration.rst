@@ -750,6 +750,8 @@ Example::
 
 See also :ref:`configuration-recipes-privateenv`.
 
+.. _configuration-recipes-filter:
+
 filter
 ~~~~~~
 
@@ -1455,6 +1457,16 @@ postBuildHook
     results as further arguments.
 
     The return status of the hook is ignored.
+
+rootFilter
+~~~~~~~~~~
+
+Type: List of Strings
+
+Filter root recipes. The effect of this is a faster package parsing due to
+the fact, that the tree is not build for filtered roots.
+
+Works like the :ref:`configuration-recipes-filter` keyword.
 
 ui
 ~~

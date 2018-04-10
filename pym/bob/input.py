@@ -2212,6 +2212,7 @@ class RecipeSet:
         self.__classes = {}
         self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
+        self.__rootFilter = []
         self.__scmOverrides = []
         self.__hooks = {}
         self.__projectGenerators = {}
@@ -2279,6 +2280,10 @@ class RecipeSet:
                     schema.Optional('postBuildHook') : str,
                 }),
                 lambda x: self.__buildHooks.update(x)
+            ),
+            "rootFilter" : BuiltinSetting(
+                schema.Schema([str]),
+                lambda x: self.__rootFilter.extend(x)
             ),
             "scmOverrides" : BuiltinSetting(
                 schema.Schema([{
@@ -2550,8 +2555,10 @@ class RecipeSet:
             if recipe.isRoot():
                 rootRecipes.append(recipe.getPackageName())
 
+        filteredRoots = [ root for root in rootRecipes
+                if (len(self.__rootFilter) == 0) or checkGlobList(root, maybeGlob(self.__rootFilter)) ]
         # create virtual root package
-        self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(rootRecipes), self.__properties)
+        self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(filteredRoots), self.__properties)
         self.__addRecipe(self.__rootRecipe)
 
     def __parseUserConfig(self, fileName, relativeIncludes=None):
