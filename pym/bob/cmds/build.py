@@ -524,6 +524,7 @@ esac
             sandbox.extend(["-W", quote(step.getExecPath())])
             sandbox.extend(["-H", "bob"])
             sandbox.extend(["-d", "/tmp"])
+            if not step.hasNetAccess(): sandbox.append('-n')
             sandboxRootFs = os.path.abspath(
                 step.getSandbox().getStep().getWorkspacePath())
             for f in os.listdir(sandboxRootFs):
