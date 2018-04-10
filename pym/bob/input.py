@@ -1120,6 +1120,9 @@ class CheckoutStep(Step):
         lines.append("}")
         return "\n".join(lines)
 
+    def hasNetAccess(self):
+        return True
+
 
 class RegularStep(Step):
     def construct(self, package, pathFormatter, sandbox, label, script=(None, None),
@@ -1159,6 +1162,9 @@ class BuildStep(RegularStep):
     def isBuildStep(self):
         return True
 
+    def hasNetAccess(self):
+        return self.getPackage().getRecipe()._getBuildNetAccess()
+
 class CorePackageStep(CoreStep):
     __slots__ = [ "script", "digestScript" ]
 
@@ -1183,6 +1189,9 @@ class PackageStep(RegularStep):
     def isRelocatable(self):
         """Returns True if the package step is relocatable."""
         return self.getPackage().isRelocatable()
+
+    def hasNetAccess(self):
+        return self.getPackage().getRecipe()._getPackageNetAccess()
 
 
 class CorePackage:
@@ -1697,6 +1706,9 @@ class Recipe(object):
         # involved.
         self.__checkoutDeterministic = recipe.get("checkoutDeterministic", checkoutScript is None)
 
+        self.__buildNetAccess = recipe.get("buildNetAccess")
+        self.__packageNetAccess = recipe.get("packageNetAccess")
+
     def __resolveClassesOrder(self, cls, stack, visited, isRecipe=False):
         # prevent cycles
         clsName = "<recipe>" if isRecipe else cls.__packageName
@@ -1764,6 +1776,8 @@ class Recipe(object):
             self.__toolDepPackage |= cls.__toolDepPackage
             (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts) = self.__checkout
             self.__checkoutDeterministic = self.__checkoutDeterministic and cls.__checkoutDeterministic
+            if self.__buildNetAccess is None: self.__buildNetAccess = cls.__buildNetAccess
+            if self.__packageNetAccess is None: self.__packageNetAccess = cls.__packageNetAccess
             # merge scripts
             checkoutScript = joinScripts([cls.__checkout[0], checkoutScript])
             checkoutDigestScript = joinScripts([cls.__checkout[1], checkoutDigestScript], "\n")
@@ -2049,6 +2063,18 @@ class Recipe(object):
 
         return p, subTreePackages
 
+    def _getBuildNetAccess(self):
+        if self.__buildNetAccess is None:
+            return not self.__recipeSet.getPolicy("offlineBuild")
+        else:
+            return self.__buildNetAccess
+
+    def _getPackageNetAccess(self):
+        if self.__packageNetAccess is None:
+            return not self.__recipeSet.getPolicy("offlineBuild")
+        else:
+            return self.__packageNetAccess
+
     def __raiseIncompatibleProvided(self, r, r2):
         raise ParseError("Incompatible variants of package: {} vs. {}"
             .format("/".join(r.getPackage().getStack()),
@@ -2190,6 +2216,7 @@ class RecipeSet:
                 schema.Optional('cleanEnvironment') : bool,
                 schema.Optional('tidyUrlScm') : bool,
                 schema.Optional('allRelocatable') : bool,
+                schema.Optional('offlineBuild') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         )
@@ -2243,6 +2270,11 @@ class RecipeSet:
                 "0.14",
                 InfoOnce("allRelocatable policy not set. Packages that define tools are not up- or downloaded.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#allrelocatable for more information.")
+            ),
+            'offlineBuild' : (
+                "0.14",
+                InfoOnce("offlineBuild policy not set. Network access still allowed during build steps.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#offlinebuild for more information.")
             ),
         }
         self.__buildHooks = {}
@@ -2649,6 +2681,8 @@ class RecipeSet:
             schema.Optional('root') : bool,
             schema.Optional('shared') : bool,
             schema.Optional('relocatable') : bool,
+            schema.Optional('buildNetAccess') : bool,
+            schema.Optional('packageNetAccess') : bool,
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
