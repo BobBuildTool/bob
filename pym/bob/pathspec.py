@@ -888,3 +888,6 @@ class PackageSet:
             thisPackage = nextPackages[step]
 
         return thisPackage
+
+    def getCacheKey(self):
+        return self.__cacheKey

@@ -9,6 +9,7 @@ cleanup
 
 run_bob dev root -DORDER=ab
 V1="$(run_bob query-path --develop -DORDER=ab root/variant-a/dep)"
+rm -f .bob-dev-dirs.sqlite3
 run_bob dev root -DORDER=ba
 V2="$(run_bob query-path --develop -DORDER=ba root/variant-a/dep)"
 
