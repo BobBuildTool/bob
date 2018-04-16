@@ -2300,7 +2300,7 @@ class RecipeSet:
                     schema.Optional('build') : self.BUILD_DEV_SCHEMA,
                     schema.Optional('graph') : self.GRAPH_SCHEMA
                 }),
-                lambda x: updateDicRecursive(self.__commandConfig, x) if self._ignoreCmdConfig else None
+                lambda x: updateDicRecursive(self.__commandConfig, x) if not self._ignoreCmdConfig else None
             ),
             "environment" : BuiltinSetting(
                 schema.Schema({ schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') : str }),
