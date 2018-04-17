@@ -539,21 +539,19 @@ class CoreStepRef:
             packageInputTools, packageInputSandbox)
 
 class CoreStep(metaclass=ABCMeta):
-    __slots__ = ( "package", "label", "tools", "digestEnv", "env", "args",
-        "shared", "doesProvideTools", "providedEnv", "providedTools",
+    __slots__ = ( "package", "tools", "digestEnv", "env", "args",
+        "doesProvideTools", "providedEnv", "providedTools",
         "providedDeps", "providedSandbox", "variantId", "sandbox", "sbxVarId",
         "deterministic" )
 
-    def __init__(self, step, label, tools, sandbox, digestEnv, env, args, shared):
+    def __init__(self, step, tools, sandbox, digestEnv, env, args):
         package = step.getPackage()
         self.package = package._getCorePackage()
-        self.label = label
         self.tools = list(tools.keys())
         self.sandbox = sandbox is not None
         self.digestEnv = digestEnv
         self.env = env
         self.args = [ CoreStepRef(package, a) for a in args ]
-        self.shared = shared
         self.doesProvideTools = False
         self.providedEnv = {}
         self.providedTools = {}
@@ -587,8 +585,8 @@ class Step(metaclass=ABCMeta):
     the step. See :meth:`bob.input.Step.getVariantId` for details.
     """
 
-    def construct(self, package, pathFormatter, sandbox, label, digestEnv=Env(),
-                 env=Env(), tools=Env(), args=[], shared=False):
+    def construct(self, package, pathFormatter, sandbox, digestEnv=Env(),
+                 env=Env(), tools=Env(), args=[]):
         # detach from tracking
         digestEnv = digestEnv.detach()
         env = env.detach()
@@ -609,8 +607,8 @@ class Step(metaclass=ABCMeta):
         self.__providedSandbox = None
 
         # will call back to us!
-        self._coreStep = self._createCoreStep(label, tools, sandbox, digestEnv,
-            env, args, shared)
+        self._coreStep = self._createCoreStep(tools, sandbox, digestEnv,
+            env, args)
 
     def reconstruct(self, package, coreStep, pathFormatter, sandbox):
         self.__package = package
@@ -643,7 +641,7 @@ class Step(metaclass=ABCMeta):
         return self.getVariantId() >= other.getVariantId()
 
     @abstractmethod
-    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared):
+    def _createCoreStep(self, tools, sandbox, digestEnv, env, args):
         pass
 
     def _getCoreStep(self):
@@ -692,9 +690,10 @@ class Step(metaclass=ABCMeta):
                 arg.isDeterministic() for arg in self.getAllDepSteps(True))
         return ret
 
+    @abstractmethod
     def isValid(self):
         """Returns True if this step is valid, False otherwise."""
-        return self.getScript() is not None
+        pass
 
     def isCheckoutStep(self):
         """Return True if this is a checkout step."""
@@ -821,13 +820,14 @@ class Step(metaclass=ABCMeta):
         else:
             return None
 
+    @abstractmethod
     def getLabel(self):
         """Return path label for step.
 
         This is currently defined as "src", "build" and "dist" for the
         respective steps.
         """
-        return self._coreStep.label
+        pass
 
     def getExecPath(self):
         """Return the execution path of the step.
@@ -923,7 +923,7 @@ class Step(metaclass=ABCMeta):
         some shared location where it is likely that the same result is needed
         again.
         """
-        return self._coreStep.shared
+        return False
 
     def isRelocatable(self):
         """Returns True if the step is relocatable."""
@@ -975,7 +975,7 @@ class Step(metaclass=ABCMeta):
         return ret
 
 class CoreCheckoutStep(CoreStep):
-    __slots__ = ( "script", "digestScript", "scmList", "coDeterministic", "cAsserts" )
+    __slots__ = ( "isValid", "scmList" )
 
     def _createStep(self, package):
         ret = CheckoutStep()
@@ -984,23 +984,18 @@ class CoreCheckoutStep(CoreStep):
 
 class CheckoutStep(Step):
     def construct(self, package, pathFormatter, sandbox=None, checkout=None,
-                  fullEnv=Env(), digestEnv=Env(), env=Env(), tools=Env(),
-                  deterministic=False):
-        super().construct(package, pathFormatter, sandbox, "src", digestEnv,
+                  fullEnv=Env(), digestEnv=Env(), env=Env(), tools=Env()):
+        super().construct(package, pathFormatter, sandbox, digestEnv,
                          env, tools)
 
         if checkout:
-            self._coreStep.script = checkout[0] if checkout[0] is not None else ""
-            self._coreStep.digestScript = checkout[1] if checkout[1] is not None else ""
-            self._coreStep.coDeterministic = deterministic
+            self._coreStep.isValid = (checkout[0] is not None) or bool(checkout[2])
 
             recipeSet = package.getRecipe().getRecipeSet()
             overrides = recipeSet.scmOverrides()
             self._coreStep.scmList = [ Scm(scm, fullEnv, overrides, recipeSet)
                 for scm in checkout[2]
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
-
-            self._coreStep.cAsserts = [ CheckoutAssert(cassert) for cassert in checkout[3] ]
 
             # Validate that SCM paths do not overlap
             knownPaths = []
@@ -1014,37 +1009,41 @@ class CheckoutStep(Step):
                                                 .format(known, p))
                     knownPaths.append(p)
         else:
-            self._coreStep.script = None
-            self._coreStep.digestScript = None
+            self._coreStep.isValid = False
             self._coreStep.scmList = []
-            self._coreStep.coDeterministic = True
-            self._coreStep.cAsserts = []
 
         return self
 
-    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared):
-        return CoreCheckoutStep(self, label, tools, sandbox, digestEnv, env, args, shared)
+    def _createCoreStep(self, tools, sandbox, digestEnv, env, args):
+        return CoreCheckoutStep(self, tools, sandbox, digestEnv, env, args)
+
+    def getLabel(self):
+        return "src"
+
+    def isValid(self):
+        return self._coreStep.isValid
 
     def isCheckoutStep(self):
         return True
 
     def getScript(self):
-        script = self._coreStep.script
-        if script is not None:
-            return joinScripts([s.asScript() for s in self._coreStep.scmList] + [script]
-                    + [s.asScript() for s in self._coreStep.cAsserts] )
-        else:
-            return None
+        recipe = self.getPackage().getRecipe()
+        return joinScripts([s.asScript() for s in self._coreStep.scmList]
+                + [recipe.checkoutScript]
+                + [s.asScript() for s in recipe.checkoutAsserts])
 
     def getJenkinsScript(self):
+        recipe = self.getPackage().getRecipe()
         return joinScripts([ s.asScript() for s in self._coreStep.scmList if not s.hasJenkinsPlugin() ]
-            + [self._coreStep.script]
-            + [s.asScript() for s in self._coreStep.cAsserts] )
+            + [recipe.checkoutScript]
+            + [s.asScript() for s in recipe.checkoutAsserts])
 
     def getDigestScript(self):
-        if self._coreStep.script is not None:
-            return "\n".join([s.asDigestScript() for s in self._coreStep.scmList] + [self._coreStep.digestScript]
-                    + [s.asDigestScript() for s in self._coreStep.cAsserts])
+        if self.isValid():
+            recipe = self.getPackage().getRecipe()
+            return "\n".join([s.asDigestScript() for s in self._coreStep.scmList]
+                    + [recipe.checkoutDigestScript]
+                    + [s.asDigestScript() for s in recipe.checkoutAsserts])
         else:
             return None
 
@@ -1062,7 +1061,7 @@ class CheckoutStep(Step):
         return dirs
 
     def isDeterministic(self):
-        return ( self._coreStep.coDeterministic and
+        return ( self.getPackage().getRecipe().checkoutDeterministic and
                  all([ s.isDeterministic() for s in self._coreStep.scmList ]) and
                  super().isDeterministic() )
 
@@ -1072,7 +1071,7 @@ class CheckoutStep(Step):
         This must be supported by all SCMs. Additionally the checkout script
         must be deterministic.
         """
-        return ( self._coreStep.coDeterministic and
+        return ( self.getPackage().getRecipe().checkoutDeterministic and
                  all(s.hasLiveBuildId() for s in self._coreStep.scmList) and
                  super().isDeterministic() )
 
@@ -1124,40 +1123,39 @@ class CheckoutStep(Step):
         return True
 
 
-class RegularStep(Step):
-    def construct(self, package, pathFormatter, sandbox, label, script=(None, None),
-                 digestEnv=Env(), env=Env(), tools=Env(), args=[], shared=False):
-        super().construct(package, pathFormatter, sandbox, label, digestEnv,
-                          env, tools, args, shared)
-        self._coreStep.script = script[0]
-        self._coreStep.digestScript = script[1]
-
-    def getScript(self):
-        return self._coreStep.script
-
-    def getJenkinsScript(self):
-        return self._coreStep.script
-
-    def getDigestScript(self):
-        return self._coreStep.digestScript
-
 class CoreBuildStep(CoreStep):
-    __slots__ = [ "script", "digestScript" ]
+    __slots__ = [ "isValid" ]
 
     def _createStep(self, package):
         ret = BuildStep()
         package._reconstructBuildStep(ret)
         return ret
 
-class BuildStep(RegularStep):
+class BuildStep(Step):
     def construct(self, package, pathFormatter, sandbox=None, script=(None, None),
                   digestEnv=Env(), env=Env(), tools=Env(), args=[]):
-        super().construct(package, pathFormatter, sandbox, "build", script,
+        super().construct(package, pathFormatter, sandbox,
                           digestEnv, env, tools, args)
+        self._coreStep.isValid = script[0] is not None
         return self
 
-    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared):
-        return CoreBuildStep(self, label, tools, sandbox, digestEnv, env, args, shared)
+    def _createCoreStep(self, tools, sandbox, digestEnv, env, args):
+        return CoreBuildStep(self, tools, sandbox, digestEnv, env, args)
+
+    def getLabel(self):
+        return "build"
+
+    def isValid(self):
+        return self._coreStep.isValid
+
+    def getScript(self):
+        return self.getPackage().getRecipe().buildScript
+
+    def getJenkinsScript(self):
+        return self.getPackage().getRecipe().buildScript
+
+    def getDigestScript(self):
+        return self.getPackage().getRecipe().buildDigestScript
 
     def isBuildStep(self):
         return True
@@ -1166,22 +1164,41 @@ class BuildStep(RegularStep):
         return self.getPackage().getRecipe()._getBuildNetAccess()
 
 class CorePackageStep(CoreStep):
-    __slots__ = [ "script", "digestScript" ]
+    __slots__ = [ "isValid" ]
 
     def _createStep(self, package):
         ret = PackageStep()
         package._reconstructPackageStep(ret)
         return ret
 
-class PackageStep(RegularStep):
+class PackageStep(Step):
     def construct(self, package, pathFormatter, sandbox=None, script=(None, None),
-                  digestEnv=Env(), env=Env(), tools=Env(), args=[], shared=False):
-        super().construct(package, pathFormatter, sandbox, "dist", script,
-                          digestEnv, env, tools, args, shared)
+                  digestEnv=Env(), env=Env(), tools=Env(), args=[]):
+        super().construct(package, pathFormatter, sandbox,
+                          digestEnv, env, tools, args)
+        self._coreStep.isValid = script[0] is not None
         return self
 
-    def _createCoreStep(self, label, tools, sandbox, digestEnv, env, args, shared):
-        return CorePackageStep(self, label, tools, sandbox, digestEnv, env, args, shared)
+    def _createCoreStep(self, tools, sandbox, digestEnv, env, args):
+        return CorePackageStep(self, tools, sandbox, digestEnv, env, args)
+
+    def getLabel(self):
+        return "dist"
+
+    def isShared(self):
+        return self.getPackage().getRecipe().isShared()
+
+    def isValid(self):
+        return self._coreStep.isValid
+
+    def getScript(self):
+        return self.getPackage().getRecipe().packageScript
+
+    def getJenkinsScript(self):
+        return self.getPackage().getRecipe().packageScript
+
+    def getDigestScript(self):
+        return self.getPackage().getRecipe().packageDigestScript
 
     def isPackageStep(self):
         return True
@@ -1195,18 +1212,16 @@ class PackageStep(RegularStep):
 
 
 class CorePackage:
-    __slots__ = ("name", "recipe", "directDepSteps", "indirectDepSteps",
-        "states", "metaEnv", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
+    __slots__ = ("recipe", "directDepSteps", "indirectDepSteps",
+        "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
         "touchedTools", "pkgId")
 
-    def __init__(self, package, name, recipe, directDepSteps, indirectDepSteps,
-                 states, metaEnv, pkgId):
-        self.name = name
+    def __init__(self, package, recipe, directDepSteps, indirectDepSteps,
+                 states, pkgId):
         self.recipe = recipe
         self.directDepSteps = [ CoreStepRef(package, d) for d in directDepSteps ]
         self.indirectDepSteps = [ CoreStepRef(package, d) for d in indirectDepSteps ]
         self.states = states
-        self.metaEnv = metaEnv
         self.tools = {}
         self.sandbox = ...
         self.pkgId = pkgId
@@ -1225,9 +1240,9 @@ class Package(object):
     def __eq__(self, other):
         return isinstance(other, Package) and (self.__stack == other.__stack)
 
-    def construct(self, name, stack, pathFormatter, recipe,
+    def construct(self, stack, pathFormatter, recipe,
                   directDepSteps, indirectDepSteps, states, inputTools,
-                  allTools, inputSandbox, sandbox, touchedTools, metaEnv,
+                  allTools, inputSandbox, sandbox, touchedTools,
                   pkgId):
         self.__stack = stack
         self.__pathFormatter = pathFormatter
@@ -1239,8 +1254,8 @@ class Package(object):
         self.__sandbox = sandbox
 
         # this will call back
-        self.__corePackage = CorePackage(self, name, recipe, directDepSteps,
-            indirectDepSteps, states, metaEnv, pkgId)
+        self.__corePackage = CorePackage(self, recipe, directDepSteps,
+            indirectDepSteps, states, pkgId)
 
         # these already need our __corePackage
         self._setCheckoutStep(CheckoutStep().construct(self, pathFormatter))
@@ -1297,11 +1312,11 @@ class Package(object):
 
     def getName(self):
         """Name of the package"""
-        return self.__corePackage.name
+        return self.getRecipe().getPackageName()
 
     def getMetaEnv(self):
         """meta variables of package"""
-        return self.__corePackage.metaEnv
+        return self.getRecipe().getMetaEnv()
 
     def getStack(self):
         """Returns the recipe processing stack leading to this package.
@@ -1849,6 +1864,9 @@ class Recipe(object):
         """
         return self.__baseName
 
+    def getMetaEnv(self):
+        return self.__metaEnv
+
     def isRoot(self):
         """Returns True if this is a root recipe."""
         return self.__root == True
@@ -1856,6 +1874,9 @@ class Recipe(object):
     def isRelocatable(self):
         """Returns True if the packages of this recipe are relocatable."""
         return self.__relocatable
+
+    def isShared(self):
+        return self.__shared
 
     def prepare(self, pathFormatter, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
                 inputTools=Env(), stack=[]):
@@ -1979,9 +2000,9 @@ class Recipe(object):
         tools.touch(self.__toolDepPackage)
 
         # create package
-        p = Package().construct(self.__packageName, stack, pathFormatter, self,
+        p = Package().construct(stack, pathFormatter, self,
             directPackages, indirectPackages, states, inputTools.detach(), tools.detach(),
-            inputSandbox, sandbox, tools.touchedKeys(), self.__metaEnv, uidGen())
+            inputSandbox, sandbox, tools.touchedKeys(), uidGen())
 
         # optional checkout step
         if self.__checkout != (None, None, [], []):
@@ -1990,7 +2011,7 @@ class Recipe(object):
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
             srcStep = CheckoutStep().construct(p, pathFormatter, sandbox, self.__checkout,
                 env, checkoutDigestEnv, checkoutEnv,
-                tools.prune(self.__toolDepCheckout), self.__checkoutDeterministic)
+                tools.prune(self.__toolDepCheckout))
             p._setCheckoutStep(srcStep)
         else:
             srcStep = p.getCheckoutStep() # return invalid step
@@ -2013,7 +2034,7 @@ class Recipe(object):
             if self.__packageVarsWeak else packageDigestEnv )
         packageStep = PackageStep().construct(p, pathFormatter, sandbox, self.__package,
             packageDigestEnv, packageEnv, tools.prune(self.__toolDepPackage),
-            [buildStep], self.__shared)
+            [buildStep])
         p._setPackageStep(packageStep)
 
         # provide environment
@@ -2091,6 +2112,39 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
 """This error is caused by naming '{PKG}' multiple times in the recipe with incompatible variants.
 Every dependency must only be given once."""
     .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
+
+    @property
+    def checkoutScript(self):
+        return self.__checkout[0] or ""
+
+    @property
+    def checkoutDigestScript(self):
+        return self.__checkout[1] or ""
+
+    @property
+    def checkoutDeterministic(self):
+        return self.__checkoutDeterministic
+
+    @property
+    def checkoutAsserts(self):
+        return [ CheckoutAssert(cassert) for cassert in self.__checkout[3] ]
+
+    @property
+    def buildScript(self):
+        return self.__build[0]
+
+    @property
+    def buildDigestScript(self):
+        return self.__build[1]
+
+    @property
+    def packageScript(self):
+        return self.__package[0]
+
+    @property
+    def packageDigestScript(self):
+        return self.__package[1]
+
 
 class PackageMatcher:
     def __init__(self, package, env, tools, states, sandbox, subTreePackages):
@@ -2756,8 +2810,8 @@ class RecipeSet:
         # try to load the persisted packages
         states = { n:s() for (n,s) in self.__states.items() }
         rootPkg = Package()
-        rootPkg.construct("<root>", [], nameFormatter, None, [], [], states,
-            {}, {}, None, None, [], {}, -1)
+        rootPkg.construct([], nameFormatter, None, [], [], states,
+            {}, {}, None, None, [], -1)
         try:
             with open(cacheName, "rb") as f:
                 persistedCacheKey = f.read(len(cacheKey))
