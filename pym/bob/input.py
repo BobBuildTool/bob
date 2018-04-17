@@ -713,7 +713,8 @@ class Step(metaclass=ABCMeta):
 
     def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
         h = hasher()
-        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
+        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox) and \
+                not self.__package.getRecipe().getRecipeSet().sandboxInvariant:
             d = calculate(self.__sandbox.getStep())
             if d is None: return None
             h.update(d)
@@ -765,12 +766,17 @@ class Step(metaclass=ABCMeta):
         return ret
 
     def _getSandboxVariantId(self):
+        # This is a special variant to calculate the variant-id as if the
+        # sandbox was enabled. This is used for live build-ids and on the
+        # jenkins where the build-id of the sandbox must always be calculated.
+        # But this is all obsolte if the sandboxInvariant policy is enabled.
         try:
             ret = self._coreStep.sbxVarId
         except AttributeError:
             ret = self._coreStep.sbxVarId = self.getDigest(
                 lambda step: step._getSandboxVariantId(),
-                True)
+                True) if not self.__package.getRecipe().getRecipeSet().sandboxInvariant \
+                      else self.getVariantId()
         return ret
 
     def _getResultId(self):
@@ -815,6 +821,10 @@ class Step(metaclass=ABCMeta):
 
         Returns a Sandbox object or None if this Step is built without one.
         """
+        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
+        # set or disabled.
+        forceSandbox = forceSandbox and \
+            not self.__package.getRecipe().getRecipeSet().sandboxInvariant
         if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
             return self.__sandbox
         else:
@@ -902,6 +912,10 @@ class Step(metaclass=ABCMeta):
         This includes the direct input to the Step as well as indirect inputs
         such as the used tools or the sandbox.
         """
+        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
+        # set or disabled.
+        forceSandbox = forceSandbox and \
+            not self.__package.getRecipe().getRecipeSet().sandboxInvariant
         return self.getArguments() + [ d.step for n,d in sorted(self.getTools().items()) ] + (
             [self.__sandbox.getStep()]
                 if (self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox))
@@ -1361,6 +1375,10 @@ class Package(object):
 
         This list includes all direct and indirect dependencies. Additionally
         the used sandbox and tools are included too."""
+        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
+        # set or disabled.
+        forceSandbox = forceSandbox and \
+            not self.getRecipe().getRecipeSet().sandboxInvariant
         allDeps = set(self.getDirectDepSteps())
         allDeps |= set(self.getIndirectDepSteps())
         if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
@@ -2271,6 +2289,7 @@ class RecipeSet:
                 schema.Optional('tidyUrlScm') : bool,
                 schema.Optional('allRelocatable') : bool,
                 schema.Optional('offlineBuild') : bool,
+                schema.Optional('sandboxInvariant') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         )
@@ -2330,6 +2349,11 @@ class RecipeSet:
                 "0.14",
                 InfoOnce("offlineBuild policy not set. Network access still allowed during build steps.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#offlinebuild for more information.")
+            ),
+            'sandboxInvariant' : (
+                "0.14",
+                InfoOnce("sandboxInvariant policy not set. Inconsistent sandbox handling for binary artifacts.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxinvariant for more information.")
             ),
         }
         self.__buildHooks = {}
@@ -2849,6 +2873,14 @@ class RecipeSet:
         if policy is None:
             warning.show(location)
         return policy
+
+    @property
+    def sandboxInvariant(self):
+        try:
+            return self.__sandboxInvariant
+        except AttributeError:
+            self.__sandboxInvariant = self.getPolicy("sandboxInvariant")
+            return self.__sandboxInvariant
 
 
 class YamlCache:
