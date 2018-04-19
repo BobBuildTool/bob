@@ -19,15 +19,22 @@ class MockRecipe:
     def getRecipeSet(self):
         return MockRecipeSet()
 
+    checkoutAsserts = []
+
 class MockPackage:
-    def __init__(self):
+    def __init__(self, checkoutScript="script", checkoutDigestScript="digest",
+            checkoutDeterministic=True):
         self.name = "package"
+        self.recipe = MockRecipe()
+        self.recipe.checkoutScript = checkoutScript
+        self.recipe.checkoutDigestScript = checkoutDigestScript
+        self.recipe.checkoutDeterministic = checkoutDeterministic
 
     def getName(self):
         return self.name
 
     def getRecipe(self):
-        return MockRecipe()
+        return self.recipe
 
     def _getCorePackage(self):
         return None
@@ -73,7 +80,8 @@ class TestCheckoutStep(TestCase):
         s1.construct(nullPkg, nullFmt, None, ("script", "digest", [], []),
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         s2 = CheckoutStep()
-        s2.construct(nullPkg, nullFmt, None, ("evil", "other digest", [], []),
+        evilPkg = MockPackage(checkoutScript="evil", checkoutDigestScript="other digest")
+        s2.construct(evilPkg, nullFmt, None, ("evil", "other digest", [], []),
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         assert s1.getVariantId() != s2.getVariantId()
 
