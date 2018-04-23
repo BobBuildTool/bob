@@ -837,314 +837,303 @@ esac
         overrides = len(overrides)
         overridesString = ("(" + str(overrides) + " scm " + ("overrides" if overrides > 1 else "override") +")") if overrides else ""
 
-        checkoutDigest = checkoutStep.getVariantId()
-        if self._wasAlreadyRun(checkoutStep):
-            prettySrcPath = checkoutStep.getWorkspacePath()
-            self._info("   CHECKOUT  skipped (reuse {}) {}".format(prettySrcPath, overridesString))
-        else:
-            # depth first
-            self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
-                      False, depth+1)
+        # depth first
+        self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
+                  False, depth+1)
 
-            # get directory into shape
-            (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
-            oldCheckoutState = BobState().getDirectoryState(prettySrcPath, {})
-            if created:
-                # invalidate result if folder was created
-                oldCheckoutState = {}
-                BobState().resetWorkspaceState(prettySrcPath, oldCheckoutState)
+        # get directory into shape
+        (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
+        oldCheckoutState = BobState().getDirectoryState(prettySrcPath, {})
+        if created:
+            # invalidate result if folder was created
+            oldCheckoutState = {}
+            BobState().resetWorkspaceState(prettySrcPath, oldCheckoutState)
 
-            checkoutExecuted = False
-            checkoutState = checkoutStep.getScmDirectories().copy()
-            checkoutState[None] = checkoutDigest
-            if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
-                if checkoutState != oldCheckoutState:
-                    print(colorize("   CHECKOUT  WARNING: recipe changed but skipped due to --build-only ({})"
-                        .format(prettySrcPath), "33"))
-                else:
-                    self._info("   CHECKOUT  skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString))
+        checkoutExecuted = False
+        checkoutState = checkoutStep.getScmDirectories().copy()
+        checkoutState[None] = checkoutDigest = checkoutStep.getVariantId()
+        if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
+            if checkoutState != oldCheckoutState:
+                print(colorize("   CHECKOUT  WARNING: recipe changed but skipped due to --build-only ({})"
+                    .format(prettySrcPath), "33"))
             else:
-                if self.__cleanCheckout:
-                    # check state of SCMs and invalidate if the directory is dirty
-                    stats = {}
-                    for scm in checkoutStep.getScmList():
-                        stats.update({ dir : scm for dir in scm.getDirectories().keys() })
-                    for (scmDir, scmDigest) in oldCheckoutState.copy().items():
-                        if scmDir is None: continue
-                        if scmDigest != checkoutState.get(scmDir): continue
-                        status = stats[scmDir].status(checkoutStep.getWorkspacePath())[0]
-                        if (status == 'dirty') or (status == 'error'):
-                            oldCheckoutState[scmDir] = None
+                self._info("   CHECKOUT  skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString))
+        else:
+            if self.__cleanCheckout:
+                # check state of SCMs and invalidate if the directory is dirty
+                stats = {}
+                for scm in checkoutStep.getScmList():
+                    stats.update({ dir : scm for dir in scm.getDirectories().keys() })
+                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                    if scmDir is None: continue
+                    if scmDigest != checkoutState.get(scmDir): continue
+                    status = stats[scmDir].status(checkoutStep.getWorkspacePath())[0]
+                    if (status == 'dirty') or (status == 'error'):
+                        oldCheckoutState[scmDir] = None
 
-                checkoutInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
-                    for i in checkoutStep.getAllDepSteps() if i.isValid() ]
-                if (self.__force or (not checkoutStep.isDeterministic()) or
-                    (BobState().getResultHash(prettySrcPath) is None) or
-                    (checkoutState != oldCheckoutState) or
-                    (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
-                    # move away old or changed source directories
-                    for (scmDir, scmDigest) in oldCheckoutState.copy().items():
-                        if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
-                            scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
-                            if os.path.exists(scmPath):
-                                atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
-                                print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
-                                atticPath = os.path.join(prettySrcPath, "..", "attic")
-                                if not os.path.isdir(atticPath):
-                                    os.makedirs(atticPath)
-                                os.rename(scmPath, os.path.join(atticPath, atticName))
-                            del oldCheckoutState[scmDir]
-                            BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
-
-                    # Check that new checkouts do not collide with old stuff in
-                    # workspace. Do it before we store the new SCM state to
-                    # check again if the step is rerun.
-                    for scmDir in checkoutState.keys():
-                        if scmDir is None or scmDir == ".": continue
-                        if oldCheckoutState.get(scmDir) is not None: continue
+            checkoutInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
+                for i in checkoutStep.getAllDepSteps() if i.isValid() ]
+            if (self.__force or (not checkoutStep.isDeterministic()) or
+                (BobState().getResultHash(prettySrcPath) is None) or
+                (checkoutState != oldCheckoutState) or
+                (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
+                # move away old or changed source directories
+                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                    if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                         if os.path.exists(scmPath):
-                            raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
-                                                .format(scmDir, prettySrcPath))
+                            atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
+                            print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
+                            atticPath = os.path.join(prettySrcPath, "..", "attic")
+                            if not os.path.isdir(atticPath):
+                                os.makedirs(atticPath)
+                            os.rename(scmPath, os.path.join(atticPath, atticName))
+                        del oldCheckoutState[scmDir]
+                        BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
-                    # Store new SCM checkout state. The script state is not stored
-                    # so that this step will run again if it fails. OTOH we must
-                    # record the SCM directories as some checkouts might already
-                    # succeeded before the step ultimately fails.
-                    BobState().setDirectoryState(prettySrcPath,
-                        { d:s for (d,s) in checkoutState.items() if d is not None })
+                # Check that new checkouts do not collide with old stuff in
+                # workspace. Do it before we store the new SCM state to
+                # check again if the step is rerun.
+                for scmDir in checkoutState.keys():
+                    if scmDir is None or scmDir == ".": continue
+                    if oldCheckoutState.get(scmDir) is not None: continue
+                    scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                    if os.path.exists(scmPath):
+                        raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
+                                            .format(scmDir, prettySrcPath))
 
-                    # Forge checkout result before we run the step again.
-                    # Normally the correct result is set directly after the
-                    # checkout finished. But if the step fails and the user
-                    # re-runs with "build-only" the dependent steps should
-                    # trigger.
-                    if BobState().getResultHash(prettySrcPath) is not None:
-                        BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
+                # Store new SCM checkout state. The script state is not stored
+                # so that this step will run again if it fails. OTOH we must
+                # record the SCM directories as some checkouts might already
+                # succeeded before the step ultimately fails.
+                BobState().setDirectoryState(prettySrcPath,
+                    { d:s for (d,s) in checkoutState.items() if d is not None })
 
-                    print(colorize("   CHECKOUT  {} {}".format(prettySrcPath, overridesString)
-                        , "32"))
-                    self._runShell(checkoutStep, "checkout", False)
-                    self.__statistic.checkouts += 1
-                    checkoutExecuted = True
-                    # reflect new checkout state
-                    BobState().setDirectoryState(prettySrcPath, checkoutState)
-                    BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
-                    BobState().setVariantId(prettySrcPath, self.__getIncrementalVariantId(checkoutStep))
-                else:
-                    self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
+                # Forge checkout result before we run the step again.
+                # Normally the correct result is set directly after the
+                # checkout finished. But if the step fails and the user
+                # re-runs with "build-only" the dependent steps should
+                # trigger.
+                if BobState().getResultHash(prettySrcPath) is not None:
+                    BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
 
-            # We always have to rehash the directory as the user might have
-            # changed the source code manually.
-            oldCheckoutHash = BobState().getResultHash(prettySrcPath)
-            checkoutHash = hashWorkspace(checkoutStep)
-            BobState().setResultHash(prettySrcPath, checkoutHash)
+                print(colorize("   CHECKOUT  {} {}".format(prettySrcPath, overridesString)
+                    , "32"))
+                self._runShell(checkoutStep, "checkout", False)
+                self.__statistic.checkouts += 1
+                checkoutExecuted = True
+                # reflect new checkout state
+                BobState().setDirectoryState(prettySrcPath, checkoutState)
+                BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
+                BobState().setVariantId(prettySrcPath, self.__getIncrementalVariantId(checkoutStep))
+            else:
+                self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
 
-            self._setAlreadyRun(checkoutStep, True)
+        # We always have to rehash the directory as the user might have
+        # changed the source code manually.
+        oldCheckoutHash = BobState().getResultHash(prettySrcPath)
+        checkoutHash = hashWorkspace(checkoutStep)
+        BobState().setResultHash(prettySrcPath, checkoutHash)
 
-            # Generate audit trail. Has to be done _after_ setResultHash()
-            # because the result is needed to calculate the buildId.
-            if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
-                self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
+        # Mark already as done. The next calls might recurse back to us and we
+        # must prevent to be run again.
+        self._setAlreadyRun(checkoutStep, True)
 
-            # upload live build-id cache in case of fresh checkout
-            if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
-                liveBId = checkoutStep.calcLiveBuildId()
-                if liveBId is not None:
-                    self.__archive.uploadLocalLiveBuildId(liveBId, checkoutHash, self.__verbose)
+        # Generate audit trail. Has to be done _after_ setResultHash()
+        # because the result is needed to calculate the buildId.
+        if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
+            self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
-            # Predicted build-id and real one after checkout do not need to
-            # match necessarily. Handle it as some build results might be
-            # inconsistent to the sources now.
-            buildId, predicted = self.__srcBuildIds.get((prettySrcPath, checkoutDigest),
-                (checkoutHash, False))
-            if buildId != checkoutHash:
-                assert predicted, "Non-predicted incorrect Build-Id found!"
-                self.__handleChangedBuildId(checkoutStep, checkoutHash)
+        # upload live build-id cache in case of fresh checkout
+        if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
+            liveBId = checkoutStep.calcLiveBuildId()
+            if liveBId is not None:
+                self.__archive.uploadLocalLiveBuildId(liveBId, checkoutHash, self.__verbose)
+
+        # Predicted build-id and real one after checkout do not need to
+        # match necessarily. Handle it as some build results might be
+        # inconsistent to the sources now.
+        buildId, predicted = self.__srcBuildIds.get((prettySrcPath, checkoutDigest),
+            (checkoutHash, False))
+        if buildId != checkoutHash:
+            assert predicted, "Non-predicted incorrect Build-Id found!"
+            self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
     def _cookBuildStep(self, buildStep, checkoutOnly, depth):
-        if self._wasAlreadyRun(buildStep, checkoutOnly):
-            prettyBuildPath = buildStep.getWorkspacePath()
-            self._info("   BUILD     skipped (reuse {})".format(prettyBuildPath))
+        # depth first
+        self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
+                   checkoutOnly, depth+1)
+
+        # Add the execution path of the build step to the buildDigest to
+        # detect changes between sandbox and non-sandbox builds. This is
+        # necessary in any build mode. Include the actual directories of
+        # dependencies in buildDigest too. Directories are reused in
+        # develop build mode and thus might change even though the variant
+        # id of this step is stable. As most tools rely on stable input
+        # directories we have to make a clean build if any of the
+        # dependency directories change.
+        buildDigest = [self.__getIncrementalVariantId(buildStep), buildStep.getExecPath()] + \
+            [ i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
+
+        # get directory into shape
+        (prettyBuildPath, created) = self._constructDir(buildStep, "build")
+        oldBuildDigest = BobState().getDirectoryState(prettyBuildPath)
+        if created or (buildDigest != oldBuildDigest):
+            # not created but exists -> something different -> prune workspace
+            if not created and os.path.exists(prettyBuildPath):
+                print(colorize("   PRUNE     {} (recipe changed)".format(prettyBuildPath), "33"))
+                emptyDirectory(prettyBuildPath)
+            # invalidate build step
+            BobState().resetWorkspaceState(prettyBuildPath, buildDigest)
+
+        # run build if input has changed
+        buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
+            for i in buildStep.getAllDepSteps() if i.isValid() ]
+        if checkoutOnly:
+            self._info("   BUILD     skipped due to --checkout-only ({})".format(prettyBuildPath))
+        elif (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
+            self._info("   BUILD     skipped (unchanged input for {})".format(prettyBuildPath))
+            # We always rehash the directory in development mode as the
+            # user might have compiled the package manually.
+            if not self.__cleanBuild:
+                BobState().setResultHash(prettyBuildPath, hashWorkspace(buildStep))
         else:
-            # depth first
-            self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
-                       checkoutOnly, depth+1)
-
-            # Add the execution path of the build step to the buildDigest to
-            # detect changes between sandbox and non-sandbox builds. This is
-            # necessary in any build mode. Include the actual directories of
-            # dependencies in buildDigest too. Directories are reused in
-            # develop build mode and thus might change even though the variant
-            # id of this step is stable. As most tools rely on stable input
-            # directories we have to make a clean build if any of the
-            # dependency directories change.
-            buildDigest = [self.__getIncrementalVariantId(buildStep), buildStep.getExecPath()] + \
-                [ i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
-
-            # get directory into shape
-            (prettyBuildPath, created) = self._constructDir(buildStep, "build")
-            oldBuildDigest = BobState().getDirectoryState(prettyBuildPath)
-            if created or (buildDigest != oldBuildDigest):
-                # not created but exists -> something different -> prune workspace
-                if not created and os.path.exists(prettyBuildPath):
-                    print(colorize("   PRUNE     {} (recipe changed)".format(prettyBuildPath), "33"))
-                    emptyDirectory(prettyBuildPath)
-                # invalidate build step
-                BobState().resetWorkspaceState(prettyBuildPath, buildDigest)
-
-            # run build if input has changed
-            buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
-                for i in buildStep.getAllDepSteps() if i.isValid() ]
-            if checkoutOnly:
-                self._info("   BUILD     skipped due to --checkout-only ({})".format(prettyBuildPath))
-            elif (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
-                self._info("   BUILD     skipped (unchanged input for {})".format(prettyBuildPath))
-                # We always rehash the directory in development mode as the
-                # user might have compiled the package manually.
-                if not self.__cleanBuild:
-                    BobState().setResultHash(prettyBuildPath, hashWorkspace(buildStep))
-            else:
-                print(colorize("   BUILD     {}".format(prettyBuildPath), "32"))
-                # Squash state because running the step will change the
-                # content. If the execution fails we have nothing reliable
-                # left and we _must_ run it again.
-                BobState().delInputHashes(prettyBuildPath)
-                BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
-                # build it
-                self._runShell(buildStep, "build", self.__cleanBuild)
-                buildHash = hashWorkspace(buildStep)
-                self._generateAudit(buildStep, depth, buildHash)
-                BobState().setResultHash(prettyBuildPath, buildHash)
-                BobState().setVariantId(prettyBuildPath, buildDigest[0])
-                BobState().setInputHashes(prettyBuildPath, buildInputHashes)
-            self._setAlreadyRun(buildStep, False, checkoutOnly)
+            print(colorize("   BUILD     {}".format(prettyBuildPath), "32"))
+            # Squash state because running the step will change the
+            # content. If the execution fails we have nothing reliable
+            # left and we _must_ run it again.
+            BobState().delInputHashes(prettyBuildPath)
+            BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
+            # build it
+            self._runShell(buildStep, "build", self.__cleanBuild)
+            buildHash = hashWorkspace(buildStep)
+            self._generateAudit(buildStep, depth, buildHash)
+            BobState().setResultHash(prettyBuildPath, buildHash)
+            BobState().setVariantId(prettyBuildPath, buildDigest[0])
+            BobState().setInputHashes(prettyBuildPath, buildInputHashes)
+        self._setAlreadyRun(buildStep, False, checkoutOnly)
 
     def _cookPackageStep(self, packageStep, checkoutOnly, depth):
+        # get directory into shape
+        (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
         packageDigest = packageStep.getVariantId()
-        if self._wasAlreadyRun(packageStep, checkoutOnly):
-            prettyPackagePath = packageStep.getWorkspacePath()
-            self._info("   PACKAGE   skipped (reuse {})".format(prettyPackagePath))
+        oldPackageDigest = BobState().getDirectoryState(prettyPackagePath)
+        if created or (packageDigest != oldPackageDigest):
+            # not created but exists -> something different -> prune workspace
+            if not created and os.path.exists(prettyPackagePath):
+                print(colorize("   PRUNE     {} (recipe changed)".format(prettyPackagePath), "33"))
+                emptyDirectory(prettyPackagePath)
+            # invalidate result if folder was created
+            BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
+
+        # Can we theoretically download the result? This requires a
+        # relocatable package or that we're building in a sandbox with
+        # stable paths. Try to determine a build-id for these artifacts.
+        if packageStep.isRelocatable() or (packageStep.getSandbox() is not None):
+            packageBuildId = self._getBuildId(packageStep, depth)
         else:
-            # get directory into shape
-            (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
-            oldPackageDigest = BobState().getDirectoryState(prettyPackagePath)
-            if created or (packageDigest != oldPackageDigest):
-                # not created but exists -> something different -> prune workspace
-                if not created and os.path.exists(prettyPackagePath):
-                    print(colorize("   PRUNE     {} (recipe changed)".format(prettyPackagePath), "33"))
-                    emptyDirectory(prettyPackagePath)
-                # invalidate result if folder was created
+            packageBuildId = None
+
+        # If we download the package in the last run the Build-Id is stored
+        # as input hash. Otherwise the input hashes of the package step is
+        # a list with the buildId as first element. Split that off for the
+        # logic below...
+        oldInputBuildId = BobState().getInputHashes(prettyPackagePath)
+        if (isinstance(oldInputBuildId, list) and (len(oldInputBuildId) >= 1)):
+            oldInputHashes = oldInputBuildId[1:]
+            oldInputBuildId = oldInputBuildId[0]
+            oldWasDownloaded = False
+        elif isinstance(oldInputBuildId, bytes):
+            oldWasDownloaded = True
+            oldInputHashes = None
+        else:
+            # created by old Bob version or new workspace
+            oldInputHashes = oldInputBuildId
+            oldWasDownloaded = False
+
+        # If possible try to download the package. If we downloaded the
+        # package in the last run we have to make sure that the Build-Id is
+        # still the same. The overall behaviour should look like this:
+        #
+        # new workspace -> try download
+        # previously built
+        #   still same build-id -> normal build
+        #   build-id changed -> prune and try download, fall back to build
+        # previously downloaded
+        #   still same build-id -> done
+        #   build-id changed -> prune and try download, fall back to build
+        workspaceChanged = False
+        wasDownloaded = False
+        if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ):
+            # prune directory if we previously downloaded/built something different
+            if ((oldInputBuildId is not None) and (oldInputBuildId != packageBuildId)) or self.__force:
+                print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
+                        "build forced" if self.__force else "build-id changed"), "33"))
+                emptyDirectory(prettyPackagePath)
                 BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
-
-            # Can we theoretically download the result? This requires a
-            # relocatable package or that we're building in a sandbox with
-            # stable paths. Try to determine a build-id for these artifacts.
-            if packageStep.isRelocatable() or (packageStep.getSandbox() is not None):
-                packageBuildId = self._getBuildId(packageStep, depth)
-            else:
-                packageBuildId = None
-
-            # If we download the package in the last run the Build-Id is stored
-            # as input hash. Otherwise the input hashes of the package step is
-            # a list with the buildId as first element. Split that off for the
-            # logic below...
-            oldInputBuildId = BobState().getInputHashes(prettyPackagePath)
-            if (isinstance(oldInputBuildId, list) and (len(oldInputBuildId) >= 1)):
-                oldInputHashes = oldInputBuildId[1:]
-                oldInputBuildId = oldInputBuildId[0]
-                oldWasDownloaded = False
-            elif isinstance(oldInputBuildId, bytes):
-                oldWasDownloaded = True
+                oldInputBuildId = None
                 oldInputHashes = None
-            else:
-                # created by old Bob version or new workspace
-                oldInputHashes = oldInputBuildId
-                oldWasDownloaded = False
 
-            # If possible try to download the package. If we downloaded the
-            # package in the last run we have to make sure that the Build-Id is
-            # still the same. The overall behaviour should look like this:
-            #
-            # new workspace -> try download
-            # previously built
-            #   still same build-id -> normal build
-            #   build-id changed -> prune and try download, fall back to build
-            # previously downloaded
-            #   still same build-id -> done
-            #   build-id changed -> prune and try download, fall back to build
-            workspaceChanged = False
-            wasDownloaded = False
-            if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ):
-                # prune directory if we previously downloaded/built something different
-                if ((oldInputBuildId is not None) and (oldInputBuildId != packageBuildId)) or self.__force:
-                    print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
-                            "build forced" if self.__force else "build-id changed"), "33"))
-                    emptyDirectory(prettyPackagePath)
-                    BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
-                    oldInputBuildId = None
-                    oldInputHashes = None
-
-                # Try to download the package if the directory is currently
-                # empty. If the directory holds a result and was downloaded it
-                # we're done.
-                if BobState().getResultHash(prettyPackagePath) is None:
-                    audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
-                    if self.__archive.downloadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose):
-                        self.__statistic.packagesDownloaded += 1
-                        BobState().setInputHashes(prettyPackagePath, packageBuildId)
-                        packageHash = hashWorkspace(packageStep)
-                        workspaceChanged = True
-                        wasDownloaded = True
-                    elif depth >= self.__downloadDepthForce:
-                        raise BuildError("Downloading artifact failed")
-                elif oldWasDownloaded:
-                    self._info("   PACKAGE   skipped (already downloaded in {})".format(prettyPackagePath))
-                    wasDownloaded = True
-
-            # Run package step if we have not yet downloaded the package or if
-            # downloads are not possible anymore. Even if the package was
-            # previously downloaded the oldInputHashes will be None to trigger
-            # an actual build.
-            if not wasDownloaded:
-                # depth first
-                self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
-                           checkoutOnly, depth+1)
-
-                # Take checkout step into account because it is guaranteed to
-                # be available and the build step might reference it (think of
-                # "make -C" or cross-workspace symlinks.
-                packageInputs = [ packageStep.getPackage().getCheckoutStep() ]
-                packageInputs.extend(packageStep.getAllDepSteps())
-                packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
-                    for i in packageInputs if i.isValid() ]
-                if checkoutOnly:
-                    self._info("   PACKAGE   skipped due to --checkout-only ({})".format(prettyPackagePath))
-                elif (not self.__force) and (oldInputHashes == packageInputHashes):
-                    self._info("   PACKAGE   skipped (unchanged input for {})".format(prettyPackagePath))
-                else:
-                    print(colorize("   PACKAGE   {}".format(prettyPackagePath), "32"))
-                    # invalidate result because folder will be cleared
-                    BobState().delInputHashes(prettyPackagePath)
-                    BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
-                    self._runShell(packageStep, "package", True)
-                    packageHash = hashWorkspace(packageStep)
-                    packageDigest = self.__getIncrementalVariantId(packageStep)
-                    audit = self._generateAudit(packageStep, depth, packageHash)
-                    workspaceChanged = True
-                    self.__statistic.packagesBuilt += 1
-                    if packageBuildId and self.__archive.canUploadLocal():
-                        self.__archive.uploadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose)
-
-            # Rehash directory if content was changed
-            if workspaceChanged:
-                BobState().setResultHash(prettyPackagePath, packageHash)
-                BobState().setVariantId(prettyPackagePath, packageDigest)
-                if wasDownloaded:
+            # Try to download the package if the directory is currently
+            # empty. If the directory holds a result and was downloaded it
+            # we're done.
+            if BobState().getResultHash(prettyPackagePath) is None:
+                audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
+                if self.__archive.downloadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose):
+                    self.__statistic.packagesDownloaded += 1
                     BobState().setInputHashes(prettyPackagePath, packageBuildId)
-                else:
-                    BobState().setInputHashes(prettyPackagePath, [packageBuildId] + packageInputHashes)
-            self._setAlreadyRun(packageStep, False, checkoutOnly)
+                    packageHash = hashWorkspace(packageStep)
+                    workspaceChanged = True
+                    wasDownloaded = True
+                elif depth >= self.__downloadDepthForce:
+                    raise BuildError("Downloading artifact failed")
+            elif oldWasDownloaded:
+                self._info("   PACKAGE   skipped (already downloaded in {})".format(prettyPackagePath))
+                wasDownloaded = True
+
+        # Run package step if we have not yet downloaded the package or if
+        # downloads are not possible anymore. Even if the package was
+        # previously downloaded the oldInputHashes will be None to trigger
+        # an actual build.
+        if not wasDownloaded:
+            # depth first
+            self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
+                       checkoutOnly, depth+1)
+
+            # Take checkout step into account because it is guaranteed to
+            # be available and the build step might reference it (think of
+            # "make -C" or cross-workspace symlinks.
+            packageInputs = [ packageStep.getPackage().getCheckoutStep() ]
+            packageInputs.extend(packageStep.getAllDepSteps())
+            packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
+                for i in packageInputs if i.isValid() ]
+            if checkoutOnly:
+                self._info("   PACKAGE   skipped due to --checkout-only ({})".format(prettyPackagePath))
+            elif (not self.__force) and (oldInputHashes == packageInputHashes):
+                self._info("   PACKAGE   skipped (unchanged input for {})".format(prettyPackagePath))
+            else:
+                print(colorize("   PACKAGE   {}".format(prettyPackagePath), "32"))
+                # invalidate result because folder will be cleared
+                BobState().delInputHashes(prettyPackagePath)
+                BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
+                self._runShell(packageStep, "package", True)
+                packageHash = hashWorkspace(packageStep)
+                packageDigest = self.__getIncrementalVariantId(packageStep)
+                audit = self._generateAudit(packageStep, depth, packageHash)
+                workspaceChanged = True
+                self.__statistic.packagesBuilt += 1
+                if packageBuildId and self.__archive.canUploadLocal():
+                    self.__archive.uploadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose)
+
+        # Rehash directory if content was changed
+        if workspaceChanged:
+            BobState().setResultHash(prettyPackagePath, packageHash)
+            BobState().setVariantId(prettyPackagePath, packageDigest)
+            if wasDownloaded:
+                BobState().setInputHashes(prettyPackagePath, packageBuildId)
+            else:
+                BobState().setInputHashes(prettyPackagePath, [packageBuildId] + packageInputHashes)
+        self._setAlreadyRun(packageStep, False, checkoutOnly)
 
     def __queryLiveBuildId(self, step):
         """Predict live build-id of checkout step.
