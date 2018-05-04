@@ -777,11 +777,11 @@ esac
     def getStatistic(self):
         return self.__statistic
 
-    def cook(self, step, checkoutOnly):
+    def cook(self, step, checkoutOnly, depth=0):
         done = False
         while not done:
             try:
-                self._cook([step], step.getPackage(), checkoutOnly)
+                self._cook([step], step.getPackage(), checkoutOnly, depth)
                 done = True
             except RestartBuildException:
                 print(colorize("** Restart build due to wrongly predicted sources.", "33"))
@@ -1444,6 +1444,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     if args.resume: builder.loadBuildState()
 
     backlog = []
+    providedBacklog = []
     results = []
     for p in args.packages:
         for package in packages.queryPackagePath(p):
@@ -1451,7 +1452,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             backlog.append(packageStep)
             # automatically include provided deps when exporting
             build_provided = (args.destination and args.build_provided == None) or args.build_provided
-            if build_provided: backlog.extend(packageStep._getProvidedDeps())
+            if build_provided: providedBacklog.extend(packageStep._getProvidedDeps())
 
     success = runHook(recipes, 'preBuildHook',
         ["/".join(p.getPackage().getStack()) for p in backlog])
@@ -1462,6 +1463,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     try:
         for p in backlog:
             builder.cook(p, True if args.build_mode == 'checkout-only' else False)
+            resultPath = p.getWorkspacePath()
+            if resultPath not in results:
+                results.append(resultPath)
+        for p in providedBacklog:
+            builder.cook(p, True if args.build_mode == 'checkout-only' else False, 1)
             resultPath = p.getWorkspacePath()
             if resultPath not in results:
                 results.append(resultPath)
