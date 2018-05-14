@@ -107,6 +107,7 @@ class DevelopDirOracle:
             if externalPersister is not None else None
         self.__dirs = {}
         self.__known = {}
+        self.__visited = set()
         self.__ready = False
 
     def __fmt(self, step, props):
@@ -136,21 +137,32 @@ class DevelopDirOracle:
             return path
 
         # Otherwise schedule for number assignment in next round by
-        # __writeBack(). The final path is not decided yet.
-        self.__dirs.setdefault(baseDir, []).append(key)
+        # __writeBack(). The final path is not decided yet. Note that a key
+        # might still map to several directories. We make sure to take only
+        # the first one, though.
+        if key not in self.__visited:
+            self.__dirs.setdefault(baseDir, []).append(key)
+            self.__visited.add(key)
 
-    def __touch(self, step, done):
+    def __touch(self, package, done):
         """Run through all dependencies and invoke name formatter.
 
-        Does it with "force sandbox" to catch also the workspaces that are
-        needed for build-id calculation.
+        Traversal is done on package level to gather all reachable packages of
+        the query language.
         """
-        key = step.getPackage().getRecipe().getName().encode("utf8") + step.getVariantId()
+        key = package._getId()
         if key in done: return
         done.add(key)
-        for d in step.getAllDepSteps(True):
-            if d.isValid(): self.__touch(d, done)
-        step.getWorkspacePath()
+
+        # Traverse direct package dependencies only to keep the recipe order.
+        # Because we start from the root we are guaranteed to see all packages.
+        for d in package.getDirectDepSteps():
+            self.__touch(d.getPackage(), done)
+
+        # Calculate the paths of all steps
+        package.getPackageStep().getWorkspacePath()
+        package.getBuildStep().getWorkspacePath()
+        package.getCheckoutStep().getWorkspacePath()
 
     def __writeBack(self):
         """Write calculated directories into database.
@@ -181,7 +193,12 @@ class DevelopDirOracle:
                     self.__db.execute("INSERT INTO dirs VALUES (?, ?)", (key, path))
                     break
 
-    def __openAndRefresh(self, cacheKey, rootPackageStep):
+        # Clear intermediate variables to save memory.
+        self.__dirs = {}
+        self.__known = {}
+        self.__visited = set()
+
+    def __openAndRefresh(self, cacheKey, rootPackage):
         self.__db = db = sqlite3.connect(".bob-dev-dirs.sqlite3", isolation_level=None).cursor()
         db.execute("CREATE TABLE IF NOT EXISTS meta(key PRIMARY KEY, value)")
         db.execute("CREATE TABLE IF NOT EXISTS dirs(key PRIMARY KEY, dir)")
@@ -193,7 +210,7 @@ class DevelopDirOracle:
         if (vsn is None) or (vsn[0] != cacheKey):
             if self.__externalPersister is not None:
                 db.execute("DELETE FROM dirs")
-            self.__touch(rootPackageStep, set())
+            self.__touch(rootPackage, set())
             self.__writeBack()
             db.execute("INSERT OR REPLACE INTO meta VALUES ('vsn', ?)", (cacheKey,))
             # Commit and start new read-only transaction
@@ -203,7 +220,7 @@ class DevelopDirOracle:
     def prime(self, packages):
         try:
             self.__openAndRefresh(packages.getCacheKey(),
-                packages.getRootPackage().getPackageStep())
+                packages.getRootPackage())
         except sqlite3.Error as e:
             raise BobError("Cannot save directory mapping: " + str(e))
         self.__ready = True
