@@ -123,26 +123,25 @@ class DevelopDirOracle:
             assert path is not None, "{} missing".format(key)
             return path
 
-        # If an external persistor is used we just call it and save the result.
+        # Make sure to process each key only once. A key might map to several
+        # directories. We have to make sure to take only the first one, though.
+        if key in self.__visited: return
+        self.__visited.add(key)
+
+        # If an external persister is used we just call it and save the result.
         if self.__externalPersister is not None:
             path = self.__externalPersister(step, props)
             self.__db.execute("INSERT INTO dirs VALUES (?, ?)", (key, path))
             return path
 
         # Try to find directory in database. If we find some the prefix has to
-        # match.
+        # match. Otherwise schedule for number assignment in next round by
+        # __writeBack(). The final path is then not decided yet.
         baseDir = self.__formatter(step, props)
         if (path is not None) and path.startswith(baseDir):
             self.__known[key] = path
-            return path
-
-        # Otherwise schedule for number assignment in next round by
-        # __writeBack(). The final path is not decided yet. Note that a key
-        # might still map to several directories. We make sure to take only
-        # the first one, though.
-        if key not in self.__visited:
+        else:
             self.__dirs.setdefault(baseDir, []).append(key)
-            self.__visited.add(key)
 
     def __touch(self, package, done):
         """Run through all dependencies and invoke name formatter.
