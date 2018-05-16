@@ -130,9 +130,8 @@ class DevelopDirOracle:
 
         # If an external persister is used we just call it and save the result.
         if self.__externalPersister is not None:
-            path = self.__externalPersister(step, props)
-            self.__db.execute("INSERT INTO dirs VALUES (?, ?)", (key, path))
-            return path
+            self.__known[key] = self.__externalPersister(step, props)
+            return
 
         # Try to find directory in database. If we find some the prefix has to
         # match. Otherwise schedule for number assignment in next round by
@@ -166,13 +165,9 @@ class DevelopDirOracle:
     def __writeBack(self):
         """Write calculated directories into database.
 
-        In case of an external persistor the data has already been written by
-        __fmt(). Otherwise we have to write the kept entries and calculate new
-        sub-directory numbers for new entries.
+        We have to write known entries and calculate new sub-directory numbers
+        for new entries.
         """
-        if self.__externalPersister is not None:
-            return
-
         # clear all mappings
         self.__db.execute("DELETE FROM dirs")
 
@@ -207,8 +202,6 @@ class DevelopDirOracle:
         db.execute("SELECT value FROM meta WHERE key='vsn'")
         vsn = db.fetchone()
         if (vsn is None) or (vsn[0] != cacheKey):
-            if self.__externalPersister is not None:
-                db.execute("DELETE FROM dirs")
             self.__touch(rootPackage, set())
             self.__writeBack()
             db.execute("INSERT OR REPLACE INTO meta VALUES ('vsn', ?)", (cacheKey,))
