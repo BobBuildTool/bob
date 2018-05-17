@@ -123,26 +123,24 @@ class DevelopDirOracle:
             assert path is not None, "{} missing".format(key)
             return path
 
-        # If an external persistor is used we just call it and save the result.
+        # Make sure to process each key only once. A key might map to several
+        # directories. We have to make sure to take only the first one, though.
+        if key in self.__visited: return
+        self.__visited.add(key)
+
+        # If an external persister is used we just call it and save the result.
         if self.__externalPersister is not None:
-            path = self.__externalPersister(step, props)
-            self.__db.execute("INSERT INTO dirs VALUES (?, ?)", (key, path))
-            return path
+            self.__known[key] = self.__externalPersister(step, props)
+            return
 
         # Try to find directory in database. If we find some the prefix has to
-        # match.
+        # match. Otherwise schedule for number assignment in next round by
+        # __writeBack(). The final path is then not decided yet.
         baseDir = self.__formatter(step, props)
         if (path is not None) and path.startswith(baseDir):
             self.__known[key] = path
-            return path
-
-        # Otherwise schedule for number assignment in next round by
-        # __writeBack(). The final path is not decided yet. Note that a key
-        # might still map to several directories. We make sure to take only
-        # the first one, though.
-        if key not in self.__visited:
+        else:
             self.__dirs.setdefault(baseDir, []).append(key)
-            self.__visited.add(key)
 
     def __touch(self, package, done):
         """Run through all dependencies and invoke name formatter.
@@ -167,13 +165,9 @@ class DevelopDirOracle:
     def __writeBack(self):
         """Write calculated directories into database.
 
-        In case of an external persistor the data has already been written by
-        __fmt(). Otherwise we have to write the kept entries and calculate new
-        sub-directory numbers for new entries.
+        We have to write known entries and calculate new sub-directory numbers
+        for new entries.
         """
-        if self.__externalPersister is not None:
-            return
-
         # clear all mappings
         self.__db.execute("DELETE FROM dirs")
 
@@ -208,8 +202,6 @@ class DevelopDirOracle:
         db.execute("SELECT value FROM meta WHERE key='vsn'")
         vsn = db.fetchone()
         if (vsn is None) or (vsn[0] != cacheKey):
-            if self.__externalPersister is not None:
-                db.execute("DELETE FROM dirs")
             self.__touch(rootPackage, set())
             self.__writeBack()
             db.execute("INSERT OR REPLACE INTO meta VALUES ('vsn', ?)", (cacheKey,))
