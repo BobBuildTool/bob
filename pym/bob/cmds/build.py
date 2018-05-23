@@ -858,9 +858,8 @@ esac
             oldCheckoutState = BobState().getDirectoryState(prettySrcPath, {})
             if created:
                 # invalidate result if folder was created
-                BobState().delWorkspaceState(prettySrcPath)
                 oldCheckoutState = {}
-                BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
+                BobState().resetWorkspaceState(prettySrcPath, oldCheckoutState)
 
             checkoutExecuted = False
             checkoutState = checkoutStep.getScmDirectories().copy()
@@ -996,10 +995,7 @@ esac
                     print(colorize("   PRUNE     {} (recipe changed)".format(prettyBuildPath), "33"))
                     emptyDirectory(prettyBuildPath)
                 # invalidate build step
-                BobState().delWorkspaceState(prettyBuildPath)
-
-            if buildDigest != oldBuildDigest:
-                BobState().setDirectoryState(prettyBuildPath, buildDigest)
+                BobState().resetWorkspaceState(prettyBuildPath, buildDigest)
 
             # run build if input has changed
             buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
@@ -1043,10 +1039,7 @@ esac
                     print(colorize("   PRUNE     {} (recipe changed)".format(prettyPackagePath), "33"))
                     emptyDirectory(prettyPackagePath)
                 # invalidate result if folder was created
-                BobState().delWorkspaceState(prettyPackagePath)
-
-            if packageDigest != oldPackageDigest:
-                BobState().setDirectoryState(prettyPackagePath, packageDigest)
+                BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
 
             # Can we theoretically download the result? This requires a
             # relocatable package or that we're building in a sandbox with
@@ -1092,7 +1085,7 @@ esac
                     print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
                             "build forced" if self.__force else "build-id changed"), "33"))
                     emptyDirectory(prettyPackagePath)
-                    BobState().delWorkspaceState(prettyPackagePath)
+                    BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
                     oldInputBuildId = None
                     oldInputHashes = None
 

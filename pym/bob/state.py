@@ -229,7 +229,7 @@ class _BobState():
             self.__variantIds[path] = variantId
             self.__save()
 
-    def delWorkspaceState(self, path):
+    def resetWorkspaceState(self, path, dirState):
         needSave = False
         if path in self.__results:
             del self.__results[path]
@@ -237,8 +237,8 @@ class _BobState():
         if path in self.__inputs:
             del self.__inputs[path]
             needSave = True
-        if path in self.__dirStates:
-            del self.__dirStates[path]
+        if self.__dirStates.get(path) != dirState:
+            self.__dirStates[path] = dirState
             needSave = True
         if path in self.__variantIds:
             del self.__variantIds[path]
