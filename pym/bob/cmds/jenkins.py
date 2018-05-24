@@ -426,24 +426,24 @@ class JenkinsJob:
         return "\n".join(ret)
 
     def dumpStepLiveBuildIdGen(self, step):
-        # this makes only sense if we can upload the result
-        if not self.__archive.canUploadJenkins():
-            return []
-
-        # Get calculation spec. May be None if step is indeterministic or some
-        # SCM does not support live build-ids.
-        spec = step.getLiveBuildIdSpec()
-        if spec is None:
-            return []
-
-        buildId = JenkinsJob._buildIdName(step)
+        # This makes only sense if we can upload the result. OTOH the live
+        # build-id file acts as an indicator of a first-time/clean checkout. We
+        # have to still create it so that we don't accidentally upload rogue
+        # results if the user enables uploads later.
         liveBuildId = JenkinsJob._liveBuildIdName(step)
-        ret = [ "bob-hash-engine --state .state -o {} <<'EOF'".format(liveBuildId),
-                spec, "EOF" ]
-        ret.append(self.__archive.uploadJenkinsLiveBuildId(step, liveBuildId, buildId))
+        ret = [ "touch " + liveBuildId ]
+
+        # Get calculation spec if upload is enabled. May be None if step is
+        # indeterministic or some SCM does not support live build-ids.
+        spec = self.__archive.canUploadJenkins() and step.getLiveBuildIdSpec()
+        if spec:
+            buildId = JenkinsJob._buildIdName(step)
+            ret = [ "bob-hash-engine --state .state -o {} <<'EOF'".format(liveBuildId),
+                    spec, "EOF" ]
+            ret.append(self.__archive.uploadJenkinsLiveBuildId(step, liveBuildId, buildId))
 
         # Without sandbox we only upload the live build-id on the initial
-        # checkout. Otherwise accidential modifications of the sources can
+        # checkout. Otherwise accidental modifications of the sources can
         # happen in later build steps.
         if step.getSandbox() is None:
             ret = [ "if [[ ! -e {} ]] ; then".format(liveBuildId) ] + ret + [ "fi" ]
