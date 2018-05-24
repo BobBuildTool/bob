@@ -1153,8 +1153,14 @@ def jenkinsNameFormatter(step, props):
 def jenkinsNamePersister(jenkins, wrapFmt, uuid):
 
     def persist(step, props):
+        vid = step.getVariantId()
+        # Make sure that build steps of sandboxed and non-sandboxed builds are
+        # not mixed. Does not apply to other steps because checkout steps must
+        # be self contained and package steps are always built clean.
+        if step.isBuildStep():
+            vid += b'\x00' if step.getSandbox() is None else b'\x01'
         ret = BobState().getJenkinsByNameDirectory(
-            jenkins, wrapFmt(step, props), step.getVariantId())
+            jenkins, wrapFmt(step, props), vid)
         if uuid: ret = ret + "-" + uuid
         return ret
 

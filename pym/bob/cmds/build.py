@@ -965,13 +965,16 @@ esac
             self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
                        checkoutOnly, depth+1)
 
-            # Include actual directories of dependencies in buildDigest.
-            # Directories are reused in develop build mode and thus might change
-            # even though the variant id of this step is stable. As most tools rely
-            # on stable input directories we have to make a clean build if any of
-            # the dependency directories change.
-            buildDigest = [self.__getIncrementalVariantId(buildStep)] + [
-                i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
+            # Add the execution path of the build step to the buildDigest to
+            # detect changes between sandbox and non-sandbox builds. This is
+            # necessary in any build mode. Include the actual directories of
+            # dependencies in buildDigest too. Directories are reused in
+            # develop build mode and thus might change even though the variant
+            # id of this step is stable. As most tools rely on stable input
+            # directories we have to make a clean build if any of the
+            # dependency directories change.
+            buildDigest = [self.__getIncrementalVariantId(buildStep), buildStep.getExecPath()] + \
+                [ i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
 
             # get directory into shape
             (prettyBuildPath, created) = self._constructDir(buildStep, "build")
