@@ -403,28 +403,30 @@ class Tool:
         return self.libs
 
 class CoreSandbox:
-    __slots__ = ("step", "enabled", "paths", "mounts")
+    __slots__ = ("step", "enabled", "paths", "mounts", "environment")
 
     def __init__(self, sandbox, upperPackage):
         self.step = CoreStepRef(upperPackage, sandbox.step)
         self.enabled = sandbox.enabled
         self.paths = sandbox.paths
         self.mounts = sandbox.mounts
+        self.environment = sandbox.environment
 
     def toSandbox(self, pathFormatter, upperPackage):
         ret = Sandbox()
         ret.reconstruct(self.step.toStep(pathFormatter, upperPackage),
-            self.enabled, self.paths, self.mounts)
+            self.enabled, self.paths, self.mounts, self.environment)
         return ret
 
 class Sandbox:
     """Represents a sandbox that is used when executing a step."""
 
-    __slots__ = ("step", "enabled", "paths", "mounts")
+    __slots__ = ("step", "enabled", "paths", "mounts", "environment")
 
     def __eq__(self, other):
         return isinstance(other, Sandbox) and (self.step == other.step) and (self.enabled == other.enabled) and \
-            (self.paths == other.paths) and (self.mounts == other.mounts)
+            (self.paths == other.paths) and (self.mounts == other.mounts) and \
+            (self.environment == other.environment)
 
     def construct(self, step, env, enabled, spec):
         self.step = step
@@ -438,13 +440,18 @@ class Sandbox:
             # silently drop empty mount lines
             if (m[0] != "") and (m[1] != ""):
                 self.mounts.append(m)
+        self.environment = {
+            k : env.substitute(v, "providedSandbox::environment")
+            for (k, v) in spec.get('environment', {})
+        }
         return self
 
-    def reconstruct(self, step, enabled, paths, mounts):
+    def reconstruct(self, step, enabled, paths, mounts, environment):
         self.step = step
         self.enabled = enabled
         self.paths = paths
         self.mounts = mounts
+        self.environment = environment
         return self
 
     def toCoreSandbox(self, upperPackage):
@@ -467,6 +474,14 @@ class Sandbox:
         (hostPath, sandboxPath, options).
         """
         return self.mounts
+
+    def getEnvironment(self):
+        """Get environment variables.
+
+        Returns the dictionary of environment variables that are defined by the
+        sandbox.
+        """
+        return self.environment
 
     def isEnabled(self):
         """Return True if the sandbox is used in the current build configuration."""
@@ -1990,6 +2005,9 @@ class Recipe(object):
             if dep.useSandbox:
                 sandbox = p._getProvidedSandbox()
                 if dep.provideGlobal: depSandbox = p._getProvidedSandbox()
+                if sandboxEnabled:
+                    env.update(sandbox.getEnvironment())
+                    if dep.provideGlobal: depEnv.update(sandbox.getEnvironment())
 
         # filter indirect packages and add to result list
         tmp = indirectPackages
@@ -2761,7 +2779,10 @@ class RecipeSet:
             schema.Optional('provideSandbox') : schema.Schema({
                 'paths' : [str],
                 schema.Optional('mount') : schema.Schema([ MountValidator() ],
-                    error="provideSandbox: invalid 'mount' property")
+                    error="provideSandbox: invalid 'mount' property"),
+                schema.Optional('environment') : schema.Schema(
+                    { varNameSchema : str },
+                    error="provideSandbox: invalid 'environment' property"),
             }),
             schema.Optional('root') : bool,
             schema.Optional('shared') : bool,
