@@ -7,6 +7,7 @@
 
 from ..input import RecipeSet
 from ..errors import BuildError
+from ..utils import processDefines
 import argparse
 import codecs
 import sys
@@ -90,15 +91,7 @@ def doLS(argv, bobRoot):
         help="Disable sandboxing")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
@@ -140,15 +133,7 @@ def doQueryMeta(argv, bobRoot):
                         help="Recursively display dependencies")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
@@ -209,15 +194,7 @@ are used:
 
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
@@ -262,15 +239,7 @@ def doQueryRecipe(argv, bobRoot):
 
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)

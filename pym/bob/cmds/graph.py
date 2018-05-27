@@ -6,6 +6,7 @@
 from .. import BOB_VERSION
 from ..input import RecipeSet
 from ..tty import colorize
+from ..utils import processDefines
 import argparse
 import json
 import re
@@ -522,15 +523,7 @@ def doGraph(argv, bobRoot):
         help="Set extended options")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
