@@ -260,12 +260,13 @@ class PluginSetting:
 class BuiltinSetting(PluginSetting):
     """Tiny wrapper to define Bob built-in settings"""
 
-    def __init__(self, schema, updater):
+    def __init__(self, schema, updater, mangle = False):
         self.__schema = schema
         self.__updater = updater
+        self.__mangle = mangle
 
     def merge(self, other):
-        self.__updater(other)
+        self.__updater(self.__schema.validate(other) if self.__mangle else other)
 
     def validate(self, data):
         try:
@@ -429,9 +430,10 @@ class Sandbox:
             (self.environment == other.environment)
 
     def construct(self, step, env, enabled, spec):
+        recipeSet = step.getPackage().getRecipe().getRecipeSet()
         self.step = step
         self.enabled = enabled
-        self.paths = spec['paths']
+        self.paths = recipeSet.getSandboxPaths() + spec['paths']
         self.mounts = []
         for mount in spec.get('mount', []):
             m = (env.substitute(mount[0], "provideSandbox::mount-from"),
@@ -440,6 +442,7 @@ class Sandbox:
             # silently drop empty mount lines
             if (m[0] != "") and (m[1] != ""):
                 self.mounts.append(m)
+        self.mounts.extend(recipeSet.getSandboxMounts())
         self.environment = {
             k : env.substitute(v, "providedSandbox::environment")
             for (k, v) in spec.get('environment', {})
@@ -2265,7 +2268,7 @@ class MountValidator:
                 raise schema.SchemaError(None, "Expected string as second mount argument!")
             if len(data) == 3:
                 self.__options.validate(data[2])
-                return data
+                return tuple(data)
             else:
                 return (data[0], data[1], [])
 
@@ -2375,6 +2378,7 @@ class RecipeSet:
             ),
         }
         self.__buildHooks = {}
+        self.__sandboxOpts = {}
 
         def updateArchive(x): self.__archive = x
 
@@ -2412,6 +2416,14 @@ class RecipeSet:
             "rootFilter" : BuiltinSetting(
                 schema.Schema([str]),
                 lambda x: self.__rootFilter.extend(x)
+            ),
+            "sandbox" : BuiltinSetting(
+                schema.Schema({
+                    schema.Optional('mount') : schema.Schema([ MountValidator() ]),
+                    schema.Optional('paths') : [str],
+                }),
+                lambda x: updateDicRecursive(self.__sandboxOpts, x),
+                True
             ),
             "scmOverrides" : BuiltinSetting(
                 schema.Schema([{
@@ -2599,6 +2611,12 @@ class RecipeSet:
 
     def getBuildHook(self, name):
         return self.__buildHooks.get(name)
+
+    def getSandboxMounts(self):
+        return self.__sandboxOpts.get("mount", [])
+
+    def getSandboxPaths(self):
+        return list(reversed(self.__sandboxOpts.get("paths", [])))
 
     def loadBinary(self, path):
         return self.__cache.loadBinary(path)
