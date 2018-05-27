@@ -30,6 +30,8 @@ import urllib.parse
 import xml.etree.ElementTree
 
 warnCertificate = WarnOnce("Using HTTPS without certificate check.")
+warnNonRelocatable = WarnOnce("Non-relocatable package used outside of a sandbox. Your build may fail!",
+    help="Jenkins builds need to copy dependenies between workspaces. At least one package does not seem to support this!")
 
 requiredPlugins = {
     "conditional-buildstep" : "Conditional BuildStep",
@@ -636,6 +638,8 @@ class JenkinsJob:
 
             # copy deps into workspace
             for d in deps:
+                if not d.isRelocatable() and (d.getSandbox() is None):
+                    warnNonRelocatable.warn(d.getPackage().getName())
                 if d.isShared():
                     vid = variantIdToName(d.getVariantId())
                     guard = xml.etree.ElementTree.SubElement(
