@@ -955,6 +955,8 @@ the relative path directly::
    provideTools:
       host-toolchain: bin
 
+.. _configuration-recipes-provideVars:
+
 provideVars
 ~~~~~~~~~~~
 
@@ -1010,10 +1012,18 @@ flags are available:
 * ``nojenkins``: Do not use this mount in Jenkins builds.
 * ``rw``: Mount as read-writable instead of read-only.
 
-Variable substitution is possible for the paths. The paths are also subject to
-shell variable expansion when a step using the sandbox *is actually executed*.
-This can be usefull e.g. to expand variables that are only available on the
-build server. Example::
+Additionally there can be an optional ``environment`` keyword. This works like
+the :ref:`configuration-recipes-provideVars` keyword and defines environment
+variables that are picked up by the depending recipe. In contrast to
+``provideVars`` the variables defined here are only consumed if the sandbox is
+actually used (i.e. the parent recipe defined ``sandbox`` in the ``use``
+section and the user builds with ``--sandbox``). In this case the variables
+defined here have a higher precedence that the ones defined in ``provideVars``.
+
+Variable substitution is possible for the mount paths and environment
+variables. The mount paths are also subject to shell variable expansion when a
+step using the sandbox *is actually executed*.  This can be useful e.g. to
+expand variables that are only available on the build server. Example::
 
     provideSandbox:
         paths: ["/bin", "/usr/bin"]
@@ -1022,13 +1032,15 @@ build server. Example::
             - "${MYREPO}"
             - "\\$HOME/.ssh"
             - ["\\$SSH_AUTH_SOCK", "\\SSH_AUTH_SOCK", [nofail, nojenkins]]
+        environment:
+            AUTOCONF_BUILD: "x86_64-linux-gnu"
 
 The example assumes that the variable ``MYREPO`` was set somewhere in the
 recipes.  On the other hand ``$HOME`` is expanded later by the shell. This is
-quite usefull on Jenkins because the home directory there is certainly
+quite useful on Jenkins because the home directory there is certainly
 different from the one where Bob runs. The last entry shows two mount option
 being used. This line mounts the ssh-agent socket into the sandbox if
-available. This won't be done on Jenins at all and the build will proceed even
+available. This won't be done on Jenkins at all and the build will proceed even
 if ``$SSH_AUTH_SOCK`` is unset or invalid. Note that such variables have to be
 in the :ref:`configuration-config-whitelist` to be available to the shell.
 
