@@ -11,7 +11,7 @@ from ..input import RecipeSet
 from ..state import BobState
 from ..tty import colorize
 from ..utils import asHexStr, hashDirectory, hashFile, removePath, \
-    emptyDirectory, copyTree, isWindows
+    emptyDirectory, copyTree, isWindows, processDefines
 from datetime import datetime
 from glob import glob
 from pipes import quote
@@ -48,19 +48,6 @@ def runHook(recipes, hook, args):
             raise BuildError(hook + ": cannot run '" + hookCmd + ": " + str(e))
 
     return ret
-
-def processDefines(defs):
-    # Process defines
-    defines = {}
-    for define in defs:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
-    return defines
 
 class RestartBuildException(Exception):
     pass
