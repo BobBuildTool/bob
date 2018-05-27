@@ -977,6 +977,8 @@ must be declared explicitly by a ``use: [environment]`` attribute in the
 dependency section of the upstream recipe. Only then are the provided variables
 merged into the upstream recipes environment.
 
+.. _configuration-recipes-provideSandbox:
+
 provideSandbox
 ~~~~~~~~~~~~~~
 
@@ -1048,6 +1050,9 @@ in the :ref:`configuration-config-whitelist` to be available to the shell.
     The mount paths are considered invariants of the build. That is changing the
     mounts will neither automatically cause a rebuild of the sandbox (and affected
     packages) nor will binary artifacts be re-fetched.
+
+The user might amend the mount and search paths in ``default.yaml`` by a
+:ref:`configuration-config-sandbox` entry.
 
 .. _configuration-recipes-relocatable:
 
@@ -1505,6 +1510,38 @@ Filter root recipes. The effect of this is a faster package parsing due to
 the fact, that the tree is not build for filtered roots.
 
 Works like the :ref:`configuration-recipes-filter` keyword.
+
+.. _configuration-config-sandbox:
+
+sandbox
+~~~~~~~
+
+Type: Sandbox-Dictionary
+
+The default paths and mounts of a sandbox are defined by the
+:ref:`configuration-recipes-provideSandbox` keyword. The ``sandbox`` section in
+the user configuration allows to specify additional mounts and additional
+search paths. The format of the settings is the same as in the
+:ref:`configuration-recipes-provideSandbox` keyword.
+
+Example::
+
+    sandbox:
+        mount:
+            - [ "$HOME/bin", "/mnt" ]
+        paths:
+            - /mnt
+
+The search paths from ``paths`` are added to ``$PATH`` in reverse order so that
+later entries have a higher precedence. In contrast to ``provideSandbox`` *no*
+variable substitution is possible for the mounts. The mount paths are still subject to
+shell variable expansion when a step using the sandbox *is actually executed*,
+though.
+
+The example above will mount the ``bin`` directory of the users home directory
+as ``/mnt`` inside the sandbox. The ``/mnt`` directory will be in ``$PATH``
+before any other search directory of the sandbox but still after any used tool
+(if any).
 
 ui
 ~~
