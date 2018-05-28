@@ -416,3 +416,10 @@ def copyTree(src, dst):
 
     return ret
 
+
+def processDefines(defs):
+    defines = {}
+    for define in defs:
+        key, _sep, value = define.partition('=')
+        defines[key] = value
+    return defines

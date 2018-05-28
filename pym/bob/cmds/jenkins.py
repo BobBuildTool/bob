@@ -10,7 +10,7 @@ from ..input import RecipeSet
 from ..state import BobState
 from ..stringparser import isTrue
 from ..tty import WarnOnce
-from ..utils import asHexStr
+from ..utils import asHexStr, processDefines
 from pipes import quote
 import argparse
 import ast
@@ -1255,15 +1255,7 @@ def doJenkinsAdd(recipes, argv):
                         help='Calculate all paths for description')
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     options = {}
     for i in args.options:
@@ -1980,15 +1972,7 @@ def doJenkinsSetOptions(recipes, argv):
         help="Reuse workspace for incremental builds")
     args = parser.parse_args(argv)
 
-    defines = {}
-    for define in args.defines:
-        d = define.split("=")
-        if len(d) == 1:
-            defines[d[0]] = ""
-        elif len(d) == 2:
-            defines[d[0]] = d[1]
-        else:
-            parser.error("Malformed define: "+define)
+    defines = processDefines(args.defines)
 
     if args.name not in BobState().getAllJenkins():
         print("Jenkins '{}' not known.".format(args.name), file=sys.stderr)
