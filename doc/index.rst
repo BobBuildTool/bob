@@ -7,10 +7,12 @@ Welcome to Bob's documentation!
 ===============================
 
 .. image:: /BOB_Logo.png
+   :target: https://bobbuildtool.github.io/
 
-To get a glimpse on Bob start with the :doc:`Tutorial <tutorial/index>`. For a
-comprehensive reference on Bob's usage and features have a look at the
-:doc:`User manual <manual/index>`.
+To get a glimpse on Bob start with the :doc:`Tutorial <tutorial/index>` or have
+a look at the `website <https://bobbuildtool.github.io/>`_. For a comprehensive
+reference on Bob's usage and features have a look at the :doc:`User manual
+<manual/index>`.
 
 Contents
 --------

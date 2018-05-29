@@ -1,7 +1,7 @@
-![Bob Logo](/doc/BOB_Logo.png?raw=true)
+[![Bob Logo](/doc/BOB_Logo.png?raw=true)](https://bobbuildtool.github.io/)
 
-Bob Build Tool
-==============
+[Bob Build Tool](https://bobbuildtool.github.io/)
+=================================================
 
 Bob is a build automation tool inspired by bitbake and portage. It is intended
 for complex embedded projects and thus focuses on reproducible builds while
