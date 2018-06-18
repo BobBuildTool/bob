@@ -25,9 +25,12 @@ def doHelp(availableCommands, argv, bobRoot):
         manSection = "7"
 
     inSourceLoc = os.path.join(bobRoot, "doc", "_build", "man", manPage+"."+manSection)
-    if os.path.isfile(inSourceLoc):
-        ret = subprocess.call(["man", inSourceLoc])
-    else:
-        ret = subprocess.call(["man", manSection, manPage])
+    try:
+        if os.path.isfile(inSourceLoc):
+            ret = subprocess.call(["man", inSourceLoc])
+        else:
+            ret = subprocess.call(["man", manSection, manPage])
+    except OSError:
+        ret = 1
 
     sys.exit(ret)
