@@ -120,6 +120,8 @@ fi
         except subprocess.CalledProcessError as e:
             raise BuildError("svn error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
                 cwd, " ".join(cmdLine), e.output.rstrip()))
+        except OSError as e:
+            raise BuildError("Error calling svn: " + str(e))
         return output
 
     # Get SvnSCM status. The purpose of this function is to return the status of the given directory
