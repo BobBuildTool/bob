@@ -264,6 +264,8 @@ class GitScm(Scm):
         except subprocess.CalledProcessError as e:
             raise BuildError("git error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
                 cwd, " ".join(cmdLine), e.output.rstrip()))
+        except OSError as e:
+            raise BuildError("Error calling git: " + str(e))
         return output
 
     # Get GitSCM status. The purpose of this function is to return the status of the given directory
@@ -358,7 +360,7 @@ class GitScm(Scm):
         try:
             output = subprocess.check_output(cmdLine, universal_newlines=True,
                 stderr=subprocess.DEVNULL).strip()
-        except subprocess.CalledProcessError as e:
+        except (subprocess.CalledProcessError, OSError):
             return None
 
         # have we found anything at all?
