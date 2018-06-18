@@ -166,6 +166,9 @@ fi
             except subprocess.CalledProcessError as e:
                 print ("cvs error: '{}' '{}'".format(" ".join(cmdLine), e.output))
                 return 'error','',''
+            except OSError as e:
+                print("Error calling cvs:", str(e))
+                return 'error','',''
 
             modified = False
             #   U = updated remotely, clean or missing locally (but can also mean local is on wrong branch)
