@@ -209,7 +209,7 @@ class SvnAudit(ScmAudit):
         except subprocess.CalledProcessError as e:
             raise BuildError("Svn audit failed: " + str(e))
         except OSError as e:
-            raise BuildError("Error calling git: " + str(e))
+            raise BuildError("Error calling svn: " + str(e))
         except ElementTree.ParseError as e:
             raise BuildError("Invalid XML received from svn")
 
