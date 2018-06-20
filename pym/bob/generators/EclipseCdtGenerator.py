@@ -19,15 +19,18 @@ from pipes import quote
 
 # scan package recursivelely with its dependencies and build a list of checkout dirs
 def getCheckOutDirs(package, dirs):
-    def collect(package, dirs, steps):
+    def collect(package, dirs, steps, processed):
+        if package._getId() in processed:
+            return
+        processed.add(package._getId())
         if package.getCheckoutStep().isValid():
             if package.getCheckoutStep().getVariantId() not in steps:
                 steps.add(package.getCheckoutStep().getVariantId())
                 dirs.append([package.getName(), package.getCheckoutStep().getWorkspacePath()])
         for d in package.getDirectDepSteps():
-            collect(d.getPackage(), dirs, steps)
+            collect(d.getPackage(), dirs, steps, processed)
 
-    collect(package, dirs, set())
+    collect(package, dirs, set(), set())
 
 # generate a unique id
 def getId():

@@ -22,7 +22,10 @@ from pipes import quote
 
 # scan package recursivelely with its dependencies and build a list of checkout dirs
 def getCheckOutDirs(package, excludes, dirs):
-    def collect(package, excludes, dirs, steps):
+    def collect(package, excludes, dirs, steps, processed):
+        if package._getId() in processed:
+            return
+        processed.add(package._getId())
         if package.getCheckoutStep().isValid():
             if package.getCheckoutStep().getVariantId() not in steps:
                 steps.add(package.getCheckoutStep().getVariantId())
@@ -36,9 +39,9 @@ def getCheckOutDirs(package, excludes, dirs):
                     break
 
             if not excluded:
-                collect(d.getPackage(), excludes, dirs, steps)
+                collect(d.getPackage(), excludes, dirs, steps, processed)
 
-    collect(package, excludes, dirs, set())
+    collect(package, excludes, dirs, set(), set())
 
 def generateFile(entries, fileName):
     try:
@@ -143,7 +146,7 @@ def parseArgumentLine(line):
         try:
             lines = [line.rstrip('\n') for line in open(filename)]
         except IOError:
-            raise BuildError("Input file (" + filename + ") could not be read.", 
+            raise BuildError("Input file (" + filename + ") could not be read.",
                              help="Specify the argument without leading @, if it is not a file path.")
     else:
         lines.append(line)
@@ -359,7 +362,7 @@ def qtProjectGenerator(package, argv, extra):
             projectCmd += " -S " + quote(e)
         for e in args.config_defs:
             projectCmd += " -C " + quote(e)
- 
+
         buildMe.append(projectCmd)
         generateFile(buildMe, buildMeFile)
         os.chmod(buildMeFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
