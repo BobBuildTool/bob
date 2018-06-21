@@ -3,16 +3,18 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from . import BOB_INPUT_HASH
 from .errors import BuildError, ParseError
 from .scm import GitAudit, SvnAudit, UrlAudit, auditFromData
 from .tty import colorize
-from .utils import asHexStr, hashFile
+from .utils import asHexStr, hashFile, binStat
 from datetime import datetime, timezone
 import gzip
 import hashlib
 import io
 import json
 import os
+import pickle
 import schema
 import struct
 
@@ -260,10 +262,23 @@ class Audit:
 
     @classmethod
     def fromFile(cls, file):
+        try:
+            cacheName = file + ".pickle"
+            cacheKey = binStat(file) + BOB_INPUT_HASH
+            with open(cacheName, "rb") as f:
+                persistedCacheKey = f.read(len(cacheKey))
+                if cacheKey == persistedCacheKey:
+                    return pickle.load(f)
+        except (EOFError, OSError, pickle.UnpicklingError) as e:
+            pass
+
         audit = cls()
         try:
             with gzip.open(file, 'rb') as gzf:
                 audit.load(gzf)
+            with open(cacheName, "wb") as f:
+                f.write(cacheKey)
+                pickle.dump(audit, f, -1)
         except OSError as e:
             print(colorize("Error loading audit: " + str(e), "33"))
         return audit
@@ -318,6 +333,13 @@ class Audit:
         try:
             with gzip.open(file, 'wb', 6) as gzf:
                 json.dump(tree, io.TextIOWrapper(gzf, encoding='utf8'))
+
+            cacheName = file + ".pickle"
+            cacheKey = binStat(file) + BOB_INPUT_HASH
+            with open(cacheName, "wb") as f:
+                f.write(cacheKey)
+                pickle.dump(self, f, -1)
+
         except OSError as e:
             raise BuildError("Cannot write audit: " + str(e))
 
