@@ -1,0 +1,296 @@
+Bob 0.14 Release Notes
+======================
+
+Changes made since Bob 0.13.0 include the following.
+
+New features
+------------
+
+* Add :ref:`configuration-config-rootFilter` setting to ``default.yaml``
+
+  This setting allows to filter root recipes by matching then with a globbing
+  pattern. The effect of this is a faster package parsing due to the fact,
+  that the tree is not build for filtered roots.
+
+* Extended colored output options
+
+  Bob gained a ``--color=`` switch that can be set to ``auto`` (default),
+  ``always`` or ``never`` to control the colorized output of all commands.
+
+* Add Microsoft Azure Blob storage backend
+
+  The azure backend uses the Microsoft cloud block blob storage. It will use
+  the same layout as all other backends so that the container can be made
+  public readable and be fetched by the http backend without giving out the
+  credentials.
+
+  See :ref:`configuration-config-archive` for all options. Requires the
+  ``azure-storage-blob`` Python3 library to be installed.
+
+* The ``-D`` switch gained the ability to take values that contain ``=``.
+
+  The value of an environment variable can have any character in the recipes.
+  When passed on the command line this is now possible too. Previously values
+  that had a ``=`` (e.g. ``-DFOO=A=B`` were rejected or lead to crashes.
+
+* Allow user to amend sandbox mounts/paths
+    
+  The default sandbox mount and search paths are defined in the sandbox
+  recipe(s). If the user wanted to mount additional directories inside the
+  sandbox (e.g. a local source code mirror in conjunction with a
+  ``scmOverride``) he previously had to edit the recipes.
+  
+  Now it is possible to add such paths to ``default.yaml``. See
+  :ref:`configuration-config-sandbox`.
+
+Recipes
+~~~~~~~
+
+*  Add ``checkoutAssert`` keyword
+    
+   With :ref:`configuration-recipes-checkoutassert` you can define a checksum
+   for some files or parts of files. This can be useful to detect license
+   changes.
+   
+   Example::
+   
+       checkoutAssert:
+           -
+               file: 'LICENSE'
+               digestSHA1: be520183980a2e06b5272f3669395782f186d6d0
+           -
+               file: 'main.c'
+               start: 1
+               end: 20
+               digestSHA1: 949d02bed248e000d23bb81dfcce55e5603e8789
+
+* Add ``stripComponents`` attribute for URL SCM
+
+  With ``stripComponents`` it is possible to strip a configurable number of
+  leading components from file names on extraction. This works only for tar
+  files, though.
+
+* Define ``relocatable`` property
+    
+  Historically any recipe that did define at least one tool was deemed to
+  be non-relocatable. This implied that it cannot be stored as binary
+  artifact unless we're in a sandbox.
+  
+  This is overly pessimistic. By introducing a ``relocatable`` property the
+  user is able to express if a package is really relocatable or not. For
+  backwards compatibility the default value is ``False`` if the recipe
+  defines a tool, otherwise it is ``True``.
+
+  See :ref:`configuration-recipes-relocatable`.
+
+* Implement proper inheritance for ``shared`` keyword
+
+  The ``shared`` keyword was always ignored in classes. Now we deduct the
+  final value by the usual inheritance rules just like all other values.
+
+* Add ``environment`` property to :ref:`configuration-recipes-provideSandbox`
+    
+  A sandbox brings its own host environment that overrides the host
+  environment when used. This can be quite different and be even a
+  different architecture (think of an i386 sandbox image that is used on
+  an x86_64 host).
+  
+  Bob regards the sandbox as a build invariant, that is it must have no
+  impact on the results of the recipes that are built inside the sandbox.
+  On the other hand there can be situations where this still the case. To
+  properly handle this a sandbox recipe can now define environment
+  variables that are picked up when this sandbox is actually used. By
+  consuming this variable in other recipes Bob can determine the impact of
+  the sandbox, if any.
+
+  See :ref:`configuration-recipes-provideSandbox`.
+
+Bob build / bob dev
+~~~~~~~~~~~~~~~~~~~
+
+* Allow build workspace to symlink checkout result
+    
+  This adds support for having symlinks to files of the checkout workspace in
+  the build workspace (e.g. linking big archives). It has always been
+  guaranteed to have the checkout and build workspace of the package available
+  in the package step. Thus the package step can access this link instead of
+  having to copy the archive in the build step.
+
+Bob clean
+~~~~~~~~~
+
+* Added ``-c`` option
+* Added ``-D`` option
+
+Bob graph
+~~~~~~~~~
+
+* Added ``--(no-)sandbox`` option
+
+Bob jenkins
+~~~~~~~~~~~
+
+* Prevent running in stale workspaces
+    
+  Jenkins does not delete workspaces automatically. He also has no clue if
+  the job that is running in an old workspace is compatible or not. Hence
+  we have to make sure ourself that we do not collide with old data in
+  case of incremental builds.
+  
+  To pro-actively prevent such clashes every Jenkins server in Bob now
+  get's a 32-bit random UUID which is appended to every path. This should
+  minimize the chance to collide with another or old instance.
+  
+  Because of the low entropy the UUID does not provide a guarantee that no
+  collision occurs. It also does not help on existing instances where no
+  UUID was assigned. Therefore, as a 2nd line of defence, every workspace
+  stores a canary with the variant-id. If the canary exists it has to
+  match. Otherwise the build is aborted because we don't build the same
+  thing in this existing workspace. The user has to clean up the workspace
+  manually then.
+
+* Add ``jobs.policy`` job trigger policy extended option
+    
+  This extended option that makes the actual trigger threshold between jobs
+  configurable. It defaults to "stable" which was the default before.  The
+  "unstable" setting triggers on unstable builds and takes artifacts from
+  stable and unstable builds. The "always" setting does what it says but might
+  not be that useful.
+
+Bob ls
+~~~~~~
+
+* Add ``--unsorted`` option
+    
+  If given, show the packages in the order they were named in the recipe.
+  By default they are sorted by name for better readability.
+
+Plugins
+~~~~~~~
+
+* Add plugin settings support
+    
+  Sometimes plugin behaviour needs to be configurable by the user. On the other
+  hand Bob expects plugins to be deterministic. To have a common interface for
+  such settings it is possible for a plugin to define additional keywords in
+  ``default.yaml``. This provides Bob with the information to validate the
+  settings and detect changes in a reliable manner.
+
+  See :ref:`extending-settings` and :class:`bob.input.PluginSetting` for more
+  details.
+
+Changed behaviour
+-----------------
+
+Backwards compatible policies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Bob will retain the old behavior unless instructed otherwise. See
+:ref:`policies` for more information.
+
+* ``url`` SCM: track checkout directory instead of file
+
+  Historically the URL SCM was not tracking the checkout directory but the
+  individual files that are downloaded by the SCM. This had the advantage that
+  it is possible to download more than one file into the same directory. There
+  are a couple of major disadvantages, though, that are now solved by "owning"
+  the whole directory by the SCM where the file is downloaded.
+
+  See :ref:`policies-tidyUrlScm` policy for more details.
+
+* Define ``allRelocatable`` policy
+    
+  The :ref:`policies-allRelocatable` policy changes the default of the
+  :ref:`configuration-recipes-relocatable` property to ``True`` regardless of
+  any defined tools. This get's rid of the old heuristic which was too
+  pessimistic in most cases.
+
+* Define offline build properties and policy
+    
+  Bob will prevent network access by default during build and package steps
+  when using a sandbox. The :ref:`configuration-recipes-netAccess` properties
+  can override this behavior and the :ref:`policies-offlineBuild` policy
+  controls the default setting.
+
+* Define ``sandboxInvariant`` policy
+    
+  Traditionally the impact of a sandbox to the build has not been handled
+  consistently. On one hand the actual usage of a sandbox was not relevant for
+  binary artifacts. As such, an artifact that was built inside a sandbox was
+  also used when building without the sandbox (and vice versa). On the other
+  hand Bob did rebuild everything from scratch when switching between
+  sandbox/non-sandbox builds. This inconsistent behavior is rectified by the
+  :ref:`policies-sandboxInvariant` policy that consistently declares builds as
+  invariant of the sandbox.
+
+Dev/build behavioural changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Clean workspace on manual invocation of build/package.sh too
+    
+  For package steps the workspace is always cleaned. This was not the case
+  if package.sh was invoked manually, though. Fix this and also adapt the
+  behaviour of build.sh to the last Bob invocation (clean vs.
+  incremental).
+
+* Check all dependencies for input changes
+    
+  Changing the source code of a tool did not trigger an incremental rebuild of
+  packages that use this tool. Such changes are now taken into account an will
+  trigger an incremental build (if possible) of affected packages.
+
+Other behavioural changes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Handle dependency correctly if it is named multiple times
+    
+  It is possible (but not useful) to name the same dependency multiple
+  times in a recipe. If only the tools are used it was not detected when
+  multiple variants of the same package were specified. We now do the
+  duplicate check independent of what is actually used.
+  
+  If a package is named multiple times in the depends section of a recipe
+  and they are the same variant then we will issue a warning. It is (and
+  was already in the past) defined that only the first in the list is
+  taken. But it is most likely an error of the user if there is more than
+  one reference to the same package. It is also possible that, even if the
+  packages themself are of the same variant, they might provide different
+  dependencies or variables upwards. This is still not detected and will
+  be prohibited implicitly by turning the warning into an error in the
+  future.
+
+Performance improvements
+------------------------
+
+* Optimize internal data structures to lower memory footprint
+
+  Depending on the recipes the memory consumption is roughly halved. This also
+  improves package calculation time to some extent.
+
+* Bob dev: improve startup time
+
+  The directory layout is now cached across invocations. This saves a couple of
+  seconds until a build starts. It will also keep the directory assignment more
+  stable in case of recipe changes.
+
+* Bob dev: optimize audit trail generation time
+
+* Bob project: improve project generation speed on large projects
+
+* Jenkins: projects with many jobs are calculated an order of magnitude faster
+
+* archive: improve local upload speed
+
+  The compression level was reduced to 6 which produces only marginally bigger
+  archives but is dramatically faster on compression. Some performance numbers
+  with a reasonably (~600MB) sized workspace of text and binary files::
+    
+      Bob 0.13 (level 9): 220MiB, 2m10s
+      Bob 0.14 (level 6): 222MiB, 0m25s
+
+* Plugins: fix ``PluginState`` class comparison.
+
+  Any plugin that used the :class:`bob.input.PluginState` class caused a
+  massive performance drop on huge projects. This is fixed for most plugins but
+  it might still be necessary to update some plugins. See
+  :class:`bob.input.PluginState` for the details.

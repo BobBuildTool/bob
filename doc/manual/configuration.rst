@@ -490,6 +490,8 @@ such access is still needed a recipe may set the ``buildNetAccess`` or the
     access was always possbible. The policy will determine the default value of
     this property.
 
+.. _configuration-recipes-checkoutassert:
+
 checkoutAssert
 ~~~~~~~~~~~~~~
 
@@ -1240,6 +1242,8 @@ Example::
    # Keep ssh-agent working
    whitelist: ["SSH_AGENT_PID", "SSH_AUTH_SOCK"]
 
+.. _configuration-config-archive:
+
 archive
 ~~~~~~~
 
@@ -1500,6 +1504,8 @@ postBuildHook
     results as further arguments.
 
     The return status of the hook is ignored.
+
+.. _configuration-config-rootFilter:
 
 rootFilter
 ~~~~~~~~~~
