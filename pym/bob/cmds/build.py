@@ -474,9 +474,9 @@ esac
 
     def loadBuildState(self):
         state = BobState().getBuildState()
-        self.__wasRun = dict(state['wasRun'])
+        self.__wasRun = dict(state.get('wasRun', {}))
         self.__srcBuildIds = { (path, vid) : (bid, True)
-            for (path, vid), bid in state['predictedBuidId'].items() }
+            for (path, vid), bid in state.get('predictedBuidId', {}).items() }
 
     def _wasAlreadyRun(self, step, skippedOk=False):
         path = step.getWorkspacePath()
