@@ -1648,7 +1648,10 @@ def doStatus(argv, bobRoot):
     packages = recipes.generatePackages(nameFormatter, defines, not args.develop)
     if args.develop: developPersister.prime(packages)
 
-    def showStatus(package, recurse, verbose, done):
+    def showStatus(package, recurse, verbose, done, donePackage):
+        if package._getId() in donePackages:
+            return
+        donePackages.add(package._getId())
         checkoutStep = package.getCheckoutStep()
         if checkoutStep.isValid() and (not checkoutStep.getVariantId() in done):
             done.add(checkoutStep.getVariantId())
@@ -1683,12 +1686,13 @@ def doStatus(argv, bobRoot):
 
         if recurse:
             for d in package.getDirectDepSteps():
-                showStatus(d.getPackage(), recurse, verbose, done)
+                showStatus(d.getPackage(), recurse, verbose, done, donePackages)
 
     done = set()
+    donePackages = set()
     for p in args.packages:
         for package in packages.queryPackagePath(p):
-            showStatus(package, args.recursive, args.verbose, done)
+            showStatus(package, args.recursive, args.verbose, done, donePackages)
 
 ### Clean #############################
 
