@@ -6,6 +6,7 @@
 from unittest import TestCase
 
 from bob.input import ScmOverride
+from bob.stringparser import Env
 
 class TestScmOverride(TestCase):
 
@@ -19,27 +20,53 @@ class TestScmOverride(TestCase):
     def testDel(self):
         """Test to delete a key"""
         o = ScmOverride({ 'del' : [ 'branch' ] })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
         })
 
+        o = ScmOverride({ 'del' : [ "${DEL}" ] })
+        e = Env({"DEL" : "branch"})
+        match, scm = o.mangle(self.scm, e)
+        self.assertEqual(scm, {
+            'scm' : "git",
+            'url' : "git@git.com:foo/bar.git",
+        })
     def testAdd(self):
         """Test to add a new key"""
         o = ScmOverride({ 'set' : { 'commit' : '1234' } })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
             'branch' : "develop",
             'commit' : "1234"
+        }
+        )
+        o = ScmOverride({ 'set' : { 'commit' : "${COMMIT}" } })
+        e = Env({"COMMIT" : "4321"})
+        match, scm = o.mangle(self.scm, e)
+        self.assertEqual(scm, {
+            'scm' : "git",
+            'url' : "git@git.com:foo/bar.git",
+            'branch' : "develop",
+            'commit' : "4321"
         })
-
     def testOverwrite(self):
         """Test to overwrite existing key"""
         o = ScmOverride({ 'set' : { 'branch' : "master" } })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
+        self.assertEqual(scm, {
+            'scm' : "git",
+            'url' : "git@git.com:foo/bar.git",
+            'branch' : "master"
+        })
+
+        # test substitution
+        o = ScmOverride({'set' : { 'branch' : "${BRANCH}" } })
+        e = Env({"BRANCH" : "master"})
+        match, scm = o.mangle(self.scm, e)
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
@@ -56,7 +83,7 @@ class TestScmOverride(TestCase):
                 }
             }
         })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@acme.test:foo/bar.git",
@@ -71,7 +98,7 @@ class TestScmOverride(TestCase):
             'match' : { 'branch' : "develop" },
             'set' : { 'branch' : "master" }
         })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
@@ -83,7 +110,7 @@ class TestScmOverride(TestCase):
             'match' : { 'branch' : "upstream" },
             'set' : { 'branch' : "master" }
         })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
@@ -98,7 +125,7 @@ class TestScmOverride(TestCase):
             },
             'set' : { 'branch' : "master" }
         })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
@@ -113,12 +140,28 @@ class TestScmOverride(TestCase):
             },
             'set' : { 'branch' : "master" }
         })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "git@git.com:foo/bar.git",
             'branch' : "develop"
         })
+
+        # test substitution
+        o = ScmOverride({'match' : {
+                'url' : "git@${SERVER}:foo/${NAME}.git",
+            },
+            'set' : { 'branch' : "master" }
+        })
+        e = Env({"SERVER" : "git.com", "NAME" : "bar"})
+        match, scm = o.mangle(self.scm, e)
+        self.assertEqual(match, True)
+        self.assertEqual(scm, {
+            'scm' : "git",
+            'url' : "git@git.com:foo/bar.git",
+            'branch' : "master"
+        })
+
 
     def testMatchGlob(self):
         """Test that matching uses globbing"""
@@ -126,7 +169,7 @@ class TestScmOverride(TestCase):
             'match' : { 'url' : "*git.com*" },
             'set' : { 'url' : "mirror" }
         })
-        match, scm = o.mangle(self.scm)
+        match, scm = o.mangle(self.scm, Env())
         self.assertEqual(scm, {
             'scm' : "git",
             'url' : "mirror",

@@ -1390,6 +1390,10 @@ If an override is matching the actions are then applied in the following order:
    ``replacement``. Each occurrence of ``pattern`` is replaced by
    ``replacement``.
 
+All overrides values are mangled through :ref:`configuration-principle-subst`. Mangling is
+performed during calculation of the checkoutStep so that the full environment for this step is
+available for substitution.
+
 alias
 ~~~~~
 
