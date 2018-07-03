@@ -40,7 +40,7 @@ class UrlScm(Scm):
     ]
 
     EXTRACTORS = {
-        "tar"  : ("tar xf", "--strip-components={}"),
+        "tar"  : ("tar -x --no-same-owner --no-same-permissions -f", "--strip-components={}"),
         "gzip" : ("gunzip -kf", None),
         "xz"   : ("unxz -kf", None),
         "7z"   : ("7z x -y", None),
