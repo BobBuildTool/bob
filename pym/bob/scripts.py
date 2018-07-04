@@ -126,6 +126,7 @@ def catchErrors(fun, *args, **kwargs):
         print(e, file=sys.stderr)
         ret = 1
     except KeyboardInterrupt:
+        print(colorize("Stopping execution. (Don't press Ctrl+C again!)", "32;1"))
         ret = 2
     except ImportError as e:
         if e.name:
