@@ -1574,8 +1574,10 @@ class UniquePackageList:
         self.cache = {}
 
     def append(self, p):
-        p2 = self.cache.setdefault(p.getPackage().getName(), p)
-        if p2 is p:
+        name = p.getPackage().getName()
+        p2 = self.cache.get(name)
+        if p2 is None:
+            self.cache[name] = p
             self.ret.append(p)
         elif p2.getVariantId() != p.getVariantId():
             self.errorHandler(p, p2)
