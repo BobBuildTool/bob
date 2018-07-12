@@ -283,7 +283,7 @@ def Scm(spec, env, overrides, recipeSet):
     # apply overrides before creating scm instances. It's possible to switch the Scm type with an override..
     matchedOverrides = []
     for override in overrides:
-        matched, spec = override.mangle(spec)
+        matched, spec = override.mangle(spec, env)
         if matched:
             matchedOverrides.append(override)
 

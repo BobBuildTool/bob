@@ -43,6 +43,10 @@ New features
   Now it is possible to add such paths to ``default.yaml``. See
   :ref:`configuration-config-sandbox`.
 
+* Allow substitution on scmOverrides
+
+   The values of scmOverrides are mangled through :ref:`configuration-principle-subst`.
+
 Recipes
 ~~~~~~~
 

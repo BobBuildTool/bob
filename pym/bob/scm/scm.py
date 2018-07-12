@@ -27,9 +27,10 @@ class ScmOverride:
         (self.__match, self.__del, self.__set, self.__replaceRaw) = s
         self.__init()
 
-    def __doesMatch(self, scm):
+    def __doesMatch(self, scm, env):
         for (key, value) in self.__match.items():
             if key not in scm: return False
+            value = env.substitute(value, "svmOverride::match")
             if not fnmatch.fnmatchcase(scm[key], value): return False
         return True
 
@@ -41,15 +42,23 @@ class ScmOverride:
         return ((self.__match, self.__del, self.__set, self.__replace) ==
             (other.__match, other.__del, other.__set, other.__replace))
 
-    def mangle(self, scm):
+    def __applyEnv(self, env):
+        rm = [ env.substitute(d, "svmOverride::del") for d in self.__del ]
+        set = { k : env.substitute(v, "svmOverride::set"+k) for (k,v) in self.__set.items() }
+        replace = { k : env.substitute(v, "svmOverride::replace"+k) for (k,v) in self.__replace.items() }
+        return rm, set, replace
+
+    def mangle(self, scm, env):
         ret = False
-        if self.__doesMatch(scm):
+        if self.__doesMatch(scm, env):
+            rm, set, replace = self.__applyEnv(env)
+
             ret = True
             scm = scm.copy()
-            for d in self.__del:
+            for d in rm:
                 if d in scm: del scm[d]
-            scm.update(self.__set)
-            for (key, (pat, repl)) in self.__replace.items():
+            scm.update(set)
+            for (key, (pat, repl)) in replace.items():
                 if key in scm:
                     scm[key] = re.sub(pat, repl, scm[key])
         return ret, scm
@@ -59,6 +68,7 @@ class ScmOverride:
                 + (("del: " + str(self.__del) + "\n") if self.__del else "")
                 + (("set: " + str(self.__set)+ "\n") if self.__set else "")
                 + (("replace: " + str(self.__replaceRaw)) if self.__replaceRaw else "")).rstrip()
+
 
 class Scm(metaclass=ABCMeta):
     def __init__(self, spec, overrides):
