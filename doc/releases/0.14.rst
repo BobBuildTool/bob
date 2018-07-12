@@ -259,6 +259,15 @@ Other behavioural changes
   be prohibited implicitly by turning the warning into an error in the
   future.
 
+* In rare circumstances it was possible that a dependency was considered
+  more than once in a package. This bug lead to wrongly calculated variant-
+  and build-IDs. Unfortunately fixing this bug can lead to incompatible binary
+  artifacts with previous versions of Bob.
+  
+  There is no impact on the build result by this fix because the bug only
+  affected the internal calculation. Bob already passed the dependency only
+  once to the build script of such a package.
+
 Performance improvements
 ------------------------
 
