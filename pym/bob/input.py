@@ -1574,14 +1574,39 @@ class UniquePackageList:
         self.cache = {}
 
     def append(self, p):
-        p2 = self.cache.setdefault(p.getPackage().getName(), p)
-        if p2 is p:
+        name = p.getPackage().getName()
+        p2 = self.cache.get(name)
+        if p2 is None:
+            self.cache[name] = p
             self.ret.append(p)
         elif p2.getVariantId() != p.getVariantId():
             self.errorHandler(p, p2)
 
     def result(self):
         return self.ret
+
+class DepTracker:
+
+    __slots__ = ('package', 'isNew', 'usedResult')
+
+    def __init__(self, package):
+        self.package = package
+        self.isNew = True
+        self.usedResult = False
+
+    def prime(self):
+        if self.isNew:
+            self.isNew = False
+            return True
+        else:
+            return False
+
+    def useResultOnce(self):
+        if self.usedResult:
+            return False
+        else:
+            self.usedResult = True
+            return True
 
 class Recipe(object):
     """Representation of a single recipe
@@ -1955,6 +1980,7 @@ class Recipe(object):
         subTreePackages = set()
         directPackages = []
         indirectPackages = []
+        provideDeps = UniquePackageList(self.__raiseIncompatibleProvided)
         results = []
         depEnv = env.derive()
         depTools = tools.derive()
@@ -1981,24 +2007,26 @@ class Recipe(object):
                 e.pushFrame(r.getPackageName())
                 raise e
 
-            p2 = thisDeps.setdefault(dep.recipe, p)
-            if p2 is p:
-                # new pacakage
+            # A dependency should be named only once. Hence we can
+            # optimistically create the DepTracker object. If the dependency is
+            # named more than one we make sure that it is the same variant.
+            depTrack = thisDeps.setdefault(dep.recipe, DepTracker(p))
+            if depTrack.prime():
                 directPackages.append(p)
-                # add provided dependencies at the end
-                if dep.useDeps: indirectPackages.extend(p._getProvidedDeps())
-                # result is only picked once
-                if dep.useBuildResult: results.append(p)
-            elif p.getVariantId() != p2.getVariantId():
+            elif p.getVariantId() != depTrack.package.getVariantId():
                 self.__raiseIncompatibleLocal(p)
             else:
                 warnDepends.show("{} -> {}".format(self.__packageName, dep.recipe))
 
-            # pick up various other results of package
+            # pick up various results of package
             for (n, s) in states.items():
                 if n in dep.use:
                     s.onUse(p.getPackage()._getStates()[n])
                     if dep.provideGlobal: depStates[n].onUse(p.getPackage()._getStates()[n])
+            if dep.useDeps:
+                indirectPackages.extend(p._getProvidedDeps())
+            if dep.useBuildResult and depTrack.useResultOnce():
+                results.append(p)
             if dep.useTools:
                 tools.update(p._getProvidedTools())
                 if dep.provideGlobal: depTools.update(p._getProvidedTools())
@@ -2011,17 +2039,27 @@ class Recipe(object):
                 if sandboxEnabled:
                     env.update(sandbox.getEnvironment())
                     if dep.provideGlobal: depEnv.update(sandbox.getEnvironment())
+            if dep.recipe in self.__provideDeps:
+                provideDeps.append(p)
+                for d in p._getProvidedDeps(): provideDeps.append(d)
 
-        # filter indirect packages and add to result list
+        # Filter indirect packages and add to result list if necessary. Most
+        # likely there are many duplicates that are dropped.
         tmp = indirectPackages
         indirectPackages = []
         for p in tmp:
-            p2 = thisDeps.setdefault(p.getPackage().getName(), p)
-            if p2 is p:
-                results.append(p)
+            name = p.getPackage().getName()
+            depTrack = thisDeps.get(name)
+            if depTrack is None:
+                thisDeps[name] = depTrack = DepTracker(p)
+
+            if depTrack.prime():
                 indirectPackages.append(p)
-            elif p.getVariantId() != p2.getVariantId():
-                self.__raiseIncompatibleProvided(p, p2)
+            elif p.getVariantId() != depTrack.package.getVariantId():
+                self.__raiseIncompatibleProvided(p, depTrack.package)
+
+            if depTrack.useResultOnce():
+                results.append(p)
 
         # apply private environment
         env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
@@ -2088,13 +2126,6 @@ class Recipe(object):
         packageStep._setProvidedTools(provideTools)
 
         # provide deps (direct and indirect deps)
-        provideDeps = UniquePackageList(self.__raiseIncompatibleProvided)
-        for dep in self.__deps:
-            if dep.recipe not in self.__provideDeps: continue
-            subDep = thisDeps.get(dep.recipe)
-            if subDep is not None:
-                provideDeps.append(subDep)
-                for d in subDep._getProvidedDeps(): provideDeps.append(d)
         packageStep._setProvidedDeps(provideDeps.result())
 
         # provide Sandbox
