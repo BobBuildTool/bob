@@ -2015,6 +2015,9 @@ class Recipe(object):
                 directPackages.append(p)
             elif p.getVariantId() != depTrack.package.getVariantId():
                 self.__raiseIncompatibleLocal(p)
+            elif self.__recipeSet.getPolicy('uniqueDependency'):
+                raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
+                                    .format(dep.recipe))
             else:
                 warnDepends.show("{} -> {}".format(self.__packageName, dep.recipe))
 
@@ -2342,6 +2345,7 @@ class RecipeSet:
                 schema.Optional('allRelocatable') : bool,
                 schema.Optional('offlineBuild') : bool,
                 schema.Optional('sandboxInvariant') : bool,
+                schema.Optional('uniqueDependency') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         )
@@ -2406,6 +2410,11 @@ class RecipeSet:
                 "0.14",
                 InfoOnce("sandboxInvariant policy not set. Inconsistent sandbox handling for binary artifacts.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxinvariant for more information.")
+            ),
+            'uniqueDependency' : (
+                "0.14",
+                InfoOnce("uniqueDependency policy not set. Naming same dependency multiple times is deprecated.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#uniquedependency for more information.")
             ),
         }
         self.__buildHooks = {}
