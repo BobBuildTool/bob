@@ -227,6 +227,15 @@ Bob will retain the old behavior unless instructed otherwise. See
   :ref:`policies-sandboxInvariant` policy that consistently declares builds as
   invariant of the sandbox.
 
+* Warn/Fail on duplicate dependencies (``uniqueDependency`` policy)
+
+  Naming the same dependency multiple times in a recipe is deprecated. If
+  encountered a warning is shown unless the :ref:`policies-uniqueDependency`
+  policy is set to the new behavior. In this case the parsing is stopped with
+  an error.
+
+  See  :ref:`policies-uniqueDependency` policy for more details.
+
 Dev/build behavioural changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -253,15 +262,16 @@ Other behavioural changes
   multiple variants of the same package were specified. We now do the
   duplicate check independent of what is actually used.
   
-  If a package is named multiple times in the depends section of a recipe
-  and they are the same variant then we will issue a warning. It is (and
-  was already in the past) defined that only the first in the list is
-  taken. But it is most likely an error of the user if there is more than
-  one reference to the same package. It is also possible that, even if the
-  packages themself are of the same variant, they might provide different
-  dependencies or variables upwards. This is still not detected and will
-  be prohibited implicitly by turning the warning into an error in the
-  future.
+  If a package is named multiple times in the depends section of a recipe and
+  they are the same variant then we will issue a warning. It is (and was
+  already in the past) defined that only the first result in the list is taken.
+  But it is most likely an error of the user if there is more than one
+  reference to the same package. It is also possible that, even if the packages
+  themself are of the same variant, they might provide different dependencies
+  or variables upwards. This is handled but not easily detectable by the user.
+
+  Setting the  :ref:`policies-uniqueDependency` policy to the new behavior will
+  halt the parsing with an error when a dependency is detected multiple times.
 
 * In rare circumstances it was possible that a dependency was considered
   more than once in a package. This bug lead to wrongly calculated variant-
