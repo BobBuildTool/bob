@@ -207,7 +207,11 @@ are used:
         if len(f) != 2: parser.error("Malformed format: "+fmt)
         formats[f[0]] = f[1]
 
-    def showPackage(package, recurse, done):
+    def showPackage(package, recurse, done, donePackages):
+        if package._getId() in donePackages:
+            return
+        donePackages.add(package._getId())
+
         # show recipes only once for each checkout variant
         key = (package.getRecipe().getName(), package.getCheckoutStep().getVariantId())
         if key not in done:
@@ -221,12 +225,13 @@ are used:
         # recurse package tree if requested
         if recurse:
             for ps in package.getDirectDepSteps():
-                showPackage(ps.getPackage(), recurse, done)
+                showPackage(ps.getPackage(), recurse, done, donePackages)
 
     done = set()
+    donePackages = set()
     for p in args.packages:
         for package in packages.queryPackagePath(p):
-            showPackage(package, args.recursive, done)
+            showPackage(package, args.recursive, done, donePackages)
 
 def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
