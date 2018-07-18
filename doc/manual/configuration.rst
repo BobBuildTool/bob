@@ -1452,6 +1452,7 @@ upload          Boolean
 download        "yes", "no", "deps", "forced" or "forced-deps"
 sandbox         Boolean
 clean_checkout  Boolean
+link_deps       Boolean
 always_checkout List of strings (regular expression patterns)
 =============== ===================================================================
 

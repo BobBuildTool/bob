@@ -74,6 +74,9 @@ Options
     as long as their recipes were not changed. If the recipe did change Bob
     will still do a clean build automatically.
 
+``--link-deps``
+    Create symlinks to dependencies next to workspace.
+
 ``--no-sandbox``
     Disable sandboxing
 
@@ -142,6 +145,9 @@ Options
     Only builds the package that was given on the command line. Bob will not
     check if the dependencies of that package are available and if they are
     up-to-date.
+
+``--no-link-deps``
+    Do not create symlinks to dependencies next to workspace.
 
 ``--no-logfiles``
     Don't write a logfile. Without this bob is creating a logfile in the
