@@ -301,7 +301,8 @@ class Env(MutableMapping):
         self.touched = self.touched + [ set() ]
 
     def touch(self, keys):
-        for k in keys: self.__touch(k)
+        for i in self.touched:
+            i.update(keys)
 
     def touchedKeys(self):
         return self.touched[-1]
@@ -366,7 +367,7 @@ def funStrip(args, **options):
 
 def funSandboxEnabled(args, sandbox, **options):
     if len(args) != 0: raise ParseError("is-sandbox-enabled expects no arguments")
-    return "true" if ((sandbox is not None) and sandbox.isEnabled()) else "false"
+    return "true" if sandbox else "false"
 
 def funToolDefined(args, tools, **options):
     if len(args) != 1: raise ParseError("is-tool-defined expects one argument")

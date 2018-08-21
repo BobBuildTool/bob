@@ -169,7 +169,7 @@ class TestRelocatable(TestCase):
         r["root"] = True
         ret = Recipe(recipeSet, recipe, name+".yaml", cwd, name, name, {})
         ret.resolveClasses()
-        return ret.prepare(None, Env({}), False, {})[0]
+        return ret.prepare(Env(), False, {})[0].refDeref([], {}, None, None)
 
     def testNormalRelocatable(self):
         """Normal recipes are relocatable by default"""

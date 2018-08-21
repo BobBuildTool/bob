@@ -175,15 +175,8 @@ class TestStringFunctions(TestCase):
     def testSandboxEnabled(self):
         with self.assertRaises(ParseError):
             funSandboxEnabled(["1", "2"], sandbox=None)
-        self.assertEqual(funSandboxEnabled([], sandbox=None), "false")
-
-        attrs = {'isEnabled.return_value' : False}
-        disabledSandbox = MagicMock(**attrs)
-        self.assertEqual(funSandboxEnabled([], sandbox=disabledSandbox), "false")
-
-        attrs = {'isEnabled.return_value' : True}
-        enabledSandbox = MagicMock(**attrs)
-        self.assertEqual(funSandboxEnabled([], sandbox=enabledSandbox), "true")
+        self.assertEqual(funSandboxEnabled([], sandbox=False), "false")
+        self.assertEqual(funSandboxEnabled([], sandbox=True), "true")
 
     def testToolDefined(self):
         with self.assertRaises(ParseError):

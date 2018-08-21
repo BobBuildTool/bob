@@ -151,7 +151,7 @@ class PluginState:
         """
         return copy.deepcopy(self)
 
-    def onEnter(self, env, tools, properties):
+    def onEnter(self, env, properties):
         """Begin creation of a package.
 
         The state tracker is about to witness the creation of a package. The passed
@@ -160,8 +160,6 @@ class PluginState:
 
         :param env: Complete environment
         :type env: Mapping[str, str]
-        :param tools: All upstream declared or inherited tools
-        :type tools: Mapping[str, :class:`bob.input.Tool`]
         :param properties: All custom properties
         :type properties: Mapping[str, :class:`bob.input.PluginProperty`]
         """
@@ -181,22 +179,19 @@ class PluginState:
         """
         pass
 
-    def onFinish(self, env, tools, properties, package):
+    def onFinish(self, env, properties):
         """Finish creation of a package.
 
-        The package was computed and the result is available as parameter
-        *package*. The passed *env*, *tools*, and *properties* have their final
-        state after all downstream dependencies have been resolved.
+        The package was computed. The passed *env* and *properties* have their
+        final state after all downstream dependencies have been resolved.
 
         :param env: Complete environment
         :type env: Mapping[str, str]
-        :param tools: All upstream declared or inherited tools
-        :type tools: Mapping[str, :class:`bob.input.Tool`]
         :param properties: All custom properties
         :type properties: Mapping[str, :class:`bob.input.PluginProperty`]
-        :param bob.input.Package packages: The created package
         """
         pass
+
 
 class PluginSetting:
     """Base class for plugin settings.
@@ -331,6 +326,61 @@ class CheckoutAssert:
     def asDigestScript(self):
         return self.__file + " " + self.__digestSHA1 + " " + str(self.__start) + " " + str(self.__end)
 
+
+class CoreRef:
+    __slots__ = ('__destination', '__stackAdd', '__diffTools', '__diffSandbox')
+
+    def __init__(self, destination, stackAdd=[], diffTools={}, diffSandbox=...):
+        self.__destination = destination
+        self.__stackAdd = stackAdd
+        self.__diffTools = diffTools
+        self.__diffSandbox = diffSandbox
+
+    def refGetDestination(self):
+        return self.__destination.refGetDestination()
+
+    def refGetStack(self):
+        return self.__stackAdd + self.__destination.refGetStack()
+
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+        if cache is None: cache = {}
+        if self.__diffTools:
+            tools = inputTools.copy()
+            for (name, tool) in self.__diffTools.items():
+                if tool is None:
+                    del tools[name]
+                else:
+                    coreTool = cache.get(tool)
+                    if coreTool is None:
+                        cache[tool] = coreTool = tool.refDeref(stack, inputTools, inputSandbox, pathFormatter, cache)
+                    tools[name] = coreTool
+        else:
+            tools = inputTools
+
+        if self.__diffSandbox is ...:
+            sandbox = inputSandbox
+        elif self.__diffSandbox is None:
+            sandbox = None
+        elif self.__diffSandbox in cache:
+            sandbox = cache[self.__diffSandbox]
+        else:
+            sandbox = self.__diffSandbox.refDeref(stack, inputTools, inputSandbox, pathFormatter, cache)
+
+        return self.__destination.refDeref(stack + self.__stackAdd, tools, sandbox, pathFormatter)
+
+class CoreItem(metaclass=ABCMeta):
+
+    def refGetDestination(self):
+        return self
+
+    def refGetStack(self):
+        return []
+
+    @abstractmethod
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+        pass
+
+
 class AbstractTool:
     __slots__ = ("path", "libs")
 
@@ -342,23 +392,23 @@ class AbstractTool:
             self.path = spec['path']
             self.libs = spec.get('libs', [])
 
-    def prepare(self, step, env):
+    def prepare(self, coreStepRef, env):
         """Create concrete tool for given step."""
         path = env.substitute(self.path, "provideTools::path")
         libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
-        return Tool(step, path, libs)
+        return CoreTool(coreStepRef, path, libs)
 
-class CoreTool:
-    __slots__ = ("step", "path", "libs")
+class CoreTool(CoreItem):
+    __slots__ = ("coreStep", "path", "libs")
 
-    def __init__(self, tool, upperPackage):
-        self.step = CoreStepRef(upperPackage, tool.step)
-        self.path = tool.path
-        self.libs = tool.libs
+    def __init__(self, coreStep, path, libs):
+        self.coreStep = coreStep
+        self.path = path
+        self.libs = libs
 
-    def toTool(self, pathFormatter, upperPackage):
-        return Tool(self.step.toStep(pathFormatter, upperPackage),
-            self.path, self.libs)
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
+        return Tool(step, self.path, self.libs)
 
 class Tool:
     """Representation of a tool.
@@ -381,9 +431,6 @@ class Tool:
         return isinstance(other, Tool) and (self.step == other.step) and (self.path == other.path) and \
             (self.libs == other.libs)
 
-    def toCoreTool(self, upperPackage):
-        return CoreTool(self, upperPackage)
-
     def getStep(self):
         """Return package step that produces the result holding the tool
         binaries/scripts.
@@ -403,35 +450,13 @@ class Tool:
         """
         return self.libs
 
-class CoreSandbox:
-    __slots__ = ("step", "enabled", "paths", "mounts", "environment")
 
-    def __init__(self, sandbox, upperPackage):
-        self.step = CoreStepRef(upperPackage, sandbox.step)
-        self.enabled = sandbox.enabled
-        self.paths = sandbox.paths
-        self.mounts = sandbox.mounts
-        self.environment = sandbox.environment
+class CoreSandbox(CoreItem):
+    __slots__ = ("coreStep", "enabled", "paths", "mounts", "environment")
 
-    def toSandbox(self, pathFormatter, upperPackage):
-        ret = Sandbox()
-        ret.reconstruct(self.step.toStep(pathFormatter, upperPackage),
-            self.enabled, self.paths, self.mounts, self.environment)
-        return ret
-
-class Sandbox:
-    """Represents a sandbox that is used when executing a step."""
-
-    __slots__ = ("step", "enabled", "paths", "mounts", "environment")
-
-    def __eq__(self, other):
-        return isinstance(other, Sandbox) and (self.step == other.step) and (self.enabled == other.enabled) and \
-            (self.paths == other.paths) and (self.mounts == other.mounts) and \
-            (self.environment == other.environment)
-
-    def construct(self, step, env, enabled, spec):
-        recipeSet = step.getPackage().getRecipe().getRecipeSet()
-        self.step = step
+    def __init__(self, coreStep, env, enabled, spec):
+        recipeSet = coreStep.corePackage.recipe.getRecipeSet()
+        self.coreStep = coreStep
         self.enabled = enabled
         self.paths = recipeSet.getSandboxPaths() + spec['paths']
         self.mounts = []
@@ -447,18 +472,30 @@ class Sandbox:
             k : env.substitute(v, "providedSandbox::environment")
             for (k, v) in spec.get('environment', {})
         }
-        return self
 
-    def reconstruct(self, step, enabled, paths, mounts, environment):
+    def __eq__(self, other):
+        return isinstance(other, CoreSandbox) and \
+            (self.coreStep.variantId == other.coreStep.variantId) and \
+            (self.enabled == other.enabled) and \
+            (self.paths == other.paths) and \
+            (self.mounts == other.mounts) and \
+            (self.environment == other.environment)
+
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
+        return Sandbox(step, self)
+
+class Sandbox:
+    """Represents a sandbox that is used when executing a step."""
+
+    __slots__ = ("step", "coreSandbox")
+
+    def __init__(self, step, coreSandbox):
         self.step = step
-        self.enabled = enabled
-        self.paths = paths
-        self.mounts = mounts
-        self.environment = environment
-        return self
+        self.coreSandbox = coreSandbox
 
-    def toCoreSandbox(self, upperPackage):
-        return CoreSandbox(self, upperPackage)
+    def __eq__(self, other):
+        return isinstance(other, Sandbox) and (self.coreSandbox == other.coreSandbox)
 
     def getStep(self):
         """Get the package step that yields the content of the sandbox image."""
@@ -468,7 +505,7 @@ class Sandbox:
         """Return list of global search paths.
 
         This is the base $PATH in the sandbox."""
-        return self.paths
+        return self.coreSandbox.paths
 
     def getMounts(self):
         """Get custom mounts.
@@ -476,7 +513,7 @@ class Sandbox:
         This returns a list of tuples where each tuple has the format
         (hostPath, sandboxPath, options).
         """
-        return self.mounts
+        return self.coreSandbox.mounts
 
     def getEnvironment(self):
         """Get environment variables.
@@ -484,117 +521,181 @@ class Sandbox:
         Returns the dictionary of environment variables that are defined by the
         sandbox.
         """
-        return self.environment
+        return self.coreSandbox.environment
 
     def isEnabled(self):
         """Return True if the sandbox is used in the current build configuration."""
-        return self.enabled
+        return self.coreSandbox.enabled
 
-def diffTools(upperTools, argTools, upperPackage, relevantTools):
-    ret = {}
-    for name in ((set(upperTools.keys()) | set(argTools.keys())) & relevantTools):
-        if name not in argTools:
-            # filtered tool
-            ret[name] = None
-        elif upperTools.get(name) != argTools[name]:
-            # new or changed tool
-            ret[name] = argTools[name].toCoreTool(upperPackage)
 
-    return ret
+class CoreStep(CoreItem):
+    __slots__ = ( "corePackage", "digestEnv", "env", "args",
+        "providedEnv", "providedTools", "providedDeps", "providedSandbox",
+        "variantId", "sbxVarId", "isDeterministic", "isValid" )
 
-def diffSandbox(upperSandbox, argSandbox, upperPackage):
-    if upperSandbox == argSandbox:
-        return ...
-    elif argSandbox is None:
-        return None
-    else:
-        return argSandbox.toCoreSandbox(upperPackage)
-
-def patchTools(inputTools, patch, pathFormatter, upperPackage):
-    if patch != {}:
-        tools = inputTools.copy()
-        for (name, tool) in patch.items():
-            if tool is None:
-                del tools[name]
-            else:
-                tools[name] = tool.toTool(pathFormatter, upperPackage)
-    else:
-        tools = inputTools
-
-    return tools
-
-def patchSandbox(inputSandbox, patch, pathFormatter, upperPackage):
-    if patch is ...:
-        return inputSandbox
-    elif patch is None:
-        return None
-    else:
-        return patch.toSandbox(pathFormatter, upperPackage)
-
-class CoreStepRef:
-    __slots__ = ("step", "stackAdder", "inputTools", "inputSandbox")
-
-    def __init__(self, upperPackage, argStep):
-        self.step = argStep._getCoreStep()
-        argPackage = argStep.getPackage()
-
-        stackPrefixLen = len(upperPackage.getStack())
-        argStack = argPackage.getStack()
-        self.stackAdder = argStack[stackPrefixLen:]
-
-        self.inputTools = diffTools(upperPackage._getInputTools(),
-                                    argPackage._getInputTools(),
-                                    upperPackage, argPackage._getTouchedTools())
-        self.inputSandbox = diffSandbox(upperPackage._getInputSandboxRaw(), argPackage._getInputSandboxRaw(), upperPackage)
-
-    def toStep(self, pathFormatter, upperPackage):
-        packageInputTools = patchTools(upperPackage._getInputTools(),
-            self.inputTools, pathFormatter, upperPackage)
-        packageInputSandbox = patchSandbox(upperPackage._getInputSandboxRaw(),
-            self.inputSandbox, pathFormatter, upperPackage)
-
-        return self.step.getStep(pathFormatter, upperPackage.getStack() + self.stackAdder,
-            packageInputTools, packageInputSandbox)
-
-class CoreStep(metaclass=ABCMeta):
-    __slots__ = ( "package", "tools", "digestEnv", "env", "args",
-        "doesProvideTools", "providedEnv", "providedTools",
-        "providedDeps", "providedSandbox", "variantId", "sandbox", "sbxVarId",
-        "deterministic" )
-
-    def __init__(self, step, tools, sandbox, digestEnv, env, args):
-        package = step.getPackage()
-        self.package = package._getCorePackage()
-        self.tools = list(tools.keys())
-        self.sandbox = sandbox is not None
-        self.digestEnv = digestEnv
-        self.env = env
-        self.args = [ CoreStepRef(package, a) for a in args ]
-        self.doesProvideTools = False
+    def __init__(self, corePackage, isValid, isDeterministic, digestEnv, env, args):
+        self.corePackage = corePackage
+        self.isValid = isValid
+        self.digestEnv = digestEnv.detach()
+        self.env = env.detach()
+        self.args = args
+        self.isDeterministic = isDeterministic and all(
+            arg.isDeterministic for arg in self.getAllDepCoreSteps(True))
+        self.variantId = self.getDigest(lambda coreStep: coreStep.variantId)
         self.providedEnv = {}
         self.providedTools = {}
         self.providedDeps = []
         self.providedSandbox = None
 
     @abstractmethod
-    def _createStep(self, package):
+    def getScript(self):
         pass
 
-    def getStep(self, pathFormatter, stack, inputTools, inputSandbox):
-        package = Package()
-        package.reconstruct(self.package, pathFormatter, stack, inputTools, inputSandbox)
-        step = self._createStep(package)
-        step.reconstruct(package, self, pathFormatter,
-            package._getSandboxRaw() if self.sandbox else None)
-        return step
+    @abstractmethod
+    def getJenkinsScript(self):
+        pass
 
-    def getStepOfPackage(self, package, pathFormatter):
-        step = self._createStep(package)
-        step.reconstruct(package, self, pathFormatter,
-            package._getSandboxRaw() if self.sandbox else None)
-        return step
+    @abstractmethod
+    def getDigestScript(self):
+        pass
 
-class Step(metaclass=ABCMeta):
+    @abstractmethod
+    def getLabel(self):
+        pass
+
+    @abstractmethod
+    def _getToolKeys(self):
+        """Return relevant tool names for this CoreStep."""
+        pass
+
+    def isCheckoutStep(self):
+        return False
+
+    def isBuildStep(self):
+        return False
+
+    def isPackageStep(self):
+        return False
+
+    def getTools(self):
+        if self.isValid:
+            toolKeys = self._getToolKeys()
+            return { name : tool for name,tool in self.corePackage.tools.items()
+                                 if name in toolKeys }
+        else:
+            return {}
+
+    def getSandbox(self, forceSandbox=False):
+        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
+        # set or disabled.
+        forceSandbox = forceSandbox and \
+            not self.corePackage.recipe.getRecipeSet().sandboxInvariant
+        sandbox = self.corePackage.sandbox
+        if sandbox and (sandbox.enabled or forceSandbox) and self.isValid:
+            return sandbox
+        else:
+            return None
+
+    def getAllDepCoreSteps(self, forceSandbox=False):
+        sandbox = self.getSandbox(forceSandbox)
+        return [ a.refGetDestination() for a in self.args ] + \
+            [ d.coreStep for n,d in sorted(self.getTools().items()) ] + (
+            [ sandbox.coreStep] if sandbox else [])
+
+    def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
+        h = hasher()
+        sandbox = self.getSandbox(forceSandbox)
+        if sandbox:
+            d = calculate(sandbox.coreStep)
+            if d is None: return None
+            h.update(d)
+            h.update(struct.pack("<I", len(sandbox.paths)))
+            for p in sandbox.paths:
+                h.update(struct.pack("<I", len(p)))
+                h.update(p.encode('utf8'))
+        else:
+            h.update(b'\x00' * 20)
+        script = self.getDigestScript()
+        if script:
+            h.update(struct.pack("<I", len(script)))
+            h.update(script.encode("utf8"))
+        else:
+            h.update(b'\x00\x00\x00\x00')
+        h.update(struct.pack("<I", len(self.getTools())))
+        for (name, tool) in sorted(self.getTools().items(), key=lambda t: t[0]):
+            d = calculate(tool.coreStep)
+            if d is None: return None
+            h.update(d)
+            h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
+            h.update(tool.path.encode("utf8"))
+            for l in tool.libs:
+                h.update(struct.pack("<I", len(l)))
+                h.update(l.encode('utf8'))
+        h.update(struct.pack("<I", len(self.digestEnv)))
+        for (key, val) in sorted(self.digestEnv.items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
+        args = [ arg for arg in (a.refGetDestination() for a in self.args) if arg.isValid ]
+        h.update(struct.pack("<I", len(args)))
+        for arg in args:
+            d = calculate(arg)
+            if d is None: return None
+            h.update(d)
+        return h.digest()
+
+    def getResultId(self):
+        h = hashlib.sha1()
+        h.update(self.variantId)
+        # providedEnv
+        h.update(struct.pack("<I", len(self.providedEnv)))
+        for (key, val) in sorted(self.providedEnv.items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
+        # providedTools
+        providedTools = self.providedTools
+        h.update(struct.pack("<I", len(providedTools)))
+        for (name, tool) in sorted(providedTools.items()):
+            h.update(tool.coreStep.variantId)
+            h.update(struct.pack("<III", len(name), len(tool.path), len(tool.libs)))
+            h.update(name.encode("utf8"))
+            h.update(tool.path.encode("utf8"))
+            for l in tool.libs:
+                h.update(struct.pack("<I", len(l)))
+                h.update(l.encode('utf8'))
+        # provideDeps
+        providedDeps = self.providedDeps
+        h.update(struct.pack("<I", len(providedDeps)))
+        for dep in providedDeps:
+            h.update(dep.refGetDestination().variantId)
+        # sandbox
+        providedSandbox = self.providedSandbox
+        if providedSandbox:
+            h.update(providedSandbox.coreStep.variantId)
+            h.update(struct.pack("<I", len(providedSandbox.paths)))
+            for p in providedSandbox.paths:
+                h.update(struct.pack("<I", len(p)))
+                h.update(p.encode('utf8'))
+        else:
+            h.update(b'\x00' * 20)
+
+        return h.digest()
+
+    def getSandboxVariantId(self):
+        # This is a special variant to calculate the variant-id as if the
+        # sandbox was enabled. This is used for live build-ids and on the
+        # jenkins where the build-id of the sandbox must always be calculated.
+        # But this is all obsolte if the sandboxInvariant policy is enabled.
+        try:
+            ret = self.sbxVarId
+        except AttributeError:
+            ret = self.sbxVarId = self.getDigest(
+                lambda step: step.getSandboxVariantId(),
+                True) if not self.corePackage.recipe.getRecipeSet().sandboxInvariant \
+                      else self.variantId
+        return ret
+
+
+class Step:
     """Represents the smallest unit of execution of a package.
 
     A step is what gets actually executed when building packages.
@@ -603,82 +704,46 @@ class Step(metaclass=ABCMeta):
     the step. See :meth:`bob.input.Step.getVariantId` for details.
     """
 
-    def construct(self, package, pathFormatter, sandbox, digestEnv=Env(),
-                 env=Env(), tools=Env(), args=[]):
-        # detach from tracking
-        digestEnv = digestEnv.detach()
-        env = env.detach()
-        tools = tools.detach()
-
-        # always present fields
-        self.__package = package
-        self.__pathFormatter = pathFormatter
-        self.__sandbox = sandbox
-
-        # lazy created fields
-        self.__tools = tools
-        self.__args = args
-
-        # only used during package calculation
-        self.__providedTools = {}
-        self.__providedDeps = []
-        self.__providedSandbox = None
-
-        # will call back to us!
-        self._coreStep = self._createCoreStep(tools, sandbox, digestEnv,
-            env, args)
-
-    def reconstruct(self, package, coreStep, pathFormatter, sandbox):
-        self.__package = package
+    def __init__(self, coreStep, package, pathFormatter):
         self._coreStep = coreStep
+        self.__package = package
         self.__pathFormatter = pathFormatter
-        self.__sandbox = sandbox
 
     def __repr__(self):
         return "Step({}, {}, {})".format(self.getLabel(), "/".join(self.getPackage().getStack()), asHexStr(self.getVariantId()))
 
     def __hash__(self):
-        return hash(self.getVariantId())
+        return hash(self._coreStep.variantId)
 
     def __lt__(self, other):
-        return self.getVariantId() < other.getVariantId()
+        return self._coreStep.variantId < other._coreStep.variantId
 
     def __le__(self, other):
-        return self.getVariantId() <= other.getVariantId()
+        return self._coreStep.variantId <= other._coreStep.variantId
 
     def __eq__(self, other):
-        return self.getVariantId() == other.getVariantId()
+        return self._coreStep.variantId == other._coreStep.variantId
 
     def __ne__(self, other):
-        return self.getVariantId() != other.getVariantId()
+        return self._coreStep.variantId != other._coreStep.variantId
 
     def __gt__(self, other):
-        return self.getVariantId() > other.getVariantId()
+        return self._coreStep.variantId > other._coreStep.variantId
 
     def __ge__(self, other):
-        return self.getVariantId() >= other.getVariantId()
+        return self._coreStep.variantId >= other._coreStep.variantId
 
-    @abstractmethod
-    def _createCoreStep(self, tools, sandbox, digestEnv, env, args):
-        pass
-
-    def _getCoreStep(self):
-        return self._coreStep
-
-    @abstractmethod
     def getScript(self):
         """Return a single big script of the whole step.
 
         Besides considerations of special backends (such as Jenkins) this
         script is what should be executed to build this step."""
-        pass
+        return self._coreStep.getScript()
 
-    @abstractmethod
     def getJenkinsScript(self):
         """Return the relevant parts as shell script that have no Jenkins plugin."""
-        pass
+        return self._coreStep.getJenkinsScript()
 
-    @abstractmethod
     def getDigestScript(self):
         """Return a long term stable script.
 
@@ -687,7 +752,7 @@ class Step(metaclass=ABCMeta):
         return a stable representation of _what_ is checked out and not the real
         script of _how_ this is done.
         """
-        pass
+        return self._coreStep.getDigestScript()
 
     def isDeterministic(self):
         """Return whether the step is deterministic.
@@ -701,29 +766,23 @@ class Step(metaclass=ABCMeta):
         sandbox of the step too. That is, the step is only deterministic if all
         its dependencies and this step itself is deterministic.
         """
-        try:
-            ret = self._coreStep.deterministic
-        except AttributeError:
-            ret = self._coreStep.deterministic = all(
-                arg.isDeterministic() for arg in self.getAllDepSteps(True))
-        return ret
+        return self._coreStep.isDeterministic
 
-    @abstractmethod
     def isValid(self):
         """Returns True if this step is valid, False otherwise."""
-        pass
+        return self._coreStep.isValid
 
     def isCheckoutStep(self):
         """Return True if this is a checkout step."""
-        return False
+        return self._coreStep.isCheckoutStep()
 
     def isBuildStep(self):
         """Return True if this is a build step."""
-        return False
+        return self._coreStep.isBuildStep()
 
     def isPackageStep(self):
         """Return True if this is a package step."""
-        return False
+        return self._coreStep.isPackageStep()
 
     def getPackage(self):
         """Get Package object that is the parent of this Step."""
@@ -731,13 +790,13 @@ class Step(metaclass=ABCMeta):
 
     def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
         h = hasher()
-        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox) and \
-                not self.__package.getRecipe().getRecipeSet().sandboxInvariant:
-            d = calculate(self.__sandbox.getStep())
+        sandbox = self.getSandbox(forceSandbox)
+        if sandbox:
+            d = calculate(sandbox.getStep())
             if d is None: return None
             h.update(d)
-            h.update(struct.pack("<I", len(self.__sandbox.getPaths())))
-            for p in self.__sandbox.getPaths():
+            h.update(struct.pack("<I", len(sandbox.getPaths())))
+            for p in sandbox.getPaths():
                 h.update(struct.pack("<I", len(p)))
                 h.update(p.encode('utf8'))
         else:
@@ -777,62 +836,10 @@ class Step(metaclass=ABCMeta):
         variants of a package. Each Variant-Id need only be built once but
         successive builds might yield different results (e.g. when building
         from branches)."""
-        try:
-            ret = self._coreStep.variantId
-        except AttributeError:
-            ret = self._coreStep.variantId = self.getDigest(lambda step: step.getVariantId())
-        return ret
+        return self._coreStep.variantId
 
     def _getSandboxVariantId(self):
-        # This is a special variant to calculate the variant-id as if the
-        # sandbox was enabled. This is used for live build-ids and on the
-        # jenkins where the build-id of the sandbox must always be calculated.
-        # But this is all obsolte if the sandboxInvariant policy is enabled.
-        try:
-            ret = self._coreStep.sbxVarId
-        except AttributeError:
-            ret = self._coreStep.sbxVarId = self.getDigest(
-                lambda step: step._getSandboxVariantId(),
-                True) if not self.__package.getRecipe().getRecipeSet().sandboxInvariant \
-                      else self.getVariantId()
-        return ret
-
-    def _getResultId(self):
-        h = hashlib.sha1()
-        h.update(self.getVariantId())
-        # providedEnv
-        h.update(struct.pack("<I", len(self._coreStep.providedEnv)))
-        for (key, val) in sorted(self._coreStep.providedEnv.items()):
-            h.update(struct.pack("<II", len(key), len(val)))
-            h.update((key+val).encode('utf8'))
-        # providedTools
-        providedTools = self._getProvidedTools()
-        h.update(struct.pack("<I", len(providedTools)))
-        for (name, tool) in sorted(providedTools.items()):
-            h.update(tool.step.getVariantId())
-            h.update(struct.pack("<III", len(name), len(tool.path), len(tool.libs)))
-            h.update(name.encode("utf8"))
-            h.update(tool.path.encode("utf8"))
-            for l in tool.libs:
-                h.update(struct.pack("<I", len(l)))
-                h.update(l.encode('utf8'))
-        # provideDeps
-        providedDeps = self._getProvidedDeps()
-        h.update(struct.pack("<I", len(providedDeps)))
-        for dep in providedDeps:
-            h.update(dep.getVariantId())
-        # sandbox
-        providedSandbox = self._getProvidedSandbox()
-        if providedSandbox and providedSandbox.isEnabled():
-            h.update(providedSandbox.getStep().getVariantId())
-            h.update(struct.pack("<I", len(providedSandbox.getPaths())))
-            for p in providedSandbox.getPaths():
-                h.update(struct.pack("<I", len(p)))
-                h.update(p.encode('utf8'))
-        else:
-            h.update(b'\x00' * 20)
-
-        return h.digest()
+        return self._coreStep.getSandboxVariantId()
 
     def getSandbox(self, forceSandbox=False):
         """Return Sandbox used in this Step.
@@ -843,19 +850,19 @@ class Step(metaclass=ABCMeta):
         # set or disabled.
         forceSandbox = forceSandbox and \
             not self.__package.getRecipe().getRecipeSet().sandboxInvariant
-        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
-            return self.__sandbox
+        sandbox = self.__package._getSandboxRaw()
+        if sandbox and (sandbox.isEnabled() or forceSandbox) and self._coreStep.isValid:
+            return sandbox
         else:
             return None
 
-    @abstractmethod
     def getLabel(self):
         """Return path label for step.
 
         This is currently defined as "src", "build" and "dist" for the
         respective steps.
         """
-        pass
+        return self._coreStep.getLabel()
 
     def getExecPath(self):
         """Return the execution path of the step.
@@ -906,23 +913,23 @@ class Step(metaclass=ABCMeta):
 
         The dict maps the tool name to a :class:`bob.input.Tool`.
         """
-        try:
-            ret = self.__tools
-        except AttributeError:
-            ret = { name : self.__package._getAllTools()[name] for name in self._coreStep.tools }
-        return ret
+        if self._coreStep.isValid:
+            toolKeys = self._coreStep._getToolKeys()
+            return { name : tool for name, tool in self.__package._getAllTools().items()
+                                 if name in toolKeys }
+        else:
+            return {}
 
     def getArguments(self):
         """Get list of all inputs for this Step.
 
         The arguments are passed as absolute paths to the script starting from $1.
         """
-        try:
-            ret = self.__args
-        except AttributeError:
-            ret = [ a.toStep(self.__pathFormatter, self.__package)
-                                  for a in self._coreStep.args ]
-        return ret
+        p = self.__package
+        refCache = {}
+        return [ a.refDeref(p.getStack(), p._getInputTools(), p._getInputSandboxRaw(),
+                            self.__pathFormatter, refCache)
+                    for a in self._coreStep.args ]
 
     def getAllDepSteps(self, forceSandbox=False):
         """Get all dependent steps of this Step.
@@ -930,14 +937,9 @@ class Step(metaclass=ABCMeta):
         This includes the direct input to the Step as well as indirect inputs
         such as the used tools or the sandbox.
         """
-        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
-        # set or disabled.
-        forceSandbox = forceSandbox and \
-            not self.__package.getRecipe().getRecipeSet().sandboxInvariant
+        sandbox = self.getSandbox(forceSandbox)
         return self.getArguments() + [ d.step for n,d in sorted(self.getTools().items()) ] + (
-            [self.__sandbox.getStep()]
-                if (self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox))
-                else [])
+            [sandbox.getStep()] if sandbox else [])
 
     def getEnv(self):
         """Return dict of environment variables."""
@@ -945,7 +947,7 @@ class Step(metaclass=ABCMeta):
 
     def doesProvideTools(self):
         """Return True if this step provides at least one tool."""
-        return self._coreStep.doesProvideTools
+        return bool(self._coreStep.providedTools)
 
     def isShared(self):
         """Returns True if the result of the Step should be shared globally.
@@ -961,77 +963,32 @@ class Step(metaclass=ABCMeta):
         """Returns True if the step is relocatable."""
         return False
 
-    def _setProvidedEnv(self, provides):
-        self._coreStep.providedEnv = provides
-
-    def _getProvidedEnv(self):
-        return self._coreStep.providedEnv
-
-    def _setProvidedTools(self, provides):
-        self.__providedTools = provides
-        self._coreStep.doesProvideTools = provides != {}
-        self._coreStep.providedTools = { n : p.toCoreTool(self.__package) for (n,p) in provides.items() }
-
-    def _getProvidedTools(self):
-        try:
-            ret = self.__providedTools
-        except AttributeError:
-            ret = { n: p.toTool(self.__pathFormatter, self.__package)
-                for (n,p) in self._coreStep.providedTools.items() }
-        return ret
-
-    def _setProvidedDeps(self, deps):
-        self.__providedDeps = deps
-        self._coreStep.providedDeps = [ CoreStepRef(self.__package, d) for d in deps ]
-
     def _getProvidedDeps(self):
-        try:
-            ret = self.__providedDeps
-        except AttributeError:
-            ret = [ d.toStep(self.__pathFormatter, self.__package)
-                                  for d in self._coreStep.providedDeps ]
-        return ret
+        p = self.__package
+        refCache = {}
+        return [ a.refDeref(p.getStack(), p._getInputTools(), p._getInputSandboxRaw(),
+                            self.__pathFormatter, refCache)
+                    for a in self._coreStep.providedDeps ]
 
-    def _setProvidedSandbox(self, sandbox):
-        self.__providedSandbox = sandbox
-        self._coreStep.providedSandbox = sandbox.toCoreSandbox(self.__package) \
-            if sandbox is not None else None
-
-    def _getProvidedSandbox(self):
-        try:
-            ret = self.__providedSandbox
-        except AttributeError:
-            sandbox = self._coreStep.providedSandbox
-            ret = sandbox.toSandbox(self.__pathFormatter, self.__package) \
-                if sandbox is not None else None
-        return ret
 
 class CoreCheckoutStep(CoreStep):
-    __slots__ = ( "isValid", "scmList" )
+    __slots__ = ( "scmList" )
 
-    def _createStep(self, package):
-        ret = CheckoutStep()
-        package._reconstructCheckoutStep(ret)
-        return ret
-
-class CheckoutStep(Step):
-    def construct(self, package, pathFormatter, sandbox=None, checkout=None,
-                  fullEnv=Env(), digestEnv=Env(), env=Env(), tools=Env()):
-        super().construct(package, pathFormatter, sandbox, digestEnv,
-                         env, tools)
-
+    def __init__(self, corePackage, checkout=None, fullEnv=Env(), digestEnv=Env(), env=Env()):
+        isDeterministic = corePackage.recipe.checkoutDeterministic
         if checkout:
-            self._coreStep.isValid = (checkout[0] is not None) or bool(checkout[2])
+            isValid = (checkout[0] is not None) or bool(checkout[2])
 
-            recipeSet = package.getRecipe().getRecipeSet()
+            recipeSet = corePackage.recipe.getRecipeSet()
             overrides = recipeSet.scmOverrides()
-            self._coreStep.scmList = [ Scm(scm, fullEnv, overrides, recipeSet)
+            self.scmList = [ Scm(scm, fullEnv, overrides, recipeSet)
                 for scm in checkout[2]
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
 
             # Validate that SCM paths do not overlap
             knownPaths = []
-            for s in self._coreStep.scmList:
+            for s in self.scmList:
+                isDeterministic = isDeterministic and s.isDeterministic()
                 for p in s.getDirectories().keys():
                     if os.path.isabs(p):
                         raise ParseError("SCM paths must be relative! Offending path: " + p)
@@ -1041,44 +998,48 @@ class CheckoutStep(Step):
                                                 .format(known, p))
                     knownPaths.append(p)
         else:
-            self._coreStep.isValid = False
-            self._coreStep.scmList = []
+            isValid = False
+            self.scmList = []
 
-        return self
+        super().__init__(corePackage, isValid, isDeterministic, digestEnv, env, [])
 
-    def _createCoreStep(self, tools, sandbox, digestEnv, env, args):
-        return CoreCheckoutStep(self, tools, sandbox, digestEnv, env, args)
+    def _getToolKeys(self):
+        return self.corePackage.recipe.toolDepCheckout
+
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
+        ret = CheckoutStep(self, package, pathFormatter)
+        package._setCheckoutStep(ret)
+        return ret
 
     def getLabel(self):
         return "src"
-
-    def isValid(self):
-        return self._coreStep.isValid
 
     def isCheckoutStep(self):
         return True
 
     def getScript(self):
-        recipe = self.getPackage().getRecipe()
-        return joinScripts([s.asScript() for s in self._coreStep.scmList]
+        recipe = self.corePackage.recipe
+        return joinScripts([s.asScript() for s in self.scmList]
                 + [recipe.checkoutScript]
                 + [s.asScript() for s in recipe.checkoutAsserts])
 
     def getJenkinsScript(self):
-        recipe = self.getPackage().getRecipe()
-        return joinScripts([ s.asScript() for s in self._coreStep.scmList if not s.hasJenkinsPlugin() ]
+        recipe = self.corePackage.recipe
+        return joinScripts([ s.asScript() for s in self.scmList if not s.hasJenkinsPlugin() ]
             + [recipe.checkoutScript]
             + [s.asScript() for s in recipe.checkoutAsserts])
 
     def getDigestScript(self):
-        if self.isValid():
-            recipe = self.getPackage().getRecipe()
-            return "\n".join([s.asDigestScript() for s in self._coreStep.scmList]
+        if self.isValid:
+            recipe = self.corePackage.recipe
+            return "\n".join([s.asDigestScript() for s in self.scmList]
                     + [recipe.checkoutDigestScript]
                     + [s.asDigestScript() for s in recipe.checkoutAsserts])
         else:
             return None
 
+class CheckoutStep(Step):
     def getJenkinsXml(self, credentials, options):
         return [ s.asJenkins(self.getWorkspacePath(), credentials, options)
                  for s in self._coreStep.scmList if s.hasJenkinsPlugin() ]
@@ -1091,11 +1052,6 @@ class CheckoutStep(Step):
         for s in self._coreStep.scmList:
             dirs.update(s.getDirectories())
         return dirs
-
-    def isDeterministic(self):
-        return ( self.getPackage().getRecipe().checkoutDeterministic and
-                 all([ s.isDeterministic() for s in self._coreStep.scmList ]) and
-                 super().isDeterministic() )
 
     def hasLiveBuildId(self):
         """Check if live build-ids are supported.
@@ -1156,84 +1112,75 @@ class CheckoutStep(Step):
 
 
 class CoreBuildStep(CoreStep):
-    __slots__ = [ "isValid" ]
 
-    def _createStep(self, package):
-        ret = BuildStep()
-        package._reconstructBuildStep(ret)
+    def __init__(self, corePackage, script=(None, None), digestEnv=Env(), env=Env(), args=[]):
+        isValid = script[0] is not None
+        super().__init__(corePackage, isValid, True, digestEnv, env, args)
+
+    def _getToolKeys(self):
+        return self.corePackage.recipe.toolDepBuild
+
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
+        ret = BuildStep(self, package, pathFormatter)
+        package._setBuildStep(ret)
         return ret
-
-class BuildStep(Step):
-    def construct(self, package, pathFormatter, sandbox=None, script=(None, None),
-                  digestEnv=Env(), env=Env(), tools=Env(), args=[]):
-        super().construct(package, pathFormatter, sandbox,
-                          digestEnv, env, tools, args)
-        self._coreStep.isValid = script[0] is not None
-        return self
-
-    def _createCoreStep(self, tools, sandbox, digestEnv, env, args):
-        return CoreBuildStep(self, tools, sandbox, digestEnv, env, args)
 
     def getLabel(self):
         return "build"
 
-    def isValid(self):
-        return self._coreStep.isValid
-
-    def getScript(self):
-        return self.getPackage().getRecipe().buildScript
-
-    def getJenkinsScript(self):
-        return self.getPackage().getRecipe().buildScript
-
-    def getDigestScript(self):
-        return self.getPackage().getRecipe().buildDigestScript
-
     def isBuildStep(self):
         return True
+
+    def getScript(self):
+        return self.corePackage.recipe.buildScript
+
+    def getJenkinsScript(self):
+        return self.corePackage.recipe.buildScript
+
+    def getDigestScript(self):
+        return self.corePackage.recipe.buildDigestScript
+
+class BuildStep(Step):
 
     def hasNetAccess(self):
         return self.getPackage().getRecipe()._getBuildNetAccess()
 
+
 class CorePackageStep(CoreStep):
-    __slots__ = [ "isValid" ]
 
-    def _createStep(self, package):
-        ret = PackageStep()
-        package._reconstructPackageStep(ret)
+    def __init__(self, corePackage, script=(None, None), digestEnv=Env(), env=Env(), args=[]):
+        isValid = script[0] is not None
+        super().__init__(corePackage, isValid, True, digestEnv, env, args)
+
+    def _getToolKeys(self):
+        return self.corePackage.recipe.toolDepPackage
+
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
+        ret = PackageStep(self, package, pathFormatter)
+        package._setPackageStep(ret)
         return ret
-
-class PackageStep(Step):
-    def construct(self, package, pathFormatter, sandbox=None, script=(None, None),
-                  digestEnv=Env(), env=Env(), tools=Env(), args=[]):
-        super().construct(package, pathFormatter, sandbox,
-                          digestEnv, env, tools, args)
-        self._coreStep.isValid = script[0] is not None
-        return self
-
-    def _createCoreStep(self, tools, sandbox, digestEnv, env, args):
-        return CorePackageStep(self, tools, sandbox, digestEnv, env, args)
 
     def getLabel(self):
         return "dist"
 
-    def isShared(self):
-        return self.getPackage().getRecipe().isShared()
-
-    def isValid(self):
-        return self._coreStep.isValid
-
-    def getScript(self):
-        return self.getPackage().getRecipe().packageScript
-
-    def getJenkinsScript(self):
-        return self.getPackage().getRecipe().packageScript
-
-    def getDigestScript(self):
-        return self.getPackage().getRecipe().packageDigestScript
-
     def isPackageStep(self):
         return True
+
+    def getScript(self):
+        return self.corePackage.recipe.packageScript
+
+    def getJenkinsScript(self):
+        return self.corePackage.recipe.packageScript
+
+    def getDigestScript(self):
+        return self.corePackage.recipe.packageDigestScript
+
+class PackageStep(Step):
+
+    def isShared(self):
+        return self.getPackage().getRecipe().isShared()
 
     def isRelocatable(self):
         """Returns True if the package step is relocatable."""
@@ -1243,20 +1190,59 @@ class PackageStep(Step):
         return self.getPackage().getRecipe()._getPackageNetAccess()
 
 
-class CorePackage:
-    __slots__ = ("recipe", "directDepSteps", "indirectDepSteps",
-        "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "touchedTools", "pkgId")
+class CorePackageInternal(CoreItem):
+    __slots__ = []
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+        return (inputTools, inputSandbox)
 
-    def __init__(self, package, recipe, directDepSteps, indirectDepSteps,
-                 states, pkgId):
+corePackageInternal = CorePackageInternal()
+
+class CorePackage:
+    __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
+        "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
+        "pkgId")
+
+    def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox,
+                 directDepSteps, indirectDepSteps, states, pkgId):
         self.recipe = recipe
-        self.directDepSteps = [ CoreStepRef(package, d) for d in directDepSteps ]
-        self.indirectDepSteps = [ CoreStepRef(package, d) for d in indirectDepSteps ]
+        self.tools = tools
+        self.sandbox = sandbox
+        self.internalRef = CoreRef(corePackageInternal, [], diffTools, diffSandbox)
+        self.directDepSteps = directDepSteps
+        self.indirectDepSteps = indirectDepSteps
         self.states = states
-        self.tools = {}
-        self.sandbox = ...
         self.pkgId = pkgId
+
+    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter):
+        tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathFormatter)
+        return Package(self, stack, pathFormatter, inputTools, tools, inputSandbox, sandbox)
+
+    def createCoreCheckoutStep(self, checkout, fullEnv, digestEnv, env):
+        ret = self.checkoutStep = CoreCheckoutStep(self, checkout, fullEnv, digestEnv, env)
+        return ret
+
+    def createInvalidCoreCheckoutStep(self):
+        ret = self.checkoutStep = CoreCheckoutStep(self)
+        return ret
+
+    def createCoreBuildStep(self, script, digestEnv, env, args):
+        ret = self.buildStep = CoreBuildStep(self, script, digestEnv, env, args)
+        return ret
+
+    def createInvalidCoreBuildStep(self):
+        ret = self.buildStep = CoreBuildStep(self)
+        return ret
+
+    def createCorePackageStep(self, script, digestEnv, env, args):
+        ret = self.packageStep = CorePackageStep(self, script, digestEnv, env, args)
+        return ret
+
+    def getCorePackageStep(self):
+        return self.packageStep
+
+    def getName(self):
+        """Name of the package"""
+        return self.recipe.getPackageName()
 
 class Package(object):
     """Representation of a package that was created from a recipe.
@@ -1269,49 +1255,17 @@ class Package(object):
     package.
     """
 
-    def __eq__(self, other):
-        return isinstance(other, Package) and (self.__stack == other.__stack)
-
-    def construct(self, stack, pathFormatter, recipe,
-                  directDepSteps, indirectDepSteps, states, inputTools,
-                  allTools, inputSandbox, sandbox, touchedTools,
-                  pkgId):
-        self.__stack = stack
-        self.__pathFormatter = pathFormatter
-        self.__directDepSteps = directDepSteps
-        self.__indirectDepSteps = indirectDepSteps
-        self.__inputTools = inputTools
-        self.__allTools = allTools
-        self.__inputSandbox = inputSandbox
-        self.__sandbox = sandbox
-
-        # this will call back
-        self.__corePackage = CorePackage(self, recipe, directDepSteps,
-            indirectDepSteps, states, pkgId)
-
-        # these already need our __corePackage
-        self._setCheckoutStep(CheckoutStep().construct(self, pathFormatter))
-        self._setBuildStep(BuildStep().construct(self, pathFormatter))
-        self._setPackageStep(PackageStep().construct(self, pathFormatter))
-
-        # calculate local tools and sandbox
-        self.__corePackage.touchedTools = set(touchedTools)
-        self.__corePackage.tools = diffTools(inputTools, allTools, self, self.__corePackage.touchedTools)
-        self.__corePackage.sandbox = diffSandbox(inputSandbox, sandbox, self)
-
-        return self
-
-    def reconstruct(self, corePackage, pathFormatter, stack, inputTools, inputSandbox):
+    def __init__(self, corePackage, stack, pathFormatter, inputTools, tools, inputSandbox, sandbox):
         self.__corePackage = corePackage
         self.__stack = stack
         self.__pathFormatter = pathFormatter
         self.__inputTools = inputTools
+        self.__tools = tools
         self.__inputSandbox = inputSandbox
+        self.__sandbox = sandbox
 
-        self.__allTools = patchTools(inputTools, corePackage.tools, pathFormatter, self)
-        self.__sandbox = patchSandbox(inputSandbox, corePackage.sandbox, pathFormatter, self)
-
-        return self
+    def __eq__(self, other):
+        return isinstance(other, Package) and (self.__stack == other.__stack)
 
     def _getId(self):
         """The package-Id is uniquely representing every package variant.
@@ -1324,17 +1278,11 @@ class Package(object):
         """
         return self.__corePackage.pkgId
 
-    def _getTouchedTools(self):
-        return self.__corePackage.touchedTools
-
-    def _getCorePackage(self):
-        return self.__corePackage
-
     def _getInputTools(self):
         return self.__inputTools
 
     def _getAllTools(self):
-        return self.__allTools
+        return self.__tools
 
     def _getInputSandboxRaw(self):
         return self.__inputSandbox
@@ -1368,12 +1316,10 @@ class Package(object):
         ``depends`` section of the recipe. The order of the items is
         preserved from the recipe.
         """
-        try:
-            ret = self.__directDepSteps
-        except AttributeError:
-            ret = [ d.toStep(self.__pathFormatter, self)
-                for d in self.__corePackage.directDepSteps ]
-        return ret
+        refCache = {}
+        return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
+                            self.__pathFormatter, refCache)
+                    for d in self.__corePackage.directDepSteps ]
 
     def getIndirectDepSteps(self):
         """Return list of indirect dependencies of the package.
@@ -1381,12 +1327,10 @@ class Package(object):
         Indirect dependencies are dependencies that were provided by downstream
         recipes. They are not directly named in the recipe.
         """
-        try:
-            ret = self.__indirectDepSteps
-        except AttributeError:
-            ret = [ d.toStep(self.__pathFormatter, self)
-                for d in self.__corePackage.indirectDepSteps ]
-        return ret
+        refCache = {}
+        return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
+                            self.__pathFormatter, refCache)
+                    for d in self.__corePackage.indirectDepSteps ]
 
     def getAllDepSteps(self, forceSandbox=False):
         """Return list of all dependencies of the package.
@@ -1404,11 +1348,7 @@ class Package(object):
         for i in self.getPackageStep().getTools().values(): allDeps.add(i.getStep())
         return sorted(allDeps)
 
-    def _reconstructCheckoutStep(self, checkoutStep):
-        self.__checkoutStep = checkoutStep
-
     def _setCheckoutStep(self, checkoutStep):
-        self.__corePackage.checkoutStep = checkoutStep._getCoreStep()
         self.__checkoutStep = checkoutStep
 
     def getCheckoutStep(self):
@@ -1416,15 +1356,11 @@ class Package(object):
         try:
             ret = self.__checkoutStep
         except AttributeError:
-            ret = self.__corePackage.checkoutStep.getStepOfPackage(self,
-                self.__pathFormatter)
+            ret = self.__checkoutStep = CheckoutStep(self.__corePackage.checkoutStep,
+                self, self.__pathFormatter)
         return ret
 
-    def _reconstructBuildStep(self, buildStep):
-        self.__buildStep = buildStep
-
     def _setBuildStep(self, buildStep):
-        self.__corePackage.buildStep = buildStep._getCoreStep()
         self.__buildStep = buildStep
 
     def getBuildStep(self):
@@ -1432,15 +1368,11 @@ class Package(object):
         try:
             ret = self.__buildStep
         except AttributeError:
-            ret = self.__corePackage.buildStep.getStepOfPackage(self,
-                self.__pathFormatter)
+            ret = self.__buildStep = BuildStep(self.__corePackage.buildStep,
+                self, self.__pathFormatter)
         return ret
 
-    def _reconstructPackageStep(self, packageStep):
-        self.__packageStep = packageStep
-
     def _setPackageStep(self, packageStep):
-        self.__corePackage.packageStep = packageStep._getCoreStep()
         self.__packageStep = packageStep
 
     def getPackageStep(self):
@@ -1448,8 +1380,8 @@ class Package(object):
         try:
             ret = self.__packageStep
         except AttributeError:
-            ret = self.__corePackage.packageStep.getStepOfPackage(self,
-                self.__pathFormatter)
+            ret = self.__packageStep = PackageStep(self.__corePackage.packageStep,
+                self, self.__pathFormatter)
         return ret
 
     def _getStates(self):
@@ -1568,29 +1500,34 @@ RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]+$')
 MULTIPACKAGE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]*$')
 
 class UniquePackageList:
-    def __init__(self, errorHandler):
+    def __init__(self, stack, errorHandler):
+        self.stack = stack
         self.errorHandler = errorHandler
         self.ret = []
         self.cache = {}
 
-    def append(self, p):
-        name = p.getPackage().getName()
-        p2 = self.cache.get(name)
-        if p2 is None:
-            self.cache[name] = p
-            self.ret.append(p)
-        elif p2.getVariantId() != p.getVariantId():
-            self.errorHandler(p, p2)
+    def append(self, ref):
+        step = ref.refGetDestination()
+        name = step.corePackage.getName()
+        ref2 = self.cache.get(name)
+        if ref2 is None:
+            self.cache[name] = ref
+            self.ret.append(ref)
+        elif ref2.refGetDestination().variantId != step.variantId:
+            self.errorHandler(name, stack + ref.refGetStack(), stack + ref2.refGetStack())
+
+    def extend(self, gen):
+        for i in gen: self.append(i)
 
     def result(self):
         return self.ret
 
 class DepTracker:
 
-    __slots__ = ('package', 'isNew', 'usedResult')
+    __slots__ = ('item', 'isNew', 'usedResult')
 
-    def __init__(self, package):
-        self.package = package
+    def __init__(self, item):
+        self.item = item
         self.isNew = True
         self.usedResult = False
 
@@ -1756,7 +1693,8 @@ class Recipe(object):
             n : p(n in recipe, recipe.get(n))
             for (n, p) in properties.items()
         }
-        self.__corePackages = []
+        self.__corePackagesByMatch = []
+        self.__corePackagesById = {}
 
         sourceName = ("Recipe " if isRecipe else "Class  ") + packageName
         incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName,
@@ -1939,57 +1877,68 @@ class Recipe(object):
     def isShared(self):
         return self.__shared
 
-    def prepare(self, pathFormatter, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
+    def prepare(self, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
                 inputTools=Env(), stack=[]):
         # already calculated?
-        for m in self.__corePackages:
+        for m in self.__corePackagesByMatch:
             if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox):
                 if set(stack) & m.subTreePackages:
                     raise ParseError("Recipes are cyclic")
-                reusedPackage = p = Package()
-                p.reconstruct(m.corePackage, pathFormatter, stack,
-                    inputTools.detach(), inputSandbox)
                 m.touch(inputEnv, inputTools)
-                if DEBUG['pkgck']: break
-                return p, m.subTreePackages
+                if DEBUG['pkgck']:
+                    reusedCorePackage = m.corePackage
+                    break
+                return m.corePackage, m.subTreePackages
         else:
-            reusedPackage = None
+            reusedCorePackage = None
+
+        # Track tool and sandbox changes
+        diffSandbox = ...
+        diffTools = { }
 
         # make copies because we will modify them
         sandbox = inputSandbox
-        inputTools = inputTools.filter(self.__filterTools)
+        if self.__filterTools is None:
+            inputTools = inputTools.copy()
+        else:
+            oldInputTools = set(inputTools.inspect().keys())
+            inputTools = inputTools.filter(self.__filterTools)
+            newInputTools = set(inputTools.inspect().keys())
+            for t in (oldInputTools - newInputTools): diffTools[t] = None
         inputTools.touchReset()
         tools = inputTools.derive()
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
-        inputEnv.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
-            "tools" : inputTools })
+        inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
         varSelf = {}
         for (key, value) in self.__varSelf.items():
             varSelf[key] = inputEnv.substitute(value, "environment::"+key)
         env = inputEnv.filter(self.__filterEnv).derive(varSelf)
         if sandbox is not None:
-            if not checkGlobList(sandbox.getStep().getPackage().getName(), self.__filterSandbox):
+            name = sandbox.coreStep.corePackage.getName()
+            if not checkGlobList(name, self.__filterSandbox):
                 sandbox = None
+                diffSandbox = None
         states = { n : s.copy() for (n,s) in inputStates.items() }
 
         # update plugin states
-        for s in states.values(): s.onEnter(env, tools, self.__properties)
+        for s in states.values(): s.onEnter(env, self.__properties)
 
         # traverse dependencies
         subTreePackages = set()
         directPackages = []
         indirectPackages = []
-        provideDeps = UniquePackageList(self.__raiseIncompatibleProvided)
+        provideDeps = UniquePackageList(stack, self.__raiseIncompatibleProvided)
         results = []
         depEnv = env.derive()
         depTools = tools.derive()
         depSandbox = sandbox
         depStates = { n : s.copy() for (n,s) in states.items() }
+        depDiffSandbox = diffSandbox
+        depDiffTools = diffTools.copy()
         thisDeps = {}
         for dep in self.__deps:
-            env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
-                "tools" : tools })
+            env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
 
             if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
             r = self.__recipeSet.getRecipe(dep.recipe)
@@ -1997,12 +1946,13 @@ class Recipe(object):
                 if r.__packageName in stack:
                     raise ParseError("Recipes are cyclic (1st package in cylce)")
                 depStack = stack + [r.__packageName]
-                p, s = r.prepare(pathFormatter, depEnv.derive(dep.envOverride),
+                p, s = r.prepare(depEnv.derive(dep.envOverride),
                                  sandboxEnabled, depStates, depSandbox, depTools,
                                  depStack)
                 subTreePackages.add(p.getName())
                 subTreePackages.update(s)
-                p = p.getPackageStep()
+                depCoreStep = p.getCorePackageStep()
+                depRef = CoreRef(depCoreStep, [p.getName()], depDiffTools, depDiffSandbox)
             except ParseError as e:
                 e.pushFrame(r.getPackageName())
                 raise e
@@ -2010,63 +1960,82 @@ class Recipe(object):
             # A dependency should be named only once. Hence we can
             # optimistically create the DepTracker object. If the dependency is
             # named more than one we make sure that it is the same variant.
-            depTrack = thisDeps.setdefault(dep.recipe, DepTracker(p))
+            depTrack = thisDeps.setdefault(dep.recipe, DepTracker(depRef))
             if depTrack.prime():
-                directPackages.append(p)
-            elif p.getVariantId() != depTrack.package.getVariantId():
-                self.__raiseIncompatibleLocal(p)
+                directPackages.append(depRef)
+            elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
+                self.__raiseIncompatibleLocal(depCoreStep)
             elif self.__recipeSet.getPolicy('uniqueDependency'):
                 raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
                                     .format(dep.recipe))
             else:
                 warnDepends.show("{} -> {}".format(self.__packageName, dep.recipe))
 
+            # Remember dependency diffs before changing them
+            origDepDiffTools = depDiffTools
+            origDepDiffSandbox = depDiffSandbox
+
             # pick up various results of package
             for (n, s) in states.items():
                 if n in dep.use:
-                    s.onUse(p.getPackage()._getStates()[n])
-                    if dep.provideGlobal: depStates[n].onUse(p.getPackage()._getStates()[n])
+                    s.onUse(depCoreStep.corePackage.states[n])
+                    if dep.provideGlobal: depStates[n].onUse(depCoreStep.corePackage.states[n])
             if dep.useDeps:
-                indirectPackages.extend(p._getProvidedDeps())
+                indirectPackages.extend(
+                    CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox)
+                    for d in depCoreStep.providedDeps)
             if dep.useBuildResult and depTrack.useResultOnce():
-                results.append(p)
+                results.append(depRef)
             if dep.useTools:
-                tools.update(p._getProvidedTools())
-                if dep.provideGlobal: depTools.update(p._getProvidedTools())
+                tools.update(depCoreStep.providedTools)
+                diffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox))
+                    for n, d in depCoreStep.providedTools.items() )
+                if dep.provideGlobal:
+                    depTools.update(depCoreStep.providedTools)
+                    depDiffTools = depDiffTools.copy()
+                    depDiffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox))
+                        for n, d in depCoreStep.providedTools.items() )
             if dep.useEnv:
-                env.update(p._getProvidedEnv())
-                if dep.provideGlobal: depEnv.update(p._getProvidedEnv())
-            if dep.useSandbox:
-                sandbox = p._getProvidedSandbox()
-                if dep.provideGlobal: depSandbox = p._getProvidedSandbox()
+                env.update(depCoreStep.providedEnv)
+                if dep.provideGlobal: depEnv.update(depCoreStep.providedEnv)
+            if dep.useSandbox and (depCoreStep.providedSandbox is not None):
+                sandbox = depCoreStep.providedSandbox
+                diffSandbox = CoreRef(depCoreStep.providedSandbox, [p.getName()], origDepDiffTools,
+                    origDepDiffSandbox)
+                if dep.provideGlobal:
+                    depSandbox = sandbox
+                    depDiffSandbox = diffSandbox
                 if sandboxEnabled:
-                    env.update(sandbox.getEnvironment())
-                    if dep.provideGlobal: depEnv.update(sandbox.getEnvironment())
+                    env.update(sandbox.environment)
+                    if dep.provideGlobal: depEnv.update(sandbox.environment)
             if dep.recipe in self.__provideDeps:
-                provideDeps.append(p)
-                for d in p._getProvidedDeps(): provideDeps.append(d)
+                provideDeps.append(depRef)
+                provideDeps.extend(CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox)
+                    for d in depCoreStep.providedDeps)
 
         # Filter indirect packages and add to result list if necessary. Most
         # likely there are many duplicates that are dropped.
         tmp = indirectPackages
         indirectPackages = []
-        for p in tmp:
-            name = p.getPackage().getName()
+        for depRef in tmp:
+            depCoreStep = depRef.refGetDestination()
+            name = depCoreStep.corePackage.getName()
             depTrack = thisDeps.get(name)
             if depTrack is None:
-                thisDeps[name] = depTrack = DepTracker(p)
+                thisDeps[name] = depTrack = DepTracker(depRef)
 
             if depTrack.prime():
-                indirectPackages.append(p)
-            elif p.getVariantId() != depTrack.package.getVariantId():
-                self.__raiseIncompatibleProvided(p, depTrack.package)
+                indirectPackages.append(depRef)
+            elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
+                self.__raiseIncompatibleProvided(name,
+                    stack + depRef.refGetStack(),
+                    stack + depTrack.item.refGetStack())
 
             if depTrack.useResultOnce():
-                results.append(p)
+                results.append(depRef)
 
         # apply private environment
-        env.setFunArgs({ "recipe" : self, "sandbox" : sandbox,
-            "tools" : tools })
+        env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
         varPrivate = {}
         for (key, value) in self.__varPrivate.items():
             varPrivate[key] = env.substitute(value, "privateEnvironment::"+key)
@@ -2080,80 +2049,76 @@ class Recipe(object):
         tools.touch(self.__toolDepPackage)
 
         # create package
-        p = Package().construct(stack, pathFormatter, self,
-            directPackages, indirectPackages, states, inputTools.detach(), tools.detach(),
-            inputSandbox, sandbox, tools.touchedKeys(), uidGen())
+        # touchedTools = tools.touchedKeys()
+        # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
+        p = CorePackage(self, tools.detach(), diffTools, sandbox, diffSandbox,
+                directPackages, indirectPackages, states, uidGen())
 
         # optional checkout step
         if self.__checkout != (None, None, [], []):
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
-            srcStep = CheckoutStep().construct(p, pathFormatter, sandbox, self.__checkout,
-                env, checkoutDigestEnv, checkoutEnv,
-                tools.prune(self.__toolDepCheckout))
-            p._setCheckoutStep(srcStep)
+            srcCoreStep = p.createCoreCheckoutStep(self.__checkout, env, checkoutDigestEnv, checkoutEnv)
         else:
-            srcStep = p.getCheckoutStep() # return invalid step
+            srcCoreStep = p.createInvalidCoreCheckoutStep()
 
         # optional build step
         if self.__build != (None, None):
             buildDigestEnv = env.prune(self.__buildVars)
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
-            buildStep = BuildStep().construct(p, pathFormatter, sandbox, self.__build,
-                buildDigestEnv, buildEnv, tools.prune(self.__toolDepBuild),
-                [srcStep] + results)
-            p._setBuildStep(buildStep)
+            buildCoreStep = p.createCoreBuildStep(self.__build, buildDigestEnv, buildEnv,
+                [CoreRef(srcCoreStep)] + results)
         else:
-            buildStep = p.getBuildStep() # return invalid step
+            buildCoreStep = p.createInvalidCoreBuildStep()
 
         # mandatory package step
         packageDigestEnv = env.prune(self.__packageVars)
         packageEnv = ( env.prune(self.__packageVars | self.__packageVarsWeak)
             if self.__packageVarsWeak else packageDigestEnv )
-        packageStep = PackageStep().construct(p, pathFormatter, sandbox, self.__package,
-            packageDigestEnv, packageEnv, tools.prune(self.__toolDepPackage),
-            [buildStep])
-        p._setPackageStep(packageStep)
+        packageCoreStep = p.createCorePackageStep(self.__package, packageDigestEnv, packageEnv,
+            [CoreRef(buildCoreStep)])
 
         # provide environment
         provideEnv = {}
         for (key, value) in self.__provideVars.items():
             provideEnv[key] = env.substitute(value, "provideVars::"+key)
-        packageStep._setProvidedEnv(provideEnv)
+        packageCoreStep.providedEnv = provideEnv
 
         # provide tools
-        provideTools = { name : tool.prepare(packageStep, env)
+        packageCoreStep.providedTools = { name : tool.prepare(packageCoreStep, env)
             for (name, tool) in self.__provideTools.items() }
-        packageStep._setProvidedTools(provideTools)
 
         # provide deps (direct and indirect deps)
-        packageStep._setProvidedDeps(provideDeps.result())
+        packageCoreStep.providedDeps = provideDeps.result()
 
         # provide Sandbox
         if self.__provideSandbox:
-            packageStep._setProvidedSandbox(Sandbox().construct(packageStep,
-                env, sandboxEnabled, self.__provideSandbox))
+            packageCoreStep.providedSandbox = CoreSandbox(packageCoreStep,
+                env, sandboxEnabled, self.__provideSandbox)
 
         # update plugin states
-        for s in states.values(): s.onFinish(env, tools, self.__properties, p)
+        for s in states.values(): s.onFinish(env, self.__properties)
 
         if self.__shared:
-            if not packageStep.isDeterministic():
+            if not packageCoreStep.isDeterministic:
                 raise ParseError("Shared packages must be deterministic!")
 
         # remember calculated package
-        if reusedPackage is None:
-            self.__corePackages.append(PackageMatcher(p, inputEnv, inputTools,
-                inputStates, inputSandbox, subTreePackages))
-        elif packageStep._getResultId() != reusedPackage.getPackageStep()._getResultId():
-            #print("original", sorted(packageStep.getEnv()))
-            #print("reused", sorted(reusedPackage.getPackageStep().getEnv()))
+        if reusedCorePackage is None:
+            pid = packageCoreStep.getResultId()
+            reusableCorePackage = self.__corePackagesById.setdefault(pid, p)
+            if reusableCorePackage is not p:
+                p = reusableCorePackage
+            self.__corePackagesByMatch.insert(0, PackageMatcher(
+                reusableCorePackage, inputEnv, inputTools, inputStates,
+                inputSandbox, subTreePackages))
+        elif packageCoreStep.getResultId() != reusedCorePackage.getCorePackageStep().getResultId():
             raise AssertionError("Wrong reusage for " + "/".join(stack))
         else:
             # drop calculated package to keep memory consumption low
-            p = reusedPackage
+            p = reusedCorePackage
 
         return p, subTreePackages
 
@@ -2169,22 +2134,21 @@ class Recipe(object):
         else:
             return self.__packageNetAccess
 
-    def __raiseIncompatibleProvided(self, r, r2):
+    def __raiseIncompatibleProvided(self, name, stack1, stack2):
         raise ParseError("Incompatible variants of package: {} vs. {}"
-            .format("/".join(r.getPackage().getStack()),
-                    "/".join(r2.getPackage().getStack())),
+            .format("/".join(stack1), "/".join(stack2)),
             help=
 """This error is caused by '{PKG}' that is passed upwards via 'provideDeps' from multiple dependencies of '{CUR}'.
 These dependencies constitute different variants of '{PKG}' and can therefore not be used in '{CUR}'."""
-    .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
+    .format(PKG=name, CUR=self.__packageName))
 
     def __raiseIncompatibleLocal(self, r):
         raise ParseError("Multiple incompatible dependencies to package: {}"
-            .format(r.getPackage().getName()),
+            .format(r.corePackage.getName()),
             help=
 """This error is caused by naming '{PKG}' multiple times in the recipe with incompatible variants.
 Every dependency must only be given once."""
-    .format(PKG=r.getPackage().getName(), CUR=self.__packageName))
+    .format(PKG=r.corePackage.getName(), CUR=self.__packageName))
 
     @property
     def checkoutScript(self):
@@ -2218,17 +2182,29 @@ Every dependency must only be given once."""
     def packageDigestScript(self):
         return self.__package[1]
 
+    @property
+    def toolDepCheckout(self):
+        return self.__toolDepCheckout
+
+    @property
+    def toolDepBuild(self):
+        return self.__toolDepBuild
+
+    @property
+    def toolDepPackage(self):
+        return self.__toolDepPackage
+
 
 class PackageMatcher:
-    def __init__(self, package, env, tools, states, sandbox, subTreePackages):
-        self.corePackage = package._getCorePackage()
+    def __init__(self, corePackage, env, tools, states, sandbox, subTreePackages):
+        self.corePackage = corePackage
         envData = env.inspect()
         self.env = { name : envData.get(name) for name in env.touchedKeys() }
         toolsData = tools.inspect()
-        self.tools = { name : (tool.getStep().getVariantId() if tool is not None else None)
+        self.tools = { name : (tool.coreStep.variantId if tool is not None else None)
             for (name, tool) in ( (n, toolsData.get(n)) for n in tools.touchedKeys() ) }
         self.states = { n : s.copy() for (n,s) in states.items() }
-        self.sandbox = sandbox.getStep().getVariantId() if sandbox is not None else None
+        self.sandbox = sandbox.coreStep.variantId if sandbox is not None else None
         self.subTreePackages = subTreePackages
 
     def matches(self, inputEnv, inputTools, inputStates, inputSandbox):
@@ -2236,9 +2212,9 @@ class PackageMatcher:
             if env != inputEnv.get(name): return False
         for (name, tool) in self.tools.items():
             match = inputTools.get(name)
-            match = match.getStep().getVariantId() if match is not None else None
+            match = match.coreStep.variantId if match is not None else None
             if tool != match: return False
-        match = inputSandbox.getStep().getVariantId() \
+        match = inputSandbox.coreStep.variantId \
             if inputSandbox is not None else None
         if self.sandbox != match: return False
         if self.states != inputStates: return False
@@ -2912,36 +2888,31 @@ class RecipeSet:
             cacheName = ".bob-packages.pickle"
 
         # try to load the persisted packages
-        states = { n:s() for (n,s) in self.__states.items() }
-        rootPkg = Package()
-        rootPkg.construct([], nameFormatter, None, [], [], states,
-            {}, {}, None, None, [], -1)
         try:
             with open(cacheName, "rb") as f:
                 persistedCacheKey = f.read(len(cacheKey))
                 if cacheKey == persistedCacheKey:
                     tmp = PackageUnpickler(f, self.getRecipe, self.__plugins,
                                            nameFormatter).load()
-                    return tmp.toStep(nameFormatter, rootPkg).getPackage()
+                    return tmp.refDeref([], {}, None, nameFormatter)
         except (EOFError, OSError, pickle.UnpicklingError):
             pass
 
         # not cached -> calculate packages
-        result = self.__rootRecipe.prepare(nameFormatter, env, sandboxEnabled,
-                                           states)[0]
+        states = { n:s() for (n,s) in self.__states.items() }
+        result = self.__rootRecipe.prepare(env, sandboxEnabled, states)[0]
 
         # save package tree for next invocation
-        tmp = CoreStepRef(rootPkg, result.getPackageStep())
         try:
             newCacheName = cacheName + ".new"
             with open(newCacheName, "wb") as f:
                 f.write(cacheKey)
-                PackagePickler(f, nameFormatter).dump(tmp)
+                PackagePickler(f, nameFormatter).dump(result)
             os.replace(newCacheName, cacheName)
         except OSError as e:
             print("Error saving internal state:", str(e), file=sys.stderr)
 
-        return result
+        return result.refDeref([], {}, None, nameFormatter)
 
     def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
         (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
