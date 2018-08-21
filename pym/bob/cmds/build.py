@@ -419,6 +419,7 @@ esac
         self.__buildDistBuildIds = {}
         self.__statistic = LocalBuilderStatistic()
         self.__alwaysCheckout = []
+        self.__linkDeps = True
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -455,6 +456,9 @@ esac
 
     def setAlwaysCheckout(self, alwaysCheckout):
         self.__alwaysCheckout = [ re.compile(e) for e in alwaysCheckout ]
+
+    def setLinkDependencies(self, linkDeps):
+        self.__linkDeps = linkDeps
 
     def saveBuildState(self):
         state = {}
@@ -558,6 +562,8 @@ esac
 
         # this will only work on POSIX
         if isWindows(): return
+
+        if not self.__linkDeps: return
 
         # always re-create the deps directory
         basePath = os.getcwd()
@@ -1363,6 +1369,10 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Preserve whole environment")
     parser.add_argument('--upload', default=None, action='store_true',
         help="Upload to binary archive")
+    parser.add_argument('--link-deps', default=None, help="Add linked dependencies to workspace paths",
+        dest='link_deps', action='store_true')
+    parser.add_argument('--no-link-deps', default=None, help="Do not add linked dependencies to workspace paths",
+        dest='link_deps', action='store_false')
     parser.add_argument('--download', metavar="MODE", default=None,
         help="Download from binary archive (yes, no, deps, forced, forced-deps, forced-fallback)",
         choices=['yes', 'no', 'deps', 'forced', 'forced-deps', 'forced-fallback'])
@@ -1403,6 +1413,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             'sandbox' : not develop,
             'clean_checkout' : False,
             'no_logfiles' : False,
+            'link_deps' : True,
         }
 
     for a in vars(args):
@@ -1433,6 +1444,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     builder.setDownloadMode(args.download)
     builder.setCleanCheckout(args.clean_checkout)
     builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
+    builder.setLinkDependencies(args.link_deps)
     if args.resume: builder.loadBuildState()
 
     backlog = []
