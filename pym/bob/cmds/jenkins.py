@@ -727,7 +727,7 @@ class JenkinsJob:
                         if [ ! -d {SHARED}/{VID1}/{VID2} ] ; then
                             mkdir -p {SHARED}
                             T=$(mktemp -d -p {SHARED})
-                            tar xf {TGZ} -C $T meta/audit.json.gz content/
+                            tar xpf {TGZ} -C $T meta/audit.json.gz content/
                             cp {BUILDID} $T/meta/buildid.bin
                             mkdir -p {SHARED}/{VID1}
                             mv -T $T {SHARED}/{VID1}/{VID2} || rm -rf $T
@@ -746,7 +746,7 @@ class JenkinsJob:
                 else:
                     prepareCmds.append("mkdir -p " + d.getWorkspacePath())
                     prepareCmds.append(
-                        "tar xf {TGZ} --transform='s|^meta/audit.json.gz|{AUDIT}|' --transform=\"s|^content|{WSP_PATH}|\" meta/audit.json.gz content/".format(
+                        "tar xpf {TGZ} --transform='s|^meta/audit.json.gz|{AUDIT}|' --transform=\"s|^content|{WSP_PATH}|\" meta/audit.json.gz content/".format(
                         TGZ=JenkinsJob._tgzName(d),
                         AUDIT=JenkinsJob._auditName(d),
                         WSP_PATH=d.getWorkspacePath()))
@@ -876,7 +876,7 @@ class JenkinsJob:
                 if [ ! -d {SHARED}/{VID1}/{VID2} ] ; then
                     mkdir -p {SHARED}
                     T=$(mktemp -d -p {SHARED})
-                    tar xf {TGZ} -C $T meta/audit.json.gz content/
+                    tar xpf {TGZ} -C $T meta/audit.json.gz content/
                     cp {BUILDID} $T/meta/buildid.bin
                     mkdir -p {SHARED}/{VID1}
                     mv -T $T {SHARED}/{VID1}/{VID2} || rm -rf $T
