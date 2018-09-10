@@ -296,8 +296,6 @@ The following built in string functions are supported:
   ``then`` is returned. Otherwise ``else`` is returned.
 * ``$(is-sandbox-enabled)``: Return ``true`` if a sandbox is enabled in the
   current context, ``false`` otherwise.
-* ``$(is-tool-defined,name)``: If ``name`` is a defined tool in the current
-  context the function will return ``true``. Otherwise ``false`` is returned.
 * ``$(ne,left,right)``: Returns ``true`` if the expansions of ``left`` and
   ``right`` differ, otherwise ``false`` is returned.
 * ``$(not,condition)``: Interpret the expansion of ``condition`` as boolean

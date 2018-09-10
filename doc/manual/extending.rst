@@ -172,9 +172,8 @@ passed:
 
 * ``env``: dict of all available environment variables at the current context
 * ``recipe``: the current :class:`bob.input.Recipe`
-* ``sandbox``: an instance of :class:`bob.input.Sandbox` of the current context
-  or ``None`` if no sandbox was configured
-* ``tools``: dict of all available tools (see :class:`bob.input.Tool`)
+* ``sandbox``: ``True`` if a sandbox is used. ``False`` if no sandbox was
+  configured or if it is disabled (e.g. ``--no-sandbox`` option was specified).
 
 In the future additional keyword args may be added without notice. Such string
 functions should therefore have a catch-all ``**kwargs`` parameter. A sample implementation
