@@ -9,7 +9,7 @@ from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
-from .tty import colorize, InfoOnce, WarnOnce, setColorMode
+from .tty import colorize, InfoOnce, Warn, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
@@ -34,6 +34,8 @@ import yaml
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 warnDepends = WarnOnce("The same package is named multiple times as dependency!",
     help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
+warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
+warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
 
 def overlappingPaths(p1, p2):
     p1 = os.path.normcase(os.path.normpath(p1)).split(os.sep)
@@ -250,6 +252,29 @@ class PluginSetting:
         :return: True if data has expected type, otherwise False.
         """
         return True
+
+
+def pluginStateCompat(cls):
+    """Small compat decorator to roughly support <0.15 plugins"""
+
+    _onEnter = cls.onEnter
+    _onFinish = cls.onFinish
+
+    def onEnter(self, env, properties):
+        _onEnter(self, env, {}, properties)
+    def onFinish(self, env, properties):
+        _onFinish(self, env, {}, properties, None)
+
+    # wrap overridden methods
+    if cls.onEnter is not PluginState.onEnter:
+        cls.onEnter = onEnter
+    if cls.onFinish is not PluginState.onFinish:
+        cls.onFinish = onFinish
+
+def pluginStringFunCompat(oldFun):
+    def newFun(args, **kwargs):
+        return oldFun(args, tools={}, **kwargs)
+    return newFun
 
 
 class BuiltinSetting(PluginSetting):
@@ -2514,6 +2539,7 @@ class RecipeSet:
             raise ParseError("Plugin '"+fileName+"' did not define 'apiVersion'!")
         if compareVersion(BOB_VERSION, apiVersion) < 0:
             raise ParseError("Your Bob is too old. Plugin '"+fileName+"' requires at least version "+apiVersion+"!")
+        toolsAbiBreak = compareVersion(apiVersion, "0.15") < 0
 
         hooks = manifest.get('hooks', {})
         if not isinstance(hooks, dict):
@@ -2554,6 +2580,9 @@ class RecipeSet:
                 raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' has wrong type!")
             if i in self.__states:
                 raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' already defined by other plugin!")
+        if states and toolsAbiBreak:
+            warnDeprecatedPluginState.show(fileName)
+            for i in states.values(): pluginStateCompat(i)
         self.__states.update(states)
 
         funs = manifest.get('stringFunctions', {})
@@ -2564,6 +2593,9 @@ class RecipeSet:
                 raise ParseError("Plugin '"+fileName+"': string function name must be a string!")
             if i in self.__stringFunctions:
                 raise ParseError("Plugin '"+fileName+"': string function '" +i+"' already defined by other plugin!")
+        if funs and toolsAbiBreak:
+            warnDeprecatedStringFn.show(fileName)
+            funs = { i : pluginStringFunCompat(j) for i, j in funs.items() }
         self.__stringFunctions.update(funs)
 
         settings = manifest.get('settings', {})
