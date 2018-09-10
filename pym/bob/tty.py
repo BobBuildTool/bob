@@ -20,13 +20,14 @@ class Unbuffered(object):
     def __getattr__(self, attr):
         return getattr(self.stream, attr)
 
-class ShowOnce:
-    def __init__(self, slogan, color, message, help):
+class Show:
+    def __init__(self, slogan, color, message, help, onlyOnce=False):
         self.__slogan = slogan
         self.__color = color
         self.__message = message
         self.__help = help
         self.__triggered = False
+        self.__onlyOnce = onlyOnce
 
     def show(self, location=None):
         if not self.__triggered:
@@ -36,18 +37,26 @@ class ShowOnce:
                 file=sys.stderr)
             if self.__help:
                 print(self.__help, file=sys.stderr)
-            self.__triggered = True
+            self.__triggered = self.__onlyOnce
 
-class InfoOnce(ShowOnce):
-    def __init__(self, message, help=None):
-        super().__init__("INFO", "34", message, help)
+class Info(Show):
+    def __init__(self, message, help=None, onlyOnce=False):
+        super().__init__("INFO", "34", message, help, onlyOnce)
 
-class WarnOnce(ShowOnce):
+class InfoOnce(Info):
     def __init__(self, message, help=None):
-        super().__init__("WARNING", "33", message, help)
+        super().__init__(message, help, True)
+
+class Warn(Show):
+    def __init__(self, message, help=None, onlyOnce=False):
+        super().__init__("WARNING", "33", message, help, onlyOnce)
 
     def warn(self, location=None):
         super().show(location)
+
+class WarnOnce(Warn):
+    def __init__(self, message, help=None):
+        super().__init__(message, help, True)
 
 # module initialization
 
