@@ -700,6 +700,14 @@ class CoreStep(CoreItem):
             for p in providedSandbox.paths:
                 h.update(struct.pack("<I", len(p)))
                 h.update(p.encode('utf8'))
+            h.update(struct.pack("<I", len(providedSandbox.mounts)))
+            for (mntFrom, mntTo, mntOpts) in providedSandbox.mounts:
+                h.update(struct.pack("<III", len(mntFrom), len(mntTo), len(mntOpts)))
+                h.update((mntFrom+mntTo+"".join(mntOpts)).encode('utf8'))
+            h.update(struct.pack("<I", len(providedSandbox.environment)))
+            for (key, val) in sorted(providedSandbox.environment.items()):
+                h.update(struct.pack("<II", len(key), len(val)))
+                h.update((key+val).encode('utf8'))
         else:
             h.update(b'\x00' * 20)
 
