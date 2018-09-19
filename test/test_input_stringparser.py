@@ -175,19 +175,15 @@ class TestStringFunctions(TestCase):
     def testSandboxEnabled(self):
         with self.assertRaises(ParseError):
             funSandboxEnabled(["1", "2"], sandbox=None)
-        self.assertEqual(funSandboxEnabled([], sandbox=None), "false")
-
-        attrs = {'isEnabled.return_value' : False}
-        disabledSandbox = MagicMock(**attrs)
-        self.assertEqual(funSandboxEnabled([], sandbox=disabledSandbox), "false")
-
-        attrs = {'isEnabled.return_value' : True}
-        enabledSandbox = MagicMock(**attrs)
-        self.assertEqual(funSandboxEnabled([], sandbox=enabledSandbox), "true")
+        self.assertEqual(funSandboxEnabled([], sandbox=False), "false")
+        self.assertEqual(funSandboxEnabled([], sandbox=True), "true")
 
     def testToolDefined(self):
+        """deprecated is-tool-defined always returns false"""
+        attrs = {'getName.return_value' : "test"}
+        recipe = MagicMock(**attrs)
         with self.assertRaises(ParseError):
-            funToolDefined([], tools={})
-        self.assertEqual(funToolDefined(["a"], tools={"a":1, "b":2}), "true")
-        self.assertEqual(funToolDefined(["c"], tools={"a":1, "b":2}), "false")
+            funToolDefined([], recipe=recipe, tools={})
+        self.assertEqual(funToolDefined(["a"], recipe=recipe, tools={"a":1, "b":2}), "false")
+        self.assertEqual(funToolDefined(["c"], recipe=recipe, tools={"a":1, "b":2}), "false")
 

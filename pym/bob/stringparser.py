@@ -4,10 +4,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .errors import ParseError
+from .tty import WarnOnce
 from collections.abc import MutableMapping
 from types import MappingProxyType
 import fnmatch
 import re
+
+isToolDefinedDeprecated = WarnOnce("Recipe uses deprecated 'is-tool-defined' function. Will always evaluate to 'false'!")
 
 def checkGlobList(name, allowed):
     if allowed is None: return True
@@ -301,7 +304,8 @@ class Env(MutableMapping):
         self.touched = self.touched + [ set() ]
 
     def touch(self, keys):
-        for k in keys: self.__touch(k)
+        for i in self.touched:
+            i.update(keys)
 
     def touchedKeys(self):
         return self.touched[-1]
@@ -366,11 +370,12 @@ def funStrip(args, **options):
 
 def funSandboxEnabled(args, sandbox, **options):
     if len(args) != 0: raise ParseError("is-sandbox-enabled expects no arguments")
-    return "true" if ((sandbox is not None) and sandbox.isEnabled()) else "false"
+    return "true" if sandbox else "false"
 
-def funToolDefined(args, tools, **options):
+def funToolDefined(args, recipe, **options):
     if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
-    return "true" if (args[0] in tools) else "false"
+    isToolDefinedDeprecated.warn(recipe.getName())
+    return "false"
 
 def funMatchScm(args, **options):
     if len(args) != 2: raise ParseError("matchScm expects two arguments")
