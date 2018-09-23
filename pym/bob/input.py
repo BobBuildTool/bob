@@ -556,16 +556,16 @@ class Sandbox:
 class CoreStep(CoreItem):
     __slots__ = ( "corePackage", "digestEnv", "env", "args",
         "providedEnv", "providedTools", "providedDeps", "providedSandbox",
-        "variantId", "sbxVarId", "isDeterministic", "isValid" )
+        "variantId", "sbxVarId", "deterministic", "isValid" )
 
-    def __init__(self, corePackage, isValid, isDeterministic, digestEnv, env, args):
+    def __init__(self, corePackage, isValid, deterministic, digestEnv, env, args):
         self.corePackage = corePackage
         self.isValid = isValid
         self.digestEnv = digestEnv.detach()
         self.env = env.detach()
         self.args = args
-        self.isDeterministic = isDeterministic and all(
-            arg.isDeterministic for arg in self.getAllDepCoreSteps(True))
+        self.deterministic = deterministic and all(
+            arg.isDeterministic() for arg in self.getAllDepCoreSteps(True))
         self.variantId = self.getDigest(lambda coreStep: coreStep.variantId)
         self.providedEnv = {}
         self.providedTools = {}
@@ -592,6 +592,9 @@ class CoreStep(CoreItem):
     def _getToolKeys(self):
         """Return relevant tool names for this CoreStep."""
         pass
+
+    def isDeterministic(self):
+        return self.deterministic
 
     def isCheckoutStep(self):
         return False
@@ -799,7 +802,7 @@ class Step:
         sandbox of the step too. That is, the step is only deterministic if all
         its dependencies and this step itself is deterministic.
         """
-        return self._coreStep.isDeterministic
+        return self._coreStep.isDeterministic()
 
     def isValid(self):
         """Returns True if this step is valid, False otherwise."""
@@ -1008,7 +1011,6 @@ class CoreCheckoutStep(CoreStep):
     __slots__ = ( "scmList" )
 
     def __init__(self, corePackage, checkout=None, fullEnv=Env(), digestEnv=Env(), env=Env()):
-        isDeterministic = corePackage.recipe.checkoutDeterministic
         if checkout:
             isValid = (checkout[0] is not None) or bool(checkout[2])
 
@@ -1021,7 +1023,6 @@ class CoreCheckoutStep(CoreStep):
             # Validate that SCM paths do not overlap
             knownPaths = []
             for s in self.scmList:
-                isDeterministic = isDeterministic and s.isDeterministic()
                 for p in s.getDirectories().keys():
                     if os.path.isabs(p):
                         raise ParseError("SCM paths must be relative! Offending path: " + p)
@@ -1034,7 +1035,8 @@ class CoreCheckoutStep(CoreStep):
             isValid = False
             self.scmList = []
 
-        super().__init__(corePackage, isValid, isDeterministic, digestEnv, env, [])
+        deterministic = corePackage.recipe.checkoutDeterministic
+        super().__init__(corePackage, isValid, deterministic, digestEnv, env, [])
 
     def _getToolKeys(self):
         return self.corePackage.recipe.toolDepCheckout
@@ -1047,6 +1049,12 @@ class CoreCheckoutStep(CoreStep):
 
     def getLabel(self):
         return "src"
+
+    def isDeterministic(self):
+        return super().isDeterministic() and all(s.isDeterministic() for s in self.scmList)
+
+    def hasLiveBuildId(self):
+        return super().isDeterministic() and all(s.hasLiveBuildId() for s in self.scmList)
 
     def isCheckoutStep(self):
         return True
@@ -1092,9 +1100,7 @@ class CheckoutStep(Step):
         This must be supported by all SCMs. Additionally the checkout script
         must be deterministic.
         """
-        return ( self.getPackage().getRecipe().checkoutDeterministic and
-                 all(s.hasLiveBuildId() for s in self._coreStep.scmList) and
-                 super().isDeterministic() )
+        return self._coreStep.hasLiveBuildId()
 
     def predictLiveBuildId(self):
         """Query server to predict live build-id.
@@ -2135,7 +2141,7 @@ class Recipe(object):
         for s in states.values(): s.onFinish(env, self.__properties)
 
         if self.__shared:
-            if not packageCoreStep.isDeterministic:
+            if not packageCoreStep.isDeterministic():
                 raise ParseError("Shared packages must be deterministic!")
 
         # remember calculated package
