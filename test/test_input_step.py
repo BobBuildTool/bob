@@ -146,7 +146,7 @@ class TestCheckoutStep(TestCase):
         t1 = Empty()
         t1.coreStep = Empty()
         t1.coreStep.variantId = b'0123456789abcdef'
-        t1.coreStep.isDeterministic = True
+        t1.coreStep.isDeterministic = lambda: True
         t1.path = "p1"
         t1.libs = []
 
@@ -162,7 +162,7 @@ class TestCheckoutStep(TestCase):
         t2 = Empty()
         t2.coreStep = Empty()
         t2.coreStep.variantId = b'0123456789000000'
-        t2.coreStep.isDeterministic = True
+        t2.coreStep.isDeterministic = lambda: True
         t2.path = "p1"
         t2.libs = []
 
