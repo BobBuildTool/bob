@@ -15,13 +15,14 @@ Synopsis
 
 ::
 
-    bob build [-h] [--destination DEST] [-f] [-n] [-p] [--without-provided]
-              [-b | -B | --normal] [--clean | --incremental]
-              [--always-checkout RE] [--resume] [-q] [-v] [--no-logfiles]
-              [-D DEFINES] [-c CONFIGFILE] [-e NAME] [-E] [--upload]
-              [--download MODE] [--sandbox | --no-sandbox]
-              [--clean-checkout]
-              PACKAGE [PACKAGE ...]
+    build [-h] [--destination DEST] [-j [JOBS]] [-k] [-f] [-n] [-p]
+          [--without-provided] [-b | -B | --normal]
+          [--clean | --incremental] [--always-checkout RE] [--resume]
+          [-q] [-v] [--no-logfiles] [-D DEFINES] [-c CONFIGFILE]
+          [-e NAME] [-E] [--upload] [--link-deps] [--no-link-deps]
+          [--download MODE] [--sandbox | --no-sandbox]
+          [--clean-checkout]
+          PACKAGE [PACKAGE ...]
 
 Description
 -----------

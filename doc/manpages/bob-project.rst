@@ -14,7 +14,8 @@ Synopsis
 ::
 
     bob project [-h] [--list] [-D DEFINES] [-c CONFIGFILE] [-e NAME] [-E]
-                [--resume] [-n] [-b]
+                [--download MODE] [--resume] [-n] [-b] [-j [JOBS]]
+                [--sandbox | --no-sandbox]
                 [projectGenerator] [package] ...
 
 
@@ -29,6 +30,11 @@ Options
 ``-c CONFIGFILE``
     Use config File
 
+``--download MODE``
+    Download from binary archive (yes, no, deps, forced, forced-deps)
+
+    See :ref:`bob-dev(1) <manpage-bob-dev>` for details.
+
 ``-D DEFINES``
     Override default environment variable
 
@@ -38,12 +44,18 @@ Options
 ``-E``
     Preserve whole environment
 
+``-j, --jobs``
+    Specifies the number of jobs to run simultaneously.
+
 ``--list``
     List available Generators
 
 ``-n``
     Do not build (bob dev) before generate project Files. RunTargets may not
     work
+
+``--no-sandbox``
+    Disable sandboxing
 
 ``-b``
     Do build only (bob dev -b) before generate project Files. No checkout

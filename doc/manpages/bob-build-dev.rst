@@ -139,6 +139,25 @@ Options
     will skip the execution of it if this is not the case. With this option Bob
     not use that optimization and will execute all build steps.
 
+``-j, --jobs``
+    Specifies the number of jobs to run simultaneously.
+
+    Any checkout/build/package step that needs to be executed are counted as a
+    job. Downloads and uploads of binary artifacts are separate jobs too. If a
+    job fails the other currently running jobs are still finished before Bob
+    returns. No new jobs are scheduled, though, unless the ``-k`` option is
+    given (see below).
+
+    If the -j option is given without an argument, Bob will run as many jobs as
+    there are processors on the machine.
+
+``-k, --keep-going``
+    Continue  as much as possible after an error.
+
+    While the package that failed to build and all the packages that depend on
+    it cannot be built either, the other dependencies are still processed.
+    Normally Bob stops on the first error that is encountered.
+
 ``-n, --no-deps``
     Don't build dependencies.
 
