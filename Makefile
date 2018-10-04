@@ -25,7 +25,7 @@ SPHINX := $(shell command -v sphinx-build 2>/dev/null)
 
 .PHONY: all install pym check doc
 
-all: bin/namespace-sandbox pym check doc
+all: bin/namespace-sandbox check pym doc
 
 bin/namespace-sandbox: $(patsubst %,$(DIR)/%,$(SOURCE) $(HEADERS))
 	@gcc -o $@ -std=c99 $^ -lm
@@ -58,6 +58,7 @@ ifdef SPHINX
 endif
 
 check:
+	@python3 -c 'import sys; sys.exit(0 if sys.hexversion >= 0x03050000 else 1)' || { echo "Pyton >= 3.5.0 is required!"; exit 1 ; }
 	@python3 -c 'import schema' || { echo "Module 'schema' missing. Please install: 'pip3 install --user schema'..." ; exit 1 ; }
 	@python3 -c 'import yaml' || { echo "Module 'yaml' missing. Please install: 'pip3 install --user PyYAML'..." ; exit 1 ; }
 
