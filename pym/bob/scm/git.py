@@ -350,7 +350,7 @@ class GitScm(Scm):
     def hasLiveBuildId(self):
         return True
 
-    def predictLiveBuildId(self):
+    def predictLiveBuildId(self, step):
         if self.__commit:
             return bytes.fromhex(self.__commit)
 

@@ -1112,7 +1112,7 @@ class CheckoutStep(Step):
         h = hashlib.sha1()
         h.update(self._getSandboxVariantId())
         for s in self._coreStep.scmList:
-            liveBId = s.predictLiveBuildId()
+            liveBId = s.predictLiveBuildId(self)
             if liveBId is None: return None
             h.update(liveBId)
         return h.digest()

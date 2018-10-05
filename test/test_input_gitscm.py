@@ -13,6 +13,16 @@ from bob.input import GitScm
 from bob.errors import ParseError
 from bob.utils import asHexStr
 
+class DummyPackage:
+    def getName(self):
+        return "dummy"
+    def getStack(self):
+        return [ "a", "b" ]
+
+class DummyStep:
+    def getPackage(self):
+        return DummyPackage()
+
 def createGitScm(spec = {}):
     s = { 'scm' : "git", 'url' : "MyURL", 'recipe' : "foo.yaml#0",
         '__source' : "Recipe foo" }
@@ -333,15 +343,15 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
     def testPredictBranch(self):
         """See if we can predict remote branches correctly"""
         s = self.createGitScm()
-        self.assertEqual(s.predictLiveBuildId(), self.commit_master)
+        self.assertEqual(s.predictLiveBuildId(DummyStep()), self.commit_master)
 
         s = self.createGitScm({ 'branch' : 'foobar' })
-        self.assertEqual(s.predictLiveBuildId(), self.commit_foobar)
+        self.assertEqual(s.predictLiveBuildId(DummyStep()), self.commit_foobar)
 
     def testPredictLightweightTags(self):
         """Lightweight tags are just like branches"""
         s = self.createGitScm({ 'tag' : 'lightweight' })
-        self.assertEqual(s.predictLiveBuildId(), self.commit_lightweight)
+        self.assertEqual(s.predictLiveBuildId(DummyStep()), self.commit_lightweight)
 
     def testPredictAnnotatedTags(self):
         """Predict commit object of annotated tags.
@@ -349,24 +359,24 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
         Annotated tags are separate git objects that point to a commit object.
         We have to predict the commit object, not the tag object."""
         s = self.createGitScm({ 'tag' : 'annotated' })
-        self.assertEqual(s.predictLiveBuildId(), self.commit_annotated)
+        self.assertEqual(s.predictLiveBuildId(DummyStep()), self.commit_annotated)
 
     def testPredictCommit(self):
         """Predictions of explicit commit-ids are easy."""
         s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
-        self.assertEqual(s.predictLiveBuildId(), self.commit_foobar)
+        self.assertEqual(s.predictLiveBuildId(DummyStep()), self.commit_foobar)
 
     def testPredictBroken(self):
         """Predictions of broken URLs must not fail"""
         s = self.createGitScm({ 'url' : '/does/not/exist' })
-        self.assertEqual(s.predictLiveBuildId(), None)
+        self.assertEqual(s.predictLiveBuildId(DummyStep()), None)
 
     def testPredictDeleted(self):
         """Predicting deleted branches/tags must not fail"""
         s = self.createGitScm({ 'branch' : 'nx' })
-        self.assertEqual(s.predictLiveBuildId(), None)
+        self.assertEqual(s.predictLiveBuildId(DummyStep()), None)
         s = self.createGitScm({ 'tag' : 'nx' })
-        self.assertEqual(s.predictLiveBuildId(), None)
+        self.assertEqual(s.predictLiveBuildId(DummyStep()), None)
 
     def testCalcBranch(self):
         """Clone branch and calculate live-build-id"""
