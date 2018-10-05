@@ -517,7 +517,11 @@ esac
         return (workDir, created)
 
     def _generateAudit(self, step, depth, resultHash, executed=True):
-        audit = Audit.create(step.getVariantId(), self._getBuildId(step, depth), resultHash)
+        if step.isCheckoutStep():
+            buildId = resultHash
+        else:
+            buildId = self._getBuildId(step, depth)
+        audit = Audit.create(step.getVariantId(), buildId, resultHash)
         audit.addDefine("bob", BOB_VERSION)
         audit.addDefine("recipe", step.getPackage().getRecipe().getName())
         audit.addDefine("package", "/".join(step.getPackage().getStack()))
@@ -815,9 +819,11 @@ esac
                 elif step.isBuildStep():
                     if step.isValid():
                         self._cookBuildStep(step, checkoutOnly, depth)
+                        self._setAlreadyRun(step, False, checkoutOnly)
                 else:
                     assert step.isPackageStep() and step.isValid()
                     self._cookPackageStep(step, checkoutOnly, depth)
+                    self._setAlreadyRun(step, False, checkoutOnly)
             except BuildError as e:
                 e.setStack(step.getPackage().getStack())
                 raise e
@@ -935,10 +941,6 @@ esac
         checkoutHash = hashWorkspace(checkoutStep)
         BobState().setResultHash(prettySrcPath, checkoutHash)
 
-        # Mark already as done. The next calls might recurse back to us and we
-        # must prevent to be run again.
-        self._setAlreadyRun(checkoutStep, True)
-
         # Generate audit trail. Has to be done _after_ setResultHash()
         # because the result is needed to calculate the buildId.
         if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
@@ -949,6 +951,10 @@ esac
             liveBId = checkoutStep.calcLiveBuildId()
             if liveBId is not None:
                 self.__archive.uploadLocalLiveBuildId(liveBId, checkoutHash, self.__verbose)
+
+        # We're done. The sanity check below won't change the result but would
+        # trigger this step again.
+        self._setAlreadyRun(checkoutStep, True)
 
         # Predicted build-id and real one after checkout do not need to
         # match necessarily. Handle it as some build results might be
@@ -1011,7 +1017,6 @@ esac
             BobState().setResultHash(prettyBuildPath, buildHash)
             BobState().setVariantId(prettyBuildPath, buildDigest[0])
             BobState().setInputHashes(prettyBuildPath, buildInputHashes)
-        self._setAlreadyRun(buildStep, False, checkoutOnly)
 
     def _cookPackageStep(self, packageStep, checkoutOnly, depth):
         # get directory into shape
@@ -1133,7 +1138,6 @@ esac
                 BobState().setInputHashes(prettyPackagePath, packageBuildId)
             else:
                 BobState().setInputHashes(prettyPackagePath, [packageBuildId] + packageInputHashes)
-        self._setAlreadyRun(packageStep, False, checkoutOnly)
 
     def __queryLiveBuildId(self, step):
         """Predict live build-id of checkout step.
