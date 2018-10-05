@@ -6,7 +6,7 @@
 from . import BOB_VERSION, _enableDebug, DEBUG
 from .errors import BobError
 from .state import finalize
-from .tty import colorize, Unbuffered, setColorMode
+from .tty import colorize, Unbuffered, setColorMode, cleanup
 from .utils import asHexStr, hashPath
 import argparse
 import logging
@@ -225,6 +225,7 @@ def bob(bobRoot):
     try:
         ret = catchErrors(cmd)
     finally:
+        cleanup()
         sys.stdout = origSysStdOut
         sys.stderr = origSysStdErr
         finalize()
