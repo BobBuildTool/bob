@@ -207,7 +207,7 @@ class Scm(metaclass=ABCMeta):
         """Check if live build-ids are supported."""
         return False
 
-    def predictLiveBuildId(self, step):
+    async def predictLiveBuildId(self, step):
         """Query server to predict live build-id."""
         return None
 

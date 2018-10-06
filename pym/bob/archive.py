@@ -25,9 +25,13 @@ from .utils import asHexStr, removePath, isWindows
 from pipes import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 import argparse
+import asyncio
+import concurrent.futures
+import concurrent.futures.process
 import gzip
 import http.client
 import os.path
+import signal
 import ssl
 import subprocess
 import tarfile
@@ -76,10 +80,10 @@ class DummyArchive:
     def canUploadJenkins(self):
         return False
 
-    def uploadPackage(self, step, buildId, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content):
         pass
 
-    def downloadPackage(self, step, buildId, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content):
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
@@ -88,10 +92,10 @@ class DummyArchive:
     def download(self, step, buildIdFile, tgzFile):
         return ""
 
-    def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
+    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
         pass
 
-    def downloadLocalLiveBuildId(self, step, liveBuildId):
+    async def downloadLocalLiveBuildId(self, step, liveBuildId):
         return None
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
@@ -173,17 +177,25 @@ class BaseArchive:
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
 
-    def downloadPackage(self, step, buildId, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content):
         if not self.canDownloadLocal():
             return False
 
+        loop = asyncio.get_event_loop()
         details = " from {}".format(self._remoteName(buildId, ARTIFACT_SUFFIX))
         with stepAction(step, "DOWNLOAD", content, details=details) as a:
-            ret, msg, kind = self._downloadPackage(buildId, audit, content)
-            if not ret: a.fail(msg, kind)
-            return ret
+            try:
+                ret, msg, kind = await loop.run_in_executor(None, BaseArchive._downloadPackage,
+                    self, buildId, audit, content)
+                if not ret: a.fail(msg, kind)
+                return ret
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Download of package interrupted.")
 
     def _downloadPackage(self, buildId, audit, content):
+        # restore signals to default so that Ctrl+C kills us
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+
         try:
             with self._openDownloadFile(buildId, ARTIFACT_SUFFIX) as (name, fileobj):
                 with tarfile.open(name, "r|*", fileobj=fileobj, errorlevel=1) as tar:
@@ -203,16 +215,23 @@ class BaseArchive:
         except tarfile.TarError as e:
             raise BuildError("Error extracting binary artifact: " + str(e))
 
-    def downloadLocalLiveBuildId(self, step, liveBuildId):
+    async def downloadLocalLiveBuildId(self, step, liveBuildId):
         if not self.canDownloadLocal():
             return None
 
+        loop = asyncio.get_event_loop()
         with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
-            ret, msg, kind = self._downloadLocalLiveBuildId(liveBuildId)
-            if not ret: a.fail(msg, kind)
-            return ret
+            try:
+                ret, msg, kind = await loop.run_in_executor(None,
+                    BaseArchive._downloadLocalLiveBuildId, self, liveBuildId)
+                if not ret: a.fail(msg, kind)
+                return ret
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Download of build-id interrupted.")
 
     def _downloadLocalLiveBuildId(self, liveBuildId):
+        # restore signals to default so that Ctrl+C kills us
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
             with self._openDownloadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
@@ -230,16 +249,23 @@ class BaseArchive:
     def _openUploadFile(self, buildId, suffix):
         raise ArtifactUploadError("not implemented")
 
-    def uploadPackage(self, step, buildId, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content):
         if not self.canUploadLocal():
             return
 
+        loop = asyncio.get_event_loop()
         details = " to {}".format(self._remoteName(buildId, ARTIFACT_SUFFIX))
         with stepAction(step, "UPLOAD", content, details=details) as a:
-            msg, kind = self._uploadPackage(buildId, audit, content)
-            a.setResult(msg, kind)
+            try:
+                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadPackage, self, buildId, audit, content)
+                a.setResult(msg, kind)
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Upload of package interrupted.")
 
     def _uploadPackage(self, buildId, audit, content):
+        # restore signals to default so that Ctrl+C kills us
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+
         try:
             with self._openUploadFile(buildId, ARTIFACT_SUFFIX) as (name, fileobj):
                 pax = { 'bob-archive-vsn' : "1" }
@@ -257,15 +283,22 @@ class BaseArchive:
                 raise BuildError("Cannot upload artifact: " + str(e))
         return ("ok", EXECUTED)
 
-    def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
+    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
         if not self.canUploadLocal():
             return
 
+        loop = asyncio.get_event_loop()
         with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
-            msg, kind = self._uploadLocalLiveBuildId(liveBuildId, buildId)
-            a.setResult(msg, kind)
+            try:
+                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalLiveBuildId, self, liveBuildId, buildId)
+                a.setResult(msg, kind)
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Upload of build-id interrupted.")
 
     def _uploadLocalLiveBuildId(self, liveBuildId, buildId):
+        # restore signals to default so that Ctrl+C kills us
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+
         try:
             with self._openUploadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, buildId)
@@ -963,15 +996,15 @@ class MultiArchive:
     def canUploadJenkins(self):
         return any(i.canUploadJenkins() for i in self.__archives)
 
-    def uploadPackage(self, step, buildId, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            i.uploadPackage(step, buildId, audit, content)
+            await i.uploadPackage(step, buildId, audit, content)
 
-    def downloadPackage(self, step, buildId, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content):
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            if i.downloadPackage(step, buildId, audit, content): return True
+            if await i.downloadPackage(step, buildId, audit, content): return True
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
@@ -984,16 +1017,16 @@ class MultiArchive:
             i.download(step, buildIdFile, tgzFile) for i in self.__archives
             if i.canDownloadJenkins())
 
-    def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
+    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            i.uploadLocalLiveBuildId(step, liveBuildId, buildId)
+            await i.uploadLocalLiveBuildId(step, liveBuildId, buildId)
 
-    def downloadLocalLiveBuildId(self, step, liveBuildId):
+    async def downloadLocalLiveBuildId(self, step, liveBuildId):
         ret = None
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            ret = i.downloadLocalLiveBuildId(step, liveBuildId)
+            ret = await i.downloadLocalLiveBuildId(step, liveBuildId)
             if ret is not None: break
         return ret
 

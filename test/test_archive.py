@@ -6,7 +6,8 @@
 from binascii import hexlify
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+import asyncio
 import http.server
 import os, os.path
 import socketserver
@@ -37,6 +38,10 @@ class DummyPackage:
 class DummyStep:
     def getPackage(self):
         return DummyPackage()
+
+def run(coro):
+    with patch('bob.archive.signal.signal'):
+        return asyncio.get_event_loop().run_until_complete(coro)
 
 def callJenkinsScript(script, workspace):
     env = os.environ.copy()
@@ -265,10 +270,10 @@ class BaseTester:
     def testDisabledLocal(self):
         """Disabled local must not do anything"""
         a = self.__getArchiveInstance({})
-        self.assertFalse(a.downloadPackage(DummyStep(), b'\xcc'*20, "unused", "unused"))
-        self.assertFalse(a.uploadPackage(DummyStep(), b'\xcc'*20, "unused", "unused"))
-        self.assertEqual(a.downloadLocalLiveBuildId(DummyStep(), b'\xcc'*20), None)
-        a.uploadLocalLiveBuildId(DummyStep(), b'\xcc'*20, b'\xcc')
+        self.assertFalse(run(a.downloadPackage(DummyStep(), b'\xcc'*20, "unused", "unused")))
+        self.assertFalse(run(a.uploadPackage(DummyStep(), b'\xcc'*20, "unused", "unused")))
+        self.assertEqual(run(a.downloadLocalLiveBuildId(DummyStep(), b'\xcc'*20)), None)
+        run(a.uploadLocalLiveBuildId(DummyStep(), b'\xcc'*20, b'\xcc'))
 
     def testDisabledJenkins(self):
         """Disabled Jenkins must produce empty strings"""
@@ -288,24 +293,24 @@ class BaseTester:
         with TemporaryDirectory() as tmp:
             audit = os.path.join(tmp, "audit.json.gz")
             content = os.path.join(tmp, "workspace")
-            self.assertTrue(archive.downloadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content))
+            self.assertTrue(run(archive.downloadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content)))
             self.__testWorkspace(audit, content)
-            self.assertEqual(archive.downloadLocalLiveBuildId(DummyStep(), DOWNLOAD_ARITFACT), b'\x00'*20)
+            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), DOWNLOAD_ARITFACT)), b'\x00'*20)
 
         # non-existent and erro cases
         with TemporaryDirectory() as tmp:
             audit = os.path.join(tmp, "audit.json.gz")
             content = os.path.join(tmp, "workspace")
-            self.assertFalse(archive.downloadPackage(DummyStep(), NOT_EXISTS_ARTIFACT, audit, content))
-            self.assertFalse(archive.downloadPackage(DummyStep(), ERROR_DOWNLOAD_ARTIFACT, audit, content))
-            self.assertFalse(archive.downloadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content))
-            self.assertEqual(archive.downloadLocalLiveBuildId(DummyStep(), NOT_EXISTS_ARTIFACT), None)
-            self.assertEqual(archive.downloadLocalLiveBuildId(DummyStep(), ERROR_DOWNLOAD_ARTIFACT), None)
-            self.assertEqual(archive.downloadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT), None)
+            self.assertFalse(run(archive.downloadPackage(DummyStep(), NOT_EXISTS_ARTIFACT, audit, content)))
+            self.assertFalse(run(archive.downloadPackage(DummyStep(), ERROR_DOWNLOAD_ARTIFACT, audit, content)))
+            self.assertFalse(run(archive.downloadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content)))
+            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), NOT_EXISTS_ARTIFACT)), None)
+            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), ERROR_DOWNLOAD_ARTIFACT)), None)
+            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT)), None)
             with self.assertRaises(BuildError):
-                archive.downloadPackage(DummyStep(), BROKEN_ARTIFACT, audit, content)
+                run(archive.downloadPackage(DummyStep(), BROKEN_ARTIFACT, audit, content))
             with self.assertRaises(BuildError):
-                archive.downloadPackage(DummyStep(), WRONG_VERSION_ARTIFACT, audit, content)
+                run(archive.downloadPackage(DummyStep(), WRONG_VERSION_ARTIFACT, audit, content))
 
     def testUploadPackageNormal(self):
         """Local upload tests"""
@@ -325,30 +330,30 @@ class BaseTester:
             archive.wantUpload(True)
             self.assertTrue(archive.canUploadLocal())
 
-            archive.uploadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content) # exists alread
+            run(archive.uploadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content)) # exists alread
 
             bid = UPLOAD1_ARTIFACT
-            archive.uploadPackage(DummyStep(), bid, audit, content)
+            run(archive.uploadPackage(DummyStep(), bid, audit, content))
             self.__testArtifact(bid)
 
             bid = UPLOAD2_ARTIFACT
-            archive.uploadPackage(DummyStep(), bid, audit, content)
+            run(archive.uploadPackage(DummyStep(), bid, audit, content))
             self.__testArtifact(bid)
 
             # Provoke upload failure
             with self.assertRaises(BuildError):
-                archive.uploadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content)
+                run(archive.uploadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content))
 
         # regular live-build-id uploads
-        archive.uploadLocalLiveBuildId(DummyStep(), DOWNLOAD_ARITFACT, b'\x00') # exists already
-        archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD1_ARTIFACT, b'\x00')
+        run(archive.uploadLocalLiveBuildId(DummyStep(), DOWNLOAD_ARITFACT, b'\x00')) # exists already
+        run(archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD1_ARTIFACT, b'\x00'))
         self.__testBuildId(UPLOAD1_ARTIFACT, b'\x00')
-        archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD2_ARTIFACT, b'\x00')
+        run(archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD2_ARTIFACT, b'\x00'))
         self.__testBuildId(UPLOAD2_ARTIFACT, b'\x00')
 
         # provoke upload errors
         with self.assertRaises(BuildError):
-            archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00')
+            run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00'))
 
     def testUploadPackageNoFail(self):
         """The nofail option must prevent fatal error on upload failures"""
@@ -366,10 +371,10 @@ class BaseTester:
                 f.write(b"DATA")
 
             # must not throw
-            archive.uploadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content)
+            run(archive.uploadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content))
 
         # also live-build-id upload errors must not throw with nofail
-        archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00')
+        run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00'))
 
     def testDownloadJenkins(self):
         """Jenkins download tests"""
@@ -451,10 +456,10 @@ class BaseTester:
         self.assertEqual(archive.upload(b'\x00'*20, "unused", "unused"), "")
         self.assertEqual(archive.uploadJenkinsLiveBuildId(None, "unused", "unused"), "")
 
-        archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused")
-        self.assertEqual(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20), None)
-        archive.uploadPackage(DummyStep(), b'\x00'*20, "unused", "unused")
-        archive.uploadLocalLiveBuildId(DummyStep(), b'\x00'*20, b'\x00'*20)
+        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
+        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
+        run(archive.uploadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
+        run(archive.uploadLocalLiveBuildId(DummyStep(), b'\x00'*20, b'\x00'*20))
 
 
 class TestDummyArchive(TestCase):
@@ -474,8 +479,8 @@ class TestDummyArchive(TestCase):
         self.assertEqual(ret, "")
 
     def testDownloadLocal(self):
-        DummyArchive().downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused")
-        self.assertEqual(DummyArchive().downloadLocalLiveBuildId(DummyStep(), b'\x00'*20), None)
+        run(DummyArchive().downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
+        self.assertEqual(run(DummyArchive().downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
 
     def testUploadJenkins(self):
         ret = DummyArchive().upload(b'\x00'*20, "unused", "unused")
@@ -484,8 +489,8 @@ class TestDummyArchive(TestCase):
         self.assertEqual(ret, "")
 
     def testUploadLocal(self):
-        DummyArchive().uploadPackage(DummyStep(), b'\x00'*20, "unused", "unused")
-        DummyArchive().uploadLocalLiveBuildId(DummyStep(), b'\x00'*20, b'\x00'*20)
+        run(DummyArchive().uploadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
+        run(DummyArchive().uploadLocalLiveBuildId(DummyStep(), b'\x00'*20, b'\x00'*20))
 
 
 def createHttpHandler(repoPath):
@@ -578,8 +583,8 @@ class TestHttpArchive(BaseTester, TestCase):
         archive.wantUpload(True)
 
         # Local
-        archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused")
-        self.assertEqual(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20), None)
+        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
+        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
 
         # Jenkins
         with TemporaryDirectory() as workspace:

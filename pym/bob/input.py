@@ -1144,7 +1144,7 @@ class CheckoutStep(Step):
         """
         return self._coreStep.hasLiveBuildId()
 
-    def predictLiveBuildId(self):
+    async def predictLiveBuildId(self):
         """Query server to predict live build-id.
 
         Returns the live-build-id or None if an SCM query failed.
@@ -1154,7 +1154,7 @@ class CheckoutStep(Step):
         h = hashlib.sha1()
         h.update(self._getSandboxVariantId())
         for s in self._coreStep.scmList:
-            liveBId = s.predictLiveBuildId(self)
+            liveBId = await s.predictLiveBuildId(self)
             if liveBId is None: return None
             h.update(liveBId)
         return h.digest()
@@ -2398,6 +2398,7 @@ class RecipeSet:
             schema.Optional('sandbox') : bool,
             schema.Optional('clean_checkout') : bool,
             schema.Optional('always_checkout') : [str],
+            schema.Optional('jobs') : int,
         })
 
     GRAPH_SCHEMA = schema.Schema(

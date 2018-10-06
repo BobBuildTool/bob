@@ -165,7 +165,7 @@ fi
     def hasLiveBuildId(self):
         return self.isDeterministic()
 
-    def predictLiveBuildId(self, step):
+    async def predictLiveBuildId(self, step):
         return self.calcLiveBuildId(None)
 
     def calcLiveBuildId(self, workspacePath):

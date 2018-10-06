@@ -11,7 +11,10 @@ from .scm import Scm, ScmAudit
 from pipes import quote
 from textwrap import dedent
 from xml.etree import ElementTree
+import asyncio
+import concurrent.futures
 import hashlib
+import locale
 import os, os.path
 import re
 import schema
@@ -350,7 +353,7 @@ class GitScm(Scm):
     def hasLiveBuildId(self):
         return True
 
-    def predictLiveBuildId(self, step):
+    async def predictLiveBuildId(self, step):
         if self.__commit:
             return bytes.fromhex(self.__commit)
 
@@ -362,8 +365,19 @@ class GitScm(Scm):
                 refs = ["refs/heads/" + self.__branch]
             cmdLine = ['git', 'ls-remote', self.__url] + refs
             try:
-                output = subprocess.check_output(cmdLine, universal_newlines=True,
-                    stderr=subprocess.DEVNULL).strip()
+                proc = await asyncio.create_subprocess_exec(*cmdLine,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=subprocess.DEVNULL)
+                try:
+                    stdout, stderr = await proc.communicate()
+                    rc = await proc.wait()
+                except concurrent.futures.CancelledError:
+                    proc.terminate()
+                    rc = await proc.wait()
+                if rc != 0:
+                    a.fail("exit {}".format(rc), WARNING)
+                    return None
+                output = stdout.decode(locale.getpreferredencoding(False)).strip()
             except (subprocess.CalledProcessError, OSError):
                 a.fail("error")
                 return None

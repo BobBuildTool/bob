@@ -5,6 +5,7 @@
 
 from pipes import quote
 from unittest import TestCase
+import asyncio
 import os
 import subprocess
 import tempfile
@@ -22,6 +23,9 @@ class DummyPackage:
 class DummyStep:
     def getPackage(self):
         return DummyPackage()
+
+def run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro)
 
 class TestLiveBuildId(TestCase):
 
@@ -87,11 +91,11 @@ class TestLiveBuildId(TestCase):
     def testPredictLiveBildId(self):
         """Predict live-build-id"""
         s = self.createUrlScm()
-        self.assertEqual(s.predictLiveBuildId(DummyStep()), None)
+        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), None)
         s = self.createUrlScm({'digestSHA1' : self.urlSha1})
-        self.assertEqual(s.predictLiveBuildId(DummyStep()), bytes.fromhex(self.urlSha1))
+        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha1))
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
-        self.assertEqual(s.predictLiveBuildId(DummyStep()), bytes.fromhex(self.urlSha256))
+        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha256))
 
     def testCalcLiveBuildId(self):
         s = self.createUrlScm()
