@@ -9,7 +9,9 @@ from ..audit import Audit
 from ..errors import BobError, BuildError, ParseError
 from ..input import RecipeSet
 from ..state import BobState
-from ..tty import colorize
+from ..tty import colorize, setVerbosity, log, stepMessage, stepAction, stepExec, \
+    SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
+    ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from ..utils import asHexStr, hashDirectory, hashFile, removePath, \
     emptyDirectory, copyTree, isWindows, processDefines
 from datetime import datetime
@@ -401,14 +403,13 @@ esac
         self.__recipes = recipes
         self.__wasRun= {}
         self.__wasSkipped = {}
-        self.__verbose = max(-2, min(3, verbose))
+        self.__verbose = max(ALWAYS, min(TRACE, verbose))
         self.__noLogFile = noLogFile
         self.__force = force
         self.__skipDeps = skipDeps
         self.__buildOnly = buildOnly
         self.__preserveEnv = preserveEnv
         self.__envWhiteList = envWhiteList
-        self.__currentPackage = None
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
         self.__downloadDepthForce = 0xffff
@@ -553,9 +554,9 @@ esac
                         audit.addScm(typ, step.getWorkspacePath(), dir)
                     except BobError as e:
                         if executed: raise
-                        print(colorize("   WARNING: cannot audit SCM: {} ({})"
+                        stepMessage(step, "AUDIT", "WARNING: cannot audit SCM: {} ({})"
                                             .format(e.slogan, dir),
-                                       "33"))
+                                       WARNING)
 
         auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
         audit.save(auditPath)
@@ -606,7 +607,7 @@ esac
                                         "{:02}-{}".format(i, a.getPackage().getName())))
                 i += 1
 
-    def _runShell(self, step, scriptName, cleanWorkspace):
+    def _runShell(self, step, scriptName, cleanWorkspace, logger):
         workspacePath = step.getWorkspacePath()
         if cleanWorkspace: emptyDirectory(workspacePath)
         if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
@@ -634,7 +635,7 @@ esac
             sandboxSetup = "\"$(mktemp -d)\""
             sandboxMounts = [ "declare -a mounts=( )" ]
             sandbox = [ quote(os.path.join(self.__bobRoot, "bin", "namespace-sandbox")) ]
-            if self.__verbose >= 3:
+            if self.__verbose >= TRACE:
                 sandbox.append('-D')
             sandbox.extend(["-S", "\"$_sandbox\""])
             sandbox.extend(["-W", quote(step.getExecPath())])
@@ -755,11 +756,11 @@ esac
         os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
         cmdLine = ["/bin/bash", runFile, "__run"]
-        if self.__verbose < 0:
+        if self.__verbose < NORMAL:
             cmdLine.append('-q')
-        elif self.__verbose == 1:
+        elif self.__verbose == INFO:
             cmdLine.append('-v')
-        elif self.__verbose >= 2:
+        elif self.__verbose >= DEBUG:
             cmdLine.append('-vv')
         if self.__noLogFile:
             cmdLine.append('-n')
@@ -776,10 +777,6 @@ esac
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
 
-    def _info(self, *args, **kwargs):
-        if self.__verbose >= -1:
-            print(*args, **kwargs)
-
     def getStatistic(self):
         return self.__statistic
 
@@ -790,12 +787,9 @@ esac
                 self._cook([step], step.getPackage(), checkoutOnly, depth)
                 done = True
             except RestartBuildException:
-                print(colorize("** Restart build due to wrongly predicted sources.", "33"))
-                self.__currentPackage = None
+                log("Restart build due to wrongly predicted sources.", WARNING)
 
     def _cook(self, steps, parentPackage, checkoutOnly, depth=0):
-        currentPackage = self.__currentPackage
-
         # skip everything except the current package
         if self.__skipDeps:
             steps = [ s for s in steps if s.getPackage() == parentPackage ]
@@ -805,11 +799,6 @@ esac
             if self._wasAlreadyRun(step):
                 continue
 
-            # update if package changes
-            newPackage = "/".join(step.getPackage().getStack())
-            if newPackage != self.__currentPackage:
-                self.__currentPackage = newPackage
-                print(">>", colorize(self.__currentPackage, "32;1"))
 
             # execute step
             try:
@@ -827,12 +816,6 @@ esac
             except BuildError as e:
                 e.setStack(step.getPackage().getStack())
                 raise e
-
-        # back to original package
-        if currentPackage != self.__currentPackage:
-            self.__currentPackage = currentPackage
-            if currentPackage:
-                print(">>", colorize(self.__currentPackage, "32;1"))
 
     def _cookCheckoutStep(self, checkoutStep, depth):
         overrides = set()
@@ -860,10 +843,11 @@ esac
         checkoutState[None] = checkoutDigest = checkoutStep.getVariantId()
         if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
             if checkoutState != oldCheckoutState:
-                print(colorize("   CHECKOUT  WARNING: recipe changed but skipped due to --build-only ({})"
-                    .format(prettySrcPath), "33"))
+                stepMessage(checkoutStep, "CHECKOUT", "WARNING: recipe changed but skipped due to --build-only ({})"
+                    .format(prettySrcPath), WARNING)
             else:
-                self._info("   CHECKOUT  skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString))
+                stepMessage(checkoutStep, "CHECKOUT", "skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString),
+                    SKIPPED, IMPORTANT)
         else:
             if self.__cleanCheckout:
                 # check state of SCMs and invalidate if the directory is dirty
@@ -889,7 +873,8 @@ esac
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                         if os.path.exists(scmPath):
                             atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
-                            print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
+                            stepMessage(checkoutStep, "ATTIC",
+                                "{} (move to ../attic/{})".format(scmPath, atticName), WARNING)
                             atticPath = os.path.join(prettySrcPath, "..", "attic")
                             if not os.path.isdir(atticPath):
                                 os.makedirs(atticPath)
@@ -923,9 +908,9 @@ esac
                 if BobState().getResultHash(prettySrcPath) is not None:
                     BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
 
-                print(colorize("   CHECKOUT  {} {}".format(prettySrcPath, overridesString)
-                    , "32"))
-                self._runShell(checkoutStep, "checkout", False)
+                with stepExec(checkoutStep, "CHECKOUT",
+                              "{} {}".format(prettySrcPath, overridesString)) as a:
+                    self._runShell(checkoutStep, "checkout", False, a)
                 self.__statistic.checkouts += 1
                 checkoutExecuted = True
                 # reflect new checkout state
@@ -933,7 +918,8 @@ esac
                 BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
                 BobState().setVariantId(prettySrcPath, self.__getIncrementalVariantId(checkoutStep))
             else:
-                self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
+                stepMessage(checkoutStep, "CHECKOUT", "skipped (fixed package {})".format(prettySrcPath),
+                    SKIPPED, IMPORTANT)
 
         # We always have to rehash the directory as the user might have
         # changed the source code manually.
@@ -950,7 +936,7 @@ esac
         if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
             liveBId = checkoutStep.calcLiveBuildId()
             if liveBId is not None:
-                self.__archive.uploadLocalLiveBuildId(liveBId, checkoutHash, self.__verbose)
+                self.__archive.uploadLocalLiveBuildId(checkoutStep, liveBId, checkoutHash)
 
         # We're done. The sanity check below won't change the result but would
         # trigger this step again.
@@ -987,7 +973,8 @@ esac
         if created or (buildDigest != oldBuildDigest):
             # not created but exists -> something different -> prune workspace
             if not created and os.path.exists(prettyBuildPath):
-                print(colorize("   PRUNE     {} (recipe changed)".format(prettyBuildPath), "33"))
+                stepMessage(buildStep, "PRUNE", "{} (recipe changed)".format(prettyBuildPath),
+                    WARNING)
                 emptyDirectory(prettyBuildPath)
             # invalidate build step
             BobState().resetWorkspaceState(prettyBuildPath, buildDigest)
@@ -996,27 +983,29 @@ esac
         buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
             for i in buildStep.getAllDepSteps() if i.isValid() ]
         if checkoutOnly:
-            self._info("   BUILD     skipped due to --checkout-only ({})".format(prettyBuildPath))
+            stepMessage(buildStep, "BUILD", "skipped due to --checkout-only ({})".format(prettyBuildPath),
+                    SKIPPED, IMPORTANT)
         elif (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
-            self._info("   BUILD     skipped (unchanged input for {})".format(prettyBuildPath))
+            stepMessage(buildStep, "BUILD", "skipped (unchanged input for {})".format(prettyBuildPath),
+                    SKIPPED, IMPORTANT)
             # We always rehash the directory in development mode as the
             # user might have compiled the package manually.
             if not self.__cleanBuild:
                 BobState().setResultHash(prettyBuildPath, hashWorkspace(buildStep))
         else:
-            print(colorize("   BUILD     {}".format(prettyBuildPath), "32"))
-            # Squash state because running the step will change the
-            # content. If the execution fails we have nothing reliable
-            # left and we _must_ run it again.
-            BobState().delInputHashes(prettyBuildPath)
-            BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
-            # build it
-            self._runShell(buildStep, "build", self.__cleanBuild)
-            buildHash = hashWorkspace(buildStep)
-            self._generateAudit(buildStep, depth, buildHash)
-            BobState().setResultHash(prettyBuildPath, buildHash)
-            BobState().setVariantId(prettyBuildPath, buildDigest[0])
-            BobState().setInputHashes(prettyBuildPath, buildInputHashes)
+            with stepExec(buildStep, "BUILD", prettyBuildPath) as a:
+                # Squash state because running the step will change the
+                # content. If the execution fails we have nothing reliable
+                # left and we _must_ run it again.
+                BobState().delInputHashes(prettyBuildPath)
+                BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
+                # build it
+                self._runShell(buildStep, "build", self.__cleanBuild, a)
+                buildHash = hashWorkspace(buildStep)
+                self._generateAudit(buildStep, depth, buildHash)
+                BobState().setResultHash(prettyBuildPath, buildHash)
+                BobState().setVariantId(prettyBuildPath, buildDigest[0])
+                BobState().setInputHashes(prettyBuildPath, buildInputHashes)
 
     def _cookPackageStep(self, packageStep, checkoutOnly, depth):
         # get directory into shape
@@ -1026,7 +1015,8 @@ esac
         if created or (packageDigest != oldPackageDigest):
             # not created but exists -> something different -> prune workspace
             if not created and os.path.exists(prettyPackagePath):
-                print(colorize("   PRUNE     {} (recipe changed)".format(prettyPackagePath), "33"))
+                stepMessage(packageStep, "PRUNE", "{} (recipe changed)".format(prettyPackagePath),
+                    WARNING)
                 emptyDirectory(prettyPackagePath)
             # invalidate result if folder was created
             BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
@@ -1072,8 +1062,9 @@ esac
         if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ):
             # prune directory if we previously downloaded/built something different
             if ((oldInputBuildId is not None) and (oldInputBuildId != packageBuildId)) or self.__force:
-                print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
-                        "build forced" if self.__force else "build-id changed"), "33"))
+                stepMessage(packageStep, "PRUNE", "{} ({})".format(prettyPackagePath,
+                        "build forced" if self.__force else "build-id changed"),
+                    WARNING)
                 emptyDirectory(prettyPackagePath)
                 BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
                 oldInputBuildId = None
@@ -1084,7 +1075,7 @@ esac
             # we're done.
             if BobState().getResultHash(prettyPackagePath) is None:
                 audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
-                if self.__archive.downloadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose):
+                if self.__archive.downloadPackage(packageStep, packageBuildId, audit, prettyPackagePath):
                     self.__statistic.packagesDownloaded += 1
                     BobState().setInputHashes(prettyPackagePath, packageBuildId)
                     packageHash = hashWorkspace(packageStep)
@@ -1093,7 +1084,8 @@ esac
                 elif depth >= self.__downloadDepthForce:
                     raise BuildError("Downloading artifact failed")
             elif oldWasDownloaded:
-                self._info("   PACKAGE   skipped (already downloaded in {})".format(prettyPackagePath))
+                stepMessage(packageStep, "PACKAGE", "skipped (already downloaded in {})".format(prettyPackagePath),
+                    SKIPPED, IMPORTANT)
                 wasDownloaded = True
 
         # Run package step if we have not yet downloaded the package or if
@@ -1113,22 +1105,24 @@ esac
             packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                 for i in packageInputs if i.isValid() ]
             if checkoutOnly:
-                self._info("   PACKAGE   skipped due to --checkout-only ({})".format(prettyPackagePath))
+                stepMessage(packageStep, "PACKAGE", "skipped due to --checkout-only ({})".format(prettyPackagePath),
+                    SKIPPED, IMPORTANT)
             elif (not self.__force) and (oldInputHashes == packageInputHashes):
-                self._info("   PACKAGE   skipped (unchanged input for {})".format(prettyPackagePath))
+                stepMessage(packageStep, "PACKAGE", "skipped (unchanged input for {})".format(prettyPackagePath),
+                    SKIPPED, IMPORTANT)
             else:
-                print(colorize("   PACKAGE   {}".format(prettyPackagePath), "32"))
-                # invalidate result because folder will be cleared
-                BobState().delInputHashes(prettyPackagePath)
-                BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
-                self._runShell(packageStep, "package", True)
-                packageHash = hashWorkspace(packageStep)
-                packageDigest = self.__getIncrementalVariantId(packageStep)
-                audit = self._generateAudit(packageStep, depth, packageHash)
-                workspaceChanged = True
-                self.__statistic.packagesBuilt += 1
-                if packageBuildId and self.__archive.canUploadLocal():
-                    self.__archive.uploadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose)
+                with stepExec(packageStep, "PACKAGE", prettyPackagePath) as a:
+                    # invalidate result because folder will be cleared
+                    BobState().delInputHashes(prettyPackagePath)
+                    BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
+                    self._runShell(packageStep, "package", True, a)
+                    packageHash = hashWorkspace(packageStep)
+                    packageDigest = self.__getIncrementalVariantId(packageStep)
+                    audit = self._generateAudit(packageStep, depth, packageHash)
+                    workspaceChanged = True
+                    self.__statistic.packagesBuilt += 1
+                    if packageBuildId and self.__archive.canUploadLocal():
+                        self.__archive.uploadPackage(packageStep, packageBuildId, audit, prettyPackagePath)
 
         # Rehash directory if content was changed
         if workspaceChanged:
@@ -1153,18 +1147,7 @@ esac
             liveBId = BobState().getBuildId(key)
             if liveBId is not None: return liveBId
 
-        if self.__verbose > 0:
-            print(colorize("   QUERY-SRC {} .. ".format(step.getPackage().getName()), "32"), end="")
-        liveBId = None
-        try:
-            liveBId = step.predictLiveBuildId()
-        finally:
-            if self.__verbose > 0:
-                if liveBId is None:
-                    print(colorize("unknown", "33"))
-                else:
-                    print(colorize("ok", "32"))
-
+        liveBId = step.predictLiveBuildId()
         if liveBId is not None:
             BobState().setBuildId(key, liveBId)
         return liveBId
@@ -1177,7 +1160,7 @@ esac
         if liveBId is not None:
             BobState().delBuildId(key)
 
-    def __translateLiveBuildId(self, liveBId):
+    def __translateLiveBuildId(self, step, liveBId):
         """Translate live build-id into real build-id.
 
         We maintain a local cache of previous translations. In case of a cache
@@ -1188,7 +1171,7 @@ esac
         if bid is not None:
             return bid
 
-        bid = self.__archive.downloadLocalLiveBuildId(liveBId, self.__verbose)
+        bid = self.__archive.downloadLocalLiveBuildId(step, liveBId)
         if bid is not None:
             BobState().setBuildId(key, bid)
 
@@ -1196,7 +1179,6 @@ esac
 
     def __getCheckoutStepBuildId(self, step, depth):
         ret = None
-        v = (self.__verbose >= -1) and (self.__verbose < 1)
 
         # Try to use live build-ids for checkout steps. Do not use them if
         # there is already a workspace or if the package matches one of the
@@ -1206,18 +1188,12 @@ esac
         if not os.path.exists(step.getWorkspacePath()) and \
            not any(pat.match(name) for pat in self.__alwaysCheckout) and \
            step.hasLiveBuildId() and self.__archive.canDownloadLocal():
-            if v:
-                print(colorize("   QUERY     {} .. ".format(step.getPackage().getName()), "32"), end="")
-            try:
+            with stepAction(step, "QUERY", step.getPackage().getName(), (IMPORTANT, NORMAL)) as a:
                 liveBId = self.__queryLiveBuildId(step)
                 if liveBId:
-                    ret = self.__translateLiveBuildId(liveBId)
-            finally:
-                if v:
-                    if ret is None:
-                        print(colorize("unknown", "33"))
-                    else:
-                        print(colorize("ok", "32"))
+                    ret = self.__translateLiveBuildId(step, liveBId)
+                if ret is None:
+                    a.fail("unknown", WARNING)
 
         # do the checkout if we still don't have a build-id
         if ret is None:

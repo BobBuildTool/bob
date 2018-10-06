@@ -20,7 +20,7 @@ concurrent uploads the artifact must appear atomically for unrelated readers.
 """
 
 from .errors import BuildError
-from .tty import colorize
+from .tty import stepAction, SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR
 from .utils import asHexStr, removePath, isWindows
 from pipes import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
@@ -76,10 +76,10 @@ class DummyArchive:
     def canUploadJenkins(self):
         return False
 
-    def uploadPackage(self, buildId, audit, content, verbose):
+    def uploadPackage(self, step, buildId, audit, content):
         pass
 
-    def downloadPackage(self, buildId, audit, content, verbose):
+    def downloadPackage(self, step, buildId, audit, content):
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
@@ -88,10 +88,10 @@ class DummyArchive:
     def download(self, step, buildIdFile, tgzFile):
         return ""
 
-    def uploadLocalLiveBuildId(self, liveBuildId, buildId, verbose):
+    def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
         pass
 
-    def downloadLocalLiveBuildId(self, liveBuildId, verbose):
+    def downloadLocalLiveBuildId(self, step, liveBuildId):
         return None
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
@@ -173,16 +173,17 @@ class BaseArchive:
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
 
-    def downloadPackage(self, buildId, audit, content, verbose):
+    def downloadPackage(self, step, buildId, audit, content):
         if not self.canDownloadLocal():
             return False
 
-        if verbose > 0:
-            print(colorize("   DOWNLOAD  {} from {} .. "
-                            .format(content, self._remoteName(buildId, ARTIFACT_SUFFIX)), "32"),
-                  end="")
-        else:
-            print(colorize("   DOWNLOAD  {} .. ".format(content), "32"), end="")
+        details = " from {}".format(self._remoteName(buildId, ARTIFACT_SUFFIX))
+        with stepAction(step, "DOWNLOAD", content, details=details) as a:
+            ret, msg, kind = self._downloadPackage(buildId, audit, content)
+            if not ret: a.fail(msg, kind)
+            return ret
+
+    def _downloadPackage(self, buildId, audit, content):
         try:
             with self._openDownloadFile(buildId, ARTIFACT_SUFFIX) as (name, fileobj):
                 with tarfile.open(name, "r|*", fileobj=fileobj, errorlevel=1) as tar:
@@ -190,113 +191,92 @@ class BaseArchive:
                     removePath(content)
                     os.makedirs(content)
                     self.__extractPackage(tar, audit, content)
-            print(colorize("ok", "32"))
-            return True
+            return (True, None, None)
         except ArtifactNotFoundError:
-            print(colorize("not found", "33"))
-            return False
+            return (False, "not found", WARNING)
         except ArtifactDownloadError as e:
-            print(colorize(e.reason, "33"))
-            return False
+            return (False, e.reason, WARNING)
         except BuildError as e:
-            print(colorize("error", "31"))
             raise
         except OSError as e:
-            print(colorize("error", "31"))
             raise BuildError("Cannot download artifact: " + str(e))
         except tarfile.TarError as e:
-            print(colorize("error", "31"))
             raise BuildError("Error extracting binary artifact: " + str(e))
 
-    def downloadLocalLiveBuildId(self, liveBuildId, verbose):
+    def downloadLocalLiveBuildId(self, step, liveBuildId):
         if not self.canDownloadLocal():
             return None
 
-        ret = None
-        if verbose > 0:
-            print(colorize("   LOOKUP    {} .. "
-                            .format(self._remoteName(liveBuildId, BUILDID_SUFFIX)), "32"),
-                  end="")
+        with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
+            ret, msg, kind = self._downloadLocalLiveBuildId(liveBuildId)
+            if not ret: a.fail(msg, kind)
+            return ret
+
+    def _downloadLocalLiveBuildId(self, liveBuildId):
 
         try:
             with self._openDownloadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
                 ret = readFileOrHandle(name, fileobj)
-            if verbose > 0: print(colorize("ok", "32"))
+            return (ret, None, None)
         except ArtifactNotFoundError:
-            if verbose > 0: print(colorize("unknown", "33"))
+            return (None, "not found", WARNING)
         except ArtifactDownloadError as e:
-            if verbose > 0: print(colorize(e.reason, "33"))
+            return (None, e.reason, WARNING)
         except BuildError as e:
-            if verbose > 0: print(colorize("error", "31"))
             raise
         except OSError as e:
-            if verbose > 0: print(colorize("error", "31"))
             raise BuildError("Cannot download artifact: " + str(e))
-
-        return ret
 
     def _openUploadFile(self, buildId, suffix):
         raise ArtifactUploadError("not implemented")
 
-    def uploadPackage(self, buildId, audit, content, verbose):
+    def uploadPackage(self, step, buildId, audit, content):
         if not self.canUploadLocal():
             return
 
-        shown = False
+        details = " to {}".format(self._remoteName(buildId, ARTIFACT_SUFFIX))
+        with stepAction(step, "UPLOAD", content, details=details) as a:
+            msg, kind = self._uploadPackage(buildId, audit, content)
+            a.setResult(msg, kind)
+
+    def _uploadPackage(self, buildId, audit, content):
         try:
             with self._openUploadFile(buildId, ARTIFACT_SUFFIX) as (name, fileobj):
                 pax = { 'bob-archive-vsn' : "1" }
-                if verbose > 0:
-                    print(colorize("   UPLOAD    {} to {} .. "
-                                    .format(content, self._remoteName(buildId, ARTIFACT_SUFFIX)), "32"),
-                          end="")
-                else:
-                    print(colorize("   UPLOAD    {} .. ".format(content), "32"), end="")
-                shown = True
                 with gzip.open(name or fileobj, 'wb', 6) as gzf:
                     with tarfile.open(name, "w", fileobj=gzf,
                                       format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
                         tar.add(audit, "meta/" + os.path.basename(audit))
                         tar.add(content, arcname="content")
-            print(colorize("ok", "32"))
         except ArtifactExistsError:
-            if shown:
-                print("skipped ({} exists in archive)".format(content))
-            else:
-                print("   UPLOAD    skipped ({} exists in archive)".format(content))
+            return ("skipped ({} exists in archive)".format(content), SKIPPED)
         except (ArtifactUploadError, tarfile.TarError, OSError) as e:
-            if shown:
-                if verbose > 0:
-                    print(colorize("error ("+str(e)+")", "31"))
-                else:
-                    print(colorize("error", "31"))
-            if not self.__ignoreErrors:
+            if self.__ignoreErrors:
+                return ("error ("+str(e)+")", ERROR)
+            else:
                 raise BuildError("Cannot upload artifact: " + str(e))
+        return ("ok", EXECUTED)
 
-    def uploadLocalLiveBuildId(self, liveBuildId, buildId, verbose):
+    def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
         if not self.canUploadLocal():
             return
 
-        shown = False
+        with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
+            msg, kind = self._uploadLocalLiveBuildId(liveBuildId, buildId)
+            a.setResult(msg, kind)
+
+    def _uploadLocalLiveBuildId(self, liveBuildId, buildId):
         try:
             with self._openUploadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
-                if verbose > 0:
-                    print(colorize("   CACHE     {} .. "
-                                    .format(self._remoteName(liveBuildId, BUILDID_SUFFIX)), "32"),
-                          end="")
-                    shown = True
                 writeFileOrHandle(name, fileobj, buildId)
-            if verbose > 0: print(colorize("ok", "32"))
         except ArtifactExistsError:
-            if verbose > 0:
-                if shown:
-                    print("skipped (exists in archive)")
-                else:
-                    print("   CACHE     skipped (exists in archive)")
+            return ("skipped (exists in archive)", SKIPPED)
         except (ArtifactUploadError, OSError) as e:
-            if shown: print(colorize("error ("+str(e)+")", "31"))
-            if not self.__ignoreErrors:
-                raise BuildError("Cannot upload artifact: " + str(e))
+            if self.__ignoreErrors:
+                return ("error ("+str(e)+")", ERROR)
+            else:
+                raise BuildError("Cannot upload build-id: " + str(e))
+        return ("ok", EXECUTED)
 
 
 class LocalArchive(BaseArchive):
@@ -983,15 +963,15 @@ class MultiArchive:
     def canUploadJenkins(self):
         return any(i.canUploadJenkins() for i in self.__archives)
 
-    def uploadPackage(self, buildId, audit, content, verbose):
+    def uploadPackage(self, step, buildId, audit, content):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            i.uploadPackage(buildId, audit, content, verbose)
+            i.uploadPackage(step, buildId, audit, content)
 
-    def downloadPackage(self, buildId, audit, content, verbose):
+    def downloadPackage(self, step, buildId, audit, content):
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            if i.downloadPackage(buildId, audit, content, verbose): return True
+            if i.downloadPackage(step, buildId, audit, content): return True
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
@@ -1004,16 +984,16 @@ class MultiArchive:
             i.download(step, buildIdFile, tgzFile) for i in self.__archives
             if i.canDownloadJenkins())
 
-    def uploadLocalLiveBuildId(self, liveBuildId, buildId, verbose):
+    def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            i.uploadLocalLiveBuildId(liveBuildId, buildId, verbose)
+            i.uploadLocalLiveBuildId(step, liveBuildId, buildId)
 
-    def downloadLocalLiveBuildId(self, liveBuildId, verbose):
+    def downloadLocalLiveBuildId(self, step, liveBuildId):
         ret = None
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            ret = i.downloadLocalLiveBuildId(liveBuildId, verbose)
+            ret = i.downloadLocalLiveBuildId(step, liveBuildId)
             if ret is not None: break
         return ret
 

@@ -6,7 +6,7 @@
 from . import BOB_INPUT_HASH
 from .errors import BuildError, ParseError
 from .scm import GitAudit, SvnAudit, UrlAudit, auditFromData
-from .tty import colorize
+from .tty import log, WARNING
 from .utils import asHexStr, hashFile, binStat
 from datetime import datetime, timezone
 import gzip
@@ -280,7 +280,7 @@ class Audit:
                 f.write(cacheKey)
                 pickle.dump(audit, f, -1)
         except OSError as e:
-            print(colorize("Error loading audit: " + str(e), "33"))
+            log("Error loading audit: " + str(e), WARNING)
         return audit
 
     @classmethod
