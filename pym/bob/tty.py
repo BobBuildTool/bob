@@ -21,6 +21,7 @@ DEBUG = 2
 TRACE = 3
 
 COLORS2CODE = [ "", "", "32", "34", "33", "31" ]
+COLORS2TEXT = [ "NOTE", "NOTE", "NOTE", "INFO", "WARN", "ERR " ]
 
 def colorize(string, color):
     if isinstance(color, int):
@@ -192,6 +193,222 @@ class SingleTUI(BaseTUI):
             return DummyTUIAction()
 
 
+class ParallelTtyUIAction(BaseTUIAction):
+    def __init__(self, tui, job, slot, name, msg, ellipsis, showDetails):
+        super().__init__(showDetails)
+        self.__tui = tui
+        self.__job = job
+        self.__slot = slot
+        self.__name = name
+        self.__msg = msg
+        self.__ellipsis = ellipsis
+        if not ellipsis: self.setError("")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            kind = ERROR
+        else:
+            kind = EXECUTED
+        msg = "[{:>4}] {}".format(self.__job, colorize(self.__msg, kind))
+        if self.__ellipsis:
+            if exc_type is None:
+                kind = self.ok_kind
+                status = self.ok_message
+            else:
+                kind = self.err_kind
+                status = self.err_message
+            msg += colorize(status, kind)
+        if not self.__ellipsis and exc_type is not None and self.err_message:
+            msg = [msg] + [
+                "[{:>4}] |{}| {}".format(self.__job, colorize(self.__name, self.err_kind), l)
+                for l in self.err_message.split("\n")]
+        self.__tui._putResult(self.__slot, msg)
+        return False
+
+class ParallelTtyUI(BaseTUI):
+    def __init__(self, verbosity, maxJobs):
+        super().__init__(verbosity)
+        import termios
+        self.__index = 1
+        self.__maxJobs = maxJobs
+        self.__jobs = {}
+        self.__slots = [None] * maxJobs
+
+        # disable cursor
+        print("\x1b[?25l")
+
+        # disable echo
+        fd = sys.stdin.fileno()
+        self.__oldTcAttr = termios.tcgetattr(fd)
+        new = termios.tcgetattr(fd)
+        new[3] = new[3] & ~termios.ECHO
+        termios.tcsetattr(fd, termios.TCSADRAIN, new)
+
+    def __nextJob(self):
+        ret = self.__index
+        self.__index += 1
+        return ret
+
+    def __putLineCont(self, line):
+        print("\r" + "\x1b[2K", line, "\x1b[K", sep="")
+
+    def __putLine(self, line):
+        self.__putLineCont(line)
+        self.__putFooter()
+
+    def __putFooter(self):
+        print("\r\x1b[?7l\x1b[2K====== {}/{} jobs running "
+                .format(len(self.__jobs), self.__maxJobs), end="")
+        i = 0
+        while i < self.__maxJobs:
+            num = self.__slots[i]
+            if num is not None:
+                print("\n\x1b[2K {:>4}  {}".format(num, self.__jobs[num]), end='')
+            else:
+                print("\n\x1b[2K ****  <idle>", end='')
+            i += 1
+        print("\x1b[{}A".format(i), "\x1b[?7h\r", sep='', end='')
+
+    def _putResult(self, slot, msg):
+        job = self.__slots[slot]
+        self.__slots[slot] = None
+        del self.__jobs[job]
+        if msg:
+            if isinstance(msg, list):
+                for l in msg: self.__putLineCont(l)
+                self.__putFooter()
+            else:
+                self.__putLine(msg)
+        else:
+            self.__putFooter()
+
+    def log(self, message, kind, severity):
+        if not self._isVisible(severity): return
+        print(colorize("[****] {}".format(message), kind))
+
+    def stepMessage(self, step, action, message, kind, severity):
+        if not self._isVisible(severity): return
+        self.__putLine("[    ] {}".format(colorize(
+            "{:10}{} - {}".format(action, step.getPackage().getName(), message), kind)))
+
+    def stepAction(self, step, action, message, severity, details):
+        return self.__action(step, action, message, severity, details, True)
+
+    def stepExec(self, step, action, message, severity, details):
+        return self.__action(step, action, message, severity, details, False)
+
+    def __action(self, step, action, message, severity, details, ellipsis):
+        if not self._isVisible(severity): return DummyTUIAction()
+        showDetails = self._isVisible(INFO)
+        if showDetails and details:
+            details = " " + details
+        else:
+            details = ""
+        if ellipsis:
+            details += " .. "
+
+        job = self.__nextJob()
+        slot = 0
+        while self.__slots[slot] is not None: slot += 1
+        name = step.getPackage().getName()
+        self.__slots[slot] = job
+        self.__jobs[job] = colorize("{:10}{} - {}".format(action, name, message), EXECUTED)
+        self.__putFooter()
+        msg = "{:10}{} - {}{}".format(action, name, message, details)
+        return ParallelTtyUIAction(self, job, slot, name, msg, ellipsis, showDetails)
+
+    def cleanup(self):
+        for i in range(max(len(self.__jobs), self.__maxJobs)+1):
+            print()
+        print("\x1b[?25h")
+        import termios
+        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
+
+
+class ParallelDumbUIAction(BaseTUIAction):
+    def __init__(self, tui, job, name, msg, ellipsis, showDetails):
+        super().__init__(showDetails)
+        self.__tui = tui
+        self.__job = job
+        self.__name = name
+        self.__msg = msg
+        self.__ellipsis = ellipsis
+        if not ellipsis: self.setError("")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        kind = EXECUTED if exc_type is None else ERROR
+        msg = self.__msg
+        stderr = None
+        if self.__ellipsis:
+            if exc_type is None:
+                kind = self.ok_kind
+                status = self.ok_message
+            else:
+                kind = self.err_kind
+                status = self.err_message
+            msg += status
+        elif exc_type is not None and self.err_message:
+            kind = self.err_kind
+            stderr = self.err_message
+        self.__tui._print(self.__job, msg, kind, "End")
+        if stderr:
+            # Print error messages on stderr when being on a dumb output. It is
+            # probably redirected by some other script or an analyzed IDE (thin
+            # "bob project").
+            print(stderr, file=sys.stderr)
+        return False
+
+class ParallelDumbUI(BaseTUI):
+    def __init__(self, verbosity):
+        super().__init__(verbosity)
+        self.__index = 1
+
+    def __nextJob(self):
+        ret = self.__index
+        self.__index += 1
+        return ret
+
+    def _print(self, job, msg, kind, stage=""):
+        level = COLORS2TEXT[kind & 7]
+        print("[{:<5} {:>4}] {}: {}".format(stage, job, level, colorize(msg, kind)))
+
+    def log(self, message, kind, severity):
+        if not self._isVisible(severity): return
+        self._print("****", message, kind, "*****")
+
+    def stepMessage(self, step, action, message, kind, severity):
+        if not self._isVisible(severity): return
+        self._print("", "{:10}{} - {}".format(action,
+            step.getPackage().getName(), message), kind)
+
+    def stepAction(self, step, action, message, severity, details):
+        return self.__action(step, action, message, severity, details, True)
+
+    def stepExec(self, step, action, message, severity, details):
+        return self.__action(step, action, message, severity, details, False)
+
+    def __action(self, step, action, message, severity, details, ellipsis):
+        if not self._isVisible(severity): return DummyTUIAction()
+        showDetails = self._isVisible(INFO)
+        if showDetails and details:
+            details = " " + details
+        else:
+            details = ""
+        if ellipsis:
+            details += ": "
+
+        job = self.__nextJob()
+        name = step.getPackage().getName()
+        self._print(job, "{:10}{} - {}".format(action, name, message), EXECUTED, "Start")
+        msg = "{:10}{} - {}{}".format(action, name, message, details)
+        return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails)
+
 def log(message, kind, severity=-2):
     __tui.log(message, kind, severity)
 
@@ -207,6 +424,16 @@ def stepExec(step, action, message, severity=-2, details=""):
 def setVerbosity(verbosity):
     verbosity = max(ALWAYS, min(TRACE, verbosity))
     __tui.setVerbosity(verbosity)
+
+def setTui(maxJobs):
+    global __tui
+    __tui.cleanup()
+    if maxJobs <= 1:
+        __tui = SingleTUI(__tui.getVerbosity())
+    elif __onTTY:
+        __tui = ParallelTtyUI(__tui.getVerbosity(), maxJobs)
+    else:
+        __tui = ParallelDumbUI(__tui.getVerbosity())
 
 def cleanup():
     __tui.cleanup()
