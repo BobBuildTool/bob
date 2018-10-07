@@ -30,6 +30,7 @@ import concurrent.futures
 import concurrent.futures.process
 import gzip
 import http.client
+import os
 import os.path
 import signal
 import ssl
@@ -542,9 +543,14 @@ class SimpleHttpArchive(BaseArchive):
             raise ArtifactUploadError(str(result))
 
     def __putUploadFile(self, url, tmp):
+        # Determine file length outself and add a "Content-Length" header. This
+        # used to work in Python 3.5 automatically but was removed later.
+        tmp.seek(0, os.SEEK_END)
+        length = str(tmp.tell())
         tmp.seek(0)
         connection = self._getConnection()
-        connection.request("PUT", url, tmp, headers={ 'If-None-Match' : '*' })
+        connection.request("PUT", url, tmp, headers={ 'Content-Length' : length,
+            'If-None-Match' : '*' })
         response = connection.getresponse()
         response.read()
         if response.status == 412:
