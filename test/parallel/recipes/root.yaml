@@ -1,0 +1,12 @@
+root: True
+
+depends:
+    - lib1
+    - lib2
+    - lib3
+
+buildScript: |
+    true
+
+packageScript: |
+    true
