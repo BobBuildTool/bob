@@ -1,0 +1,3 @@
+environment:
+    B: "${B:-}<b>"
+    C: "<b>"
