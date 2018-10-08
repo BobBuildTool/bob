@@ -1790,6 +1790,12 @@ class Recipe(object):
         # calculate order of classes (depth first) but ignore ourself
         inherit = self.__resolveClassesOrder(self, [], set(), True)
 
+        # prepare environment merge list
+        mergeEnvironment = self.__recipeSet.getPolicy('mergeEnvironment')
+        if mergeEnvironment:
+            self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
+            self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
+
         # inherit classes
         inherit.reverse()
         for cls in inherit:
@@ -1809,12 +1815,16 @@ class Recipe(object):
             self.__provideVars = tmp
             self.__provideDeps |= cls.__provideDeps
             if self.__provideSandbox is None: self.__provideSandbox = cls.__provideSandbox
-            tmp = cls.__varSelf.copy()
-            tmp.update(self.__varSelf)
-            self.__varSelf = tmp
-            tmp = cls.__varPrivate.copy()
-            tmp.update(self.__varPrivate)
-            self.__varPrivate = tmp
+            if mergeEnvironment:
+                if cls.__varSelf: self.__varSelf.insert(0, cls.__varSelf)
+                if cls.__varPrivate: self.__varPrivate.insert(0, cls.__varPrivate)
+            else:
+                tmp = cls.__varSelf.copy()
+                tmp.update(self.__varSelf)
+                self.__varSelf = tmp
+                tmp = cls.__varPrivate.copy()
+                tmp.update(self.__varPrivate)
+                self.__varPrivate = tmp
             self.__checkoutVars |= cls.__checkoutVars
             tmp = cls.__metaEnv.copy()
             tmp.update(self.__metaEnv)
@@ -1854,6 +1864,11 @@ class Recipe(object):
             )
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
+
+        # finalize environment merge list
+        if not mergeEnvironment:
+            self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
+            self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
 
         # the package step must always be valid
         if self.__package[0] is None:
@@ -1949,10 +1964,10 @@ class Recipe(object):
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
         inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
-        varSelf = {}
-        for (key, value) in self.__varSelf.items():
-            varSelf[key] = inputEnv.substitute(value, "environment::"+key)
-        env = inputEnv.filter(self.__filterEnv).derive(varSelf)
+        env = inputEnv.filter(self.__filterEnv)
+        for i in self.__varSelf:
+            env = env.derive({ key : env.substitute(value, "environment::"+key)
+                               for key, value in i.items() })
         if sandbox is not None:
             name = sandbox.coreStep.corePackage.getName()
             if not checkGlobList(name, self.__filterSandbox):
@@ -2075,10 +2090,9 @@ class Recipe(object):
 
         # apply private environment
         env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
-        varPrivate = {}
-        for (key, value) in self.__varPrivate.items():
-            varPrivate[key] = env.substitute(value, "privateEnvironment::"+key)
-        env.update(varPrivate)
+        for i in self.__varPrivate:
+            env = env.derive({ key : env.substitute(value, "privateEnvironment::"+key)
+                               for key, value in i.items() })
 
         # meta variables override existing variables but can not be substituted
         env.update(self.__metaEnv)
@@ -2362,6 +2376,7 @@ class RecipeSet:
                 schema.Optional('offlineBuild') : bool,
                 schema.Optional('sandboxInvariant') : bool,
                 schema.Optional('uniqueDependency') : bool,
+                schema.Optional('mergeEnvironment') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         )
@@ -2431,6 +2446,11 @@ class RecipeSet:
                 "0.14",
                 InfoOnce("uniqueDependency policy not set. Naming same dependency multiple times is deprecated.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#uniquedependency for more information.")
+            ),
+            'mergeEnvironment' : (
+                "0.15",
+                InfoOnce("mergeEnvironment policy not set. Recipe and classes (private)environments overwrite each other instead of being merged.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#mergeenvironment for more information.")
             ),
         }
         self.__buildHooks = {}
