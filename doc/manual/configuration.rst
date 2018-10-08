@@ -769,6 +769,9 @@ Example::
    environment:
       PKG_VERSION: "1.2.3"
 
+The environment of the recipe and inherited classes are merged together. The
+exact way of merging is subject to the :ref:`policies-mergeEnvironment` policy.
+
 See also :ref:`configuration-recipes-privateenv`.
 
 .. _configuration-recipes-filter:
@@ -890,6 +893,10 @@ Example::
 
    privateEnvironment:
       APPLY_FOO_PATCH: "no"
+
+The privateEnvironment of the recipe and inherited classes are merged together.
+The exact way of merging is subject to the :ref:`policies-mergeEnvironment`
+policy.
 
 See also :ref:`configuration-recipes-env`.
 

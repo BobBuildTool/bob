@@ -327,3 +327,52 @@ New behavior
     the ``if`` condition of the dependencies. It is therefore still possible to
     have multiple references to the same package given that only one reference
     is active. Everything else will result in a parsing error.
+
+.. _policies-mergeEnvironment:
+
+mergeEnvironment
+~~~~~~~~~~~~~~~~
+
+Introduced in: 0.15
+
+The :ref:`configuration-recipes-env` and
+:ref:`configuration-recipes-privateenv` sections of the recipes and classes it
+inherits from are merged when the packages are calculated. Traditionally this
+was done on a key-by-key basis without variable substitution. Keys from the
+recipe or an inherited class would simply shadow keys from later inherited
+classes. This had the effect that the definitions of later inherited classes
+were lost. It was also not possible to pick them up via variable substitution.
+Suppose the following simple recipe/class structure::
+
+    recipes/foo.yaml:
+        inherit: [asan, werror]
+        privateEnvironment:
+            CFLAGS: "${CFLAGS:-} -DFOO=1"
+
+    classes/asan.yaml:
+        privateEnvironment:
+            CFLAGS: "${CFLAGS:-} -fsanitize=address"
+
+    classes/werror.yaml:
+        privateEnvironment:
+            CFLAGS: "${CFLAGS:-} -Werror"
+
+Previously the definition of ``CFLAGS`` in the recipe would completely shadow
+the ones of the inherited classes. So the ``CFLAGS`` variable would only ever
+be amended with ``-DFOO=1``. In contrast to this unintuitive result the new
+behavior is to take all classes into account and merge their values by applying
+the usual variable substitution.
+
+Old behavior
+    Environment keys in the recipe or earlier inherited classes shadow any
+    later inherited classes. Variable substitution is done only with the first
+    definition of the key. Any shadowed deviations are not examined. Given the
+    above example the resulting ``CFLAGS`` would be ``${CFLAGS:-} -DFOO=1``.
+
+New behavior
+    All environment keys are eligible to variable substitution. The definitions
+    of the recipe has the highest precedence (i.e. it is substituted last).
+    Declarations of classes are substituted in their inheritance order, that is,
+    the last inherited class has the highest precedence. Given the above
+    example the resulting ``CFLAGS`` would be ``${CFLAGS:-} -fsanitize=address
+    -Werror -DFOO=1``
