@@ -14,7 +14,7 @@ import os
 import collections
 from shutil import copyfile
 
-def findPackages(package, excludes, highlights, done, maxdepth, level = 0):
+def findPackages(package, excludes, highlights, done, maxdepth, donePackages, level = 0):
     def isHighLigh(package):
         for h in highlights:
             if (h.match(package.getName())):
@@ -34,6 +34,10 @@ def findPackages(package, excludes, highlights, done, maxdepth, level = 0):
             return 2
         return 3
 
+    if package._getId() in donePackages:
+       return
+    donePackages.add(package._getId())
+
     for e in excludes:
         if (e.match(package.getName())):
             return
@@ -52,7 +56,7 @@ def findPackages(package, excludes, highlights, done, maxdepth, level = 0):
                 break
         else:
            yield ('link', d.getPackage(), package)
-        yield from findPackages(d.getPackage(), excludes, highlights, done, maxdepth, level+1)
+        yield from findPackages(d.getPackage(), excludes, highlights, done, maxdepth, donePackages, level+1)
 
 def makeD3Graph(packages, p, filename, options, excludes, highlights, maxdepth):
     def getHover(package, options):
@@ -69,8 +73,9 @@ def makeD3Graph(packages, p, filename, options, excludes, highlights, maxdepth):
     nodes = []
     links = []
     done = set()
+    donePackages = set()
     for package in packages.queryPackagePath(p):
-        for (t, a, b) in findPackages(package, excludes, highlights, done, maxdepth):
+        for (t, a, b) in findPackages(package, excludes, highlights, done, maxdepth, donePackages):
             if t == 'node':
                 # do we already have this package? if so add a suffix
                 maxVariant = -1
@@ -479,12 +484,13 @@ def makeDotGraph(packages, p, filename, excludes, highlights, maxdepth):
             return 'white';
 
     done = set()
+    donePackages = set()
     links = []
     with open(filename + ".dot", "w") as f:
         f.write("digraph \"" + p + "\" {\n")
         f.write(" {\n")
         for package in packages.queryPackagePath(p):
-            for (t, a, b) in findPackages(package, excludes, highlights, done, maxdepth):
+            for (t, a, b) in findPackages(package, excludes, highlights, done, maxdepth, donePackages):
                 if t == 'link':
                     if (a.getName(),b.getName()) not in links:
                         links.append((a.getName(), b.getName()))
