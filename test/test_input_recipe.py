@@ -161,13 +161,13 @@ class TestRelocatable(TestCase):
         recipeSet.loadBinary = MagicMock()
         recipeSet.getPolicy = lambda x: allRelocatable if x == 'allRelocatable' else None
 
-        cc = { n : Recipe(recipeSet, r, n+".yaml", cwd, n, n, {}, False)
+        cc = { n : Recipe(recipeSet, r, [], n+".yaml", cwd, n, n, {}, False)
             for n, r in classes.items() }
         recipeSet.getClass = lambda x, cc=cc: cc[x]
 
         r = recipe.copy()
         r["root"] = True
-        ret = Recipe(recipeSet, recipe, name+".yaml", cwd, name, name, {})
+        ret = Recipe(recipeSet, recipe, [], name+".yaml", cwd, name, name, {})
         ret.resolveClasses()
         return ret.prepare(Env(), False, {})[0].refDeref([], {}, None, None)
 

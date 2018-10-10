@@ -1816,11 +1816,11 @@ class Recipe(object):
                 for dep in deps )
 
     @staticmethod
-    def loadFromFile(recipeSet, fileName, properties, fileSchema, isRecipe):
+    def loadFromFile(recipeSet, layer, rootDir, fileName, properties, fileSchema, isRecipe):
         # MultiPackages are handled as separate recipes with an anonymous base
-        # class. Ignore first dir in path, which is 'recipes' by default.
-        # Following dirs are treated as categories separated by '::'.
-        baseName = os.path.splitext( fileName )[0].split( os.sep )[1:]
+        # class. Directories are treated as categories separated by '::'.
+        baseName = os.path.splitext( fileName )[0].split( os.sep )
+        fileName = os.path.join(rootDir, fileName)
         try:
             for n in baseName: RECIPE_NAME_SCHEMA.validate(n)
         except schema.SchemaError as e:
@@ -1836,7 +1836,7 @@ class Recipe(object):
 
         def collect(recipe, suffix, anonBaseClass):
             if "multiPackage" in recipe:
-                anonBaseClass = Recipe(recipeSet, recipe, fileName, baseDir,
+                anonBaseClass = Recipe(recipeSet, recipe, layer, fileName, baseDir,
                     anonNameCalculator(suffix), baseName, properties, isRecipe,
                     anonBaseClass)
                 return chain.from_iterable(
@@ -1845,7 +1845,7 @@ class Recipe(object):
                     for (subName, subSpec) in recipe["multiPackage"].items() )
             else:
                 packageName = baseName + suffix
-                return [ Recipe(recipeSet, recipe, fileName, baseDir, packageName,
+                return [ Recipe(recipeSet, recipe, layer, fileName, baseDir, packageName,
                                 baseName, properties, isRecipe, anonBaseClass) ]
 
         return list(collect(recipeSet.loadYaml(fileName, fileSchema), "", None))
@@ -1859,11 +1859,11 @@ class Recipe(object):
             "buildScript" : "true",
             "packageScript" : "true"
         }
-        ret = Recipe(recipeSet, recipe, "", ".", "", "", properties)
+        ret = Recipe(recipeSet, recipe, [], "", ".", "", "", properties)
         ret.resolveClasses()
         return ret
 
-    def __init__(self, recipeSet, recipe, sourceFile, baseDir, packageName, baseName,
+    def __init__(self, recipeSet, recipe, layer, sourceFile, baseDir, packageName, baseName,
                  properties, isRecipe=True, anonBaseClass=None):
         self.__recipeSet = recipeSet
         self.__sources = [ sourceFile ] if anonBaseClass is None else []
@@ -1911,7 +1911,8 @@ class Recipe(object):
         self.__corePackagesByMatch = []
         self.__corePackagesById = {}
 
-        sourceName = ("Recipe " if isRecipe else "Class  ") + packageName
+        sourceName = ("Recipe " if isRecipe else "Class  ") + packageName + (
+            ", layer "+"/".join(layer) if layer else "")
         incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName,
                                   sourceName)
 
@@ -2628,7 +2629,8 @@ class RecipeSet:
                 schema.Optional('secureSSL') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
-        )
+        ),
+        schema.Optional('layers') : [str],
     })
 
     _ignoreCmdConfig = False
@@ -2796,12 +2798,12 @@ class RecipeSet:
             raise ParseError("Class "+name+" already defined")
         self.__classes[name] = recipe
 
-    def __loadPlugins(self, plugins):
+    def __loadPlugins(self, rootDir, layer, plugins):
         for p in plugins:
-            name = os.path.join("plugins", p+".py")
+            name = os.path.join(rootDir, "plugins", p+".py")
             if not os.path.exists(name):
                 raise ParseError("Plugin '"+name+"' not found!")
-            mangledName = "__bob_plugin_"+p
+            mangledName = "__bob_plugin_" + "".join("layers_"+l+"_" for l in layer) + p
             self.__plugins[mangledName] = self.__loadPlugin(mangledName, name, p)
 
     def __loadPlugin(self, mangledName, fileName, name):
@@ -2981,51 +2983,8 @@ class RecipeSet:
             self.__cache.close()
 
     def __parse(self):
-        config = self.loadYaml("config.yaml", RecipeSet.STATIC_CONFIG_SCHEMA)
-        minVer = config.get("bobMinimumVersion", "0.1")
-        if compareVersion(BOB_VERSION, minVer) < 0:
-            raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
-        self.__loadPlugins(config.get("plugins", []))
-        self.__createSchemas()
-
-        # determine policies
-        self.__policies = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
-            for (name, (ver, warn)) in self.__policies.items() }
-        for (name, behaviour) in config.get("policies", {}).items():
-            self.__policies[name] = (behaviour, None)
-
-        # user config(s)
-        if not DEBUG['ngd']:
-            self.__parseUserConfig("/etc/bobdefault.yaml", True)
-            self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
-                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
-        self.__parseUserConfig("default.yaml")
-
-        # color mode provided in cmd line takes precedence
-        # (if no color mode provided by user, default one will be used)
-        setColorMode(self._colorModeConfig or self.__uiConfig.get('color', 'auto'))
-
-        # finally parse recipes
-        for root, dirnames, filenames in os.walk('classes'):
-            for path in fnmatch.filter(filenames, "*.yaml"):
-                try:
-                    [r] = Recipe.loadFromFile(self, os.path.join(root, path),
-                        self.__properties, self.__classSchema, False)
-                    self.__addClass(r)
-                except ParseError as e:
-                    e.pushFrame(path)
-                    raise
-
-        for root, dirnames, filenames in os.walk('recipes'):
-            for path in fnmatch.filter(filenames, "*.yaml"):
-                try:
-                    for r in Recipe.loadFromFile(self,  os.path.join(root, path),
-                                                 self.__properties, self.__recipeSchema,
-                                                 True):
-                        self.__addRecipe(r)
-                except ParseError as e:
-                    e.pushFrame(path)
-                    raise
+        # Begin with root layer
+        self.__parseLayer([], "9999")
 
         # resolve recipes and their classes
         rootRecipes = []
@@ -3043,6 +3002,82 @@ class RecipeSet:
         # create virtual root package
         self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(filteredRoots), self.__properties)
         self.__addRecipe(self.__rootRecipe)
+
+    def __parseLayer(self, layer, maxVer):
+        rootDir = os.path.join("", *(os.path.join("layers", l) for l in layer))
+        if not os.path.isdir(rootDir or "."):
+            raise ParseError("Layer '{}' does not exist!".format("/".join(layer)))
+
+        config = self.loadYaml(os.path.join(rootDir, "config.yaml"), RecipeSet.STATIC_CONFIG_SCHEMA)
+        minVer = config.get("bobMinimumVersion", "0.1")
+        if compareVersion(BOB_VERSION, minVer) < 0:
+            raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
+        if compareVersion(maxVer, minVer) < 0:
+            raise ParseError("Layer '{}' reqires a higher Bob version than root project!"
+                                .format("/".join(layer)))
+        maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
+        self.__loadPlugins(rootDir, layer, config.get("plugins", []))
+        self.__createSchemas()
+
+        # Determine policies. The root layer determines the default settings
+        # implicitly by bobMinimumVersion or explicitly via 'policies'. All
+        # sub-layer policies must not contradict root layer policies
+        if layer:
+            for (name, behaviour) in config.get("policies", {}).items():
+                if bool(self.__policies[name][0]) != behaviour:
+                    raise ParseError("Layer '{}' requires different behaviour for policy '{}' than root project!"
+                                        .format("/".join(layer), name))
+        else:
+            self.__policies = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
+                for (name, (ver, warn)) in self.__policies.items() }
+            for (name, behaviour) in config.get("policies", {}).items():
+                self.__policies[name] = (behaviour, None)
+
+        # global user config(s)
+        if not DEBUG['ngd'] and not layer:
+            self.__parseUserConfig("/etc/bobdefault.yaml", True)
+            self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
+                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
+
+        # First parse any sub-layers. Their settings have a lower precedence
+        # and may be overwritten by higher layers.
+        for l in config.get("layers", []):
+            self.__parseLayer(layer + [l], maxVer)
+
+        # project user config(s)
+        if layer and not self.getPolicy("relativeIncludes"):
+            raise ParseError("Layers require the relativeIncludes policy to be set to the new behaviour!")
+        self.__parseUserConfig(os.path.join(rootDir, "default.yaml"))
+
+        # color mode provided in cmd line takes precedence
+        # (if no color mode provided by user, default one will be used)
+        setColorMode(self._colorModeConfig or self.__uiConfig.get('color', 'auto'))
+
+        # finally parse recipes
+        classesDir = os.path.join(rootDir, 'classes')
+        for root, dirnames, filenames in os.walk(classesDir):
+            for path in fnmatch.filter(filenames, "*.yaml"):
+                try:
+                    [r] = Recipe.loadFromFile(self, layer, classesDir,
+                        os.path.relpath(os.path.join(root, path), classesDir),
+                        self.__properties, self.__classSchema, False)
+                    self.__addClass(r)
+                except ParseError as e:
+                    e.pushFrame(path)
+                    raise
+
+        recipesDir = os.path.join(rootDir, 'recipes')
+        for root, dirnames, filenames in os.walk(recipesDir):
+            for path in fnmatch.filter(filenames, "*.yaml"):
+                try:
+                    recipes = Recipe.loadFromFile(self, layer, recipesDir,
+                        os.path.relpath(os.path.join(root, path), recipesDir),
+                        self.__properties, self.__recipeSchema, True)
+                    for r in recipes:
+                        self.__addRecipe(r)
+                except ParseError as e:
+                    e.pushFrame(path)
+                    raise
 
     def __parseUserConfig(self, fileName, relativeIncludes=None):
         if relativeIncludes is None:
