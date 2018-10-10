@@ -1782,6 +1782,8 @@ def doProject(argv, bobRoot):
         help="Do not build (bob dev) before generate project Files. RunTargets may not work")
     parser.add_argument('-b', dest="execute_buildonly", default=False, action='store_true',
         help="Do build only (bob dev -b) before generate project Files. No checkout")
+    parser.add_argument('-j', '--jobs', default=None, type=int, nargs='?', const=...,
+        help="Specifies  the  number of jobs to run simultaneously.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
@@ -1836,6 +1838,13 @@ def doProject(argv, bobRoot):
         extra.append(e)
     if args.preserve_env: extra.append('-E')
     if args.sandbox: extra.append('--sandbox')
+    if args.jobs is ...:
+        # expand because we cannot control the argument order in the generator
+        args.jobs = os.cpu_count()
+    if args.jobs is not None:
+        if args.jobs <= 0:
+            parser.error("--jobs argument must be greater than zero!")
+        extra.extend(['-j', str(args.jobs)])
 
     package = packages.walkPackagePath(args.package)
 
