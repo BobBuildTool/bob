@@ -376,3 +376,24 @@ New behavior
     the last inherited class has the highest precedence. Given the above
     example the resulting ``CFLAGS`` would be ``${CFLAGS:-} -fsanitize=address
     -Werror -DFOO=1``
+
+.. _policies-secureSSL:
+
+secureSSL
+~~~~~~~~~
+
+Introduced in: 0.15
+
+Due to historical reasons Bob did not check for SSL certificate errors
+everywhere. While most parts were already secure the git SCM and HTTPS archive
+backend were still insecure by default.
+
+Old behavior
+    The git SCM and the HTTPS archive backend do not check for certificate
+    errors by default. May still be enabled by setting the corresponding
+    ``sslVerify`` option to ``True``.
+
+New behavior
+    Whenever a secure connection is used the certificate is checked. May be
+    disabled selectively by setting the corresponding ``sslVerify`` option to
+    ``False``.
