@@ -580,8 +580,10 @@ git `Git`_ project               | ``url``: URL of remote repository
                                  | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
                                  | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
                                  | ``remote-*``: additional remote repositories (optional, see below)
+                                 | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
 svn `Svn`_ repository            | ``url``: URL of SVN module
                                  | ``revision``: Optional revision number (optional)
+                                 | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
 cvs CVS repository               | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
                                  | ``module``: module name
                                  | ``rev``: revision, branch, or tag name (optional)
@@ -590,12 +592,19 @@ url While not a real SCM it      | ``url``: File that should be downloaded
     extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
                                  | ``extract``: Extract directive (optional, default: auto)
                                  | ``fileName``: Local file name (optional, default: url file name)
+                                 | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
                                  | ``stripComponents``: Number of leading components stripped from file name
                                                         (optional, tar files only)
 === ============================ =======================================================================================
 
 .. _Git: http://git-scm.com/
 .. _Svn: http://subversion.apache.org/
+
+Most SCMs support the ``sslVerify`` attribute. This is a boolean that controls
+whether to verify the SSL certificate when fetching. It defaults to ``True``
+with the notable exception of ``git`` before Bob 0.15 which was rectified by
+the introduction of the :ref:`policies-secureSSL` policy. If at all possible,
+fixing a certificate problem is preferable to using this option.
 
 The ``git`` SCM requires at least an ``url`` attribute. The URL might be any
 valid Git URL. To checkout a branch other than *master* add a ``branch``
@@ -1298,7 +1307,8 @@ file        Use a local directory as binary artifact repository. The directory
             is specified in the ``path`` key as absolute path.
 http        Uses a HTTP server as binary artifact repository. The server has to
             support the HEAD, PUT and GET methods. The base URL is given in the
-            ``url`` key.
+            ``url`` key. The optional ``sslVerify`` boolean key controls
+            whether to verify the SSL certificate.
 shell       This backend can be used to execute commands that do the actual up-
             or download. A ``download`` and/or ``upload`` key provides the
             commands that are executed for the respective operation. The
