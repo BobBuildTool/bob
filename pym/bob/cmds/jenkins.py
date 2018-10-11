@@ -1425,8 +1425,9 @@ def getUrl(config):
 class JenkinsConnection:
     """Connection to a Jenkins server abstracting the REST API"""
 
-    def __init__(self, config):
+    def __init__(self, config, sslVerify):
         self.__config = config
+        self.__sslVerify = sslVerify
         self.__init()
 
     def __init(self):
@@ -1436,8 +1437,11 @@ class JenkinsConnection:
             connection = http.client.HTTPConnection(url["server"],
                                                     url.get("port"))
         elif url["scheme"] == 'https':
-            ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-            warnCertificate.warn()
+            if self.__sslVerify:
+                ctx = None
+            else:
+                ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+                warnCertificate.warn()
             connection = http.client.HTTPSConnection(url["server"],
                                                      url.get("port"), context=ctx)
         else:
@@ -1617,6 +1621,8 @@ will disable the root jobs because they cannot run anyawy without failing.
         help="Delete only obsolete jobs")
     group.add_argument('--intermediate', action='store_true', default=False,
         help="Delete everything except root jobs")
+    parser.add_argument('--no-ssl-verify', dest='ssl_verify', default=True,
+        action='store_false', help="Disable SSL certificate verification.")
     parser.add_argument('-q', '--quiet', default=0, action='count',
         help="Decrease verbosity (may be specified multiple times)")
     parser.add_argument('-v', '--verbose', default=0, action='count',
@@ -1640,7 +1646,7 @@ will disable the root jobs because they cannot run anyawy without failing.
     existingJobs = BobState().getJenkinsAllJobs(args.name)
 
     # connect to server
-    with JenkinsConnection(config) as connection:
+    with JenkinsConnection(config, args.ssl_verify) as connection:
         if args.obsolete:
             # delete all disabled jobs
             for name in existingJobs:
@@ -1706,6 +1712,8 @@ def doJenkinsPush(recipes, argv):
     parser.add_argument("name", help="Push jobs to Jenkins server")
     parser.add_argument("-f", "--force", action="store_true", default=False,
                         help="Overwrite existing jobs")
+    parser.add_argument('--no-ssl-verify', dest='ssl_verify', default=True,
+        action='store_false', help="Disable SSL certificate verification.")
     parser.add_argument("--no-trigger", action="store_true", default=False,
                         help="Do not trigger build for updated jobs")
     parser.add_argument('-q', '--quiet', default=0, action='count',
@@ -1751,7 +1759,7 @@ def doJenkinsPush(recipes, argv):
     def printDebug(job, *args): printLine(2, job, *args)
 
     # connect to server
-    with JenkinsConnection(config) as connection:
+    with JenkinsConnection(config, args.ssl_verify) as connection:
         # verify plugin state
         printDebug(None, "Check available plugins...")
         connection.checkPlugins()
