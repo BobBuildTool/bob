@@ -20,7 +20,8 @@ class SvnScm(Scm):
         'url' : str,
         schema.Optional('dir') : str,
         schema.Optional('if') : str,
-        schema.Optional('revision') : schema.Or(int, str)
+        schema.Optional('revision') : schema.Or(int, str),
+        schema.Optional('sslVerify') : bool,
     })
 
     def __init__(self, spec, overrides=[]):
@@ -28,6 +29,7 @@ class SvnScm(Scm):
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
         self.__revision = spec.get("revision")
+        self.__sslVerify = spec.get('sslVerify', True)
 
     def getProperties(self):
         ret = super().getProperties()
@@ -35,26 +37,30 @@ class SvnScm(Scm):
             'scm' : 'svn',
             "url" : self.__url,
             "dir" : self.__dir,
+            'sslVerify' : self.__sslVerify,
         })
         if self.__revision:
             ret["revision"] = self.__revision
         return ret
 
     def asScript(self):
+        options = "--non-interactive"
+        if not self.__sslVerify:
+            options += " --trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other"
         return """
 {HEADER}
 if [[ -d {SUBDIR}/.svn ]] ; then
     if [[ {URL} != */tags/* ]] ; then
-        svn up {REVISION_ARG} {SUBDIR}
+        svn up {OPTIONS} {REVISION_ARG} {SUBDIR}
     fi
 else
-    if ! svn co {REVISION_ARG} {URL} {SUBDIR} ; then
+    if ! svn co {OPTIONS} {REVISION_ARG} {URL} {SUBDIR} ; then
         rm -rf {SUBDIR}
         exit 1
     fi
 fi
 """.format(
-          HEADER=super().asScript(),
+          HEADER=super().asScript(), OPTIONS=options,
           URL=quote(self.__url), SUBDIR=quote(self.__dir),
           REVISION_ARG=(("-r " + quote(str(self.__revision))) if self.__revision else '')
           )
