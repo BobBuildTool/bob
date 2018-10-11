@@ -7,6 +7,7 @@ from ..errors import BuildError
 from ..tty import colorize
 from ..utils import hashString
 from .scm import Scm, ScmAudit
+from pipes import quote
 import os, os.path
 import schema
 import subprocess
@@ -42,20 +43,20 @@ class SvnScm(Scm):
     def asScript(self):
         return """
 {HEADER}
-if [[ -d "{SUBDIR}/.svn" ]] ; then
-    if [[ "{URL}" != */tags/* ]] ; then
-        svn up {REVISION_ARG} "{SUBDIR}"
+if [[ -d {SUBDIR}/.svn ]] ; then
+    if [[ {URL} != */tags/* ]] ; then
+        svn up {REVISION_ARG} {SUBDIR}
     fi
 else
-    if ! svn co {REVISION_ARG} "{URL}" "{SUBDIR}" ; then
-        rm -rf "{SUBDIR}"
+    if ! svn co {REVISION_ARG} {URL} {SUBDIR} ; then
+        rm -rf {SUBDIR}
         exit 1
     fi
 fi
 """.format(
           HEADER=super().asScript(),
-          URL=self.__url, SUBDIR=self.__dir,
-          REVISION_ARG=(("-r " + str( self.__revision ) ) if self.__revision else '')
+          URL=quote(self.__url), SUBDIR=quote(self.__dir),
+          REVISION_ARG=(("-r " + quote(str(self.__revision))) if self.__revision else '')
           )
 
 
