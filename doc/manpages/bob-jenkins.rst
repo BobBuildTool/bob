@@ -29,8 +29,11 @@ Available sub-commands:
     bob jenkins export [-h] name dir
     bob jenkins graph [-h] name
     bob jenkins ls [-h] [-v]
-    bob jenkins prune [-h] [--obsolete | --intermediate] [-q] [-v] name
-    bob jenkins push [-h] [-f] [--no-trigger] [-q] [-v] name
+    bob jenkins prune [-h] [--obsolete | --intermediate] [--no-ssl-verify]
+                      [-q] [-v]
+                      name
+    bob jenkins push [-h] [-f] [--no-ssl-verify] [--no-trigger] [-q] [-v]
+                     name
     bob jenkins rm [-h] [-f] name
     bob jenkins set-options [-h] [--reset] [-n NODES] [-o OPTIONS] [-p PREFIX]
                             [--add-root ADD_ROOT] [--del-root DEL_ROOT]
@@ -96,6 +99,13 @@ Options
 
 ``--no-sandbox``
     Disable sandboxing
+
+``--no-ssl-verify``
+    Disable HTTPS certificate checking
+
+    By default only secure connections are allowed to HTTPS Jenkins servers. If
+    this option is given then any certificate error is ignored. This was the
+    default before Bob 0.15.
 
 ``--no-trigger``
     Do not trigger build for updated jobs
