@@ -24,6 +24,7 @@ class UrlScm(Scm):
         schema.Optional('extract') : schema.Or(bool, str),
         schema.Optional('fileName') : str,
         schema.Optional('stripComponents') : int,
+        schema.Optional('sslVerify') : bool,
     })
 
     EXTENSIONS = [
@@ -67,6 +68,7 @@ class UrlScm(Scm):
         self.__extract = spec.get("extract", "auto")
         self.__tidy = tidy
         self.__strip = spec.get("stripComponents", 0)
+        self.__sslVerify = spec.get('sslVerify', True)
 
     def getProperties(self):
         ret = super().getProperties()
@@ -79,26 +81,30 @@ class UrlScm(Scm):
             'fileName' : self.__fn,
             'extract' : self.__extract,
             'stripComponents' : self.__strip,
+            'sslVerify' : self.__sslVerify,
         })
         return ret
 
     def asScript(self):
+        options = "-sSgLf"
+        if not self.__sslVerify: options += "k"
         ret = """
 {HEADER}
 mkdir -p {DIR}
 cd {DIR}
 if [ -e {FILE} ] ; then
-    curl -sSgLf -o {FILE} -z {FILE} {URL}
+    curl {OPTIONS} -o {FILE} -z {FILE} {URL}
 else
     (
         F=$(mktemp)
         trap 'rm -f $F' EXIT
         set -e
-        curl -sSgLf -o $F {URL}
+        curl {OPTIONS} -o $F {URL}
         mv $F {FILE}
     )
 fi
-""".format(HEADER=super().asScript(), DIR=quote(self.__dir), URL=quote(self.__url), FILE=quote(self.__fn))
+""".format(HEADER=super().asScript(), DIR=quote(self.__dir), URL=quote(self.__url),
+           FILE=quote(self.__fn), OPTIONS=options)
 
         if self.__digestSha1:
             ret += "echo {DIGEST}\ \ {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
