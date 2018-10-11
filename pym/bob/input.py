@@ -2291,6 +2291,7 @@ class ArchiveValidator:
         fileArchive["path"] = str
         httpArchive = baseArchive.copy()
         httpArchive["url"] = str
+        httpArchive[schema.Optional("sslVerify")] = bool
         shellArchive = baseArchive.copy()
         shellArchive.update({
             schema.Optional('download') : str,

@@ -433,7 +433,7 @@ class SimpleHttpArchive(BaseArchive):
         super().__init__(spec)
         self.__url = urllib.parse.urlparse(spec["url"])
         self.__connection = None
-        self.__sslVerify = secureSSL
+        self.__sslVerify = spec.get("sslVerify", secureSSL)
 
     def __retry(self, request):
         retry = True
@@ -546,33 +546,37 @@ class SimpleHttpArchive(BaseArchive):
             return ""
 
         # upload with curl if file does not exist yet on server
+        insecure = "" if self.__sslVerify else "-k"
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
             BOB_UPLOAD_URL="{URL}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
-            if ! curl --output /dev/null --silent --head --fail "$BOB_UPLOAD_URL" ; then
-                BOB_UPLOAD_RSP=$(curl -sSgf -w '%{{http_code}}' -H 'If-None-Match: *' -T {RESULT} "$BOB_UPLOAD_URL" || true)
+            if ! curl --output /dev/null --silent --head --fail {INSECURE} "$BOB_UPLOAD_URL" ; then
+                BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {RESULT} "$BOB_UPLOAD_URL" || true)
                 if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
                     echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
                 fi
             fi""".format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                          FAIL="" if self._ignoreErrors() else "; exit 1",
-                         GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
+                         GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
+                         INSECURE=insecure))
 
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
         if not self.canDownloadJenkins():
             return ""
 
+        insecure = "" if self.__sslVerify else "-k"
         return "\n" + textwrap.dedent("""\
             if [[ ! -e {RESULT} ]] ; then
                 BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
                 BOB_DOWNLOAD_URL="{URL}/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
-                curl -sSg --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
+                curl -sSg {INSECURE} --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
             fi
             """.format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-                       GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
+                       GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
+                       INSECURE=insecure))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
         # only upload if requested
@@ -580,19 +584,21 @@ class SimpleHttpArchive(BaseArchive):
             return ""
 
         # upload with curl if file does not exist yet on server
+        insecure = "" if self.__sslVerify else "-k"
         return "\n" + textwrap.dedent("""\
             # upload live build-id
             cd $WORKSPACE
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {LIVEBUILDID}){GEN}"
             BOB_UPLOAD_URL="{URL}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
-            BOB_UPLOAD_RSP=$(curl -sSgf -w '%{{http_code}}' -H 'If-None-Match: *' -T {BUILDID} "$BOB_UPLOAD_URL" || true)
+            BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {BUILDID} "$BOB_UPLOAD_URL" || true)
             if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
                 echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
             fi
             """.format(URL=self.__url.geturl(), LIVEBUILDID=quote(liveBuildId),
                        BUILDID=quote(buildId),
                        FAIL="" if self._ignoreErrors() else "; exit 1",
-                       GEN=ARCHIVE_GENERATION, SUFFIX=BUILDID_SUFFIX))
+                       GEN=ARCHIVE_GENERATION, SUFFIX=BUILDID_SUFFIX,
+                       INSECURE=insecure))
 
 class SimpleHttpDownloader:
     def __init__(self, archiver, response):
