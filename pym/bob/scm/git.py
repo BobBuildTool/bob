@@ -29,6 +29,7 @@ class GitScm(Scm):
         schema.Optional('commit') : str,
         schema.Optional('rev') : str,
         schema.Optional(schema.Regex('^remote-.*')) : str,
+        schema.Optional('sslVerify') : bool,
     })
     REMOTE_PREFIX = "remote-"
 
@@ -67,7 +68,7 @@ class GitScm(Scm):
                 if stripped_key == "origin":
                     raise ParseError("Invalid remote name: " + stripped_key)
                 self.__remotes.update({stripped_key : val})
-        self.__sslVerify = secureSSL
+        self.__sslVerify = spec.get('sslVerify', secureSSL)
 
     def getProperties(self):
         properties = super().getProperties()
@@ -81,7 +82,8 @@ class GitScm(Scm):
             'rev' : ( self.__commit if self.__commit else
                 (("refs/tags/" + self.__tag) if self.__tag else
                     ("refs/heads/" + self.__branch))
-            )
+            ),
+            'sslVerify' : self.__sslVerify,
         })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
