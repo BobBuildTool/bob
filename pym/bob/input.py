@@ -310,7 +310,7 @@ def Scm(spec, env, overrides, recipeSet):
     # create scm instance
     scm = spec["scm"]
     if scm == "git":
-        return GitScm(spec, matchedOverrides)
+        return GitScm(spec, matchedOverrides, recipeSet.getPolicy('secureSSL'))
     elif scm == "svn":
         return SvnScm(spec, matchedOverrides)
     elif scm == "cvs":
@@ -2451,6 +2451,11 @@ class RecipeSet:
                 "0.15",
                 InfoOnce("mergeEnvironment policy not set. Recipe and classes (private)environments overwrite each other instead of being merged.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#mergeenvironment for more information.")
+            ),
+            'secureSSL' : (
+                "0.15",
+                InfoOnce("secureSSL policy not set. Bob will ignore SSL certificate errors.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#securessl for more information.")
             ),
         }
         self.__buildHooks = {}

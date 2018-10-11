@@ -580,7 +580,7 @@ class TestHttpArchive(BaseTester, TestCase):
         """Test download on non-existent server"""
 
         spec = { 'url' : "https://127.1.2.3:7257" }
-        archive = SimpleHttpArchive(spec)
+        archive = SimpleHttpArchive(spec, None)
         archive.wantDownload(True)
         archive.wantUpload(True)
 

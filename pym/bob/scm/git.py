@@ -32,7 +32,7 @@ class GitScm(Scm):
     })
     REMOTE_PREFIX = "remote-"
 
-    def __init__(self, spec, overrides=[]):
+    def __init__(self, spec, overrides=[], secureSSL=None):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__branch = None
@@ -67,6 +67,7 @@ class GitScm(Scm):
                 if stripped_key == "origin":
                     raise ParseError("Invalid remote name: " + stripped_key)
                 self.__remotes.update({stripped_key : val})
+        self.__sslVerify = secureSSL
 
     def getProperties(self):
         properties = super().getProperties()
@@ -122,10 +123,11 @@ class GitScm(Scm):
             )""").format(REMOTES_ARRAY="\n    ".join(remotes_array))
 
         header = super().asScript()
+        if not self.__sslVerify:
+            header += "\nexport GIT_SSL_NO_VERIFY=true"
         if self.__tag or self.__commit:
             return dedent("""\
                 {HEADER}
-                export GIT_SSL_NO_VERIFY=true
                 if [ ! -d {DIR}/.git ] ; then
                     git init {DIR}
                 fi
@@ -144,7 +146,6 @@ class GitScm(Scm):
         else:
             return dedent("""\
                 {HEADER}
-                export GIT_SSL_NO_VERIFY=true
                 if [ -d {DIR}/.git ] ; then
                     cd {DIR}
                     if [[ $(git rev-parse --abbrev-ref HEAD) == "{BRANCH}" ]] ; then

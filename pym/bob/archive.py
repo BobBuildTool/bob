@@ -429,10 +429,11 @@ class LocalArchiveUploader:
 
 
 class SimpleHttpArchive(BaseArchive):
-    def __init__(self, spec):
+    def __init__(self, spec, secureSSL):
         super().__init__(spec)
         self.__url = urllib.parse.urlparse(spec["url"])
         self.__connection = None
+        self.__sslVerify = secureSSL
 
     def __retry(self, request):
         retry = True
@@ -461,7 +462,7 @@ class SimpleHttpArchive(BaseArchive):
         if url.scheme == 'http':
             connection = http.client.HTTPConnection(url.hostname, url.port)
         elif url.scheme == 'https':
-            ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+            ctx = None if self.__sslVerify else ssl.SSLContext(ssl.PROTOCOL_SSLv23)
             connection = http.client.HTTPSConnection(url.hostname, url.port,
                                                      context=ctx)
         else:
@@ -1021,7 +1022,7 @@ def getSingleArchiver(recipes, archiveSpec):
     if archiveBackend == "file":
         return LocalArchive(archiveSpec)
     elif archiveBackend == "http":
-        return SimpleHttpArchive(archiveSpec)
+        return SimpleHttpArchive(archiveSpec, recipes.getPolicy('secureSSL'))
     elif archiveBackend == "shell":
         return CustomArchive(archiveSpec, recipes.envWhiteList())
     elif archiveBackend == "azure":
