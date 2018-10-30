@@ -63,9 +63,21 @@ consists of one ore more status codes followed by the scm path.
 
 Status codes can be interpreted as follows:
 
-    - ``M`` = modified. Some sources have been modified and not yet committed to SCM.
-    - ``S`` = switched. The commit/tag/branch/url is different from the recipe.
-    - ``U`` = unpushed. Git only. Some commits are made locally and not yet pushed to the SCM.
-    - ``u`` = unpushed on a local branch. Git only. A local branch exists with unpushed commits. This branch differs from the branch specified in the recipe.
-    - ``O`` = overridden. This SCM is overridden by an scmOverride. This information is only shown if ``--show-overrides`` is passed.
+- ``A`` = attic. The recipe was changed for this checkout or the checkout
+  is not referenced anymore in the recipe. The SCM path will be moved to
+  the attic the next time the checkout is run.
+
+  .. attention::
+     Bob has no further information about the SCM directory to provide
+     additional information. The directory can be in any state with respect to
+     the original checkout.
+
+- ``M`` = modified. Some sources have been modified and not yet committed to SCM.
+- ``S`` = switched. The commit/tag/branch/url is different from the recipe.
+- ``U`` = unpushed. Git only. Some commits are made locally and not yet pushed
+  to the SCM.
+- ``u`` = unpushed on a local branch. Git only. A local branch exists with
+  unpushed commits. This branch differs from the branch specified in the recipe.
+- ``O`` = overridden. This SCM is overridden by an scmOverride. This
+  information is only shown if ``--show-overrides`` is passed.
 
