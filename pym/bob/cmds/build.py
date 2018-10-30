@@ -1667,7 +1667,9 @@ def doStatus(argv, bobRoot):
                     stats.update({ dir : scm for dir in scm.getDirectories().keys() })
                 for (scmDir, scmDigest) in sorted(oldCheckoutState.copy().items(), key=lambda a:'' if a[0] is None else a[0]):
                     if scmDir is None: continue
-                    if scmDigest != checkoutState.get(scmDir): continue
+                    if scmDigest != checkoutState.get(scmDir):
+                        print(colorize("   STATUS {0: <4} {1}".format("A", os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "33"))
+                        continue
                     status, shortStatus, longStatus = stats[scmDir].status(checkoutStep.getWorkspacePath())
                     if (status == 'clean') or (status == 'empty'):
                         if (verbose >= 3):
