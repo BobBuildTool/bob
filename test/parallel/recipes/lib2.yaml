@@ -1,0 +1,5 @@
+packageVars: [FAIL_LIB2]
+packageScript: |
+    if [ ${FAIL_LIB2:-} ] ; then
+        exit 1
+    fi

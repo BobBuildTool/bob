@@ -9,7 +9,7 @@ from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
-from .tty import colorize, InfoOnce, Warn, WarnOnce, setColorMode
+from .tty import InfoOnce, Warn, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
@@ -865,6 +865,48 @@ class Step:
             h.update(d)
         return h.digest()
 
+    async def getDigestCoro(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
+        h = hasher()
+        sandbox = self.getSandbox(forceSandbox)
+        if sandbox:
+            [d] = await calculate([sandbox.getStep()])
+            if d is None: return None
+            h.update(d)
+            h.update(struct.pack("<I", len(sandbox.getPaths())))
+            for p in sandbox.getPaths():
+                h.update(struct.pack("<I", len(p)))
+                h.update(p.encode('utf8'))
+        else:
+            h.update(b'\x00' * 20)
+        script = self.getDigestScript()
+        if script:
+            h.update(struct.pack("<I", len(script)))
+            h.update(script.encode("utf8"))
+        else:
+            h.update(b'\x00\x00\x00\x00')
+        h.update(struct.pack("<I", len(self.getTools())))
+        tools = sorted(self.getTools().items(), key=lambda t: t[0])
+        toolsDigests = await calculate([ tool.step for name,tool in tools ])
+        for ((name, tool), d) in zip(tools, toolsDigests):
+            if d is None: return None
+            h.update(d)
+            h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
+            h.update(tool.path.encode("utf8"))
+            for l in tool.libs:
+                h.update(struct.pack("<I", len(l)))
+                h.update(l.encode('utf8'))
+        h.update(struct.pack("<I", len(self._coreStep.digestEnv)))
+        for (key, val) in sorted(self._coreStep.digestEnv.items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
+        args = [ a for a in self.getArguments() if a.isValid() ]
+        argsDigests = await calculate(args)
+        h.update(struct.pack("<I", len(args)))
+        for d in argsDigests:
+            if d is None: return None
+            h.update(d)
+        return h.digest()
+
     def getVariantId(self):
         """Return Variant-Id of this Step.
 
@@ -1102,7 +1144,7 @@ class CheckoutStep(Step):
         """
         return self._coreStep.hasLiveBuildId()
 
-    def predictLiveBuildId(self):
+    async def predictLiveBuildId(self):
         """Query server to predict live build-id.
 
         Returns the live-build-id or None if an SCM query failed.
@@ -1112,7 +1154,7 @@ class CheckoutStep(Step):
         h = hashlib.sha1()
         h.update(self._getSandboxVariantId())
         for s in self._coreStep.scmList:
-            liveBId = s.predictLiveBuildId()
+            liveBId = await s.predictLiveBuildId(self)
             if liveBId is None: return None
             h.update(liveBId)
         return h.digest()
@@ -2356,6 +2398,7 @@ class RecipeSet:
             schema.Optional('sandbox') : bool,
             schema.Optional('clean_checkout') : bool,
             schema.Optional('always_checkout') : [str],
+            schema.Optional('jobs') : int,
         })
 
     GRAPH_SCHEMA = schema.Schema(

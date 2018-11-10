@@ -3,6 +3,16 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import sys
+
+# validate Python version
+if sys.version_info.major != 3:
+    print("Bob requires Python 3")
+    sys.exit(1)
+elif sys.version_info.minor < 5:
+    print("Bob requires at least Python 3.5")
+    sys.exit(1)
+
 def getVersion():
     import os, re
 
@@ -53,7 +63,6 @@ try:
     BOB_VERSION = getVersion()
     BOB_INPUT_HASH = getBobInputHash()
 except KeyboardInterrupt:
-    import sys
     sys.exit(1)
 
 # global debug switches
@@ -87,7 +96,6 @@ def _enableDebug(enabled):
         if e in DEBUG:
             DEBUG[e] = True
         else:
-            import sys
             print("Invalid debug flag:", e, file=sys.stderr)
             sys.exit(2)
 

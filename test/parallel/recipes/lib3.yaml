@@ -1,0 +1,6 @@
+depends:
+    - lib2
+
+checkoutScript: "true"
+buildScript: "true"
+packageScript: "true"

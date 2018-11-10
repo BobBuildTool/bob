@@ -165,16 +165,16 @@ fi
     def hasLiveBuildId(self):
         return self.isDeterministic()
 
-    def predictLiveBuildId(self):
+    async def predictLiveBuildId(self, step):
+        return self.calcLiveBuildId(None)
+
+    def calcLiveBuildId(self, workspacePath):
         if self.__digestSha256:
             return bytes.fromhex(self.__digestSha256)
         elif self.__digestSha1:
             return bytes.fromhex(self.__digestSha1)
         else:
             return None
-
-    def calcLiveBuildId(self, workspacePath):
-        return self.predictLiveBuildId()
 
     def getLiveBuildIdSpec(self, workspacePath):
         if self.__digestSha256:

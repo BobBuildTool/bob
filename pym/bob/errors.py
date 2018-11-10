@@ -36,3 +36,24 @@ class BuildError(BobError):
     def __init__(self, slogan, help=""):
         BobError.__init__(self, slogan, "Build", "Failed package", help)
 
+
+class MultiBobError(BobError):
+    def __init__(self, others):
+        self.others = []
+        for i in others:
+            if isinstance(i, MultiBobError):
+                for j in i.others:
+                    if j not in self.others: self.others.append(j)
+            elif isinstance(i, BobError):
+                if i not in self.others: self.others.append(i)
+            else:
+                raise i
+
+    def __str__(self):
+        return "\n".join(str(i) for i in self.others)
+
+    def pushFrame(self, frame):
+        pass
+
+    def setStack(self, stack):
+        pass

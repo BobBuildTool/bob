@@ -1,11 +1,10 @@
+from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import http.client
 import re
 import socket
 from threading import Thread
-
-import requests
 
 CRUMBDATA=b"""
 <defaultCrumbIssuer>
@@ -19,7 +18,7 @@ PLUGINS=b"""
 class MockServerRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if 'crumbIssuer' in self.path:
-            self.send_response(requests.codes.ok)
+            self.send_response(HTTPStatus.OK)
             self.end_headers()
             self.wfile.write(CRUMBDATA)
             return
@@ -32,7 +31,7 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         try:
             txData = self.server.getTxData()
             txData=txData[self.path]
-            self.send_response(requests.codes.ok)
+            self.send_response(HTTPStatus.OK)
             self.end_headers()
             self.wfile.write(txData)
         except KeyError:
@@ -45,14 +44,14 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
                 length = int(self.headers.get('content-length',0))
                 fstream = self.rfile.read(length)
                 self.server.rxJenkinsData((self.path , fstream))
-                self.send_response(requests.codes.created)
+                self.send_response(HTTPStatus.CREATED)
                 self.end_headers()
                 return
             if 'config.xml' in self.path:
                 length = int(self.headers.get('content-length',0))
                 fstream = self.rfile.read(length)
                 self.server.rxJenkinsData((self.path , fstream))
-                self.send_response(requests.codes.ok)
+                self.send_response(HTTPStatus.OK)
                 self.end_headers()
                 return
         if 'doDelete' in self.path:

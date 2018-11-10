@@ -6,10 +6,12 @@
 from .. import BOB_VERSION
 from ..archive import DummyArchive, getArchiver
 from ..audit import Audit
-from ..errors import BobError, BuildError, ParseError
+from ..errors import BobError, BuildError, ParseError, MultiBobError
 from ..input import RecipeSet
 from ..state import BobState
-from ..tty import colorize
+from ..tty import colorize, setVerbosity, setTui, log, stepMessage, stepAction, stepExec, \
+    SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
+    ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from ..utils import asHexStr, hashDirectory, hashFile, removePath, \
     emptyDirectory, copyTree, isWindows, processDefines
 from datetime import datetime
@@ -17,14 +19,31 @@ from glob import glob
 from pipes import quote
 from textwrap import dedent
 import argparse
+import asyncio
+import concurrent.futures
 import datetime
+import io
+import multiprocessing
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import stat
 import subprocess
+import sys
+import tempfile
 import time
+
+def dummy():
+    pass
+
+async def gatherTasks(tasks):
+    if not tasks:
+        return []
+
+    await asyncio.wait(tasks)
+    return [ t.result() for t in tasks ]
 
 # Output verbosity:
 #    <= -2: package name
@@ -50,6 +69,9 @@ def runHook(recipes, hook, args):
     return ret
 
 class RestartBuildException(Exception):
+    pass
+
+class CancelBuildException(Exception):
     pass
 
 class LocalBuilderStatistic:
@@ -401,14 +423,13 @@ esac
         self.__recipes = recipes
         self.__wasRun= {}
         self.__wasSkipped = {}
-        self.__verbose = max(-2, min(3, verbose))
+        self.__verbose = max(ALWAYS, min(TRACE, verbose))
         self.__noLogFile = noLogFile
         self.__force = force
         self.__skipDeps = skipDeps
         self.__buildOnly = buildOnly
         self.__preserveEnv = preserveEnv
         self.__envWhiteList = envWhiteList
-        self.__currentPackage = None
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
         self.__downloadDepthForce = 0xffff
@@ -420,6 +441,10 @@ esac
         self.__statistic = LocalBuilderStatistic()
         self.__alwaysCheckout = []
         self.__linkDeps = True
+        self.__buildIdLocks = {}
+        self.__jobs = 1
+        self.__bufferedStdIO = False
+        self.__keepGoing = False
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -459,6 +484,15 @@ esac
 
     def setLinkDependencies(self, linkDeps):
         self.__linkDeps = linkDeps
+
+    def setJobs(self, jobs):
+        self.__jobs = max(jobs, 1)
+
+    def enableBufferedIO(self):
+        self.__bufferedStdIO = True
+
+    def setKeepGoing(self, keepGoing):
+        self.__keepGoing = keepGoing
 
     def saveBuildState(self):
         state = {}
@@ -516,8 +550,12 @@ esac
             created = True
         return (workDir, created)
 
-    def _generateAudit(self, step, depth, resultHash, executed=True):
-        audit = Audit.create(step.getVariantId(), self._getBuildId(step, depth), resultHash)
+    async def _generateAudit(self, step, depth, resultHash, executed=True):
+        if step.isCheckoutStep():
+            buildId = resultHash
+        else:
+            buildId = await self._getBuildId(step, depth)
+        audit = Audit.create(step.getVariantId(), buildId, resultHash)
         audit.addDefine("bob", BOB_VERSION)
         audit.addDefine("recipe", step.getPackage().getRecipe().getName())
         audit.addDefine("package", "/".join(step.getPackage().getStack()))
@@ -549,9 +587,9 @@ esac
                         audit.addScm(typ, step.getWorkspacePath(), dir)
                     except BobError as e:
                         if executed: raise
-                        print(colorize("   WARNING: cannot audit SCM: {} ({})"
+                        stepMessage(step, "AUDIT", "WARNING: cannot audit SCM: {} ({})"
                                             .format(e.slogan, dir),
-                                       "33"))
+                                       WARNING)
 
         auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
         audit.save(auditPath)
@@ -602,7 +640,7 @@ esac
                                         "{:02}-{}".format(i, a.getPackage().getName())))
                 i += 1
 
-    def _runShell(self, step, scriptName, cleanWorkspace):
+    async def _runShell(self, step, scriptName, cleanWorkspace, logger):
         workspacePath = step.getWorkspacePath()
         if cleanWorkspace: emptyDirectory(workspacePath)
         if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
@@ -630,7 +668,7 @@ esac
             sandboxSetup = "\"$(mktemp -d)\""
             sandboxMounts = [ "declare -a mounts=( )" ]
             sandbox = [ quote(os.path.join(self.__bobRoot, "bin", "namespace-sandbox")) ]
-            if self.__verbose >= 3:
+            if self.__verbose >= TRACE:
                 sandbox.append('-D')
             sandbox.extend(["-S", "\"$_sandbox\""])
             sandbox.extend(["-W", quote(step.getExecPath())])
@@ -751,84 +789,212 @@ esac
         os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
         cmdLine = ["/bin/bash", runFile, "__run"]
-        if self.__verbose < 0:
+        if self.__verbose < NORMAL:
             cmdLine.append('-q')
-        elif self.__verbose == 1:
+        elif self.__verbose == INFO:
             cmdLine.append('-v')
-        elif self.__verbose >= 2:
+        elif self.__verbose >= DEBUG:
             cmdLine.append('-vv')
         if self.__noLogFile:
             cmdLine.append('-n')
 
         try:
-            proc = subprocess.Popen(cmdLine, cwd=step.getWorkspacePath(), env=runEnv)
-            if proc.wait() != 0:
-                raise BuildError("Build script {} returned with {}"
-                                    .format(absRunFile, proc.returncode),
-                                 help="You may resume at this point with '--resume' after fixing the error.")
+            if self.__bufferedStdIO:
+                ret = await self.__runShellBuffered(cmdLine, step.getWorkspacePath(), runEnv, logger)
+            else:
+                ret = await self.__runShellRegular(cmdLine, step.getWorkspacePath(), runEnv)
         except OSError as e:
             raise BuildError("Cannot execute build script {}: {}".format(absRunFile, str(e)))
-        except KeyboardInterrupt:
+
+        if ret == -int(signal.SIGINT):
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
+        elif ret != 0:
+            raise BuildError("Build script {} returned with {}"
+                                .format(absRunFile, ret),
+                             help="You may resume at this point with '--resume' after fixing the error.")
 
-    def _info(self, *args, **kwargs):
-        if self.__verbose >= -1:
-            print(*args, **kwargs)
+    async def __runShellRegular(self, cmdLine, cwd, env):
+        proc = await asyncio.create_subprocess_exec(*cmdLine, cwd=cwd, env=env)
+        ret = None
+        while ret is None:
+            try:
+                ret = await proc.wait()
+            except concurrent.futures.CancelledError:
+                pass
+        return ret
+
+    async def __runShellBuffered(self, cmdLine, cwd, env, logger):
+        with tempfile.TemporaryFile() as tmp:
+            proc = await asyncio.create_subprocess_exec(*cmdLine, cwd=cwd, env=env,
+                stdin=subprocess.DEVNULL, stdout=tmp, stderr=subprocess.STDOUT)
+            ret = None
+            while ret is None:
+                try:
+                    ret = await proc.wait()
+                except concurrent.futures.CancelledError:
+                    pass
+            if ret != 0 and ret != -int(signal.SIGINT):
+                tmp.seek(0)
+                logger.setError(io.TextIOWrapper(tmp).read().strip())
+
+        return ret
 
     def getStatistic(self):
         return self.__statistic
 
-    def cook(self, step, checkoutOnly, depth=0):
-        done = False
-        while not done:
+    def __createTask(self, coro, step=None, tracker=None):
+        tracked = (step is not None) and (tracker is not None)
+
+        async def wrapTask():
             try:
-                self._cook([step], step.getPackage(), checkoutOnly, depth)
-                done = True
+                ret = await coro()
+                if tracked:
+                    # Only remove us from the task list if we finished successfully.
+                    # Other concurrent tasks might want to cook the same step again.
+                    # They have to get the same exception again.
+                    del tracker[step.getWorkspacePath()]
+                return ret
+            except BuildError as e:
+                if not self.__keepGoing:
+                    self.__running = False
+                if step:
+                    e.setStack(step.getPackage().getStack())
+                self.__buildErrors.append(e)
+                raise CancelBuildException
             except RestartBuildException:
-                print(colorize("** Restart build due to wrongly predicted sources.", "33"))
-                self.__currentPackage = None
+                if self.__running:
+                    log("Restart build due to wrongly predicted sources.", WARNING)
+                    self.__restart = True
+                    self.__running = False
+                raise CancelBuildException
+            except CancelBuildException:
+                raise
+            except concurrent.futures.CancelledError:
+                pass
+            except Exception as e:
+                self.__buildErrors.append(e)
+                raise CancelBuildException
 
-    def _cook(self, steps, parentPackage, checkoutOnly, depth=0):
-        currentPackage = self.__currentPackage
+        if tracked:
+            path = step.getWorkspacePath()
+            task = tracker.get(path)
+            if task is not None: return task
 
+        task = asyncio.get_event_loop().create_task(wrapTask())
+        if tracked:
+            tracker[path] = task
+
+        return task
+
+    def cook(self, steps, checkoutOnly, depth=0):
+        def cancelJobs():
+            if self.__jobs > 1:
+                log("Cancel all running jobs...", WARNING)
+            self.__running = False
+            self.__restart = False
+            for i in asyncio.Task.all_tasks(): i.cancel()
+
+        async def dispatcher():
+            if self.__jobs > 1:
+                packageJobs = [
+                    self.__createTask(lambda s=step: self._cookTask(s, checkoutOnly, depth), step)
+                    for step in steps ]
+                await gatherTasks(packageJobs)
+            else:
+                for step in steps:
+                    await self._cookTask(step, checkoutOnly, depth)
+
+        loop = asyncio.get_event_loop()
+        self.__restart = True
+        while self.__restart:
+            self.__running = True
+            self.__restart = False
+            self.__cookTasks = {}
+            self.__buildIdTasks = {}
+            self.__buildErrors = []
+            self.__runners = asyncio.BoundedSemaphore(self.__jobs)
+
+            j = self.__createTask(dispatcher)
+            try:
+                loop.add_signal_handler(signal.SIGINT, cancelJobs)
+            except NotImplementedError:
+                pass # not implemented on windows
+            try:
+                loop.run_until_complete(j)
+            except CancelBuildException:
+                pass
+            except concurrent.futures.CancelledError:
+                pass
+            finally:
+                try:
+                    loop.remove_signal_handler(signal.SIGINT)
+                except NotImplementedError:
+                    pass # not implemented on windows
+
+            if len(self.__buildErrors) > 1:
+                raise MultiBobError(self.__buildErrors)
+            elif self.__buildErrors:
+                raise self.__buildErrors[0]
+
+        if not self.__running:
+            raise BuildError("Canceled by user!",
+                             help = "Run again with '--resume' to skip already built packages.")
+
+    async def _cookTask(self, step, checkoutOnly, depth):
+        async with self.__runners:
+            if not self.__running: raise CancelBuildException
+            await self._cook([step], step.getPackage(), checkoutOnly, depth)
+
+    async def _cook(self, steps, parentPackage, checkoutOnly, depth=0):
         # skip everything except the current package
         if self.__skipDeps:
             steps = [ s for s in steps if s.getPackage() == parentPackage ]
 
-        for step in reversed(steps):
-            # skip if already processed steps
-            if self._wasAlreadyRun(step):
-                continue
+        # bail out if nothing has to be done
+        steps = [ s for s in steps
+                  if s.isValid() and not self._wasAlreadyRun(s) ]
+        if not steps: return
 
-            # update if package changes
-            newPackage = "/".join(step.getPackage().getStack())
-            if newPackage != self.__currentPackage:
-                self.__currentPackage = newPackage
-                print(">>", colorize(self.__currentPackage, "32;1"))
+        if self.__jobs > 1:
+            # spawn the child tasks
+            tasks = [
+                self.__createTask(lambda s=step: self._cookStep(s, checkoutOnly, depth), step, self.__cookTasks)
+                for step in steps
+            ]
 
-            # execute step
-            try:
-                if step.isCheckoutStep():
-                    if step.isValid():
-                        self._cookCheckoutStep(step, depth)
-                elif step.isBuildStep():
-                    if step.isValid():
-                        self._cookBuildStep(step, checkoutOnly, depth)
-                else:
-                    assert step.isPackageStep() and step.isValid()
-                    self._cookPackageStep(step, checkoutOnly, depth)
-            except BuildError as e:
-                e.setStack(step.getPackage().getStack())
-                raise e
+            # wait for all tasks to finish
+            await self.__yieldJobWhile(gatherTasks(tasks))
+        else:
+            for step in steps:
+                await self.__yieldJobWhile(self._cookStep(step, checkoutOnly, depth))
 
-        # back to original package
-        if currentPackage != self.__currentPackage:
-            self.__currentPackage = currentPackage
-            if currentPackage:
-                print(">>", colorize(self.__currentPackage, "32;1"))
+    async def _cookStep(self, step, checkoutOnly, depth):
+        await self.__runners.acquire()
+        try:
+            if not self.__running:
+                raise CancelBuildException
+            elif self._wasAlreadyRun(step):
+                pass
+            elif step.isCheckoutStep():
+                if step.isValid():
+                    await self._cookCheckoutStep(step, depth)
+            elif step.isBuildStep():
+                if step.isValid():
+                    await self._cookBuildStep(step, checkoutOnly, depth)
+                    self._setAlreadyRun(step, False, checkoutOnly)
+            else:
+                assert step.isPackageStep() and step.isValid()
+                await self._cookPackageStep(step, checkoutOnly, depth)
+                self._setAlreadyRun(step, False, checkoutOnly)
+        except BuildError as e:
+            e.setStack(step.getPackage().getStack())
+            raise
+        finally:
+            # we're done, let the others do their work
+            self.__runners.release()
 
-    def _cookCheckoutStep(self, checkoutStep, depth):
+    async def _cookCheckoutStep(self, checkoutStep, depth):
         overrides = set()
         scmList = checkoutStep.getScmList()
         for scm in scmList:
@@ -838,7 +1004,7 @@ esac
         overridesString = ("(" + str(overrides) + " scm " + ("overrides" if overrides > 1 else "override") +")") if overrides else ""
 
         # depth first
-        self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
+        await self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
                   False, depth+1)
 
         # get directory into shape
@@ -854,10 +1020,11 @@ esac
         checkoutState[None] = checkoutDigest = checkoutStep.getVariantId()
         if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
             if checkoutState != oldCheckoutState:
-                print(colorize("   CHECKOUT  WARNING: recipe changed but skipped due to --build-only ({})"
-                    .format(prettySrcPath), "33"))
+                stepMessage(checkoutStep, "CHECKOUT", "WARNING: recipe changed but skipped due to --build-only ({})"
+                    .format(prettySrcPath), WARNING)
             else:
-                self._info("   CHECKOUT  skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString))
+                stepMessage(checkoutStep, "CHECKOUT", "skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString),
+                    SKIPPED, IMPORTANT)
         else:
             if self.__cleanCheckout:
                 # check state of SCMs and invalidate if the directory is dirty
@@ -883,7 +1050,8 @@ esac
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                         if os.path.exists(scmPath):
                             atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
-                            print(colorize("   ATTIC     {} (move to ../attic/{})".format(scmPath, atticName), "33"))
+                            stepMessage(checkoutStep, "ATTIC",
+                                "{} (move to ../attic/{})".format(scmPath, atticName), WARNING)
                             atticPath = os.path.join(prettySrcPath, "..", "attic")
                             if not os.path.isdir(atticPath):
                                 os.makedirs(atticPath)
@@ -917,9 +1085,9 @@ esac
                 if BobState().getResultHash(prettySrcPath) is not None:
                     BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
 
-                print(colorize("   CHECKOUT  {} {}".format(prettySrcPath, overridesString)
-                    , "32"))
-                self._runShell(checkoutStep, "checkout", False)
+                with stepExec(checkoutStep, "CHECKOUT",
+                              "{} {}".format(prettySrcPath, overridesString)) as a:
+                    await self._runShell(checkoutStep, "checkout", False, a)
                 self.__statistic.checkouts += 1
                 checkoutExecuted = True
                 # reflect new checkout state
@@ -927,7 +1095,8 @@ esac
                 BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
                 BobState().setVariantId(prettySrcPath, self.__getIncrementalVariantId(checkoutStep))
             else:
-                self._info("   CHECKOUT  skipped (fixed package {})".format(prettySrcPath))
+                stepMessage(checkoutStep, "CHECKOUT", "skipped (fixed package {})".format(prettySrcPath),
+                    SKIPPED, IMPORTANT)
 
         # We always have to rehash the directory as the user might have
         # changed the source code manually.
@@ -935,20 +1104,20 @@ esac
         checkoutHash = hashWorkspace(checkoutStep)
         BobState().setResultHash(prettySrcPath, checkoutHash)
 
-        # Mark already as done. The next calls might recurse back to us and we
-        # must prevent to be run again.
-        self._setAlreadyRun(checkoutStep, True)
-
         # Generate audit trail. Has to be done _after_ setResultHash()
         # because the result is needed to calculate the buildId.
         if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
-            self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
+            await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
         # upload live build-id cache in case of fresh checkout
         if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
             liveBId = checkoutStep.calcLiveBuildId()
             if liveBId is not None:
-                self.__archive.uploadLocalLiveBuildId(liveBId, checkoutHash, self.__verbose)
+                await self.__archive.uploadLocalLiveBuildId(checkoutStep, liveBId, checkoutHash)
+
+        # We're done. The sanity check below won't change the result but would
+        # trigger this step again.
+        self._setAlreadyRun(checkoutStep, True)
 
         # Predicted build-id and real one after checkout do not need to
         # match necessarily. Handle it as some build results might be
@@ -959,9 +1128,9 @@ esac
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
-    def _cookBuildStep(self, buildStep, checkoutOnly, depth):
+    async def _cookBuildStep(self, buildStep, checkoutOnly, depth):
         # depth first
-        self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
+        await self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
                    checkoutOnly, depth+1)
 
         # Add the execution path of the build step to the buildDigest to
@@ -981,7 +1150,8 @@ esac
         if created or (buildDigest != oldBuildDigest):
             # not created but exists -> something different -> prune workspace
             if not created and os.path.exists(prettyBuildPath):
-                print(colorize("   PRUNE     {} (recipe changed)".format(prettyBuildPath), "33"))
+                stepMessage(buildStep, "PRUNE", "{} (recipe changed)".format(prettyBuildPath),
+                    WARNING)
                 emptyDirectory(prettyBuildPath)
             # invalidate build step
             BobState().resetWorkspaceState(prettyBuildPath, buildDigest)
@@ -990,30 +1160,31 @@ esac
         buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
             for i in buildStep.getAllDepSteps() if i.isValid() ]
         if checkoutOnly:
-            self._info("   BUILD     skipped due to --checkout-only ({})".format(prettyBuildPath))
+            stepMessage(buildStep, "BUILD", "skipped due to --checkout-only ({})".format(prettyBuildPath),
+                    SKIPPED, IMPORTANT)
         elif (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
-            self._info("   BUILD     skipped (unchanged input for {})".format(prettyBuildPath))
+            stepMessage(buildStep, "BUILD", "skipped (unchanged input for {})".format(prettyBuildPath),
+                    SKIPPED, IMPORTANT)
             # We always rehash the directory in development mode as the
             # user might have compiled the package manually.
             if not self.__cleanBuild:
                 BobState().setResultHash(prettyBuildPath, hashWorkspace(buildStep))
         else:
-            print(colorize("   BUILD     {}".format(prettyBuildPath), "32"))
-            # Squash state because running the step will change the
-            # content. If the execution fails we have nothing reliable
-            # left and we _must_ run it again.
-            BobState().delInputHashes(prettyBuildPath)
-            BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
-            # build it
-            self._runShell(buildStep, "build", self.__cleanBuild)
-            buildHash = hashWorkspace(buildStep)
-            self._generateAudit(buildStep, depth, buildHash)
+            with stepExec(buildStep, "BUILD", prettyBuildPath) as a:
+                # Squash state because running the step will change the
+                # content. If the execution fails we have nothing reliable
+                # left and we _must_ run it again.
+                BobState().delInputHashes(prettyBuildPath)
+                BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
+                # build it
+                await self._runShell(buildStep, "build", self.__cleanBuild, a)
+                buildHash = hashWorkspace(buildStep)
+            await self._generateAudit(buildStep, depth, buildHash)
             BobState().setResultHash(prettyBuildPath, buildHash)
             BobState().setVariantId(prettyBuildPath, buildDigest[0])
             BobState().setInputHashes(prettyBuildPath, buildInputHashes)
-        self._setAlreadyRun(buildStep, False, checkoutOnly)
 
-    def _cookPackageStep(self, packageStep, checkoutOnly, depth):
+    async def _cookPackageStep(self, packageStep, checkoutOnly, depth):
         # get directory into shape
         (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
         packageDigest = packageStep.getVariantId()
@@ -1021,7 +1192,8 @@ esac
         if created or (packageDigest != oldPackageDigest):
             # not created but exists -> something different -> prune workspace
             if not created and os.path.exists(prettyPackagePath):
-                print(colorize("   PRUNE     {} (recipe changed)".format(prettyPackagePath), "33"))
+                stepMessage(packageStep, "PRUNE", "{} (recipe changed)".format(prettyPackagePath),
+                    WARNING)
                 emptyDirectory(prettyPackagePath)
             # invalidate result if folder was created
             BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
@@ -1030,7 +1202,7 @@ esac
         # relocatable package or that we're building in a sandbox with
         # stable paths. Try to determine a build-id for these artifacts.
         if packageStep.isRelocatable() or (packageStep.getSandbox() is not None):
-            packageBuildId = self._getBuildId(packageStep, depth)
+            packageBuildId = await self._getBuildId(packageStep, depth)
         else:
             packageBuildId = None
 
@@ -1067,8 +1239,9 @@ esac
         if ( (not checkoutOnly) and packageBuildId and (depth >= self.__downloadDepth) ):
             # prune directory if we previously downloaded/built something different
             if ((oldInputBuildId is not None) and (oldInputBuildId != packageBuildId)) or self.__force:
-                print(colorize("   PRUNE     {} ({})".format(prettyPackagePath,
-                        "build forced" if self.__force else "build-id changed"), "33"))
+                stepMessage(packageStep, "PRUNE", "{} ({})".format(prettyPackagePath,
+                        "build forced" if self.__force else "build-id changed"),
+                    WARNING)
                 emptyDirectory(prettyPackagePath)
                 BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
                 oldInputBuildId = None
@@ -1079,7 +1252,9 @@ esac
             # we're done.
             if BobState().getResultHash(prettyPackagePath) is None:
                 audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
-                if self.__archive.downloadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose):
+                wasDownloaded = await self.__archive.downloadPackage(packageStep,
+                    packageBuildId, audit, prettyPackagePath)
+                if wasDownloaded:
                     self.__statistic.packagesDownloaded += 1
                     BobState().setInputHashes(prettyPackagePath, packageBuildId)
                     packageHash = hashWorkspace(packageStep)
@@ -1088,7 +1263,8 @@ esac
                 elif depth >= self.__downloadDepthForce:
                     raise BuildError("Downloading artifact failed")
             elif oldWasDownloaded:
-                self._info("   PACKAGE   skipped (already downloaded in {})".format(prettyPackagePath))
+                stepMessage(packageStep, "PACKAGE", "skipped (already downloaded in {})".format(prettyPackagePath),
+                    SKIPPED, IMPORTANT)
                 wasDownloaded = True
 
         # Run package step if we have not yet downloaded the package or if
@@ -1097,7 +1273,7 @@ esac
         # an actual build.
         if not wasDownloaded:
             # depth first
-            self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
+            await self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
                        checkoutOnly, depth+1)
 
             # Take checkout step into account because it is guaranteed to
@@ -1108,22 +1284,24 @@ esac
             packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                 for i in packageInputs if i.isValid() ]
             if checkoutOnly:
-                self._info("   PACKAGE   skipped due to --checkout-only ({})".format(prettyPackagePath))
+                stepMessage(packageStep, "PACKAGE", "skipped due to --checkout-only ({})".format(prettyPackagePath),
+                    SKIPPED, IMPORTANT)
             elif (not self.__force) and (oldInputHashes == packageInputHashes):
-                self._info("   PACKAGE   skipped (unchanged input for {})".format(prettyPackagePath))
+                stepMessage(packageStep, "PACKAGE", "skipped (unchanged input for {})".format(prettyPackagePath),
+                    SKIPPED, IMPORTANT)
             else:
-                print(colorize("   PACKAGE   {}".format(prettyPackagePath), "32"))
-                # invalidate result because folder will be cleared
-                BobState().delInputHashes(prettyPackagePath)
-                BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
-                self._runShell(packageStep, "package", True)
-                packageHash = hashWorkspace(packageStep)
-                packageDigest = self.__getIncrementalVariantId(packageStep)
-                audit = self._generateAudit(packageStep, depth, packageHash)
-                workspaceChanged = True
-                self.__statistic.packagesBuilt += 1
+                with stepExec(packageStep, "PACKAGE", prettyPackagePath) as a:
+                    # invalidate result because folder will be cleared
+                    BobState().delInputHashes(prettyPackagePath)
+                    BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
+                    await self._runShell(packageStep, "package", True, a)
+                    packageHash = hashWorkspace(packageStep)
+                    packageDigest = self.__getIncrementalVariantId(packageStep)
+                    workspaceChanged = True
+                    self.__statistic.packagesBuilt += 1
+                audit = await self._generateAudit(packageStep, depth, packageHash)
                 if packageBuildId and self.__archive.canUploadLocal():
-                    self.__archive.uploadPackage(packageBuildId, audit, prettyPackagePath, self.__verbose)
+                    await self.__archive.uploadPackage(packageStep, packageBuildId, audit, prettyPackagePath)
 
         # Rehash directory if content was changed
         if workspaceChanged:
@@ -1133,9 +1311,8 @@ esac
                 BobState().setInputHashes(prettyPackagePath, packageBuildId)
             else:
                 BobState().setInputHashes(prettyPackagePath, [packageBuildId] + packageInputHashes)
-        self._setAlreadyRun(packageStep, False, checkoutOnly)
 
-    def __queryLiveBuildId(self, step):
+    async def __queryLiveBuildId(self, step):
         """Predict live build-id of checkout step.
 
         Query the SCMs for their live-buildid and cache the result. Normally
@@ -1149,18 +1326,7 @@ esac
             liveBId = BobState().getBuildId(key)
             if liveBId is not None: return liveBId
 
-        if self.__verbose > 0:
-            print(colorize("   QUERY-SRC {} .. ".format(step.getPackage().getName()), "32"), end="")
-        liveBId = None
-        try:
-            liveBId = step.predictLiveBuildId()
-        finally:
-            if self.__verbose > 0:
-                if liveBId is None:
-                    print(colorize("unknown", "33"))
-                else:
-                    print(colorize("ok", "32"))
-
+        liveBId = await step.predictLiveBuildId()
         if liveBId is not None:
             BobState().setBuildId(key, liveBId)
         return liveBId
@@ -1173,7 +1339,7 @@ esac
         if liveBId is not None:
             BobState().delBuildId(key)
 
-    def __translateLiveBuildId(self, liveBId):
+    async def __translateLiveBuildId(self, step, liveBId):
         """Translate live build-id into real build-id.
 
         We maintain a local cache of previous translations. In case of a cache
@@ -1184,41 +1350,34 @@ esac
         if bid is not None:
             return bid
 
-        bid = self.__archive.downloadLocalLiveBuildId(liveBId, self.__verbose)
+        bid = await self.__archive.downloadLocalLiveBuildId(step, liveBId)
         if bid is not None:
             BobState().setBuildId(key, bid)
 
         return bid
 
-    def __getCheckoutStepBuildId(self, step, depth):
+    async def __getCheckoutStepBuildId(self, step, depth):
         ret = None
-        v = (self.__verbose >= -1) and (self.__verbose < 1)
 
         # Try to use live build-ids for checkout steps. Do not use them if
         # there is already a workspace or if the package matches one of the
         # 'always-checkout' patterns. Fall back to a regular checkout if any
         # condition is not met.
         name = step.getPackage().getName()
+        path = step.getWorkspacePath()
         if not os.path.exists(step.getWorkspacePath()) and \
            not any(pat.match(name) for pat in self.__alwaysCheckout) and \
            step.hasLiveBuildId() and self.__archive.canDownloadLocal():
-            if v:
-                print(colorize("   QUERY     {} .. ".format(step.getPackage().getName()), "32"), end="")
-            try:
-                liveBId = self.__queryLiveBuildId(step)
+            with stepAction(step, "QUERY", step.getPackage().getName(), (IMPORTANT, NORMAL)) as a:
+                liveBId = await self.__queryLiveBuildId(step)
                 if liveBId:
-                    ret = self.__translateLiveBuildId(liveBId)
-            finally:
-                if v:
-                    if ret is None:
-                        print(colorize("unknown", "33"))
-                    else:
-                        print(colorize("ok", "32"))
+                    ret = await self.__translateLiveBuildId(step, liveBId)
+                if ret is None:
+                    a.fail("unknown", WARNING)
 
         # do the checkout if we still don't have a build-id
         if ret is None:
-            # do checkout
-            self._cook([step], step.getPackage(), depth)
+            await self._cook([step], step.getPackage(), depth)
             # return directory hash
             ret = BobState().getResultHash(step.getWorkspacePath())
             predicted = False
@@ -1227,7 +1386,7 @@ esac
 
         return ret, predicted
 
-    def _getBuildId(self, step, depth):
+    async def _getBuildId(self, step, depth):
         """Calculate build-id and cache result.
 
         The cache uses the workspace path as index because there might be
@@ -1241,18 +1400,46 @@ esac
         invalidated because they could be derived from the wrong checkout
         build-id.
         """
+
+        # Pass over to __getBuildIdList(). It will try to create a task and (if
+        # the calculation already failed) will make sure that we get the same
+        # exception again. This prevents recalculation of already failed build
+        # ids.
+        [ret] = await self.__getBuildIdList([step], depth)
+        return ret
+
+    async def __getBuildIdList(self, steps, depth):
+        if self.__jobs > 1:
+            tasks = [
+                self.__createTask(lambda s=step: self.__getBuildIdTask(s, depth), step, self.__buildIdTasks)
+                for step in steps
+            ]
+            ret = await self.__yieldJobWhile(gatherTasks(tasks))
+        else:
+            ret = []
+            for step in steps:
+                ret.append(await self.__yieldJobWhile(self.__getBuildIdTask(step, depth)))
+        return ret
+
+    async def __getBuildIdTask(self, step, depth):
+        async with self.__runners:
+            if not self.__running: raise CancelBuildException
+            ret = await self.__getBuildIdSingle(step, depth)
+        return ret
+
+    async def __getBuildIdSingle(self, step, depth):
         path = step.getWorkspacePath()
         if step.isCheckoutStep():
             key = (path, step.getVariantId())
             ret, predicted = self.__srcBuildIds.get(key, (None, False))
             if ret is None:
-                tmp = self.__getCheckoutStepBuildId(step, depth)
+                tmp = await self.__getCheckoutStepBuildId(step, depth)
                 self.__srcBuildIds[key] = tmp
                 ret = tmp[0]
         else:
             ret = self.__buildDistBuildIds.get(path)
             if ret is None:
-                ret = step.getDigest(lambda s: self._getBuildId(s, depth+1), True)
+                ret = await step.getDigestCoro(lambda x: self.__getBuildIdList(x, depth+1), True)
                 self.__buildDistBuildIds[path] = ret
 
         return ret
@@ -1309,12 +1496,36 @@ esac
         r = step.getDigest(getStoredVId)
         return r
 
+    async def __yieldJobWhile(self, coro):
+        """Yield the job slot while waiting for a coroutine.
+
+        Handles the dirty details of cancellation. Might throw CancelledError
+        if overall execution was stopped.
+        """
+        self.__runners.release()
+        try:
+            ret = await coro
+        finally:
+            acquired = False
+            while not acquired:
+                try:
+                    await self.__runners.acquire()
+                    acquired = True
+                except concurrent.futures.CancelledError:
+                    pass
+        if not self.__running: raise CancelBuildException
+        return ret
+
 
 def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('packages', metavar='PACKAGE', type=str, nargs='+',
         help="(Sub-)package to build")
     parser.add_argument('--destination', metavar="DEST", default=None,
         help="Destination of build result (will be overwritten!)")
+    parser.add_argument('-j', '--jobs', default=None, type=int, nargs='?', const=...,
+        help="Specifies  the  number of jobs to run simultaneously.")
+    parser.add_argument('-k', '--keep-going', default=None, action='store_true',
+        help="Continue  as much as possible after an error.")
     parser.add_argument('-f', '--force', default=None, action='store_true',
         help="Force execution of all build steps")
     parser.add_argument('-n', '--no-deps', default=None, action='store_true',
@@ -1378,96 +1589,138 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
     startTime = time.time()
 
-    recipes = RecipeSet()
-    recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
-    recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
-    recipes.defineHook('developNamePersister', None)
-    recipes.setConfigFiles(args.configFile)
-    recipes.parse()
-
-    # if arguments are not passed on cmdline use them from default.yaml or set to default yalue
-    if develop:
-        cfg = recipes.getCommandConfig().get('dev', {})
+    if sys.platform == 'win32':
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+        multiprocessing.set_start_method('spawn')
+        executor = concurrent.futures.ProcessPoolExecutor()
     else:
-        cfg = recipes.getCommandConfig().get('build', {})
+        # The ProcessPoolExecutor is a barely usable for our interactive use
+        # case. On SIGINT any busy executor should stop. The only way how this
+        # does not explode is that we ignore SIGINT before spawning the process
+        # pool and re-enable SIGINT in every executor. In the main process we
+        # have to ignore BrokenProcessPool errors as we will likely hit them.
+        # To "prime" the process pool a dummy workload must be executed because
+        # the processes are spawned lazily.
+        loop = asyncio.get_event_loop()
+        origSigInt = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        multiprocessing.set_start_method('forkserver') # fork early before process gets big
+        executor = concurrent.futures.ProcessPoolExecutor()
+        executor.submit(dummy).result()
+        signal.signal(signal.SIGINT, origSigInt)
+    loop.set_default_executor(executor)
 
-    defaults = {
-            'destination' : '',
-            'force' : False,
-            'no_deps' : False,
-            'build_mode' : 'normal',
-            'clean' : not develop,
-            'upload' : False,
-            'download' : "deps" if develop else "yes",
-            'sandbox' : not develop,
-            'clean_checkout' : False,
-            'no_logfiles' : False,
-            'link_deps' : True,
-        }
-
-    for a in vars(args):
-        if getattr(args, a) == None:
-            setattr(args, a, cfg.get(a, defaults.get(a)))
-
-    envWhiteList = recipes.envWhiteList()
-    envWhiteList |= set(args.white_list)
-
-    if develop:
-        nameFormatter = recipes.getHook('developNameFormatter')
-        developPersister = DevelopDirOracle(nameFormatter, recipes.getHook('developNamePersister'))
-        nameFormatter = developPersister.getFormatter()
-    else:
-        nameFormatter = recipes.getHook('releaseNameFormatter')
-        nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
-    nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
-    packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
-    if develop: developPersister.prime(packages)
-
-    builder = LocalBuilder(recipes, cfg.get('verbosity', 0) + args.verbose - args.quiet, args.force,
-                           args.no_deps, True if args.build_mode == 'build-only' else False,
-                           args.preserve_env, envWhiteList, bobRoot, args.clean,
-                           args.no_logfiles)
-
-    builder.setArchiveHandler(getArchiver(recipes))
-    builder.setUploadMode(args.upload)
-    builder.setDownloadMode(args.download)
-    builder.setCleanCheckout(args.clean_checkout)
-    builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
-    builder.setLinkDependencies(args.link_deps)
-    if args.resume: builder.loadBuildState()
-
-    backlog = []
-    providedBacklog = []
-    results = []
-    for p in args.packages:
-        for package in packages.queryPackagePath(p):
-            packageStep = package.getPackageStep()
-            backlog.append(packageStep)
-            # automatically include provided deps when exporting
-            build_provided = (args.destination and args.build_provided == None) or args.build_provided
-            if build_provided: providedBacklog.extend(packageStep._getProvidedDeps())
-
-    success = runHook(recipes, 'preBuildHook',
-        ["/".join(p.getPackage().getStack()) for p in backlog])
-    if not success:
-        raise BuildError("preBuildHook failed!",
-            help="A preBuildHook is set but it returned with a non-zero status.")
-    success = False
     try:
-        for p in backlog:
-            builder.cook(p, True if args.build_mode == 'checkout-only' else False)
-            resultPath = p.getWorkspacePath()
-            if resultPath not in results:
-                results.append(resultPath)
-        for p in providedBacklog:
-            builder.cook(p, True if args.build_mode == 'checkout-only' else False, 1)
-            resultPath = p.getWorkspacePath()
-            if resultPath not in results:
-                results.append(resultPath)
-        success = True
+        recipes = RecipeSet()
+        recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
+        recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
+        recipes.defineHook('developNamePersister', None)
+        recipes.setConfigFiles(args.configFile)
+        recipes.parse()
+
+        # if arguments are not passed on cmdline use them from default.yaml or set to default yalue
+        if develop:
+            cfg = recipes.getCommandConfig().get('dev', {})
+        else:
+            cfg = recipes.getCommandConfig().get('build', {})
+
+        defaults = {
+                'destination' : '',
+                'force' : False,
+                'no_deps' : False,
+                'build_mode' : 'normal',
+                'clean' : not develop,
+                'upload' : False,
+                'download' : "deps" if develop else "yes",
+                'sandbox' : not develop,
+                'clean_checkout' : False,
+                'no_logfiles' : False,
+                'link_deps' : True,
+                'jobs' : 1,
+                'keep_going' : False,
+            }
+
+        for a in vars(args):
+            if getattr(args, a) == None:
+                setattr(args, a, cfg.get(a, defaults.get(a)))
+
+        if args.jobs is ...:
+            args.jobs = os.cpu_count()
+        elif args.jobs <= 0:
+            parser.error("--jobs argument must be greater than zero!")
+
+        envWhiteList = recipes.envWhiteList()
+        envWhiteList |= set(args.white_list)
+
+        if develop:
+            nameFormatter = recipes.getHook('developNameFormatter')
+            developPersister = DevelopDirOracle(nameFormatter, recipes.getHook('developNamePersister'))
+            nameFormatter = developPersister.getFormatter()
+        else:
+            nameFormatter = recipes.getHook('releaseNameFormatter')
+            nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
+        nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
+        packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
+        if develop: developPersister.prime(packages)
+
+        verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
+        setVerbosity(verbosity)
+        builder = LocalBuilder(recipes, verbosity, args.force,
+                               args.no_deps, True if args.build_mode == 'build-only' else False,
+                               args.preserve_env, envWhiteList, bobRoot, args.clean,
+                               args.no_logfiles)
+
+        builder.setArchiveHandler(getArchiver(recipes))
+        builder.setUploadMode(args.upload)
+        builder.setDownloadMode(args.download)
+        builder.setCleanCheckout(args.clean_checkout)
+        builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
+        builder.setLinkDependencies(args.link_deps)
+        builder.setJobs(args.jobs)
+        builder.setKeepGoing(args.keep_going)
+        if args.resume: builder.loadBuildState()
+
+        backlog = []
+        providedBacklog = []
+        results = []
+        for p in args.packages:
+            for package in packages.queryPackagePath(p):
+                packageStep = package.getPackageStep()
+                backlog.append(packageStep)
+                # automatically include provided deps when exporting
+                build_provided = (args.destination and args.build_provided == None) or args.build_provided
+                if build_provided: providedBacklog.extend(packageStep._getProvidedDeps())
+
+        success = runHook(recipes, 'preBuildHook',
+            ["/".join(p.getPackage().getStack()) for p in backlog])
+        if not success:
+            raise BuildError("preBuildHook failed!",
+                help="A preBuildHook is set but it returned with a non-zero status.")
+        success = False
+        if args.jobs > 1:
+            setTui(args.jobs)
+            builder.enableBufferedIO()
+        try:
+            builder.cook(backlog, True if args.build_mode == 'checkout-only' else False)
+            for p in backlog:
+                resultPath = p.getWorkspacePath()
+                if resultPath not in results:
+                    results.append(resultPath)
+            builder.cook(providedBacklog, True if args.build_mode == 'checkout-only' else False, 1)
+            for p in providedBacklog:
+                resultPath = p.getWorkspacePath()
+                if resultPath not in results:
+                    results.append(resultPath)
+            success = True
+        finally:
+            if args.jobs > 1: setTui(1)
+            builder.saveBuildState()
+            runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
+
     finally:
-        builder.saveBuildState()
-        runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
+        executor.shutdown()
+        loop.close()
 
     # tell the user
     if results:
@@ -1529,6 +1782,8 @@ def doProject(argv, bobRoot):
         help="Do not build (bob dev) before generate project Files. RunTargets may not work")
     parser.add_argument('-b', dest="execute_buildonly", default=False, action='store_true',
         help="Do build only (bob dev -b) before generate project Files. No checkout")
+    parser.add_argument('-j', '--jobs', default=None, type=int, nargs='?', const=...,
+        help="Specifies  the  number of jobs to run simultaneously.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
@@ -1583,6 +1838,13 @@ def doProject(argv, bobRoot):
         extra.append(e)
     if args.preserve_env: extra.append('-E')
     if args.sandbox: extra.append('--sandbox')
+    if args.jobs is ...:
+        # expand because we cannot control the argument order in the generator
+        args.jobs = os.cpu_count()
+    if args.jobs is not None:
+        if args.jobs <= 0:
+            parser.error("--jobs argument must be greater than zero!")
+        extra.extend(['-j', str(args.jobs)])
 
     package = packages.walkPackagePath(args.package)
 

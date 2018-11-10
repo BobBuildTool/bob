@@ -5,13 +5,16 @@
 
 from ..errors import ParseError, BuildError
 from ..stringparser import isTrue
-from ..tty import colorize, WarnOnce
+from ..tty import colorize, WarnOnce, stepAction, INFO, TRACE, WARNING
 from ..utils import hashString
 from .scm import Scm, ScmAudit
 from pipes import quote
 from textwrap import dedent
 from xml.etree import ElementTree
+import asyncio
+import concurrent.futures
 import hashlib
+import locale
 import os, os.path
 import re
 import schema
@@ -350,43 +353,58 @@ class GitScm(Scm):
     def hasLiveBuildId(self):
         return True
 
-    def predictLiveBuildId(self):
+    async def predictLiveBuildId(self, step):
         if self.__commit:
             return bytes.fromhex(self.__commit)
 
-        if self.__tag:
-            # Annotated tags are objects themselves. We need the commit object!
-            refs = ["refs/tags/" + self.__tag + '^{}', "refs/tags/" + self.__tag]
-        else:
-            refs = ["refs/heads/" + self.__branch]
-        cmdLine = ['git', 'ls-remote', self.__url] + refs
-        try:
-            output = subprocess.check_output(cmdLine, universal_newlines=True,
-                stderr=subprocess.DEVNULL).strip()
-        except (subprocess.CalledProcessError, OSError):
+        with stepAction(step, "LS-REMOTE", self.__url, (INFO, TRACE)) as a:
+            if self.__tag:
+                # Annotated tags are objects themselves. We need the commit object!
+                refs = ["refs/tags/" + self.__tag + '^{}', "refs/tags/" + self.__tag]
+            else:
+                refs = ["refs/heads/" + self.__branch]
+            cmdLine = ['git', 'ls-remote', self.__url] + refs
+            try:
+                proc = await asyncio.create_subprocess_exec(*cmdLine,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=subprocess.DEVNULL)
+                try:
+                    stdout, stderr = await proc.communicate()
+                    rc = await proc.wait()
+                except concurrent.futures.CancelledError:
+                    proc.terminate()
+                    rc = await proc.wait()
+                if rc != 0:
+                    a.fail("exit {}".format(rc), WARNING)
+                    return None
+                output = stdout.decode(locale.getpreferredencoding(False)).strip()
+            except (subprocess.CalledProcessError, OSError):
+                a.fail("error")
+                return None
+
+            # have we found anything at all?
+            if not output:
+                a.fail("unknown", WARNING)
+                return None
+
+            # See if we got one of our intended refs. Git is generating lines with
+            # the following format:
+            #
+            #   <sha1>\t<refname>
+            #
+            # Put the output into a dict with the refname as key. Be extra careful
+            # and strip out lines not matching this pattern.
+            output = {
+                commitAndRef[1].strip() : bytes.fromhex(commitAndRef[0].strip())
+                for commitAndRef
+                in (line.split('\t') for line in output.split('\n'))
+                if len(commitAndRef) == 2 }
+            for ref in refs:
+                if ref in output: return output[ref]
+
+            # uhh, should not happen...
+            a.fail("unknown", WARNING)
             return None
-
-        # have we found anything at all?
-        if not output:
-            return None
-
-        # See if we got one of our intended refs. Git is generating lines with
-        # the following format:
-        #
-        #   <sha1>\t<refname>
-        #
-        # Put the output into a dict with the refname as key. Be extra careful
-        # and strip out lines not matching this pattern.
-        output = {
-            commitAndRef[1].strip() : bytes.fromhex(commitAndRef[0].strip())
-            for commitAndRef
-            in (line.split('\t') for line in output.split('\n'))
-            if len(commitAndRef) == 2 }
-        for ref in refs:
-            if ref in output: return output[ref]
-
-        # uhh, should not happen...
-        return None
 
     def calcLiveBuildId(self, workspacePath):
         if self.__commit:

@@ -18,7 +18,7 @@ Python modules that are not in the standard library:
 * gcc
 * `python3-sphinx` Only needed for generating man pages.
 
-Python 3.3 or later should work. For the basic usage there is no installation
+Python 3.5 or later should work. For the basic usage there is no installation
 needed. Just clone the repository and compile::
 
    $ git clone https://github.com/BobBuildTool/bob.git
