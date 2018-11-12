@@ -275,7 +275,7 @@ class Audit:
         audit = cls()
         try:
             with gzip.open(file, 'rb') as gzf:
-                audit.load(gzf)
+                audit.load(gzf, file)
             with open(cacheName, "wb") as f:
                 f.write(cacheKey)
                 pickle.dump(audit, f, -1)
@@ -284,9 +284,9 @@ class Audit:
         return audit
 
     @classmethod
-    def fromByteStream(cls, stream):
+    def fromByteStream(cls, stream, name):
         audit = cls()
-        audit.load(stream)
+        audit.load(stream, name)
         return audit
 
     @classmethod
@@ -311,7 +311,7 @@ class Audit:
                 if dep not in done: refs.add(dep)
             done.add(curId)
 
-    def load(self, file):
+    def load(self, file, name):
         try:
             tree = json.load(io.TextIOWrapper(file, encoding='utf8'))
             tree = Audit.SCHEMA.validate(tree)
@@ -320,9 +320,9 @@ class Audit:
                 r["artifact-id"] : Artifact.fromData(r) for r in tree["references"]
             }
         except schema.SchemaError as e:
-            raise ParseError("Invalid audit record: " + str(e))
+            raise ParseError(name + ": Invalid audit record: " + str(e))
         except ValueError as e:
-            raise ParseError("Invalid json: " + str(e))
+            raise ParseError(name + ": Invalid json: " + str(e))
         self.__validate()
 
     def save(self, file):

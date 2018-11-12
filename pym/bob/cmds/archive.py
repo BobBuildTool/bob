@@ -85,7 +85,7 @@ class ArchiveScanner:
                 # read audit trail
                 auditJsonGz = tar.extractfile(f)
                 auditJson = gzip.GzipFile(fileobj=auditJsonGz)
-                audit = Audit.fromByteStream(auditJson)
+                audit = Audit.fromByteStream(auditJson, fileName)
 
             # import data
             artifact = audit.getArtifact()
