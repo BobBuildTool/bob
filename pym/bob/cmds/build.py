@@ -516,7 +516,7 @@ esac
         self.__srcBuildIds = { (path, vid) : (bid, True)
             for (path, vid), bid in state.get('predictedBuidId', {}).items() }
 
-    def _wasAlreadyRun(self, step, skippedOk=False):
+    def _wasAlreadyRun(self, step, skippedOk):
         path = step.getWorkspacePath()
         if path in self.__wasRun:
             digest = self.__wasRun[path][0]
@@ -953,7 +953,7 @@ esac
 
         # bail out if nothing has to be done
         steps = [ s for s in steps
-                  if s.isValid() and not self._wasAlreadyRun(s) ]
+                  if s.isValid() and not self._wasAlreadyRun(s, checkoutOnly) ]
         if not steps: return
 
         if self.__jobs > 1:
@@ -974,7 +974,7 @@ esac
         try:
             if not self.__running:
                 raise CancelBuildException
-            elif self._wasAlreadyRun(step):
+            elif self._wasAlreadyRun(step, checkoutOnly):
                 pass
             elif step.isCheckoutStep():
                 if step.isValid():
