@@ -2386,8 +2386,8 @@ class RecipeSet:
         {
             schema.Optional('destination') : str,
             schema.Optional('force') : bool,
-            schema.Optional('no_deps') : bool,
-            schema.Optional('build_mode') : schema.Or("build-only","normal", "checkout-only"),
+            schema.Optional('dep_mode') : schema.Or("no-deps", "all-packages", "deps-only"),
+            schema.Optional('build_mode') : schema.Or("build-only", "normal", "checkout-only"),
             schema.Optional('checkout_only') : bool,
             schema.Optional('clean') : bool,
             schema.Optional('verbosity') : int,

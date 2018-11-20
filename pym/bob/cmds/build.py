@@ -418,7 +418,7 @@ esac
 
         return fmt
 
-    def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
+    def __init__(self, recipes, verbose, force, depMode, buildOnly, preserveEnv,
                  envWhiteList, bobRoot, cleanBuild, noLogFile):
         self.__recipes = recipes
         self.__wasRun= {}
@@ -426,7 +426,7 @@ esac
         self.__verbose = max(ALWAYS, min(TRACE, verbose))
         self.__noLogFile = noLogFile
         self.__force = force
-        self.__skipDeps = skipDeps
+        self.__depMode = depMode
         self.__buildOnly = buildOnly
         self.__preserveEnv = preserveEnv
         self.__envWhiteList = envWhiteList
@@ -541,6 +541,14 @@ esac
         self.__wasRun = { path : (vid, isCheckoutStep)
             for path, (vid, isCheckoutStep) in self.__wasRun.items()
             if isCheckoutStep }
+
+    def _checkDepsOnly(self, step, depth):
+        checkValue = 0
+        if step.isBuildStep():
+            checkValue = 1
+        elif step.isCheckoutStep():
+            checkValue = 2
+        return self.__depMode == 'deps-only' and depth == checkValue
 
     def _constructDir(self, step, label):
         created = False
@@ -948,7 +956,7 @@ esac
 
     async def _cook(self, steps, parentPackage, checkoutOnly, depth=0):
         # skip everything except the current package
-        if self.__skipDeps:
+        if self.__depMode == 'no-deps':
             steps = [ s for s in steps if s.getPackage() == parentPackage ]
 
         # bail out if nothing has to be done
@@ -1018,7 +1026,12 @@ esac
         checkoutExecuted = False
         checkoutState = checkoutStep.getScmDirectories().copy()
         checkoutState[None] = checkoutDigest = checkoutStep.getVariantId()
-        if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
+        print("DEPTH", depth)
+        print(checkoutStep)
+        if self._checkDepsOnly(checkoutStep, depth):
+            stepMessage(checkoutStep, "CHECKOUT",
+                        "skipped due to --deps-only ({}) {}".format(prettySrcPath, overridesString), SKIPPED, IMPORTANT)
+        elif self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
             if checkoutState != oldCheckoutState:
                 stepMessage(checkoutStep, "CHECKOUT", "WARNING: recipe changed but skipped due to --build-only ({})"
                     .format(prettySrcPath), WARNING)
@@ -1106,7 +1119,7 @@ esac
 
         # Generate audit trail. Has to be done _after_ setResultHash()
         # because the result is needed to calculate the buildId.
-        if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
+        if ((checkoutHash != oldCheckoutHash) or checkoutExecuted) and not self._checkDepsOnly(checkoutStep, depth):
             await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
         # upload live build-id cache in case of fresh checkout
@@ -1124,7 +1137,7 @@ esac
         # inconsistent to the sources now.
         buildId, predicted = self.__srcBuildIds.get((prettySrcPath, checkoutDigest),
             (checkoutHash, False))
-        if buildId != checkoutHash:
+        if (buildId != checkoutHash) and not self._checkDepsOnly(checkoutStep, depth):
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
@@ -1159,7 +1172,11 @@ esac
         # run build if input has changed
         buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
             for i in buildStep.getAllDepSteps() if i.isValid() ]
-        if checkoutOnly:
+
+        if self._checkDepsOnly(buildStep, depth):
+            stepMessage(buildStep, "BUILD", "skipped due to --deps-only ({})".format(prettyBuildPath),
+                        SKIPPED, IMPORTANT)
+        elif checkoutOnly:
             stepMessage(buildStep, "BUILD", "skipped due to --checkout-only ({})".format(prettyBuildPath),
                     SKIPPED, IMPORTANT)
         elif (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
@@ -1283,9 +1300,13 @@ esac
             packageInputs.extend(packageStep.getAllDepSteps())
             packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                 for i in packageInputs if i.isValid() ]
-            if checkoutOnly:
+
+            if self._checkDepsOnly(packageStep, depth):
+                stepMessage(packageStep, "PACKAGE", "skipped due to --deps-only ({})".format(prettyPackagePath),
+                            SKIPPED, IMPORTANT)
+            elif checkoutOnly:
                 stepMessage(packageStep, "PACKAGE", "skipped due to --checkout-only ({})".format(prettyPackagePath),
-                    SKIPPED, IMPORTANT)
+                        SKIPPED, IMPORTANT)
             elif (not self.__force) and (oldInputHashes == packageInputHashes):
                 stepMessage(packageStep, "PACKAGE", "skipped (unchanged input for {})".format(prettyPackagePath),
                     SKIPPED, IMPORTANT)
@@ -1528,8 +1549,13 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Continue  as much as possible after an error.")
     parser.add_argument('-f', '--force', default=None, action='store_true',
         help="Force execution of all build steps")
-    parser.add_argument('-n', '--no-deps', default=None, action='store_true',
-        help="Don't build dependencies")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-n', '--no-deps', default=None, action='store_const', const='no-deps', dest='dep_mode',
+                       help="Don't build dependencies")
+    group.add_argument('-N', '--deps-only', action='store_const', const='deps-only', dest='dep_mode',
+                       help="Build only dependencies")
+    group.add_argument('--all-packages', action='store_const', const='all-packages', dest='dep_mode',
+                       help="Build dependencies and the package itself")
     parser.add_argument('-p', '--with-provided', dest='build_provided', default=None, action='store_true',
         help="Build provided dependencies")
     parser.add_argument('--without-provided', dest='build_provided', default=None, action='store_false',
@@ -1628,7 +1654,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         defaults = {
                 'destination' : '',
                 'force' : False,
-                'no_deps' : False,
+                'dep_mode' : 'all-packages',
                 'build_mode' : 'normal',
                 'clean' : not develop,
                 'upload' : False,
@@ -1667,7 +1693,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
         setVerbosity(verbosity)
         builder = LocalBuilder(recipes, verbosity, args.force,
-                               args.no_deps, True if args.build_mode == 'build-only' else False,
+                               args.dep_mode, args.build_mode == 'build-only',
                                args.preserve_env, envWhiteList, bobRoot, args.clean,
                                args.no_logfiles)
 
