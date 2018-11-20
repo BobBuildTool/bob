@@ -1,0 +1,5 @@
+buildScript: |
+    false # must not be exectued
+
+packageScript: |
+    false # must not be executed

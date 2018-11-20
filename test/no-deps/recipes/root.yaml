@@ -1,0 +1,10 @@
+root: True
+
+depends:
+    - app
+
+buildScript: |
+    true # must not be exectued
+
+packageScript: |
+    true # must not be executed
