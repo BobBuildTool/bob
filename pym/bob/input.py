@@ -2844,7 +2844,13 @@ class RecipeSet:
             relativeIncludes = self.getPolicy("relativeIncludes")
         cfg = self.loadYaml(fileName, self.__userConfigSchema)
         for (name, value) in cfg.items():
-            if name != "include": self.__settings[name].merge(value)
+            if name != "include" and name != "require": self.__settings[name].merge(value)
+        for p in cfg.get("require", []):
+            p = (os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p) + ".yaml"
+            if not os.path.isfile(p):
+                raise ParseError("Include file '{}' (required by '{}') does not exist!"
+                                    .format(p, fileName))
+            self.__parseUserConfig(p, relativeIncludes)
         for p in cfg.get("include", []):
             p = os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p
             self.__parseUserConfig(p + ".yaml", relativeIncludes)
@@ -2954,6 +2960,7 @@ class RecipeSet:
 
         userConfigSchemaSpec = {
             schema.Optional('include') : schema.Schema([str]),
+            schema.Optional('require') : schema.Schema([str]),
         }
         for (name, setting) in self.__settings.items():
             userConfigSchemaSpec[schema.Optional(name)] = schema.Schema(setting.validate,

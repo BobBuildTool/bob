@@ -1217,6 +1217,17 @@ It is possible for plugins to define additional settings. See
 completely controlled by the respective plugin and Bob will just pass the data
 as-is without further interpretation.
 
+User configuration files may also require specific files to be included. The
+``require`` keyword behaves just like the ``include`` keyword with the
+exception that Bob raises a parsing error if the file to be included cannot be
+found::
+
+     require:
+        - overrides
+        - /path/to/some/file
+
+Required include files have a lower precedence that optional include files.
+
 .. _configuration-config-environment:
 
 environment
