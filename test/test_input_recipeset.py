@@ -126,6 +126,94 @@ class TestUserConfig(TestCase):
 
             assert recipeSet.defaultEnv() == { "FOO":"USER"}
 
+    def testDefaultRequire(self):
+        """Test parsing default.yaml requiring another file"""
+        with TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            os.mkdir("recipes")
+            with open("default.yaml", "w") as f:
+                f.write("require:\n")
+                f.write("    - user\n")
+            with open("user.yaml", "w") as f:
+                f.write("whitelist: [FOO]\n")
+            recipeSet = RecipeSet()
+            recipeSet.parse()
+
+            assert "FOO" in recipeSet.envWhiteList()
+
+    def testDefaultRequireMissing(self):
+        """Test that default.yaml barfs on required missing files"""
+        with TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            os.mkdir("recipes")
+            with open("default.yaml", "w") as f:
+                f.write("require:\n")
+                f.write("    - user\n")
+            recipeSet = RecipeSet()
+            self.assertRaises(ParseError, recipeSet.parse)
+
+    def testDefaultRequireLowerPrecedence(self):
+        """Test that 'require' has lower precedence than 'include'"""
+        with TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            os.mkdir("recipes")
+            with open("default.yaml", "w") as f:
+                f.write("include:\n")
+                f.write("    - higher\n")
+                f.write("require:\n")
+                f.write("    - lower\n")
+                f.write("environment:\n")
+                f.write("    FOO: default\n")
+                f.write("    BAR: default\n")
+                f.write("    BAZ: default\n")
+            with open("lower.yaml", "w") as f:
+                f.write("environment:\n")
+                f.write("    BAR: lower\n")
+                f.write("    BAZ: lower\n")
+            with open("higher.yaml", "w") as f:
+                f.write("environment:\n")
+                f.write("    BAZ: higher\n")
+            recipeSet = RecipeSet()
+            recipeSet.parse()
+            self.assertEqual(recipeSet.defaultEnv(),
+                {'FOO' : 'default', 'BAR' : 'lower', 'BAZ' : 'higher' })
+
+    def testDefaultRelativeIncludes(self):
+        """Test relative includes work"""
+        with TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            os.mkdir("recipes")
+            os.makedirs("some/sub/dirs")
+            os.makedirs("other/directories")
+            with open("config.yaml", "w") as f:
+                f.write("policies:\n")
+                f.write("  relativeIncludes: True\n")
+            with open("default.yaml", "w") as f:
+                f.write("include:\n")
+                f.write("    - some/first\n")
+                f.write("require:\n")
+                f.write("    - other/second\n")
+                f.write("environment:\n")
+                f.write("    FOO: default\n")
+                f.write("    BAR: default\n")
+                f.write("    BAZ: default\n")
+            with open("other/second.yaml", "w") as f:
+                f.write('require: ["directories/lower"]')
+            with open("other/directories/lower.yaml", "w") as f:
+                f.write("environment:\n")
+                f.write("    BAR: lower\n")
+                f.write("    BAZ: lower\n")
+            with open("some/first.yaml", "w") as f:
+                f.write('include: ["sub/dirs/higher"]')
+            with open("some/sub/dirs/higher.yaml", "w") as f:
+                f.write("environment:\n")
+                f.write("    BAZ: higher\n")
+            recipeSet = RecipeSet()
+            recipeSet.parse()
+            self.assertEqual(recipeSet.defaultEnv(),
+                {'FOO' : 'default', 'BAR' : 'lower', 'BAZ' : 'higher' })
+
+
 class TestDependencies(TestCase):
     def setUp(self):
         self.cwd = os.getcwd()
