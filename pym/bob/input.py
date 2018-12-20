@@ -3111,7 +3111,7 @@ class YamlCache:
                     self.__files[name] = cached[0]
                     return pickle.loads(cached[1])
 
-            with open(name, "r") as f:
+            with open(name, "r", encoding='utf8') as f:
                 try:
                     rawData = f.read()
                     data = yaml.safe_load(rawData)
