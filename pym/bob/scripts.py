@@ -19,15 +19,15 @@ def __archive(*args, **kwargs):
      doArchive(*args, **kwargs)
 
 def __build(*args, **kwargs):
-     from .cmds.build import doBuild
+     from .cmds.build.build import doBuild
      doBuild(*args, **kwargs)
 
 def __develop(*args, **kwargs):
-     from .cmds.build import doDevelop
+     from .cmds.build.build import doDevelop
      doDevelop(*args, **kwargs)
 
 def __clean(*args, **kwargs):
-     from .cmds.build import doClean
+     from .cmds.build.clean import doClean
      doClean(*args, **kwargs)
 
 def __graph(*args, **kwargs):
@@ -47,11 +47,11 @@ def __ls(*args, **kwargs):
      doLS(*args, **kwargs)
 
 def __project(*args, **kwargs):
-     from .cmds.build import doProject
+     from .cmds.build.project import doProject
      doProject(*args, **kwargs)
 
 def __status(*args, **kwars):
-     from .cmds.build import doStatus
+     from .cmds.build.status import doStatus
      doStatus(*args, **kwars)
 
 def __queryscm(*args, **kwargs):
@@ -67,7 +67,7 @@ def __queryrecipe(*args, **kwargs):
      doQueryRecipe(*args, **kwargs)
 
 def __querypath(*args, **kwargs):
-     from .cmds.build import doQueryPath
+     from .cmds.build.query import doQueryPath
      doQueryPath(*args, **kwargs)
 
 def __download(*args, **kwargs):
