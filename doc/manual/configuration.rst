@@ -1448,6 +1448,8 @@ Override default command settings::
             [..]
         build:
             [..]
+        graph:
+            [..]
 
 build / dev
 ^^^^^^^^^^^
@@ -1455,12 +1457,13 @@ build / dev
 Set default build arguments here. See :ref:`manpage-dev` or
 :ref:`manpage-build` for details.::
 
-    dev:
-        no_logfile: True
-        build_mode: "build-only"
-    build:
-        verbosity: 3
-        download: No
+    command:
+        dev:
+            no_logfile: True
+            build_mode: "build-only"
+        build:
+            verbosity: 3
+            download: No
 
 The following table lists possible arguments and their type:
 
@@ -1485,7 +1488,14 @@ always_checkout List of strings (regular expression patterns)
 graph
 ^^^^^
 
-Set default graph arguments here. See :ref:`manpage-graph` for details.
+Set default graph arguments here. See :ref:`manpage-graph` for details.::
+
+    command:
+        graph:
+            options:
+                d3.dragNodes: True
+            type: "d3"
+            max_depth: 2
 
 Supported arguments and their type:
 
