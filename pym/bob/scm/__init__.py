@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ..errors import ParseError
 from .scm import Scm, ScmOverride
 from .cvs import CvsScm
 from .git import GitScm, GitAudit
@@ -38,3 +39,15 @@ def auditFromData(data):
         from ..errors import ParseError
         raise ParseError("Error while validating audit: {} {}".format(str(e), str(data)))
 
+def getScm(spec, overrides=[], recipeSet=None):
+    scm = spec["scm"]
+    if scm == "git":
+        return GitScm(spec, overrides, recipeSet and recipeSet.getPolicy('secureSSL'))
+    elif scm == "svn":
+        return SvnScm(spec, overrides)
+    elif scm == "cvs":
+        return CvsScm(spec, overrides)
+    elif scm == "url":
+        return UrlScm(spec, overrides, recipeSet and recipeSet.getPolicy('tidyUrlScm'))
+    else:
+        raise ParseError("Unknown SCM '{}'".format(scm))

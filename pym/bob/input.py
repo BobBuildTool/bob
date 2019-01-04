@@ -6,7 +6,7 @@
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError
 from .pathspec import PackageSet
-from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
+from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
@@ -308,17 +308,7 @@ def Scm(spec, env, overrides, recipeSet):
             matchedOverrides.append(override)
 
     # create scm instance
-    scm = spec["scm"]
-    if scm == "git":
-        return GitScm(spec, matchedOverrides, recipeSet.getPolicy('secureSSL'))
-    elif scm == "svn":
-        return SvnScm(spec, matchedOverrides)
-    elif scm == "cvs":
-        return CvsScm(spec, matchedOverrides)
-    elif scm == "url":
-        return UrlScm(spec, matchedOverrides, recipeSet.getPolicy('tidyUrlScm'))
-    else:
-        raise ParseError("Unknown SCM '{}'".format(scm))
+    return getScm(spec, matchedOverrides, recipeSet)
 
 class CheckoutAssert:
     SCHEMA = schema.Schema({
