@@ -115,8 +115,9 @@ class Scm(metaclass=ABCMeta):
         return False
 
     @abstractmethod
-    def getDirectories(self):
-        return { }
+    def getDirectory(self):
+        """Return relative directory that this SCM owns in the workspace."""
+        return ""
 
     @abstractmethod
     def isDeterministic(self):

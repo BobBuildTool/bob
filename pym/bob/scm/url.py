@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import ParseError
-from ..utils import asHexStr, hashString, hashFile
+from ..utils import asHexStr, hashFile
 from .scm import Scm, ScmAudit
 from pipes import quote
 import hashlib
@@ -152,9 +152,8 @@ fi
                     ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
                     ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
 
-    def getDirectories(self):
-        fn = self.__dir if self.__tidy else os.path.join(self.__dir, self.__fn)
-        return { fn : hashString(self.asDigestScript()) }
+    def getDirectory(self):
+        return self.__dir if self.__tidy else os.path.join(self.__dir, self.__fn)
 
     def isDeterministic(self):
         return (self.__digestSha1 is not None) or (self.__digestSha256 is not None)

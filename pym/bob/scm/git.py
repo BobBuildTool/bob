@@ -6,7 +6,6 @@
 from ..errors import ParseError, BuildError
 from ..stringparser import isTrue
 from ..tty import colorize, WarnOnce, stepAction, INFO, TRACE, WARNING
-from ..utils import hashString
 from .scm import Scm, ScmAudit
 from pipes import quote
 from textwrap import dedent
@@ -251,8 +250,8 @@ class GitScm(Scm):
 
         return scm
 
-    def getDirectories(self):
-        return { self.__dir : hashString(self.asDigestScript()) }
+    def getDirectory(self):
+        return self.__dir
 
     def isDeterministic(self):
         return bool(self.__tag) or bool(self.__commit)

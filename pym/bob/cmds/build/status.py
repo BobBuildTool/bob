@@ -78,7 +78,7 @@ def doStatus(argv, bobRoot):
                 checkoutState = checkoutStep.getScmDirectories().copy()
                 stats = {}
                 for scm in checkoutStep.getScmList():
-                    stats.update({ dir : scm for dir in scm.getDirectories().keys() })
+                    stats[scm.getDirectory()] = scm
                 for (scmDir, scmDigest) in sorted(oldCheckoutState.copy().items(), key=lambda a:'' if a[0] is None else a[0]):
                     if scmDir is None: continue
                     if scmDigest != checkoutState.get(scmDir):

@@ -5,7 +5,6 @@
 
 from ..errors import BuildError
 from ..tty import colorize
-from ..utils import hashString
 from .scm import Scm, ScmAudit
 from pipes import quote
 import os, os.path
@@ -108,8 +107,8 @@ fi
 
         return scm
 
-    def getDirectories(self):
-        return { self.__dir : hashString(self.asDigestScript()) }
+    def getDirectory(self):
+        return self.__dir
 
     def isDeterministic(self):
         return str(self.__revision).isnumeric()

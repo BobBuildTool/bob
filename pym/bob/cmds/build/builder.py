@@ -866,7 +866,7 @@ esac
                 # check state of SCMs and invalidate if the directory is dirty
                 stats = {}
                 for scm in checkoutStep.getScmList():
-                    stats.update({ dir : scm for dir in scm.getDirectories().keys() })
+                    stats[scm.getDirectory()] = scm
                 for (scmDir, scmDigest) in oldCheckoutState.copy().items():
                     if scmDir is None: continue
                     if scmDigest != checkoutState.get(scmDir): continue

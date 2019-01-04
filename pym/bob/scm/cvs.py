@@ -3,7 +3,6 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ..utils import hashString
 from ..tty import colorize
 from .scm import Scm
 import re
@@ -92,8 +91,8 @@ fi
                                                           module=self.__module,
                                                           dir=self.__dir)
 
-    def getDirectories(self):
-        return {self.__dir: hashString(self.asDigestScript())}
+    def getDirectory(self):
+        return self.__dir
 
     def isDeterministic(self):
         # We cannot know whether this step is deterministic because we
