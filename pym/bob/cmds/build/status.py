@@ -27,10 +27,6 @@ def doStatus(argv, bobRoot):
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
-    parser.add_argument('-e', dest="white_list", default=[], action='append', metavar="NAME",
-        help="Preserve environment variable")
-    parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
-        help="Preserve whole environment")
     parser.add_argument('-v', '--verbose', default=1, action='count',
         help="Increase verbosity (may be specified multiple times)")
     parser.add_argument('--show-overrides', default=False, action='store_true', dest='show_overrides',
@@ -45,9 +41,6 @@ def doStatus(argv, bobRoot):
     recipes.defineHook('developNamePersister', None)
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-
-    envWhiteList = recipes.envWhiteList()
-    envWhiteList |= set(args.white_list)
 
     if args.develop:
         # Develop names are stable. All we need to do is to replicate build's algorithm,
