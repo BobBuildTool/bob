@@ -118,10 +118,10 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 			} >> log.txt
 			(
 				set -o pipefail
-				set -e
+				set -ex
 				cd "$i"
 				. run.sh 2>&1 | tee log.txt
-			) | tee log-cmd.txt >> log.txt
+			) 2>&1 | tee log-cmd.txt >> log.txt
 
 			if [[ $? -ne 0 ]] ; then
 				echo "FAIL (log follows...)"
