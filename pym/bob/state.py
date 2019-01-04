@@ -228,6 +228,9 @@ class _BobState():
             del self.__inputs[path]
             self.__save()
 
+    def getDirectories(self):
+        return list(self.__dirStates.keys())
+
     def getDirectoryState(self, path, isSourceDir):
         ret = copy.deepcopy(self.__dirStates.get(path, {} if isSourceDir else None))
         if isSourceDir:
@@ -244,6 +247,11 @@ class _BobState():
         """
         self.__dirStates[path] = digest
         self.__save()
+
+    def delDirectoryState(self, path):
+        if path in self.__dirStates:
+            del self.__dirStates[path]
+            self.__save()
 
     def getVariantId(self, path):
         return self.__variantIds.get(path)
