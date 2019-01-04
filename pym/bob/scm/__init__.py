@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import ParseError
-from .scm import Scm, ScmOverride
+from .scm import Scm, ScmStatus, ScmTaint, ScmOverride
 from .cvs import CvsScm
 from .git import GitScm, GitAudit
 from .svn import SvnScm, SvnAudit

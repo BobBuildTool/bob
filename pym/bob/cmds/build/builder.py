@@ -882,8 +882,8 @@ esac
                 for (scmDir, (scmDigest, scmSpec)) in oldCheckoutState.copy().items():
                     if scmDir is None: continue
                     if scmDigest != checkoutState.get(scmDir, (None, None))[0]: continue
-                    status = stats[scmDir].status(checkoutStep.getWorkspacePath())[0]
-                    if (status == 'dirty') or (status == 'error'):
+                    if not os.path.exists(os.path.join(prettySrcPath, scmDir)): continue
+                    if stats[scmDir].status(checkoutStep.getWorkspacePath()).dirty:
                         # Invalidate scmDigest to forcibly move it away in the loop below.
                         # Do not use None here to distinguish it from a non-existent directory.
                         oldCheckoutState[scmDir] = (False, scmSpec)

@@ -79,14 +79,15 @@ def doStatus(argv, bobRoot):
                     if scmDigest != checkoutState.get(scmDir):
                         print(colorize("   STATUS {0: <4} {1}".format("A", os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "33"))
                         continue
-                    status, shortStatus, longStatus = stats[scmDir].status(checkoutStep.getWorkspacePath())
-                    if (status == 'clean') or (status == 'empty'):
+                    if not os.path.exists(os.path.join(checkoutStep.getWorkspacePath(), scmDir)): continue
+                    status = stats[scmDir].status(checkoutStep.getWorkspacePath())
+                    if status.clean:
                         if (verbose >= 3):
                             print(colorize("   STATUS      {0}".format(os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "32"))
-                    elif (status == 'dirty'):
-                        print(colorize("   STATUS {0: <4} {1}".format(shortStatus, os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "33"))
-                        if (verbose >= 2) and (longStatus != ""):
-                            for line in longStatus.splitlines():
+                    elif status.dirty:
+                        print(colorize("   STATUS {0: <4} {1}".format(str(status), os.path.join(checkoutStep.getWorkspacePath(), scmDir)), "33"))
+                        if (verbose >= 2) and (status.description != ""):
+                            for line in status.description.splitlines():
                                 print('   ' + line)
                     if args.show_overrides:
                         overridden, shortStatus, longStatus = stats[scmDir].statusOverrides(checkoutStep.getWorkspacePath())

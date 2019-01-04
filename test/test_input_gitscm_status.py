@@ -9,18 +9,18 @@ import os
 import subprocess
 import tempfile
 
-from bob.input import GitScm
+from bob.scm import GitScm, ScmTaint
 from bob.utils import removePath
 
 class TestGitScmStatus(TestCase):
     repodir = ""
     repodir_local = ""
 
-    def createGitScm(self, spec = {}):
+    def statusGitScm(self, spec = {}):
         s = { 'scm' : "git", 'url' : self.repodir, 'recipe' : "foo.yaml#0",
             '__source' : "Recipe foo" }
         s.update(spec)
-        return GitScm(s)
+        return GitScm(s).status(self.repodir_local)
 
     def callGit(self, *arg, **kwargs):
         try:
@@ -55,41 +55,74 @@ class TestGitScmStatus(TestCase):
         self.callGit('git config user.name test', cwd=self.repodir_local)
 
     def testBranch(self):
-        s = self.createGitScm({ 'branch' : 'anybranch' })
-        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
+        s = self.statusGitScm({ 'branch' : 'anybranch' })
+        self.assertEqual(s.flags, {ScmTaint.switched})
+        self.assertTrue(s.dirty)
 
     def testClean(self):
-        s = self.createGitScm()
-        self.assertEqual(s.status(self.repodir_local)[0], 'clean')
+        s = self.statusGitScm()
+        self.assertEqual(s.flags, set())
+        self.assertTrue(s.clean)
 
     def testCommit(self):
-        s = self.createGitScm({ 'commit' : '0123456789012345678901234567890123456789' })
-        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
+        s = self.statusGitScm({ 'commit' : '0123456789012345678901234567890123456789' })
+        self.assertEqual(s.flags, {ScmTaint.switched})
+        self.assertTrue(s.dirty)
 
-    def testEmpty(self):
+    def testNonExisting(self):
         removePath(self.repodir_local)
-        s = self.createGitScm()
-        self.assertEqual(s.status(self.repodir_local)[0], 'empty')
+        s = self.statusGitScm()
+        self.assertEqual(s.flags, {ScmTaint.error})
+        self.assertTrue(s.error)
 
     def testModified(self):
         with open(os.path.join(self.repodir_local, "test.txt"), "w") as f:
             f.write("test modified")
-        s = self.createGitScm()
-        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
+        s = self.statusGitScm()
+        self.assertEqual(s.flags, {ScmTaint.modified})
+        self.assertTrue(s.dirty)
 
     def testTag(self):
-        s = self.createGitScm({ 'tag' : 'v0.1' })
-        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
+        s = self.statusGitScm({ 'tag' : 'v0.1' })
+        self.assertEqual(s.flags, {ScmTaint.switched})
+        self.assertTrue(s.dirty)
 
-    def testUnpushed(self):
+    def testUnpushedMain(self):
         with open(os.path.join(self.repodir_local, "test.txt"), "w") as f:
             f.write("test modified")
         self.callGit('git commit -a -m "modified"', cwd=self.repodir_local)
 
-        s = self.createGitScm()
-        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
+        s = self.statusGitScm()
+        self.assertEqual(s.flags, {ScmTaint.unpushed_main})
+        self.assertTrue(s.dirty)
+
+    def testUnpushedLocal(self):
+        self.callGit('git checkout -b unrelated', cwd=self.repodir_local)
+        with open(os.path.join(self.repodir_local, "test.txt"), "w") as f:
+            f.write("test modified")
+        self.callGit('git commit -a -m "modified"', cwd=self.repodir_local)
+        self.callGit('git checkout master', cwd=self.repodir_local)
+
+        s = self.statusGitScm()
+        self.assertEqual(s.flags, {ScmTaint.unpushed_local})
+        self.assertFalse(s.dirty)
+
+    def testUnpushedBoth(self):
+        self.callGit('git checkout -b unrelated', cwd=self.repodir_local)
+        with open(os.path.join(self.repodir_local, "test.txt"), "w") as f:
+            f.write("unrelated modified")
+        self.callGit('git commit -a -m whatever', cwd=self.repodir_local)
+        self.callGit('git checkout master', cwd=self.repodir_local)
+        with open(os.path.join(self.repodir_local, "test.txt"), "w") as f:
+            f.write("test modified")
+        self.callGit('git commit -a -m "modified"', cwd=self.repodir_local)
+
+        s = self.statusGitScm()
+        self.assertEqual(s.flags, {ScmTaint.unpushed_main, ScmTaint.unpushed_local})
+        self.assertTrue(s.dirty)
 
     def testUrl(self):
-        s = self.createGitScm({ 'url' : 'anywhere' })
-        self.assertEqual(s.status(self.repodir_local)[0], 'dirty')
+        s = self.statusGitScm({ 'url' : 'anywhere' })
+        self.assertEqual(s.flags, {ScmTaint.switched})
+        self.assertTrue(s.dirty)
 
