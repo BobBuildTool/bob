@@ -20,8 +20,9 @@ class _BobState():
     #  3 -> 4: jenkins job names are lower case
     #  4 -> 5: build state stores step kind (checkout-step vs. others)
     #  5 -> 6: build state stores predicted live-build-ids too
+    #  6 -> 7: amended directory state for source steps
     MIN_VERSION = 2
-    CUR_VERSION = 6
+    CUR_VERSION = 7
 
     instance = None
     def __init__(self):
@@ -214,10 +215,20 @@ class _BobState():
             del self.__inputs[path]
             self.__save()
 
-    def getDirectoryState(self, path, default=None):
-        return copy.deepcopy(self.__dirStates.get(path, default))
+    def getDirectoryState(self, path, isSourceDir):
+        ret = copy.deepcopy(self.__dirStates.get(path, {} if isSourceDir else None))
+        if isSourceDir:
+            # convert from old format if necessary
+            ret = { k : v if isinstance(v, tuple) else (v, None)
+                for k, v in ret.items() }
+        return ret
 
     def setDirectoryState(self, path, digest):
+        """Store state information about a directory.
+
+        For source directories:     Dict[path : Union[str, None], state : Tuple[digest:bytes, spec:Any]]
+        For all other directories:  bytes
+        """
         self.__dirStates[path] = digest
         self.__save()
 

@@ -1123,7 +1123,7 @@ class CheckoutStep(Step):
     def getScmDirectories(self):
         dirs = {}
         for s in self._coreStep.scmList:
-            dirs[s.getDirectory()] = hashString(s.asDigestScript())
+            dirs[s.getDirectory()] = (hashString(s.asDigestScript()), s.getProperties())
         return dirs
 
     def hasLiveBuildId(self):

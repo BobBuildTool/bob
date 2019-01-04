@@ -46,6 +46,17 @@ def hashWorkspace(step):
     return hashDirectory(step.getWorkspacePath(),
         os.path.join(step.getWorkspacePath(), "..", "cache.bin"))
 
+def compareDirectoryState(left, right):
+    """Compare two directory states while ignoring the SCM specs.
+
+    The SCM specs might change even though the digest stays the same (e.g. the
+    URL changes but the commit id stays the same).  This function filters the
+    spec to detect real changes.
+    """
+    left  = { d : v[0] for d, v in left.items()  }
+    right = { d : v[0] for d, v in right.items() }
+    return left == right
+
 class RestartBuildException(Exception):
     pass
 
@@ -845,17 +856,18 @@ esac
 
         # get directory into shape
         (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
-        oldCheckoutState = BobState().getDirectoryState(prettySrcPath, {})
+        oldCheckoutState = BobState().getDirectoryState(prettySrcPath, True)
         if created:
             # invalidate result if folder was created
             oldCheckoutState = {}
             BobState().resetWorkspaceState(prettySrcPath, oldCheckoutState)
 
         checkoutExecuted = False
+        checkoutDigest = checkoutStep.getVariantId()
         checkoutState = checkoutStep.getScmDirectories().copy()
-        checkoutState[None] = checkoutDigest = checkoutStep.getVariantId()
+        checkoutState[None] = (checkoutDigest, None)
         if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
-            if checkoutState != oldCheckoutState:
+            if not compareDirectoryState(checkoutState, oldCheckoutState):
                 stepMessage(checkoutStep, "CHECKOUT", "WARNING: recipe changed but skipped due to --build-only ({})"
                     .format(prettySrcPath), WARNING)
             else:
@@ -867,22 +879,24 @@ esac
                 stats = {}
                 for scm in checkoutStep.getScmList():
                     stats[scm.getDirectory()] = scm
-                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
+                for (scmDir, (scmDigest, scmSpec)) in oldCheckoutState.copy().items():
                     if scmDir is None: continue
-                    if scmDigest != checkoutState.get(scmDir): continue
+                    if scmDigest != checkoutState.get(scmDir, (None, None))[0]: continue
                     status = stats[scmDir].status(checkoutStep.getWorkspacePath())[0]
                     if (status == 'dirty') or (status == 'error'):
-                        oldCheckoutState[scmDir] = None
+                        # Invalidate scmDigest to forcibly move it away in the loop below.
+                        # Do not use None here to distinguish it from a non-existent directory.
+                        oldCheckoutState[scmDir] = (False, scmSpec)
 
             checkoutInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                 for i in checkoutStep.getAllDepSteps() if i.isValid() ]
             if (self.__force or (not checkoutStep.isDeterministic()) or
                 (BobState().getResultHash(prettySrcPath) is None) or
-                (checkoutState != oldCheckoutState) or
+                not compareDirectoryState(checkoutState, oldCheckoutState) or
                 (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
                 # move away old or changed source directories
-                for (scmDir, scmDigest) in oldCheckoutState.copy().items():
-                    if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir)):
+                for (scmDir, (scmDigest, scmSpec)) in oldCheckoutState.copy().items():
+                    if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir, (None, None))[0]):
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                         if os.path.exists(scmPath):
                             atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
@@ -900,7 +914,7 @@ esac
                 # check again if the step is rerun.
                 for scmDir in checkoutState.keys():
                     if scmDir is None or scmDir == ".": continue
-                    if oldCheckoutState.get(scmDir) is not None: continue
+                    if scmDir in oldCheckoutState: continue
                     scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                     if os.path.exists(scmPath):
                         raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
@@ -982,7 +996,7 @@ esac
 
         # get directory into shape
         (prettyBuildPath, created) = self._constructDir(buildStep, "build")
-        oldBuildDigest = BobState().getDirectoryState(prettyBuildPath)
+        oldBuildDigest = BobState().getDirectoryState(prettyBuildPath, False)
         if created or (buildDigest != oldBuildDigest):
             # not created but exists -> something different -> prune workspace
             if not created and os.path.exists(prettyBuildPath):
@@ -1024,7 +1038,7 @@ esac
         # get directory into shape
         (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
         packageDigest = packageStep.getVariantId()
-        oldPackageDigest = BobState().getDirectoryState(prettyPackagePath)
+        oldPackageDigest = BobState().getDirectoryState(prettyPackagePath, False)
         if created or (packageDigest != oldPackageDigest):
             # not created but exists -> something different -> prune workspace
             if not created and os.path.exists(prettyPackagePath):

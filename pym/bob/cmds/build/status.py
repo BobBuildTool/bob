@@ -72,10 +72,12 @@ def doStatus(argv, bobRoot):
             done.add(checkoutStep.getVariantId())
             print(">>", colorize("/".join(package.getStack()), "32;1"))
             if checkoutStep.getWorkspacePath() is not None:
-                oldCheckoutState = BobState().getDirectoryState(checkoutStep.getWorkspacePath(), {})
+                oldCheckoutState = BobState().getDirectoryState(checkoutStep.getWorkspacePath(), True)
                 if not os.path.isdir(checkoutStep.getWorkspacePath()):
                     oldCheckoutState = {}
-                checkoutState = checkoutStep.getScmDirectories().copy()
+                else:
+                    oldCheckoutState = { k : v[0] for k,v in oldCheckoutState.items() }
+                checkoutState = { k : v[0] for k,v in checkoutStep.getScmDirectories().items() }
                 stats = {}
                 for scm in checkoutStep.getScmList():
                     stats[scm.getDirectory()] = scm
