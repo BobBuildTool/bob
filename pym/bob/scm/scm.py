@@ -253,29 +253,6 @@ class Scm(metaclass=ABCMeta):
         """Return list of ScmOverride objects that matched this SCM."""
         return self.__overrides
 
-    def statusOverrides(self, workspacePath):
-        """Return user visible status about SCM overrides.
-
-        Returns a tuple of three elements:
-
-          overridden, taintFlags, longStatus
-
-        were 'overridden' is a boolean that is True if at least one override
-        matched. The 'taintFlags' are single letters that indicate certain
-        overrides. Only 'O' for 'overridded' is defined at the moment. Each SCM
-        might define further flags. The 'longStatus' is shown in very verbose
-        output modes and should contain the gory details.
-        """
-        overrides = self.getActiveOverrides()
-        if len(overrides):
-            status = "O"
-            longStatus = ""
-            for o in overrides:
-                overrideText = str(o).rstrip().replace('\n', '\n       ')
-                longStatus += "    > Overridden by:\n       {}\n".format(overrideText)
-            return True, status, longStatus
-        return False, '', ''
-
     def getAuditSpec(self):
         """Return spec for audit trail generation.
 
