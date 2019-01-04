@@ -905,7 +905,9 @@ esac
                             atticPath = os.path.join(prettySrcPath, "..", "attic")
                             if not os.path.isdir(atticPath):
                                 os.makedirs(atticPath)
-                            os.rename(scmPath, os.path.join(atticPath, atticName))
+                            atticPath = os.path.join(atticPath, atticName)
+                            os.rename(scmPath, atticPath)
+                            BobState().setAtticDirectoryState(atticPath, scmSpec)
                         del oldCheckoutState[scmDir]
                         BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 

@@ -4,11 +4,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .errors import ParseError
+from .tty import WarnOnce
 import copy
 import errno
 import os
 import pickle
 import sqlite3
+
+warnNoAttic = WarnOnce(
+    "Project was created by old Bob version. Attic directories listing will be incomplete.",
+    help="Attic directires were not tracked by Bob version 0.14 and below.")
 
 class _BobState():
     # Bump CUR_VERSION if internal state is made backwards incompatible, that is
@@ -20,9 +25,11 @@ class _BobState():
     #  3 -> 4: jenkins job names are lower case
     #  4 -> 5: build state stores step kind (checkout-step vs. others)
     #  5 -> 6: build state stores predicted live-build-ids too
-    #  6 -> 7: amended directory state for source steps
+    #  6 -> 7: amended directory state for source steps, store attic directories
     MIN_VERSION = 2
     CUR_VERSION = 7
+
+    VERSION_SINCE_ATTIC_TRACKED = 7
 
     instance = None
     def __init__(self):
@@ -38,6 +45,8 @@ class _BobState():
         self.__lock = None
         self.__buildIdCache = None
         self.__variantIds = {}
+        self.__atticDirs = {}
+        self.__createdWithVersion = self.CUR_VERSION
 
         # lock state
         lockFile = ".bob-state.lock"
@@ -79,6 +88,8 @@ class _BobState():
                 self.__dirStates = state.get("dirStates", {})
                 self.__buildState = state.get("buildState", {})
                 self.__variantIds = state.get("variantIds", {})
+                self.__atticDirs = state.get("atticDirs", {})
+                self.__createdWithVersion = state.get("createdWithVersion", 0)
 
                 # version upgrades
                 if state["version"] == 2:
@@ -116,6 +127,8 @@ class _BobState():
                 "dirStates" : self.__dirStates,
                 "buildState" : self.__buildState,
                 "variantIds" : self.__variantIds,
+                "atticDirs" : self.__atticDirs,
+                "createdWithVersion" : self.__createdWithVersion,
             }
             tmpFile = self.__path+".new"
             try:
@@ -256,6 +269,25 @@ class _BobState():
             needSave = True
         if needSave:
             self.__save()
+
+    def setAtticDirectoryState(self, path, state):
+        self.__atticDirs[path] = state
+        self.__save()
+
+    def getAtticDirectoryState(self, path):
+        if self.__createdWithVersion < self.VERSION_SINCE_ATTIC_TRACKED:
+            warnNoAttic.warn()
+        return copy.deepcopy(self.__atticDirs.get(path))
+
+    def delAtticDirectoryState(self, path):
+        if path in self.__atticDirs:
+            del self.__atticDirs[path]
+            self.__save()
+
+    def getAtticDirectories(self):
+        if self.__createdWithVersion < self.VERSION_SINCE_ATTIC_TRACKED:
+            warnNoAttic.warn()
+        return list(self.__atticDirs.keys())
 
     def getAllJenkins(self):
         return self.__jenkins.keys()
