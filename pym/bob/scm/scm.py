@@ -64,10 +64,13 @@ class ScmOverride:
         return ret, scm
 
     def __str__(self):
-        return str("match: " + str(self.__match)  + "\n"
-                + (("del: " + str(self.__del) + "\n") if self.__del else "")
-                + (("set: " + str(self.__set)+ "\n") if self.__set else "")
-                + (("replace: " + str(self.__replaceRaw)) if self.__replaceRaw else "")).rstrip()
+        import yaml
+        spec = {}
+        if self.__match: spec['match'] = self.__match
+        if self.__del: spec['del'] = self.__del
+        if self.__set: spec['set'] = self.__set
+        if self.__replaceRaw: spec['replace'] = self.__replaceRaw
+        return yaml.dump(spec, default_flow_style=False).rstrip()
 
 
 class Scm(metaclass=ABCMeta):
