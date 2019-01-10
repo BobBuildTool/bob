@@ -202,8 +202,8 @@ def qtProjectGenerator(package, argv, extra):
         # use package name for project name
         projectName = package.getName()
     if not destination:
-        # use package stack for project directory
-        destination = os.path.join(os.getcwd(), "projects", "_".join(package.getStack()))
+        # use package name for project directory
+        destination = os.path.join(os.getcwd(), "projects", projectName)
         destination = destination.replace(':', '_')
     if args.overwrite:
         removePath(destination)

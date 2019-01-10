@@ -182,8 +182,8 @@ def eclipseCdtGenerator(package, argv, extra):
 
     projectName = projectName.replace(':', '_')
     if not destination:
-        # use package stack for project directory
-        destination = os.path.join(os.getcwd(), "projects", "_".join(package.getStack()))
+        # use package name for project directory
+        destination = os.path.join(os.getcwd(), "projects", projectName)
     destination = destination.replace(':', '_')
     if args.overwrite:
         removePath(destination)
