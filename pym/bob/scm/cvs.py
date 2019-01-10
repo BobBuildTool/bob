@@ -3,9 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ..utils import hashString
-from ..tty import colorize
-from .scm import Scm
+from .scm import Scm, ScmTaint, ScmStatus
 import re
 import schema
 import os
@@ -92,8 +90,8 @@ fi
                                                           module=self.__module,
                                                           dir=self.__dir)
 
-    def getDirectories(self):
-        return {self.__dir: hashString(self.asDigestScript())}
+    def getDirectory(self):
+        return self.__dir
 
     def isDeterministic(self):
         # We cannot know whether this step is deterministic because we
@@ -101,21 +99,12 @@ fi
         # tag or branch.
         return False
 
-    # CvsScm status.
-    #
-    # Return values:
-    # - empty: workspace does not exist
-    # - error: workspace does not contain CVS checkout, or other bad things happen
-    # - clean: no local and no remote changes
-    # - dirty: local or remote changes (cannot easily distinguish between both with CVS)
     def status(self, workspacePath):
         # Check directories
         workDir = os.path.join(workspacePath, self.__dir)
         cvsDir = os.path.join(workDir, 'CVS')
-        if not os.path.exists(workDir):
-            return 'empty','',''
         if not os.path.exists(cvsDir):
-            return 'error','',''
+            return ScmStatus(ScmTaint.error, description='> CVS directory missing')
 
         # Prepare an environment
         environment = os.environ.copy()
@@ -127,25 +116,17 @@ fi
             expectedRoot = self.__cvsroot
 
         # Validate root and module
-        status = 'clean'
-        shortStatus = ''
-        longStatus = ''
-        def setStatus(shortMsg, longMsg, dirty=True):
-            nonlocal status, shortStatus, longStatus
-            if (shortMsg not in shortStatus):
-                shortStatus += shortMsg
-            longStatus += longMsg
-            if (dirty):
-                status = 'dirty'
-
+        status = ScmStatus()
         actualRoot = CvsScm._loadFile(os.path.join(cvsDir, 'Root'))
         actualModule = CvsScm._loadFile(os.path.join(cvsDir, 'Repository'))
         if actualRoot != expectedRoot:
             # Root mismatch counts as switch.
-            setStatus("S", colorize("> Root does not match!\n     recipe:\t{}\n     actual:\t{}\n".format(self.__cvsroot, expectedRoot), "33"))
+            status.add(ScmTaint.switched,
+                "> Root: configured: '{}', actual: '{}'".format(self.__cvsroot, expectedRoot))
         elif actualModule != self.__module:
             # Module mismatch counts as switch.
-            setStatus("S", colorize("> Module does not match!\n     recipe:\t{}\n     actual:\t{}\n".format(self.__module, actualModule), "33"))
+            status.add(ScmTaint.switched,
+                "> Module: configured: '{}', actual: '{}'".format(self.__module, actualModule))
         else:
             # Repository matches.
             # There is no (easy) local-only way to determine just local changes AND match it against the requested revision.
@@ -164,13 +145,11 @@ fi
                                                  stderr=subprocess.DEVNULL,
                                                  stdin=subprocess.DEVNULL)
             except subprocess.CalledProcessError as e:
-                print ("cvs error: '{}' '{}'".format(" ".join(cmdLine), e.output))
-                return 'error','',''
+                return ScmStatus(ScmTaint.error,
+                    description="cvs error: '{}' '{}'".format(" ".join(cmdLine), e.output))
             except OSError as e:
-                print("Error calling cvs:", str(e))
-                return 'error','',''
+                return ScmStatus(ScmTaint.error, description="Error calling cvs:" + str(e))
 
-            modified = False
             #   U = updated remotely, clean or missing locally (but can also mean local is on wrong branch)
             #   P = same, but transferring patch instead of file
             #   A = added locally
@@ -180,16 +159,11 @@ fi
             #   ? = untracked (could be file forgotten to add)
             # We therefore interpret every nonempty output as a modification
             # (ignoring spurious extra output such as "cvs update: Updating...").
-            longMsg = ""
-            for i in output.split('\n'):
-                if (re.match('^[^ ] ', i)):
-                    if not modified: longMsg += colorize("> modified:\n", "33")
-                    modified = True
-                    longMsg += '  ' + i + '\n'
-            if modified:
-                setStatus("M", longMsg)
+            output = "\n".join('   '+i for i in output.splitlines() if re.match('^[^ ] ', i))
+            if output:
+                status.add(ScmTaint.modified, "> modified:\n"+output)
 
-        return status, shortStatus, longStatus
+        return status
 
     @staticmethod
     def _loadFile(name):

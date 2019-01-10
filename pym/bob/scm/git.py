@@ -5,11 +5,11 @@
 
 from ..errors import ParseError, BuildError
 from ..stringparser import isTrue
-from ..tty import colorize, WarnOnce, stepAction, INFO, TRACE, WARNING
-from ..utils import hashString
-from .scm import Scm, ScmAudit
+from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
+from ..utils import joinLines
+from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
 from pipes import quote
-from textwrap import dedent
+from textwrap import dedent, indent
 from xml.etree import ElementTree
 import asyncio
 import concurrent.futures
@@ -251,8 +251,8 @@ class GitScm(Scm):
 
         return scm
 
-    def getDirectories(self):
-        return { self.__dir : hashString(self.asDigestScript()) }
+    def getDirectory(self):
+        return self.__dir
 
     def isDeterministic(self):
         return bool(self.__tag) or bool(self.__commit)
@@ -272,80 +272,62 @@ class GitScm(Scm):
                 cwd, " ".join(cmdLine), e.output.rstrip()))
         except OSError as e:
             raise BuildError("Error calling git: " + str(e))
-        return output
+        return output.strip()
 
-    # Get GitSCM status. The purpose of this function is to return the status of the given directory
-    #
-    # return values:
-    #  - error: The SCM is in a error state. Use this if git returned a error code.
-    #  - dirty: SCM is dirty. Could be: modified files, switched to another branch/tag/commit/repo, unpushed commits.
-    #  - clean: Same branch/tag/commit as specified in the recipe and no local changes.
-    #  - empty: Directory is not existing.
-    #
-    # This function is called when build with --clean-checkout. 'error' and 'dirty' SCMs are moved to attic,
-    # while empty and clean directories are not.
     def status(self, workspacePath):
-        if not os.path.exists(os.path.join(workspacePath, self.__dir)):
-            return 'empty','',''
-
-        status = 'clean'
-        shortStatus = ""
-        longStatus = ""
-        def setStatus(shortMsg, longMsg, dirty=True):
-            nonlocal status, shortStatus, longStatus
-            if (shortMsg not in shortStatus):
-                shortStatus += shortMsg
-            longStatus += longMsg
-            if (dirty):
-                status = 'dirty'
-
+        status = ScmStatus()
         try:
-            output = self.callGit(workspacePath, 'ls-remote' ,'--get-url').rstrip()
+            onCorrectBranch = False
+            output = self.callGit(workspacePath, 'ls-remote' ,'--get-url')
             if output != self.__url:
-                setStatus("S", colorize("> URL: configured: '{}'  actual: '{}'\n".format(self.__url, output), "33"))
-            else:
-                if self.__commit:
-                    output = self.callGit(workspacePath, 'rev-parse', 'HEAD').rstrip()
-                    if output != self.__commit:
-                        setStatus("S", colorize("> commitId: configured: {}  actual: {}\n".format(self.__commit, output), "33"))
-                elif self.__tag:
-                    output = self.callGit(workspacePath, 'tag', '--points-at', 'HEAD').rstrip().splitlines()
-                    if self.__tag not in output:
-                        actual = ("'" + ", ".join(output) + "'") if output else "not on any tag"
-                        setStatus("S", colorize("    > tag: configured: '{}' actual: {}\n".format(self.__tag, actual), "33"))
-                elif self.__branch:
-                    output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD').rstrip()
-                    if output != self.__branch:
-                        setStatus("S", colorize("> branch: configured: {} actual: {}\n".format(self.__branch, output), "33"))
-                    else:
-                        output = self.callGit(workspacePath, 'rev-list', 'origin/'+self.__branch+'..HEAD')
-                        if len(output):
-                            setStatus("U", "")
-                            # do not print detailed status this point.
-                            # git log --branches --not --remotes --decorate will give the same informations.
+                status.add(ScmTaint.switched,
+                    "> URL: configured: '{}', actual: '{}'".format(self.__url, output))
 
+            if self.__commit:
+                output = self.callGit(workspacePath, 'rev-parse', 'HEAD')
+                if output != self.__commit:
+                    status.add(ScmTaint.switched,
+                        "> commit: configured: '{}', actual: '{}'".format(self.__commit, output))
+            elif self.__tag:
+                output = self.callGit(workspacePath, 'tag', '--points-at', 'HEAD').splitlines()
+                if self.__tag not in output:
+                    actual = ("'" + ", ".join(output) + "'") if output else "not on any tag"
+                    status.add(ScmTaint.switched,
+                        "> tag: configured: '{}', actual: '{}'".format(self.__tag, actual))
+            elif self.__branch:
+                output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD')
+                if output != self.__branch:
+                    status.add(ScmTaint.switched,
+                        "> branch: configured: '{}', actual: '{}'".format(self.__branch, output))
+                else:
+                    output = self.callGit(workspacePath, 'log', '--oneline',
+                        'refs/remotes/origin/'+self.__branch+'..HEAD')
+                    if output:
+                        status.add(ScmTaint.unpushed_main,
+                            joinLines("> unpushed commits:", indent(output, '   ')))
+                    onCorrectBranch = True
+
+            # Check for modifications wrt. checked out commit
             output = self.callGit(workspacePath, 'status', '--porcelain')
-            if len(output):
-                longMsg = colorize("> modified:\n", "33")
-                for line in output.split('\n'):
-                    if line != "":
-                       longMsg += '  '+line + '\n'
-                setStatus("M", longMsg)
+            if output:
+                status.add(ScmTaint.modified, joinLines("> modified:",
+                    indent(output, '   ')))
 
-            # the following shows unpushed commits even on local branches. do not mark the SCM as dirty.
-            output = self.callGit(workspacePath, 'log', '--branches', '--not', '--remotes', '--decorate')
-            if len(output):
-                longMsg = colorize("> unpushed:\n", "33")
-                for line in output.split('\n'):
-                   if line != "":
-                       longStatus += '  ' + line + '\n'
-                setStatus("u", longMsg, False)
+            # The following shows unpushed commits on all local branches.
+            # Exclude HEAD if the configured branch is checked out to not
+            # double-count them. Does not mark the SCM as dirty.
+            what = ['--branches', '--not', '--remotes']
+            if onCorrectBranch: what.append('HEAD')
+            output = self.callGit(workspacePath, 'log', '--oneline', '--decorate',
+                *what)
+            if output:
+                status.add(ScmTaint.unpushed_local,
+                    joinLines("> unpushed banches:", indent(output, '   ')))
 
         except BuildError as e:
-            print(e)
-            ret = 'error'
+            status.add(ScmTaint.error, e.slogan)
 
-        return status, shortStatus, longStatus
+        return status
 
     def getAuditSpec(self):
         return ("git", self.__dir)

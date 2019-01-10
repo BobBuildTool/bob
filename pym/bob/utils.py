@@ -23,6 +23,9 @@ def hashString(string):
 def asHexStr(binary):
     return hexlify(binary).decode("ascii")
 
+def joinLines(*lines):
+    return "\n".join(l for l in lines if l)
+
 def joinScripts(scripts, glue="\ncd \"${BOB_CWD}\"\n"):
     scripts = [ s for s in scripts if ((s is not None) and (s != "")) ]
     if scripts != []:

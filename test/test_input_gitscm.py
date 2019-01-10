@@ -142,23 +142,15 @@ class TestGitScm(TestCase):
         """Test digest script stable representation"""
         s = createGitScm()
         self.assertEqual(s.asDigestScript(), "MyURL refs/heads/master .")
-        self.assertEqual(s.getDirectories(),
-            { '.' : b'o\xe5\xadn\xc2\xb9w\x9f`\x1b\x19\x9e\x88\xd3\x11t' })
 
         s = createGitScm({'branch' : "foobar", 'dir' : "sub/dir"})
         self.assertEqual(s.asDigestScript(), "MyURL refs/heads/foobar sub/dir")
-        self.assertEqual(s.getDirectories(),
-            { 'sub/dir' : b'W\xe7!\xed\xe8\x11\x15\xda\xe8\xc9G\xa4]\xc6\xdb\xc1' })
 
         s = createGitScm({'tag' : "asdf"})
         self.assertEqual(s.asDigestScript(), "MyURL refs/tags/asdf .")
-        self.assertEqual(s.getDirectories(),
-            { '.' : b'\xfd\xef,5\xc0it\xa3\x8cRTj\x90\x11\xce\x92' })
 
         s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
         self.assertEqual(s.asDigestScript(), "0123456789abcdef0123456789abcdef01234567 .")
-        self.assertEqual(s.getDirectories(),
-            { '.' : b'QU\xa9;\x00N\x00(\x90\x0c\xe5\xd3\x01y\xa0a' })
 
     def testJenkinsXML(self):
         """Test Jenins XML generation"""

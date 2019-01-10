@@ -3,7 +3,9 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ..utils import joinLines
 from abc import ABCMeta, abstractmethod
+from enum import Enum
 from pipes import quote
 import fnmatch
 import re
@@ -64,16 +66,124 @@ class ScmOverride:
         return ret, scm
 
     def __str__(self):
-        return str("match: " + str(self.__match)  + "\n"
-                + (("del: " + str(self.__del) + "\n") if self.__del else "")
-                + (("set: " + str(self.__set)+ "\n") if self.__set else "")
-                + (("replace: " + str(self.__replaceRaw)) if self.__replaceRaw else "")).rstrip()
+        import yaml
+        spec = {}
+        if self.__match: spec['match'] = self.__match
+        if self.__del: spec['del'] = self.__del
+        if self.__set: spec['set'] = self.__set
+        if self.__replaceRaw: spec['replace'] = self.__replaceRaw
+        return yaml.dump(spec, default_flow_style=False).rstrip()
+
+
+class ScmTaint(Enum):
+    """
+    The taint flags are single letter flags that indicate certain states of the
+    SCM.
+
+    Their meaning is as follows:
+     - attic - Recipe changed. Will be moved to attic.
+     - collides - New checkout but obstructed by existing file.
+     - error - Something went really wrong when getting status.
+     - modified -  The SCM has been modified wrt. checked out commit.
+     - new - New checkout.
+     - overridden - A scmOverrides entry applies.
+     - switched - The SCM branch/tag/commit was changed by the user.
+     - unknown - Not enough information to get further status.
+     - unpushed_main - Configured branch with commits not in remote.
+     - unpushed_local - Some local branch with unpushed commits exists.
+    """
+    attic = 'A'
+    collides = 'C'
+    error = 'E'
+    modified = 'M'
+    new = 'N'
+    overridden = 'O'
+    switched = 'S'
+    unknown = '?'
+    unpushed_main = 'U'
+    unpushed_local = 'u'
+
+class ScmStatus:
+    """"
+    Describes an SCM status wrt. recipe.
+
+    The important status is stored as a set of ScmTaint flags. Additionally the
+    'description' field holds any output from the SCM tool that is interesting
+    to the user to judge the SCM status. This is only shown in verbose output
+    mode.
+    """
+
+    def __init__(self, *flags, description=""):
+        self.__flags = set(flags)
+        self.__description = description
+
+    def __str__(self):
+        return "".join(sorted(f.value for f in self.__flags))
+
+    @property
+    def clean(self):
+        """
+        Is SCM branch/tag/commit the same as specified in the recipe and no
+        local changes?
+        """
+        return not self.dirty
+
+    @property
+    def dirty(self):
+        """
+        Is SCM is dirty?
+
+        Could be: errors, modified files or switched to another
+        branch/tag/commit/repo.  Unpushed commits on the configured branch also
+        count as dirty because they are locally commited changes that are not
+        visible upstream. On the other hand unpushed changes on unrelated
+        branches (unpushed_local) do not count.
+        """
+        return bool(self.__flags & {ScmTaint.modified, ScmTaint.error,
+            ScmTaint.switched, ScmTaint.unpushed_main})
+
+    @property
+    def error(self):
+        """
+        Check if SCM is in an error state.
+
+        Set if the SCM command returned a error code or something unexpected
+        happened while gathering the status.
+        """
+        return ScmTaint.error in self.__flags
+
+    @property
+    def expendable(self):
+        """
+        Could the SCM be deleted without loosing user data?
+
+        This is more strict than 'dirty' because it includes unrelated local
+        branches that the user might have created.
+        """
+        return self.dirty or (ScmTaint.unpushed_local in self.__flags)
+
+    @property
+    def flags(self):
+        return frozenset(self.__flags)
+
+    @property
+    def description(self):
+        return self.__description
+
+    def add(self, flag, description=""):
+        self.__flags.add(flag)
+        if description:
+            self.__description = joinLines(self.__description, description)
+
+    def merge(self, other):
+        self.__flags |= other.__flags
+        self.__description = joinLines(self.__description, other.__description)
 
 
 class Scm(metaclass=ABCMeta):
     def __init__(self, spec, overrides):
         # Recipe foobar, checkoutSCM dir:., url:asdf
-        self.__source = spec["__source"] + " in checkoutSCM: dir:" + \
+        self.__source = spec.get("__source", "<unknown>") + " in checkoutSCM: dir:" + \
             spec.get("dir", ".") + ", url:" + spec.get("url", "?")
         self.__recipe = spec["recipe"]
         self.__overrides = overrides
@@ -115,8 +225,9 @@ class Scm(metaclass=ABCMeta):
         return False
 
     @abstractmethod
-    def getDirectories(self):
-        return { }
+    def getDirectory(self):
+        """Return relative directory that this SCM owns in the workspace."""
+        return ""
 
     @abstractmethod
     def isDeterministic(self):
@@ -128,67 +239,19 @@ class Scm(metaclass=ABCMeta):
 
         The purpose of this method is to return the status of the given
         directory in the work-space. The returned value is used for 'bob
-        status' and to implement --clean-checkout. Shall return a tuple with
-        three values:
+        status' and to implement --clean-checkout. Shall return a ScmStatus()
+        object.
 
-            status, taintFlags, longStatus
-
-        where 'status' is a string that can have one of the following values:
-
-         - error: The SCM is in a error state. Use this if the SCM command
-                  returned a error code or something unexpected happened while
-                  gathering the status.
-         - dirty: SCM is dirty. Could be: modified files, switched to another
-                  branch/tag/commit/repo, unpushed commits.
-         - clean: Same branch/tag/commit as specified in the recipe and no
-                  local changes.
-         - empty: Directory is not existing. This is not an error as the
-                  checkout script might not have run yet.
-
-        This method is called when building with --clean-checkout. 'error' and
-        'dirty' SCMs are moved to attic, while empty and clean directories are
-        not.
-
-        The 'taintFlags' is a short string of single letters that indicate
-        certain states of the SCM. Common flags are as follows.  Each SCM might
-        define furhter flags as appropriate.
-
-         - M: "modified" - the SCM has been modified locally
-         - S: "switched" - the SCM branch/tag/commit was changed by the user
-
-        The 'longStatus' field should hold any output from the SCM that is
-        interesting to the user to judge the SCM status. This is only shown in
-        very verbose output mode.
+        This method is called when building with --clean-checkout. If the
+        returned ScmStatus objects 'error' or 'dirty' properties are True then
+        the SCM is moved to the attic, while clean directories are not.
         """
 
-        return 'clean', '', ''
+        return ScmStatus()
 
     def getActiveOverrides(self):
         """Return list of ScmOverride objects that matched this SCM."""
         return self.__overrides
-
-    def statusOverrides(self, workspacePath):
-        """Return user visible status about SCM overrides.
-
-        Returns a tuple of three elements:
-
-          overridden, taintFlags, longStatus
-
-        were 'overridden' is a boolean that is True if at least one override
-        matched. The 'taintFlags' are single letters that indicate certain
-        overrides. Only 'O' for 'overridded' is defined at the moment. Each SCM
-        might define further flags. The 'longStatus' is shown in very verbose
-        output modes and should contain the gory details.
-        """
-        overrides = self.getActiveOverrides()
-        if len(overrides):
-            status = "O"
-            longStatus = ""
-            for o in overrides:
-                overrideText = str(o).rstrip().replace('\n', '\n       ')
-                longStatus += "    > Overridden by:\n       {}\n".format(overrideText)
-            return True, status, longStatus
-        return False, '', ''
 
     def getAuditSpec(self):
         """Return spec for audit trail generation.

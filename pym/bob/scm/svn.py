@@ -4,10 +4,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import BuildError
-from ..tty import colorize
-from ..utils import hashString
-from .scm import Scm, ScmAudit
+from ..utils import joinLines
+from .scm import Scm, ScmAudit, ScmTaint, ScmStatus
 from pipes import quote
+from textwrap import indent
 import os, os.path
 import schema
 import subprocess
@@ -108,8 +108,8 @@ fi
 
         return scm
 
-    def getDirectories(self):
-        return { self.__dir : hashString(self.asDigestScript()) }
+    def getDirectory(self):
+        return self.__dir
 
     def isDeterministic(self):
         return str(self.__revision).isnumeric()
@@ -129,57 +129,32 @@ fi
                 cwd, " ".join(cmdLine), e.output.rstrip()))
         except OSError as e:
             raise BuildError("Error calling svn: " + str(e))
-        return output
+        return output.strip()
 
-    # Get SvnSCM status. The purpose of this function is to return the status of the given directory
-    #
-    # return values:
-    #  - error: the scm is in a error state. Use this if svn call returns a error code.
-    #  - dirty: SCM is dirty. Could be: modified files, switched to another URL or revision
-    #  - clean: same URL and revision as specified in the recipe and no local changes.
-    #  - empty: directory is not existing
-    #
-    # This function is called when build with --clean-checkout. 'error' and 'dirty' scm's are moved to attic,
-    # while empty and clean directories are not.
     def status(self, workspacePath):
-        if not os.path.exists(os.path.join(workspacePath, self.__dir)):
-            return 'empty','',''
-
-        status = 'clean'
-        shortStatus = ''
-        longStatus = ''
-        def setStatus(shortMsg, longMsg, dirty=True):
-            nonlocal status, shortStatus, longStatus
-            if (shortMsg not in shortStatus):
-                shortStatus += shortMsg
-            longStatus += longMsg
-            if (dirty):
-                status = 'dirty'
-
+        status = ScmStatus()
         try:
-            svnoutput = self.callSubversion(workspacePath, 'status')
-            if len(svnoutput):
-                longMsg = colorize("> modified:\n", "33")
-                for line in svnoutput.split('\n'):
-                    longMsg += '  '+line.rstrip()
-                setStatus('M', longMsg)
+            output = self.callSubversion(workspacePath, 'status')
+            if output:
+                status.add(ScmTaint.modified, joinLines("> modified:", indent(output, '   ')))
 
-            svnoutput = self.callSubversion(workspacePath, 'info', '--xml')
-            info = ElementTree.fromstring(svnoutput)
+            output = self.callSubversion(workspacePath, 'info', '--xml')
+            info = ElementTree.fromstring(output)
             entry = info.find('entry')
             url = entry.find('url').text
             revision = entry.attrib['revision']
 
             if self.__url != url:
-                setStatus('S', colorize("> URLs do not match!\n     recipe:\t{}\n     svn info:\t{}".format(self.__url, url), "33"))
+                status.add(ScmTaint.switched,
+                    "> URL: configured: '{}', actual: '{}'".format(self.__url, url))
             if self.__revision is not None and int(revision) != int(self.__revision):
-                setStatus('S', colorize("> wrong revision: recipe: {} svn info: {}".format(self.__revision, revision), "33"))
+                status.add(ScmTaint.switched,
+                    "> revision: configured: {}, actual: {}".format(self.__revision, revision))
 
         except BuildError as e:
-            print(e)
-            status = 'error'
+            status.add(ScmTaint.error, e.slogan)
 
-        return status, shortStatus, longStatus
+        return status
 
     def getAuditSpec(self):
         return ("svn", self.__dir)

@@ -11,7 +11,7 @@ EXECUTED = 2
 INFO = 3
 WARNING = 4
 ERROR = 5
-HEADLINE = 8
+HEADLINE = 6
 
 ALWAYS = -2
 IMPORTANT = -1
@@ -20,12 +20,12 @@ INFO = 1
 DEBUG = 2
 TRACE = 3
 
-COLORS2CODE = [ "", "", "32", "34", "33", "31" ]
-COLORS2TEXT = [ "NOTE", "NOTE", "NOTE", "INFO", "WARN", "ERR " ]
+COLORS2CODE = [ "", "", "32", "34", "33", "31", "32;1" ]
+COLORS2TEXT = [ "NOTE", "NOTE", "NOTE", "INFO", "WARN", "ERR ", "====" ]
 
 def colorize(string, color):
     if isinstance(color, int):
-        color = COLORS2CODE[color & 7] + (";1" if color >= HEADLINE else "")
+        color = COLORS2CODE[color]
     if __useColor and color:
         return "\x1b[" + color + "m" + string + "\x1b[0m"
     else:
@@ -160,7 +160,7 @@ class SingleTUI(BaseTUI):
         package = "/".join(step.getPackage().getStack())
         if package != self.__currentPackage:
             self.__currentPackage = package
-            print(">>", colorize(self.__currentPackage, EXECUTED|HEADLINE))
+            print(">>", colorize(self.__currentPackage, HEADLINE))
 
     def log(self, message, kind, severity):
         if not self._isVisible(severity): return

@@ -6,11 +6,11 @@
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError
 from .pathspec import PackageSet
-from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir
+from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
-from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive
+from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive, hashString
 from abc import ABCMeta, abstractmethod
 from base64 import b64encode
 from itertools import chain
@@ -308,17 +308,7 @@ def Scm(spec, env, overrides, recipeSet):
             matchedOverrides.append(override)
 
     # create scm instance
-    scm = spec["scm"]
-    if scm == "git":
-        return GitScm(spec, matchedOverrides, recipeSet.getPolicy('secureSSL'))
-    elif scm == "svn":
-        return SvnScm(spec, matchedOverrides)
-    elif scm == "cvs":
-        return CvsScm(spec, matchedOverrides)
-    elif scm == "url":
-        return UrlScm(spec, matchedOverrides, recipeSet.getPolicy('tidyUrlScm'))
-    else:
-        raise ParseError("Unknown SCM '{}'".format(scm))
+    return getScm(spec, matchedOverrides, recipeSet)
 
 class CheckoutAssert:
     SCHEMA = schema.Schema({
@@ -1065,14 +1055,14 @@ class CoreCheckoutStep(CoreStep):
             # Validate that SCM paths do not overlap
             knownPaths = []
             for s in self.scmList:
-                for p in s.getDirectories().keys():
-                    if os.path.isabs(p):
-                        raise ParseError("SCM paths must be relative! Offending path: " + p)
-                    for known in knownPaths:
-                        if overlappingPaths(known, p):
-                            raise ParseError("SCM paths '{}' and '{}' overlap."
-                                                .format(known, p))
-                    knownPaths.append(p)
+                p = s.getDirectory()
+                if os.path.isabs(p):
+                    raise ParseError("SCM paths must be relative! Offending path: " + p)
+                for known in knownPaths:
+                    if overlappingPaths(known, p):
+                        raise ParseError("SCM paths '{}' and '{}' overlap."
+                                            .format(known, p))
+                knownPaths.append(p)
         else:
             isValid = False
             self.scmList = []
@@ -1133,7 +1123,7 @@ class CheckoutStep(Step):
     def getScmDirectories(self):
         dirs = {}
         for s in self._coreStep.scmList:
-            dirs.update(s.getDirectories())
+            dirs[s.getDirectory()] = (hashString(s.asDigestScript()), s.getProperties())
         return dirs
 
     def hasLiveBuildId(self):

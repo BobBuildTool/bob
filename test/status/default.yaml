@@ -18,3 +18,7 @@ scmOverrides:
           scm: "svn"
       set:
           dir: "svn"
+
+include:
+    - user
+    - override

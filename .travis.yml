@@ -3,6 +3,12 @@ python:
     - "3.5"
     - "3.6"
 
+# install additonally required packages
+addons:
+    apt:
+        packages:
+            - cvs
+
 install:
     - pip install PyYAML
     - pip install codecov

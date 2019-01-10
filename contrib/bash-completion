@@ -345,7 +345,7 @@ __bob_query_recipe()
 
 __bob_status()
 {
-  __bob_complete_path "-r --recursive -D -c --build --release -e -E -v --show-overrides"
+  __bob_complete_path "--attic --develop --recursive --release --show-clean --show-overrides --verbose -D -c -r -v"
 }
 
 __bob_subcommands()
