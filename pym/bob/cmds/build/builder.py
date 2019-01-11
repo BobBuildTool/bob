@@ -607,7 +607,7 @@ esac
                     exit $1
                 }
                 declare -A _BOB_SOURCES=( [0]="Bob prolog" )
-                trap 'bob_handle_error $? >&2' ERR
+                trap 'bob_handle_error $? >&2 ; exit 99' ERR
                 trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do rm -f "$i" ; done' EXIT
                 set -o errtrace -o nounset -o pipefail
 
