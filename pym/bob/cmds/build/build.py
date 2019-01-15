@@ -125,7 +125,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         loop = asyncio.get_event_loop()
         origSigInt = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        multiprocessing.set_start_method('forkserver') # fork early before process gets big
+        # fork early before process gets big
+        if sys.platform == 'msys':
+            multiprocessing.set_start_method('fork')
+        else:
+            multiprocessing.set_start_method('forkserver')
         executor = concurrent.futures.ProcessPoolExecutor()
         executor.submit(dummy).result()
         signal.signal(signal.SIGINT, origSigInt)
