@@ -26,8 +26,9 @@ class _BobState():
     #  4 -> 5: build state stores step kind (checkout-step vs. others)
     #  5 -> 6: build state stores predicted live-build-ids too
     #  6 -> 7: amended directory state for source steps, store attic directories
+    #  7 -> 8: normalize attic directories
     MIN_VERSION = 2
-    CUR_VERSION = 7
+    CUR_VERSION = 8
 
     VERSION_SINCE_ATTIC_TRACKED = 7
 
@@ -112,6 +113,9 @@ class _BobState():
                         'wasRun' : self.__buildState,
                         'predictedBuidId' : {}
                     }
+                if state["version"] <= 7:
+                    self.__atticDirs = { os.path.normpath(k) : v
+                        for k, v in self.__atticDirs.items() }
         except:
             self.finalize()
             raise
@@ -279,7 +283,7 @@ class _BobState():
             self.__save()
 
     def setAtticDirectoryState(self, path, state):
-        self.__atticDirs[path] = state
+        self.__atticDirs[os.path.normpath(path)] = state
         self.__save()
 
     def getAtticDirectoryState(self, path):
