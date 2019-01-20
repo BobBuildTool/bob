@@ -19,7 +19,7 @@ EOF
 cd "${0%/*}/.."
 . ./test/test-lib.sh
 
-USE_COVERAGE=0
+COVERAGE=
 FAILED=0
 RUN_TEST_DIRS=( )
 GEN_HTML=0
@@ -28,12 +28,18 @@ unset RUN_BLACKBOX_PAT
 
 # check if python coverage is installed
 if type -fp coverage3 >/dev/null; then
+   COVERAGE=coverage3
+elif type -fp python3-coverage >/dev/null; then
+   COVERAGE=python3-coverage
+fi
+
+if [[ -n $COVERAGE ]] ; then
     # make sure coverage is installed in the current environment
     if python3 -c "import coverage" 2>/dev/null; then
-	    RUN="coverage3 run --source $PWD/pym  --parallel-mode"
-        USE_COVERAGE=1
+        RUN="$COVERAGE run --source $PWD/pym  --parallel-mode"
     else
         RUN=python3
+        COVERAGE=
         echo "coverage3 is installed but not in the current environment" >&2
     fi
 else
@@ -137,10 +143,10 @@ fi
 popd > /dev/null
 
 # collect coverage
-if [[ $USE_COVERAGE -eq 1 ]]; then
-	coverage3 combine test "${RUN_TEST_DIRS[@]}"
+if [[ -n $COVERAGE ]]; then
+	$COVERAGE combine test "${RUN_TEST_DIRS[@]}"
 	if [[ $GEN_HTML -eq 1 ]] ; then
-		coverage3 html
+		$COVERAGE html
 	fi
 fi
 
