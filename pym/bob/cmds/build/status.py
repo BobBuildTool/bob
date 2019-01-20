@@ -143,10 +143,10 @@ class Printer:
             if not d.startswith(prefix): continue
 
             scmSpec = BobState().getAtticDirectoryState(d)
-            # We must remove the 'dir' propery if present because the attic
-            # directory is already the final directory.
-            if 'dir' in scmSpec: del scmSpec['dir']
             if scmSpec is not None:
+                # We must remove the 'dir' propery if present because the attic
+                # directory is already the final directory.
+                if 'dir' in scmSpec: del scmSpec['dir']
                 status = getScm(scmSpec).status(d)
             else:
                 status = UNKNOWN
