@@ -247,7 +247,8 @@ class _BobState():
         """Store state information about a directory.
 
         For source directories:     Dict[path : Union[str, None], state : Tuple[digest:bytes, spec:Any]]
-        For all other directories:  bytes
+        For build directories:      list
+        For pacakge directories:    bytes
         """
         self.__dirStates[path] = digest
         self.__save()
