@@ -55,7 +55,7 @@ class PackagePrinter:
 
         if severity <= self.verbose:
             self.__printHeader()
-            self.__printStatus(flags, os.path.normpath(dir), color)
+            self.__printStatus(flags, dir, color)
             # show detailed description on first '-v'
             if (INFO <= self.verbose) and status.description:
                 for line in status.description.splitlines():
