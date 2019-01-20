@@ -161,12 +161,15 @@ class Printer:
         if checkoutStep.isValid() and (checkoutStep.getVariantId() not in self.doneSteps):
             pp = PackagePrinter(self.verbose, self.showClean, self.showOverrides,
                 checkoutStep)
-            if os.path.isdir(checkoutStep.getWorkspacePath()):
+            workspace = checkoutStep.getWorkspacePath()
+            if os.path.isdir(workspace):
                 self.__showCheckoutStep(pp, checkoutStep)
             else:
                 pp.skipped()
             if self.showAttic:
-                self.__showAtticDirs(pp, checkoutStep.getWorkspacePath())
+                # The last path element (/workspace) must be removed because
+                # attics are located next to the workspace, not inside it.
+                self.__showAtticDirs(pp, os.path.dirname(workspace))
         self.doneSteps.add(checkoutStep.getVariantId())
 
         if self.recurse:
