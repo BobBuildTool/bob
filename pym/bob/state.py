@@ -254,9 +254,7 @@ class _BobState():
         self.__save()
 
     def delDirectoryState(self, path):
-        if path in self.__dirStates:
-            del self.__dirStates[path]
-            self.__save()
+        self.resetWorkspaceState(path, None)
 
     def getVariantId(self, path):
         return self.__variantIds.get(path)
@@ -275,7 +273,10 @@ class _BobState():
             del self.__inputs[path]
             needSave = True
         if self.__dirStates.get(path) != dirState:
-            self.__dirStates[path] = dirState
+            if dirState is None:
+                del self.__dirStates[path]
+            else:
+                self.__dirStates[path] = dirState
             needSave = True
         if path in self.__variantIds:
             del self.__variantIds[path]
