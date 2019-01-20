@@ -160,7 +160,8 @@ class ScmStatus:
         This is more strict than 'dirty' because it includes unrelated local
         branches that the user might have created.
         """
-        return self.dirty or (ScmTaint.unpushed_local in self.__flags)
+        return not self.dirty and self.__flags.isdisjoint(
+            {ScmTaint.unpushed_local, ScmTaint.unknown})
 
     @property
     def flags(self):
