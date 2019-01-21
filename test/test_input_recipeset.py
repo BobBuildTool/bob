@@ -398,3 +398,100 @@ class TestDependencies(RecipesTmp, TestCase):
         packages = recipes.generatePackages(lambda x,y: "unused")
         self.assertRaises(ParseError, packages.getRootPackage)
 
+
+class TestNetAccess(RecipesTmp, TestCase):
+
+    def testOldPolicy(self):
+        """Test that network access is enbled by default for old projects"""
+        self.writeRecipe("root", """\
+            root: True
+            """)
+        p = self.generate().walkPackagePath("root")
+        self.assertTrue(p.getBuildStep().hasNetAccess())
+        self.assertTrue(p.getPackageStep().hasNetAccess())
+
+    def testNewPolicy(self):
+        """Test that network access is disabled by default"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.15",
+        })
+        self.writeRecipe("root", """\
+            root: True
+            """)
+        p = self.generate().walkPackagePath("root")
+        self.assertFalse(p.getBuildStep().hasNetAccess())
+        self.assertFalse(p.getPackageStep().hasNetAccess())
+
+    def testBuildNetAccess(self):
+        """Test that a recipe can request network access for build step"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.15",
+        })
+        self.writeRecipe("root1", """\
+            root: True
+            buildNetAccess: True
+            buildScript: "true"
+            """)
+        self.writeRecipe("root2", """\
+            root: True
+            packageNetAccess: True
+            """)
+        packages = self.generate()
+        root1 = packages.walkPackagePath("root1")
+        self.assertTrue(root1.getBuildStep().hasNetAccess())
+        self.assertFalse(root1.getPackageStep().hasNetAccess())
+        root2 = packages.walkPackagePath("root2")
+        self.assertFalse(root2.getBuildStep().hasNetAccess())
+        self.assertTrue(root2.getPackageStep().hasNetAccess())
+
+    def testToolAccessBuild(self):
+        """Test that a tool can force network access for build step."""
+
+        self.writeConfig({
+            "bobMinimumVersion" : "0.15",
+        })
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tool
+                  use: [tools]
+            buildTools: [compiler]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("tool", """\
+            provideTools:
+                compiler:
+                    path: "."
+                    netAccess: True
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertTrue(p.getBuildStep().hasNetAccess())
+        self.assertTrue(p.getPackageStep().hasNetAccess())
+
+    def testToolAccessPackage(self):
+        """Test that a tool can force network access for package step."""
+
+        self.writeConfig({
+            "bobMinimumVersion" : "0.15",
+        })
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tool
+                  use: [tools]
+            buildScript: "true"
+            packageTools: [compiler]
+            packageScript: "true"
+            """)
+        self.writeRecipe("tool", """\
+            provideTools:
+                compiler:
+                    path: "."
+                    netAccess: True
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertFalse(p.getBuildStep().hasNetAccess())
+        self.assertTrue(p.getPackageStep().hasNetAccess())
