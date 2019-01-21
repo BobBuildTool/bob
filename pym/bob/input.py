@@ -397,33 +397,36 @@ class CoreItem(metaclass=ABCMeta):
 
 
 class AbstractTool:
-    __slots__ = ("path", "libs")
+    __slots__ = ("path", "libs", "netAccess")
 
     def __init__(self, spec):
         if isinstance(spec, str):
             self.path = spec
             self.libs = []
+            self.netAccess = False
         else:
             self.path = spec['path']
             self.libs = spec.get('libs', [])
+            self.netAccess = spec.get('netAccess', False)
 
     def prepare(self, coreStepRef, env):
         """Create concrete tool for given step."""
         path = env.substitute(self.path, "provideTools::path")
         libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
-        return CoreTool(coreStepRef, path, libs)
+        return CoreTool(coreStepRef, path, libs, self.netAccess)
 
 class CoreTool(CoreItem):
-    __slots__ = ("coreStep", "path", "libs")
+    __slots__ = ("coreStep", "path", "libs", "netAccess")
 
-    def __init__(self, coreStep, path, libs):
+    def __init__(self, coreStep, path, libs, netAccess):
         self.coreStep = coreStep
         self.path = path
         self.libs = libs
+        self.netAccess = netAccess
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
-        return Tool(step, self.path, self.libs)
+        return Tool(step, self.path, self.libs, self.netAccess)
 
 class Tool:
     """Representation of a tool.
@@ -432,19 +435,20 @@ class Tool:
     and some optional relative library paths.
     """
 
-    __slots__ = ("step", "path", "libs")
+    __slots__ = ("step", "path", "libs", "netAccess")
 
-    def __init__(self, step, path, libs):
+    def __init__(self, step, path, libs, netAccess):
         self.step = step
         self.path = path
         self.libs = libs
+        self.netAccess = netAccess
 
     def __repr__(self):
         return "Tool({}, {}, {})".format(repr(self.step), self.path, self.libs)
 
     def __eq__(self, other):
         return isinstance(other, Tool) and (self.step == other.step) and (self.path == other.path) and \
-            (self.libs == other.libs)
+            (self.libs == other.libs) and (self.netAccess == other.netAccess)
 
     def getStep(self):
         """Return package step that produces the result holding the tool
@@ -464,6 +468,15 @@ class Tool:
         :return: List[str]
         """
         return self.libs
+
+    def getNetAccess(self):
+        """Does tool require network access?
+
+        This reflects the `netAccess` tool property.
+
+        :return: bool
+        """
+        return self.netAccess
 
 
 class CoreSandbox(CoreItem):
@@ -680,6 +693,7 @@ class CoreStep(CoreItem):
             for l in tool.libs:
                 h.update(struct.pack("<I", len(l)))
                 h.update(l.encode('utf8'))
+            h.update(struct.pack("<?", tool.netAccess))
         # provideDeps
         providedDeps = self.providedDeps
         h.update(struct.pack("<I", len(providedDeps)))
@@ -1215,7 +1229,8 @@ class CoreBuildStep(CoreStep):
 class BuildStep(Step):
 
     def hasNetAccess(self):
-        return self.getPackage().getRecipe()._getBuildNetAccess()
+        return self.getPackage().getRecipe()._getBuildNetAccess() or any(
+            t.getNetAccess() for t in self.getTools().values())
 
 
 class CorePackageStep(CoreStep):
@@ -1258,7 +1273,8 @@ class PackageStep(Step):
         return self.getPackage().isRelocatable()
 
     def hasNetAccess(self):
-        return self.getPackage().getRecipe()._getPackageNetAccess()
+        return self.getPackage().getRecipe()._getPackageNetAccess() or any(
+            t.getNetAccess() for t in self.getTools().values())
 
 
 class CorePackageInternal(CoreItem):
@@ -2915,7 +2931,8 @@ class RecipeSet:
                     str,
                     schema.Schema({
                         'path' : str,
-                        schema.Optional('libs') : [str]
+                        schema.Optional('libs') : [str],
+                        schema.Optional('netAccess') : bool,
                     })
                 )
             }),
