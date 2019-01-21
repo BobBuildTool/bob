@@ -488,6 +488,12 @@ such access is still needed a recipe may set the ``buildNetAccess`` or the
     access was always possbible. The policy will determine the default value of
     this property.
 
+To configure the network access based on the actually used tools by a recipe
+you can set the ``netAccess`` property in
+:ref:`configuration-recipes-provideTools`. The ``{build,package}NetAccess``
+should only be set if the script in the recipe itself requires the network
+access during build or package steps.
+
 .. _configuration-recipes-checkoutassert:
 
 checkoutAssert
@@ -943,6 +949,7 @@ Bob will make sure that the forwarded dependencies are compatible in the
 injected recipe. That is, any duplicates through injected dependencies must
 result in the same package being used.
 
+.. _configuration-recipes-provideTools:
 
 provideTools
 ~~~~~~~~~~~~
@@ -959,14 +966,23 @@ consuming recipes. Example::
       host-toolchain:
          path: bin
          libs: [ "sysroot/lib/i386-linux-gnu", "sysroot/usr/lib", "sysroot/usr/lib/i386-linux-gnu" ]
+         netAccess: True
 
 The ``path`` attribute is always needed.  The ``libs`` attribute, if present,
 must be a list of paths to needed shared libraries. Any path that is specified
 must be relative. If the recipe makes use of existing host binaries and wants
 to provide them as tool you should create symlinks to the host paths.
 
-If no library paths are present the declaration may be abbreviated by giving
-the relative path directly::
+The ``netAccess`` attribute allows the tool to request network access during
+build/package step execution even if the recipe has not requested it (see
+:ref:`configuration-recipes-netAccess`). The network access is only granted if
+the tool is used. This attribute might be needed if the recipe cannot know if a
+particular tool actually requires network access. A prominent example are
+proprietary compilers that need to talk to a license server. Unless a package
+is built with such a compiler the network access is not needed.
+
+If no attributes except ``path`` are present the declaration may be abbreviated
+by giving the relative path directly::
 
    provideTools:
       host-toolchain: bin
