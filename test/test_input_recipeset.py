@@ -495,3 +495,64 @@ class TestNetAccess(RecipesTmp, TestCase):
         p = self.generate().walkPackagePath("root")
         self.assertFalse(p.getBuildStep().hasNetAccess())
         self.assertTrue(p.getPackageStep().hasNetAccess())
+
+
+class TestToolEnvironment(RecipesTmp, TestCase):
+
+    def testEnvDefine(self):
+        """Test that a tool can set environment."""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tool
+                  use: [tools]
+            environment:
+                FOO: unset
+                BAR: unset
+            packageTools: [compiler]
+            packageVars: [FOO, BAR]
+            packageScript: "true"
+            """)
+        self.writeRecipe("tool", """\
+            environment:
+                LOCAL: "foo"
+            provideTools:
+                compiler:
+                    path: "."
+                    environment:
+                        FOO: "${LOCAL}"
+                        BAR: "bar"
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertEqual(p.getPackageStep().getEnv(),
+            {"FOO":"foo", "BAR":"bar"})
+
+    def testEnvCollides(self):
+        """Test that colliding tool environment definitions are detected."""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tool
+                  use: [tools]
+            packageTools: [t1, t2]
+            packageScript: "true"
+            """)
+        self.writeRecipe("tool", """\
+            provideTools:
+                t1:
+                    path: "."
+                    environment:
+                        FOO: "foo"
+                        BAR: "bar"
+                t2:
+                    path: "."
+                    environment:
+                        BAR: "bar"
+                        BAZ: "baz"
+            """)
+
+        packages = self.generate()
+        self.assertRaises(ParseError, packages.getRootPackage)
