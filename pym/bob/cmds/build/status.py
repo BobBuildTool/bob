@@ -222,6 +222,12 @@ def doStatus(argv, bobRoot):
         help="Additionally look in/for attic directories")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox', help="Disable sandboxing")
+    parser.set_defaults(sandbox=None)
+
     parser.add_argument('--show-clean', action='store_true',
         help="Show SCM status even if checkout is unmodified")
     parser.add_argument('--show-overrides', action='store_true',
@@ -229,6 +235,9 @@ def doStatus(argv, bobRoot):
     parser.add_argument('-v', '--verbose', default=NORMAL, action='count',
         help="Increase verbosity (may be specified multiple times)")
     args = parser.parse_args(argv)
+
+    if args.sandbox == None:
+        args.sandbox = not args.develop
 
     defines = processDefines(args.defines)
 
@@ -250,7 +259,7 @@ def doStatus(argv, bobRoot):
         nameFormatter = LocalBuilder.releaseNameInterrogator
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
 
-    packages = recipes.generatePackages(nameFormatter, defines, not args.develop)
+    packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if args.develop: developPersister.prime(packages)
 
     # Dummy query of attic directories. Will warn if project directory was

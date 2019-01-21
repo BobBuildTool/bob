@@ -16,7 +16,8 @@ Synopsis
 ::
 
     bob status [-h] [--develop | --release] [-c CONFIGFILE] [-D DEFINES]
-               [--attic] [-r] [--show-clean] [--show-overrides] [-v]
+               [--attic] [-r] [--sandbox | --no-sandbox] [--show-clean]
+               [--show-overrides] [-v]
                [packages [packages ...]]
 
 Description
@@ -54,6 +55,9 @@ Options
 ``--develop``
     Use developer mode. This is the default.
 
+``--no-sandbox``
+    Disable sandboxing
+
 ``-r, --recursive``
     Recursively display dependencies. Only direct dependencies are considered,
     i.e. packages that are named in the ``depends`` section of the recipe.
@@ -62,6 +66,9 @@ Options
 
 ``--release``
     Use release mode.
+
+``--sandbox``
+    Enable sandboxing
 
 ``--show-clean``
     Show the status of a checkout even if unmodified. This includes
