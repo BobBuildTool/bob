@@ -15,8 +15,9 @@ Synopsis
 --------
 
 ::
-
-    bob query-meta [-h] [-D DEFINES] [-c CONFIGFILE] [-r] PACKAGE [PACKAGE ...]
+    bob query-meta [-h] [-D DEFINES] [-c CONFIGFILE] [-r]
+                   [--sandbox | --no-sandbox]
+                   packages [packages ...]
 
 Description
 -----------
@@ -32,5 +33,11 @@ Options
 ``-D DEFINES``
     Override default environment variable
 
+``--no-sandbox``
+    Disable sandboxing
+
 ``-r``
     Also list metaEnvironment variables for all dependencies.
+
+``--sandbox``
+    Enable sandboxing

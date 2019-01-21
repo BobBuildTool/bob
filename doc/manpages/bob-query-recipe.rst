@@ -13,7 +13,9 @@ Synopsis
 
 ::
 
-    bob query-recipe [-h] [-c CONFIGFILE] [-D DEFINES] package
+    bob query-recipe [-h] [-D DEFINES] [-c CONFIGFILE]
+                     [--sandbox | --no-sandbox]
+                     package
 
 Description
 -----------
@@ -29,4 +31,8 @@ Options
 ``-D DEFINES``
     Override default environment variable
 
+``--no-sandbox``
+    Disable sandboxing
 
+``--sandbox``
+    Enable sandboxing

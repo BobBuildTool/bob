@@ -131,6 +131,11 @@ def doQueryMeta(argv, bobRoot):
         help="Use config File")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', default=False,
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -138,7 +143,7 @@ def doQueryMeta(argv, bobRoot):
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    packages = recipes.generatePackages(lambda s,m: "unused", defines)
+    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
 
     def showPackage(package, recurse, done):
         # Show each package only once. Meta variables are fixed and not variant
@@ -184,6 +189,11 @@ are used:
     parser.add_argument('--default', default="", help='Default for missing attributes (default: "")')
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', default=False,
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
 
     formats = {
         'git' : "git {package} {dir} {url} {branch}",
@@ -199,7 +209,7 @@ are used:
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    packages = recipes.generatePackages(lambda s,m: "unused", defines)
+    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
 
     # update formats
     for fmt in args.formats:
@@ -241,6 +251,11 @@ def doQueryRecipe(argv, bobRoot):
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', default=False,
+        help="Enable sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing")
 
     args = parser.parse_args(argv)
 
@@ -249,7 +264,7 @@ def doQueryRecipe(argv, bobRoot):
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse()
-    package = recipes.generatePackages(lambda s,m: "unused", defines).walkPackagePath(args.package)
+    package = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox).walkPackagePath(args.package)
 
     for fn in package.getRecipe().getSources():
         print(fn)

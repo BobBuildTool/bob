@@ -325,7 +325,7 @@ __bob_project()
 
 __bob_query_scm()
 {
-    __bob_complete_path "-c -f --default -r"
+    __bob_complete_path "-c -f --default -r --sandbox --no-sandbox"
 }
 
 __bob_query_path()
@@ -335,17 +335,17 @@ __bob_query_path()
 
 __bob_query_meta()
 {
-  __bob_complete_path " -c -D -r"
+  __bob_complete_path " -c -D -r --sandbox --no-sandbox"
 }
 
 __bob_query_recipe()
 {
-    __bob_complete_path "-c -D"
+    __bob_complete_path "-c -D --sandbox --no-sandbox"
 }
 
 __bob_status()
 {
-  __bob_complete_path "--attic --develop --recursive --release --show-clean --show-overrides --verbose -D -c -r -v"
+  __bob_complete_path "--attic --develop --recursive --no-sandbox --release --sandbox --show-clean --show-overrides --verbose -D -c -r -v"
 }
 
 __bob_subcommands()

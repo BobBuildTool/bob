@@ -12,8 +12,9 @@ Synopsis
 --------
 
 ::
-
-    bob query-scm [-h] [-c CONFIGFILE] [-D DEFINES] [-f FORMATS] [--default DEFAULT] [-r] package
+    bob query-scm [-h] [-D DEFINES] [-c CONFIGFILE] [-f FORMATS]
+                  [--default DEFAULT] [-r] [--sandbox | --no-sandbox]
+                  packages [packages ...]
 
 Description
 -----------
@@ -44,6 +45,11 @@ Options
 ``-f FORMATS``
     Output format for scm (syntax: scm=format). Can be specified multiple times.
 
+``--no-sandbox``
+    Disable sandboxing
+
 ``-r, --recursive``
     Recursively display dependencies
 
+``--sandbox``
+    Enable sandboxing
