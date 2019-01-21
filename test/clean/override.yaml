@@ -1,0 +1,4 @@
+scmOverrides:
+   -
+      set:
+         branch: topic
