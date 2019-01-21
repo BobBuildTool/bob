@@ -397,36 +397,41 @@ class CoreItem(metaclass=ABCMeta):
 
 
 class AbstractTool:
-    __slots__ = ("path", "libs", "netAccess")
+    __slots__ = ("path", "libs", "netAccess", "environment")
 
     def __init__(self, spec):
         if isinstance(spec, str):
             self.path = spec
             self.libs = []
             self.netAccess = False
+            self.environment = {}
         else:
             self.path = spec['path']
             self.libs = spec.get('libs', [])
             self.netAccess = spec.get('netAccess', False)
+            self.environment = spec.get('environment', {})
 
     def prepare(self, coreStepRef, env):
         """Create concrete tool for given step."""
         path = env.substitute(self.path, "provideTools::path")
         libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
-        return CoreTool(coreStepRef, path, libs, self.netAccess)
+        environment = { k : env.substitute(v, "provideTools::environment::"+k)
+            for k, v in self.environment.items() }
+        return CoreTool(coreStepRef, path, libs, self.netAccess, environment)
 
 class CoreTool(CoreItem):
-    __slots__ = ("coreStep", "path", "libs", "netAccess")
+    __slots__ = ("coreStep", "path", "libs", "netAccess", "environment")
 
-    def __init__(self, coreStep, path, libs, netAccess):
+    def __init__(self, coreStep, path, libs, netAccess, environment):
         self.coreStep = coreStep
         self.path = path
         self.libs = libs
         self.netAccess = netAccess
+        self.environment = environment
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
-        return Tool(step, self.path, self.libs, self.netAccess)
+        return Tool(step, self.path, self.libs, self.netAccess, self.environment)
 
 class Tool:
     """Representation of a tool.
@@ -435,20 +440,22 @@ class Tool:
     and some optional relative library paths.
     """
 
-    __slots__ = ("step", "path", "libs", "netAccess")
+    __slots__ = ("step", "path", "libs", "netAccess", "environment")
 
-    def __init__(self, step, path, libs, netAccess):
+    def __init__(self, step, path, libs, netAccess, environment):
         self.step = step
         self.path = path
         self.libs = libs
         self.netAccess = netAccess
+        self.environment = environment
 
     def __repr__(self):
         return "Tool({}, {}, {})".format(repr(self.step), self.path, self.libs)
 
     def __eq__(self, other):
         return isinstance(other, Tool) and (self.step == other.step) and (self.path == other.path) and \
-            (self.libs == other.libs) and (self.netAccess == other.netAccess)
+            (self.libs == other.libs) and (self.netAccess == other.netAccess) and \
+            (self.environment == other.environment)
 
     def getStep(self):
         """Return package step that produces the result holding the tool
@@ -477,6 +484,14 @@ class Tool:
         :return: bool
         """
         return self.netAccess
+
+    def getEnvironment(self):
+        """Get environment variables.
+
+        Returns the dictionary of environment variables that are defined by the
+        tool.
+        """
+        return self.environment
 
 
 class CoreSandbox(CoreItem):
@@ -693,7 +708,10 @@ class CoreStep(CoreItem):
             for l in tool.libs:
                 h.update(struct.pack("<I", len(l)))
                 h.update(l.encode('utf8'))
-            h.update(struct.pack("<?", tool.netAccess))
+            h.update(struct.pack("<?I", tool.netAccess, len(tool.environment)))
+            for (key, val) in sorted(tool.environment.items()):
+                h.update(struct.pack("<II", len(key), len(val)))
+                h.update((key+val).encode('utf8'))
         # provideDeps
         providedDeps = self.providedDeps
         h.update(struct.pack("<I", len(providedDeps)))
@@ -2136,6 +2154,19 @@ class Recipe(object):
             if depTrack.useResultOnce():
                 results.append(depRef)
 
+        # apply tool environments
+        toolsEnv = set()
+        toolsView = tools.inspect()
+        for i in self.__toolDepPackage:
+            tool = toolsView.get(i)
+            if tool is None: continue
+            if not tool.environment: continue
+            tmp = set(tool.environment.keys())
+            if not tmp.isdisjoint(toolsEnv):
+                self.__raiseIncompatibleTools(toolsView)
+            toolsEnv.update(tmp)
+            env.update(tool.environment)
+
         # apply private environment
         env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
         for i in self.__varPrivate:
@@ -2250,6 +2281,20 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
 """This error is caused by naming '{PKG}' multiple times in the recipe with incompatible variants.
 Every dependency must only be given once."""
     .format(PKG=r.corePackage.getName(), CUR=self.__packageName))
+
+    def __raiseIncompatibleTools(self, tools):
+        toolsVars = {}
+        for i in self.__toolDepPackage:
+            tool = tools.get(i)
+            if tool is None: continue
+            for k in tool.environment.keys():
+                toolsVars.setdefault(k, []).append(i)
+        toolsVars = ", ".join(sorted(
+            "'{}' defined by {}".format(k, " and ".join(sorted(v)))
+            for k,v in toolsVars.items() if len(v) > 1))
+        raise ParseError("Multiple tools defined the same environment variable(s): {}"
+            .format(toolsVars),
+            help="Each environment variable must be defined only by one used tool.")
 
     @property
     def checkoutScript(self):
@@ -2933,6 +2978,9 @@ class RecipeSet:
                         'path' : str,
                         schema.Optional('libs') : [str],
                         schema.Optional('netAccess') : bool,
+                        schema.Optional('environment') : schema.Schema(
+                            { varNameSchema : str },
+                            error="provideTools: invalid 'environment' property"),
                     })
                 )
             }),
