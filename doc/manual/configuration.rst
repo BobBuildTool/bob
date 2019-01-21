@@ -151,6 +151,12 @@ A copy of the environment is inherited from the upstream recipe.
       merged variable of the previous step is updated in the forwarded
       environment too.
 
+After all dependencies have been processed the environment variables of tools
+(see :ref:`configuration-recipes-provideTools`) that are used in the recipe are
+merged into the local environment. Finally variables defined in
+:ref:`configuration-recipes-privateenv` and
+:ref:`configuration-recipes-metaenv` are merged too.
+
 A subset of the resulting local environment can be passed to the three
 execution steps. The available variables to the scripts are defined by
 :ref:`configuration-recipes-vars` and :ref:`configuration-recipes-vars-weak`.
@@ -967,6 +973,9 @@ consuming recipes. Example::
          path: bin
          libs: [ "sysroot/lib/i386-linux-gnu", "sysroot/usr/lib", "sysroot/usr/lib/i386-linux-gnu" ]
          netAccess: True
+         environment:
+            CC: gcc
+            LD: ld
 
 The ``path`` attribute is always needed.  The ``libs`` attribute, if present,
 must be a list of paths to needed shared libraries. Any path that is specified
@@ -980,6 +989,14 @@ the tool is used. This attribute might be needed if the recipe cannot know if a
 particular tool actually requires network access. A prominent example are
 proprietary compilers that need to talk to a license server. Unless a package
 is built with such a compiler the network access is not needed.
+
+The ``environment`` attribute provides the ability to define environment
+variables that are automatically picked up by the recipe where the tool is
+used. This allows for much more fine-grained variable provisioning than
+:ref:`configuration-recipes-provideVars`. If multiple tools are used in a
+recipe they must define distinct variables because no particular order between
+tools is defined. The values defined in this attribute are subject to variable
+substitution.
 
 If no attributes except ``path`` are present the declaration may be abbreviated
 by giving the relative path directly::
