@@ -33,7 +33,7 @@ Options
 ``--download MODE``
     Download from binary archive (yes, no, deps, forced, forced-deps)
 
-    See :ref:`bob-dev(1) <manpage-bob-dev>` for details.
+    See :ref:`bob-dev(1) <manpage-dev>` for details.
 
 ``-D DEFINES``
     Override default environment variable
