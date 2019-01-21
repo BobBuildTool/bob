@@ -8,9 +8,35 @@ from unittest import TestCase
 from unittest.mock import Mock
 import os
 import textwrap
+import yaml
 
 from bob.input import RecipeSet
 from bob.errors import ParseError
+
+class RecipesTmp:
+    def setUp(self):
+        self.cwd = os.getcwd()
+        self.tmpdir = TemporaryDirectory()
+        os.chdir(self.tmpdir.name)
+        os.mkdir("recipes")
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+        os.chdir(self.cwd)
+
+    def writeRecipe(self, name, content):
+        with open(os.path.join("recipes", name+".yaml"), "w") as f:
+            f.write(textwrap.dedent(content))
+
+    def writeConfig(self, content):
+        with open("config.yaml", "w") as f:
+            f.write(yaml.dump(content))
+
+    def generate(self):
+        recipes = RecipeSet()
+        recipes.parse()
+        return recipes.generatePackages(lambda x,y: "unused")
+
 
 class TestUserConfig(TestCase):
     def setUp(self):
@@ -214,21 +240,7 @@ class TestUserConfig(TestCase):
                 {'FOO' : 'default', 'BAR' : 'lower', 'BAZ' : 'higher' })
 
 
-class TestDependencies(TestCase):
-    def setUp(self):
-        self.cwd = os.getcwd()
-        self.tmpdir = TemporaryDirectory()
-        os.chdir(self.tmpdir.name)
-        os.mkdir("recipes")
-
-    def tearDown(self):
-        self.tmpdir.cleanup()
-        os.chdir(self.cwd)
-
-    def writeRecipe(self, name, content):
-        with open(os.path.join("recipes", name+".yaml"), "w") as f:
-            f.write(textwrap.dedent(content))
-
+class TestDependencies(RecipesTmp, TestCase):
     def testDuplicateRemoval(self):
         """Test that provided dependencies do not replace real dependencies"""
         self.writeRecipe("root", """\
