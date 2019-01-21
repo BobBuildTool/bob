@@ -491,7 +491,7 @@ such access is still needed a recipe may set the ``buildNetAccess`` or the
 
 .. note::
     Before Bob 0.14 (see :ref:`policies-offlineBuild` policy) the network
-    access was always possbible. The policy will determine the default value of
+    access was always possible. The policy will determine the default value of
     this property.
 
 To configure the network access based on the actually used tools by a recipe
