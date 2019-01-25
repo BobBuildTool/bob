@@ -386,7 +386,7 @@ class BaseTester:
         with TemporaryDirectory() as workspace:
             with open(os.path.join(workspace, "test.buildid"), "wb") as f:
                 f.write(b'\x00'*20)
-            script = archive.download(None, "test.buildid", "result.tgz")
+            script = archive.download(DummyStep(), "test.buildid", "result.tgz")
             callJenkinsScript(script, workspace)
             with open(self.dummyFileName, "rb") as f:
                 with open(os.path.join(workspace, "result.tgz"), "rb") as g:
@@ -406,7 +406,7 @@ class BaseTester:
             self.__createArtifactByName(os.path.join(tmp, "result.tgz"))
 
             # upload artifact
-            script = archive.upload(None, "test.buildid", "result.tgz")
+            script = archive.upload(DummyStep(), "test.buildid", "result.tgz")
             callJenkinsScript(script, tmp)
 
             # test that artifact was uploaded correctly
@@ -423,7 +423,7 @@ class BaseTester:
             with open(os.path.join(tmp, "error.buildid"), "wb") as f:
                 f.write(ERROR_UPLOAD_ARTIFACT)
             with self.assertRaises(subprocess.CalledProcessError):
-                script = archive.upload(None, "error.buildid", "result.tgz")
+                script = archive.upload(DummyStep(), "error.buildid", "result.tgz")
                 callJenkinsScript(script, tmp)
             with self.assertRaises(subprocess.CalledProcessError):
                 script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid")
@@ -441,7 +441,7 @@ class BaseTester:
             self.__createArtifactByName(os.path.join(tmp, "result.tgz"))
 
             # these uploads must not fail even though they do not succeed
-            script = archive.upload(None, "error.buildid", "result.tgz")
+            script = archive.upload(DummyStep(), "error.buildid", "result.tgz")
             callJenkinsScript(script, tmp)
             script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid")
             callJenkinsScript(script, tmp)
@@ -451,10 +451,10 @@ class BaseTester:
 
         archive = self.__getSingleArchiveInstance({})
 
-        self.assertEqual(archive.download(b'\x00'*20, "unused", "unused"), "")
+        self.assertEqual(archive.download(DummyStep(), "unused", "unused"), "")
 
-        self.assertEqual(archive.upload(b'\x00'*20, "unused", "unused"), "")
-        self.assertEqual(archive.uploadJenkinsLiveBuildId(None, "unused", "unused"), "")
+        self.assertEqual(archive.upload(DummyStep(), "unused", "unused"), "")
+        self.assertEqual(archive.uploadJenkinsLiveBuildId(DummyStep(), "unused", "unused"), "")
 
         run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
@@ -590,7 +590,7 @@ class TestHttpArchive(BaseTester, TestCase):
         with TemporaryDirectory() as workspace:
             with open(os.path.join(workspace, "test.buildid"), "wb") as f:
                 f.write(b'\x00'*20)
-            script = archive.download(None, "test.buildid", "result.tgz")
+            script = archive.download(DummyStep(), "test.buildid", "result.tgz")
             callJenkinsScript(script, workspace)
 
 class TestCustomArchive(BaseTester, TestCase):
