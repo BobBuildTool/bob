@@ -650,7 +650,8 @@ class CoreStep(CoreItem):
 
     def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
         h = hasher()
-        sandbox = self.getSandbox(forceSandbox)
+        sandbox = not self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
+            self.getSandbox(forceSandbox)
         if sandbox:
             d = calculate(sandbox.coreStep)
             if d is None: return None
@@ -848,7 +849,8 @@ class Step:
 
     def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
         h = hasher()
-        sandbox = self.getSandbox(forceSandbox)
+        sandbox = not self.__package.getRecipe().getRecipeSet().sandboxInvariant and \
+            self.getSandbox(forceSandbox)
         if sandbox:
             d = calculate(sandbox.getStep())
             if d is None: return None
@@ -889,7 +891,8 @@ class Step:
 
     async def getDigestCoro(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
         h = hasher()
-        sandbox = self.getSandbox(forceSandbox)
+        sandbox = not self.__package.getRecipe().getRecipeSet().sandboxInvariant and \
+            self.getSandbox(forceSandbox)
         if sandbox:
             [d] = await calculate([sandbox.getStep()])
             if d is None: return None
