@@ -26,6 +26,11 @@ ERROR_UPLOAD_ARTIFACT = b'\x03'*20
 ERROR_DOWNLOAD_ARTIFACT = b'\x04'*20
 BROKEN_ARTIFACT = b'\xba\xdc\x0f\xfe'*5
 
+TAINTED_ARTIFACT = b'\x05'*20
+TAINTED_ARTIFACT_FP_STR = "a4380269bf9d4679ba39fed110b70a25ee78c457" # sha1(b'Bob\n')
+TAINTED_ARTIFACT_FP_BIN = bytes.fromhex(TAINTED_ARTIFACT_FP_STR)
+TAINTED_ARTIFACT_SUFFIX = "-"+TAINTED_ARTIFACT_FP_STR +".tgz"
+
 UPLOAD1_ARTIFACT = b'\x10'*20
 UPLOAD2_ARTIFACT = b'\x11'*20
 
@@ -54,9 +59,9 @@ def callJenkinsScript(script, workspace):
 
 class BaseTester:
 
-    def __createArtifact(self, bid, version="1"):
+    def __createArtifact(self, bid, version="1", suffix=".tgz"):
         bid = hexlify(bid).decode("ascii")
-        name = os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.tgz")
+        name = os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1" + suffix)
         os.makedirs(os.path.dirname(name), exist_ok=True)
         return self.__createArtifactByName(name, version)
 
@@ -82,9 +87,9 @@ class BaseTester:
             f.write(b'\x00'*20)
         return name
 
-    def __testArtifact(self, bid):
+    def __testArtifact(self, bid, suffix=".tgz"):
         bid = hexlify(bid).decode("ascii")
-        artifact = os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.tgz")
+        artifact = os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1" + suffix)
         return self.__testArtifactByName(artifact)
 
     def __testArtifactByName(self, artifact):
@@ -158,6 +163,7 @@ class BaseTester:
         # add artifacts
         self.dummyFileName = self.__createArtifact(DOWNLOAD_ARITFACT)
         self.__createArtifact(WRONG_VERSION_ARTIFACT, "0")
+        self.__createArtifact(TAINTED_ARTIFACT, suffix=TAINTED_ARTIFACT_SUFFIX)
         self.__createBuildId(DOWNLOAD_ARITFACT)
 
         # create ERROR_DOWNLOAD_ARTIFACT that is there but cannot be opened
@@ -315,6 +321,14 @@ class BaseTester:
             with self.assertRaises(BuildError):
                 run(archive.downloadPackage(DummyStep(), WRONG_VERSION_ARTIFACT, b'', audit, content))
 
+        # tainted artifact
+        with TemporaryDirectory() as tmp:
+            audit = os.path.join(tmp, "audit.json.gz")
+            content = os.path.join(tmp, "workspace")
+            self.assertTrue(run(archive.downloadPackage(DummyStep(),
+                TAINTED_ARTIFACT, TAINTED_ARTIFACT_FP_BIN, audit, content)))
+            self.__testWorkspace(audit, content)
+
     def testUploadPackageNormal(self):
         """Local upload tests"""
 
@@ -342,6 +356,10 @@ class BaseTester:
             bid = UPLOAD2_ARTIFACT
             run(archive.uploadPackage(DummyStep(), bid, b'', audit, content))
             self.__testArtifact(bid)
+
+            # tainted artifact
+            run(archive.uploadPackage(DummyStep(), bid, TAINTED_ARTIFACT_FP_BIN, audit, content))
+            self.__testArtifact(bid, TAINTED_ARTIFACT_SUFFIX)
 
             # Provoke upload failure
             with self.assertRaises(BuildError):
@@ -395,6 +413,15 @@ class BaseTester:
                 with open(os.path.join(workspace, "result.tgz"), "rb") as g:
                     self.assertEqual(f.read(), g.read())
 
+        with TemporaryDirectory() as workspace:
+            with open(os.path.join(workspace, "test.buildid"), "wb") as f:
+                f.write(TAINTED_ARTIFACT)
+            with open(os.path.join(workspace, "test.fingerprint"), "w") as f:
+                f.write(TAINTED_ARTIFACT_FP_STR)
+            script = archive.download(DummyStep(), "test.buildid", "test.fingerprint", "result.tgz")
+            callJenkinsScript(script, workspace)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "result.tgz")))
+
     def testUploadJenkinsNormal(self):
         """Jenkins upload tests"""
 
@@ -406,6 +433,8 @@ class BaseTester:
             bid = b'\x01'*20
             with open(os.path.join(tmp, "test.buildid"), "wb") as f:
                 f.write(bid)
+            with open(os.path.join(tmp, "test.fingerprint"), "w") as f:
+                f.write(TAINTED_ARTIFACT_FP_STR)
             self.__createArtifactByName(os.path.join(tmp, "result.tgz"))
 
             # upload artifact
@@ -414,6 +443,11 @@ class BaseTester:
 
             # test that artifact was uploaded correctly
             self.__testArtifact(bid)
+
+            # upload the same as tainted artifact and test that
+            script = archive.upload(DummyStep(), "test.buildid", "test.fingerprint", "result.tgz")
+            callJenkinsScript(script, tmp)
+            self.__testArtifact(bid, TAINTED_ARTIFACT_SUFFIX)
 
             # upload live build-id
             script = archive.uploadJenkinsLiveBuildId(None, "test.buildid", "test.buildid")
