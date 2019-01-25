@@ -5,6 +5,7 @@
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError
+from .fingerprints import mangleFingerprints
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
 from .state import BobState
@@ -36,6 +37,7 @@ warnDepends = WarnOnce("The same package is named multiple times as dependency!"
     help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
 warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
 warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
+warnFingerprint = Warn("The 'fingerprint' property is ignored when the 'allRelocatable' policy is unset or off.")
 
 def overlappingPaths(p1, p2):
     p1 = os.path.normcase(os.path.normpath(p1)).split(os.sep)
@@ -397,7 +399,7 @@ class CoreItem(metaclass=ABCMeta):
 
 
 class AbstractTool:
-    __slots__ = ("path", "libs", "netAccess", "environment")
+    __slots__ = ("path", "libs", "netAccess", "environment", "fingerprint")
 
     def __init__(self, spec):
         if isinstance(spec, str):
@@ -405,11 +407,13 @@ class AbstractTool:
             self.libs = []
             self.netAccess = False
             self.environment = {}
+            self.fingerprint = ""
         else:
             self.path = spec['path']
             self.libs = spec.get('libs', [])
             self.netAccess = spec.get('netAccess', False)
             self.environment = spec.get('environment', {})
+            self.fingerprint = spec.get('fingerprint', "")
 
     def prepare(self, coreStepRef, env):
         """Create concrete tool for given step."""
@@ -417,21 +421,22 @@ class AbstractTool:
         libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
         environment = { k : env.substitute(v, "provideTools::environment::"+k)
             for k, v in self.environment.items() }
-        return CoreTool(coreStepRef, path, libs, self.netAccess, environment)
+        return CoreTool(coreStepRef, path, libs, self.netAccess, environment, self.fingerprint)
 
 class CoreTool(CoreItem):
-    __slots__ = ("coreStep", "path", "libs", "netAccess", "environment")
+    __slots__ = ("coreStep", "path", "libs", "netAccess", "environment", "fingerprint")
 
-    def __init__(self, coreStep, path, libs, netAccess, environment):
+    def __init__(self, coreStep, path, libs, netAccess, environment, fingerprint):
         self.coreStep = coreStep
         self.path = path
         self.libs = libs
         self.netAccess = netAccess
         self.environment = environment
+        self.fingerprint = fingerprint
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
-        return Tool(step, self.path, self.libs, self.netAccess, self.environment)
+        return Tool(step, self.path, self.libs, self.netAccess, self.environment, self.fingerprint)
 
 class Tool:
     """Representation of a tool.
@@ -440,14 +445,15 @@ class Tool:
     and some optional relative library paths.
     """
 
-    __slots__ = ("step", "path", "libs", "netAccess", "environment")
+    __slots__ = ("step", "path", "libs", "netAccess", "environment", "fingerprint")
 
-    def __init__(self, step, path, libs, netAccess, environment):
+    def __init__(self, step, path, libs, netAccess, environment, fingerprint):
         self.step = step
         self.path = path
         self.libs = libs
         self.netAccess = netAccess
         self.environment = environment
+        self.fingerprint = fingerprint
 
     def __repr__(self):
         return "Tool({}, {}, {})".format(repr(self.step), self.path, self.libs)
@@ -713,6 +719,8 @@ class CoreStep(CoreItem):
             for (key, val) in sorted(tool.environment.items()):
                 h.update(struct.pack("<II", len(key), len(val)))
                 h.update((key+val).encode('utf8'))
+            h.update(struct.pack("<I", len(tool.fingerprint)))
+            h.update(tool.fingerprint.encode('utf8'))
         # provideDeps
         providedDeps = self.providedDeps
         h.update(struct.pack("<I", len(providedDeps)))
@@ -1308,10 +1316,10 @@ corePackageInternal = CorePackageInternal()
 class CorePackage:
     __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
         "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "pkgId")
+        "pkgId", "fingerprint")
 
     def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox,
-                 directDepSteps, indirectDepSteps, states, pkgId):
+                 directDepSteps, indirectDepSteps, states, pkgId, fingerprint):
         self.recipe = recipe
         self.tools = tools
         self.sandbox = sandbox
@@ -1320,6 +1328,7 @@ class CorePackage:
         self.indirectDepSteps = indirectDepSteps
         self.states = states
         self.pkgId = pkgId
+        self.fingerprint = fingerprint
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter):
         tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -1498,6 +1507,15 @@ class Package(object):
     def isRelocatable(self):
         """Returns True if the packages is relocatable."""
         return self.__corePackage.recipe.isRelocatable()
+
+    def _getFingerprintScript(self):
+        ret = []
+        fingerprint = self.__corePackage.fingerprint
+        if fingerprint: ret.append(fingerprint)
+        packageStep = self.getPackageStep()
+        ret.extend(t.fingerprint for n,t in sorted(packageStep.getTools().items())
+                                         if t.fingerprint )
+        return mangleFingerprints(joinScripts(ret), packageStep.getEnv())
 
 
 # FIXME: implement this on our own without the Template class. How to do proper
@@ -1823,6 +1841,8 @@ class Recipe(object):
         self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts)
         self.__build = incHelper.resolve(recipe.get("buildScript"), "buildScript")
         self.__package = incHelper.resolve(recipe.get("packageScript"), "packageScript")
+        self.__fingerprint = recipe.get("fingerprint")
+        self.__fingerprintIf = recipe.get("fingerprintIf")
 
         # Consider checkout deterministic by default if no checkout script is
         # involved.
@@ -1931,6 +1951,11 @@ class Recipe(object):
                 joinScripts([cls.__package[0], self.__package[0]]),
                 joinScripts([cls.__package[1], self.__package[1]], "\n")
             )
+            self.__fingerprint = joinScripts([cls.__fingerprint, self.__fingerprint], "\n")
+            if self.__fingerprintIf is None:
+                self.__fingerprintIf = cls.__fingerprintIf
+            elif cls.__fingerprintIf is not None:
+                self.__fingerprintIf = "$(and,{},{})".format(cls.__fingerprintIf, self.__fingerprintIf)
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
 
@@ -1963,6 +1988,12 @@ class Recipe(object):
                 raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern))
             providedDeps |= l
         self.__provideDeps = providedDeps
+
+        # warn about unsupported combinations
+        if (any(t.fingerprint for t in self.__provideTools.values()) or
+            self.__fingerprint is not None) and \
+           not self.__recipeSet.getPolicy('allRelocatable'):
+            warnFingerprint.warn(self.__packageName)
 
     def getRecipeSet(self):
         return self.__recipeSet
@@ -2183,11 +2214,22 @@ class Recipe(object):
         env.touch(self.__packageVars | self.__packageVarsWeak)
         tools.touch(self.__toolDepPackage)
 
+        # check if fingerprinting has to be applied
+        if self.__fingerprint:
+            # By default apply fingerprint. Otherwise evaluate boolean expression.
+            if self.__fingerprintIf is None:
+                doFingerprint = True
+            else:
+                doFingerprint = env.evaluate(self.__fingerprintIf, "fingerprintIf")
+            fingerprint = self.__fingerprint if doFingerprint else ""
+        else:
+            fingerprint = ""
+
         # create package
         # touchedTools = tools.touchedKeys()
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
         p = CorePackage(self, tools.detach(), diffTools, sandbox, diffSandbox,
-                directPackages, indirectPackages, states, uidGen())
+                directPackages, indirectPackages, states, uidGen(), fingerprint)
 
         # optional checkout step
         if self.__checkout != (None, None, [], []):
@@ -2984,6 +3026,7 @@ class RecipeSet:
                         schema.Optional('environment') : schema.Schema(
                             { varNameSchema : str },
                             error="provideTools: invalid 'environment' property"),
+                        schema.Optional('fingerprint') : str,
                     })
                 )
             }),
@@ -3003,6 +3046,8 @@ class RecipeSet:
             schema.Optional('relocatable') : bool,
             schema.Optional('buildNetAccess') : bool,
             schema.Optional('packageNetAccess') : bool,
+            schema.Optional('fingerprint') : str,
+            schema.Optional('fingerprintIf') : str,
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,

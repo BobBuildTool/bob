@@ -45,6 +45,20 @@ requiredPlugins = {
 JENKINS_SCRIPT_START = "cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'"
 JENKINS_SCRIPT_END = "BOB_JENKINS_SANDBOXED_SCRIPT"
 
+# Template for fingerprint script execution. Run the script in a dedicated
+# temporary directory. Use a sub-shell to reliaby remove the temporary
+# directory even if script fails.
+FINGERPRINT_SCRIPT_TEMPLATE = """\
+(
+trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d)
+cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | env {ENV} BOB_CWD="$T" bash -x | sha1sum | cut -d ' ' -f1 > {OUTPUT}
+cd $BOB_CWD
+{SCRIPT}
+BOB_JENKINS_FINGERPRINT_SCRIPT
+)
+"""
+
 SHARED_GENERATION = '-1'
 
 def variantIdToName(vid):
@@ -415,6 +429,11 @@ class JenkinsJob:
         cmd.append("$(hexdump -v -e '/1 \"%02x\"' " + JenkinsJob._buildIdName(step) + ")")
         cmd.append("$(echo \"#{}\" | bob-hash-engine --state .state | hexdump -v -e '/1 \"%02x\"')"
                     .format(step.getWorkspacePath()))
+        fingerprint = self._fingerprintName(step.getPackage())
+        if isinstance(fingerprint, bytes):
+            cmd.append(asHexStr(fingerprint))
+        elif isinstance(fingerprint, str):
+            cmd.append("$(< {})".format(quote(fingerprint)))
 
         # wrap lines
         ret = []
@@ -475,6 +494,32 @@ class JenkinsJob:
     @staticmethod
     def _canaryName(d):
         return ".state/" + d.getWorkspacePath().replace('/', '_') + ".canary"
+
+    def _fingerprintName(self, package):
+        """Determine static fingerprint or return file name where it is stored.
+
+        Depending on the fingerprint state returns the following values:
+
+          * None if no fingerprint is needed
+          * bytes() if the fingerprint is static
+          * str() with the name of the file where the fingerprint is stored
+
+        See bob.cmds.build.builder.LocalBuilder._getFingerprint() for the master
+        algorithm.
+        """
+        if not self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
+            return None
+
+        script = package._getFingerprintScript()
+        if not script and package.isRelocatable():
+            return None
+
+        packageStep = package.getPackageStep()
+        sandbox = packageStep.getSandbox()
+        if sandbox is not None:
+            return sandbox.getStep().getVariantId()
+
+        return packageStep.getWorkspacePath().replace('/', '_') + ".fingerprint"
 
     def dumpXML(self, orig, nodes, windows, credentials, clean, options, date, authtoken):
         if orig:
@@ -610,6 +655,25 @@ class JenkinsJob:
         prepareCmds.extend(wrapCommandArguments("pruneUnused", sorted(whiteList)))
         prepareCmds.append("set -x")
 
+        fingerprints = set()
+        def ensureFingerprint(package):
+            fingerprint = self._fingerprintName(package)
+            if isinstance(fingerprint, str) and (fingerprint not in fingerprints):
+                # ok, we really have to compute it
+                script = package._getFingerprintScript()
+                if not package.isRelocatable():
+                    script += "\necho -n " + quote(package.getPackageStep().getExecPath())
+                envWhiteList = package.getRecipe().getRecipeSet().envWhiteList()
+                envWhiteList |= set(['PATH'])
+                env = ["-i"]
+                env.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
+                prepareCmds.append("\n# fingerprint " + package.getName())
+                prepareCmds.append(FINGERPRINT_SCRIPT_TEMPLATE.format(
+                    ENV=" ".join(env), SCRIPT=script, OUTPUT=quote(fingerprint)))
+                fingerprints.add(fingerprint)
+
+            return fingerprint
+
         deps = sorted(self.__deps.values())
         if deps:
             policy = options.get("jobs.policy", "stable")
@@ -712,9 +776,12 @@ class JenkinsJob:
                                    SHARED=sharedDir,
                                    DOWNLOAD_CMD=self.__archive.download(d,
                                                     JenkinsJob._buildIdName(d),
+                                                    ensureFingerprint(d.getPackage()),
                                                     JenkinsJob._tgzName(d))))
                     else:
-                        prepareCmds.append(self.__archive.download(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d)))
+                        prepareCmds.append(self.__archive.download(d,
+                            JenkinsJob._buildIdName(d), ensureFingerprint(d.getPackage()),
+                            JenkinsJob._tgzName(d)))
 
             # extract deps
             prepareCmds.append("\n# extract deps\n# ============")
@@ -751,9 +818,10 @@ class JenkinsJob:
                         AUDIT=JenkinsJob._auditName(d),
                         WSP_PATH=d.getWorkspacePath()))
 
+        # Create first "prepare" shell action. The actual command is set at the
+        # end because the prepare commands are generated throughout the
+        # generating process.
         prepare = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
-        xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
-            prepareCmds)
 
         # checkout steps
         checkoutSCMs = []
@@ -815,10 +883,14 @@ class JenkinsJob:
         # download if possible
         downloadCmds = []
         for d in sorted(self.__packageSteps.values()):
-            # only download non-relocatable packages if built in sandbox
-            if not d.isRelocatable() and (d.getSandbox() is None):
+            # Prohibit up-/download if we are on the old allRelocatable policy
+            # and the package is not explicitly relocatable and built outside
+            # the sandbox.
+            if not self.__recipe.getRecipeSet().getPolicy('allRelocatable') and \
+               not d.isRelocatable() and (d.getSandbox() is None):
                 continue
-            cmd = self.__archive.download(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
+            cmd = self.__archive.download(d, JenkinsJob._buildIdName(d),
+                ensureFingerprint(d.getPackage()), JenkinsJob._tgzName(d))
             if not cmd: continue
             downloadCmds.append(cmd)
         if downloadCmds:
@@ -846,6 +918,7 @@ class JenkinsJob:
         # package steps
         publish = []
         for d in sorted(self.__packageSteps.values()):
+            ensureFingerprint(d.getPackage())
             package = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
@@ -859,8 +932,11 @@ class JenkinsJob:
                     TGZ=JenkinsJob._tgzName(d),
                     AUDIT=JenkinsJob._auditName(d),
                     WSP_PATH=d.getWorkspacePath()),
-                "" if not d.isRelocatable() and (d.getSandbox() is None) and (options.get("artifacts.copy", "jenkins") == "jenkins")
-                    else self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
+                "" if not self.__recipe.getRecipeSet().getPolicy('allRelocatable') and \
+                      not d.isRelocatable() and \
+                      (d.getSandbox() is None) and \
+                      (options.get("artifacts.copy", "jenkins") == "jenkins")
+                    else self.__archive.upload(d, JenkinsJob._buildIdName(d), ensureFingerprint(d.getPackage()), JenkinsJob._tgzName(d))
             ])
             if options.get("artifacts.copy", "jenkins") == "jenkins":
                 publish.append(JenkinsJob._tgzName(d))
@@ -914,6 +990,10 @@ class JenkinsJob:
         # add authtoken if set in options
         if auth:
             auth.text = authtoken
+
+        # finally set prepare command
+        xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
+            prepareCmds)
 
         return xml.etree.ElementTree.tostring(root, encoding="UTF-8")
 

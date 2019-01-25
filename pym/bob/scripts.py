@@ -289,6 +289,7 @@ def auditEngine():
     parser.add_argument("variantID")
     parser.add_argument("buildID")
     parser.add_argument("resultHash")
+    parser.add_argument("fingerprint", nargs='?', default="")
     args = parser.parse_args()
 
     def cmd():
@@ -297,7 +298,7 @@ def auditEngine():
         import os
         try:
             gen = Audit.create(bytes.fromhex(args.variantID), bytes.fromhex(args.buildID),
-                bytes.fromhex(args.resultHash))
+                bytes.fromhex(args.resultHash), bytes.fromhex(args.fingerprint))
         except ValueError:
             raise BuildError("Invalid digest argument")
         if args.env is not None: gen.setEnv(args.env)
