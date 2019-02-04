@@ -695,7 +695,10 @@ esac
 
         async def wrapTask():
             try:
+                task = asyncio.Task.current_task()
+                self.__allTasks.add(task)
                 ret = await coro()
+                self.__allTasks.remove(task)
                 if tracked:
                     # Only remove us from the task list if we finished successfully.
                     # Other concurrent tasks might want to cook the same step again.
@@ -759,6 +762,7 @@ esac
             self.__restart = False
             self.__cookTasks = {}
             self.__buildIdTasks = {}
+            self.__allTasks = set()
             self.__buildErrors = []
             self.__runners = asyncio.BoundedSemaphore(self.__jobs)
 
@@ -778,6 +782,15 @@ esac
                     loop.remove_signal_handler(signal.SIGINT)
                 except NotImplementedError:
                     pass # not implemented on windows
+
+            # Reap all remaining tasks to prevent Python warnings about ignored
+            # exceptions or that tasks are still pending. We don't care about
+            # their result. This is already handled via __buildErrors.
+            for i in self.__allTasks: i.cancel()
+            if self.__allTasks:
+                loop.run_until_complete(asyncio.gather(*self.__allTasks,
+                                                       return_exceptions=True))
+            self.__allTasks.clear()
 
             if len(self.__buildErrors) > 1:
                 raise MultiBobError(self.__buildErrors)
