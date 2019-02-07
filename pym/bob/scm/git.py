@@ -313,16 +313,17 @@ class GitScm(Scm):
                 status.add(ScmTaint.modified, joinLines("> modified:",
                     indent(output, '   ')))
 
-            # The following shows unpushed commits on all local branches.
+            # The following shows all unpushed commits reachable by any ref
+            # (local branches, stash, detached HEAD, etc).
             # Exclude HEAD if the configured branch is checked out to not
             # double-count them. Does not mark the SCM as dirty.
-            what = ['--branches', '--not', '--remotes']
+            what = ['--all', '--not', '--remotes']
             if onCorrectBranch: what.append('HEAD')
             output = self.callGit(workspacePath, 'log', '--oneline', '--decorate',
                 *what)
             if output:
                 status.add(ScmTaint.unpushed_local,
-                    joinLines("> unpushed banches:", indent(output, '   ')))
+                    joinLines("> unpushed commits:", indent(output, '   ')))
 
         except BuildError as e:
             status.add(ScmTaint.error, e.slogan)
