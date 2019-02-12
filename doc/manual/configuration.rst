@@ -331,6 +331,33 @@ Plugins may provide additional functions as described in
 empty string, "0" and "false" (case insensitive) are considered as logical
 "false".  Any other value is considered as "true".
 
+Host dependency fingerprinting
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Bob closely tracks the input of all packages. This includes all checked out
+sources and the dependencies to other packages. If anything is changed Bob can
+accurately determine which packages have to be rebuilt. This information is
+also used to find matching binary artifacts. If a recipe depends on resources
+that are outside of the declared recipes the situation changes, though. Bob
+cannot infer what external resources are actually used and how these influence
+the build result.
+
+A common host dependency that "taints" the build result is the host compiler.
+While the host compiler typically does not change it limits the portablilty
+across machines in the form of binary artifacts. The dependency on the host
+architecture is obvious but also the libc has to be considered. This can be
+extended to other libaries that might be used by the recipe.
+
+To let Bob know about the usage and state of an external host resource a
+fingerprint script can be used in the recipe. The ouput of the fingerprint
+script is used to "tag" the created package. If the fingerprint changes the
+package is rebuilt. The fingerprint is also attached to the binary artifact.
+To download a binary artifact of a package the fingerprint has to match.
+
+See :ref:`configuration-recipes-fingerprint` and
+:ref:`configuration-recipes-provideTools` where fingerprint scripts can be
+configured.
+
 Recipe and class keywords
 -------------------------
 
@@ -828,6 +855,75 @@ is accepted as sandbox which would also be the default if left out.
    might be removed completely.
 
 
+.. _configuration-recipes-fingerprint:
+
+fingerprint
+~~~~~~~~~~~
+
+Type: String
+
+The fingerprint script is executed before a package is built or downloaded.
+The script is supposed to gather information about whatever external resource
+is used in the recipe and output that in a stable format. The actual output is
+irrelevant to Bob as long as it detects all relevant external influences of the
+build result and that subsequent executions of the script generate the same
+output if the external components have not changed.
+
+Bob will incrementally rebuild the package whenever the fingerprint script
+output changes. The output of the script is also used to tag binary artifacts.
+An artifacts will only be downloaded if the fingerprint script generated the
+same output. This enables Bob to prevent false sharing of binary artifacts
+across otherise incompatible machines.
+
+The fingerprint script is executed in an empty temporary directory. It does not
+have access to any dependenices of the recipe nor to the checked out sources.
+All environment variables of the package that were declared in the recipe (see
+:ref:`configuration-recipes-vars` ) are set. The usual bash options are applied
+(``nounset``, ``errexit``, ``pipefail``) too. If the script returns with a
+non-zero exit status it will fail the build. The output on stderr is ignored
+but will be displayed in the error message if the script fails. The scripts of
+inherited classes are concatenated. Any fingerprint scripts that are defined by
+used tools (see :ref:`configuration-recipes-provideTools`) are concatenated too.
+
+For common fingerprint tasks the following built-in functions are provided by
+Bob:
+
+``bob-libc-version``
+    Checks the host architecture together with the type and version of the libc
+    library. The C-compiler that is used can be configured either with the
+    first parameter of the function or it will use the ``CC`` environment
+    variable. If both are not set the ``cc`` command is used.
+
+    This helper should typically be used with the host compiler recipe.
+
+``bob-libstdc++-version``
+    Checks the host architecture together with the type and version of the C++
+    standard library. The C++-compiler that is used can be configured either
+    with the first parameter of the function or it will use the ``CXX``
+    environment variable. If both are not set the ``c++`` command is used.
+
+    This helper should typically be used with the host compiler recipe.
+
+These helpers can be used in the fingerprint script. Their actual
+implementation and output may change in the future as more systems are
+supported by Bob.
+
+fingerprintIf
+~~~~~~~~~~~~~
+
+Type: String
+
+This string is evaluated as boolean expression. The fingerprint of a package is
+only calculated if the string is interpreted as true. It can be used e.g. to
+apply a fingerprint only if the package is built for the host and not
+cross-compiled.
+
+Example::
+
+   fingerprintIf: "$(eq,${TOOLCHAIN},host)"
+
+If not given it defaults to ``true``.
+
 inherit
 ~~~~~~~
 
@@ -976,6 +1072,8 @@ consuming recipes. Example::
          environment:
             CC: gcc
             LD: ld
+         fingerprint: |
+            bob-libc-version gcc
 
 The ``path`` attribute is always needed.  The ``libs`` attribute, if present,
 must be a list of paths to needed shared libraries. Any path that is specified
@@ -997,6 +1095,12 @@ used. This allows for much more fine-grained variable provisioning than
 recipe they must define distinct variables because no particular order between
 tools is defined. The values defined in this attribute are subject to variable
 substitution.
+
+The ``fingerprint`` attribute defines a fingerprint script like in a normal
+recipe by :ref:`configuration-recipes-fingerprint`. A fingerprint script
+defined by a tool is implicitly added to the fingerprint scripts of all recipes
+that use the particular tool. Use it to automatically apply a fingerprint to
+all recipes whose result will depend on the host environment by using the tool.
 
 If no attributes except ``path`` are present the declaration may be abbreviated
 by giving the relative path directly::
