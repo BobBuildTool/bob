@@ -3,71 +3,115 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ..audit import Audit
 from ..errors import BobError
 from ..utils import binStat, asHexStr
-from ..audit import Audit
-from functools import lru_cache
 import argparse
-import os, os.path
-import re
-import dbm
-import pickle
-import tarfile
 import gzip
 import json
+import os, os.path
+import pickle
 import pyparsing
+import re
+import sqlite3
+import tarfile
 
 # need to enable this for nested expression parsing performance
 pyparsing.ParserElement.enablePackrat()
 
 class ArchiveScanner:
+    CUR_VERSION = 1
+
     def __init__(self):
         self.__dirSchema = re.compile(r'[0-9a-zA-Z]{2}')
-        self.__archiveSchema = re.compile(r'[0-9a-zA-Z]{36}-1.tgz')
+        self.__archiveSchema = re.compile(r'[0-9a-zA-Z]{36}-1(-[0-9a-zA-Z]{40})?.tgz')
         self.__db = None
+        self.__cleanup = False
 
     def __enter__(self):
         try:
-            self.__db = dbm.open(".bob-adb", 'c')
-        except dbm.error as e:
+            self.__con = sqlite3.connect(".bob-archive.sqlite3", isolation_level=None)
+            self.__db = self.__con.cursor()
+            self.__db.execute("""\
+                CREATE TABLE IF NOT EXISTS meta(
+                    key TEXT PRIMARY KEY NOT NULL,
+                    value
+                )""")
+            self.__db.execute("SELECT value FROM meta WHERE key='vsn'")
+            vsn = self.__db.fetchone()
+            if vsn is None:
+                self.__db.executescript("""
+                    CREATE TABLE files(
+                        bid BLOB NOT NULL,
+                        taint BLOB NOT NULL,
+                        stat BLOB,
+                        vars BLOB,
+                        PRIMARY KEY(bid, taint)
+                    );
+                    CREATE TABLE refs(
+                        bid BLOB NOT NULL,
+                        ref BLOB NOT NULL,
+                        PRIMARY KEY (bid, ref)
+                    );
+                    """)
+                self.__db.execute("INSERT INTO meta VALUES ('vsn', ?)", (self.CUR_VERSION,))
+            elif vsn[0] > self.CUR_VERSION:
+                raise BobError("Archive database was created by a newer version of Bob!")
+        except sqlite3.Error as e:
             raise BobError("Cannot open cache: " + str(e))
         return self
 
     def __exit__(self, *exc):
         try:
+            if self.__cleanup:
+                # prune references where files have been removed
+                self.__db.execute("""\
+                    DELETE FROM refs WHERE bid NOT IN (
+                        SELECT bid FROM files
+                    )""")
             self.__db.close()
-        except dbm.error as e:
+            self.__con.close()
+        except sqlite3.Error as e:
             raise BobError("Cannot close cache: " + str(e))
         self.__db = None
         return False
 
     def scan(self, verbose):
         try:
+            self.__db.execute("BEGIN")
             for l1 in os.listdir("."):
                 if not self.__dirSchema.fullmatch(l1): continue
                 for l2 in os.listdir(l1):
                     if not self.__dirSchema.fullmatch(l2): continue
                     l2 = os.path.join(l1, l2)
                     for l3 in os.listdir(l2):
-                        if not self.__archiveSchema.fullmatch(l3): continue
-                        self.__scan(os.path.join(l2, l3), verbose)
+                        m = self.__archiveSchema.fullmatch(l3)
+                        if not m: continue
+                        taint = m.group(1) and m.group(1)[1:]
+                        self.__scan(os.path.join(l2, l3), taint, verbose)
         except OSError as e:
             raise BobError("Error scanning archive: " + str(e))
+        finally:
+            self.__db.execute("END")
 
-    def __scan(self, fileName, verbose):
+    def __scan(self, fileName, taint, verbose):
         try:
             st = binStat(fileName)
             bid = bytes.fromhex(fileName[0:2] + fileName[3:5] + fileName[6:42])
+            taint = bytes.fromhex(taint) if taint else b''
 
-            # validate entry in caching db
-            if bid in self.__db:
-                info = pickle.loads(self.__db[bid])
-                if info['stat'] == st:
-                    return
-                del self.__db[bid]
+            # Validate entry in caching db. Delete entry if stat has changed.
+            # The database will clean the 'refs' table automatically.
+            self.__db.execute("SELECT stat FROM files WHERE bid=? AND taint=?",
+                                (bid, taint))
+            cachedStat = self.__db.fetchone()
+            if cachedStat is not None:
+                if cachedStat[0] == st: return
+                self.__db.execute("DELETE FROM files WHERE bid=? AND taint=?",
+                    (bid, taint))
 
             # read audit trail
-            if verbose: print(fileName)
+            if verbose: print("scan", fileName)
             with tarfile.open(fileName, errorlevel=1) as tar:
                 # validate
                 if tar.pax_headers.get('bob-archive-vsn') != "1":
@@ -89,41 +133,42 @@ class ArchiveScanner:
 
             # import data
             artifact = audit.getArtifact()
-            self.__db[bid] = pickle.dumps({
-                'stat' : st,
-                'refs' : audit.getReferencedBuildIds(),
-                'vars' : {
-                    'meta' : artifact.getMetaData(),
-                    'build' : artifact.getBuildInfo(),
-                    'metaEnv' : artifact.getMetaEnv(),
-                }
+            vrs = pickle.dumps({
+                'meta' : artifact.getMetaData(),
+                'build' : artifact.getBuildInfo(),
+                'metaEnv' : artifact.getMetaEnv(),
             })
+            self.__db.execute("INSERT INTO files VALUES (?, ?, ?, ?)",
+                (bid, taint, st, vrs))
+            self.__db.executemany("INSERT OR IGNORE INTO refs VALUES (?, ?)",
+                [ (bid, r) for r in audit.getReferencedBuildIds() ])
         except tarfile.TarError as e:
             raise BobError("Cannot read {}: {}".format(fileName, str(e)))
         except OSError as e:
             raise BobError(str(e))
 
-    def remove(self, bid):
-        try:
-            del self.__db[bid]
-        except KeyError:
-            pass
-
-    @lru_cache(maxsize=16)
-    def __getEntry(self, bid):
-        try:
-            return pickle.loads(self.__db[bid])
-        except KeyError:
-            return { 'refs' : [], 'vars' : {} }
+    def remove(self, bid, taint):
+        self.__cleanup = True
+        self.__db.execute("DELETE FROM files WHERE bid=? AND taint=?",
+            (bid, taint))
 
     def getBuildIds(self):
-        return self.__db.keys()
+        self.__db.execute("SELECT bid,taint FROM files")
+        return self.__db.fetchall()
 
     def getReferencedBuildIds(self, bid):
-        return self.__getEntry(bid)['refs']
+        self.__db.execute("SELECT ref FROM refs WHERE bid=?",
+            (bid,))
+        return [ r[0] for r in self.__db.fetchall() ]
 
-    def getVars(self, bid):
-        return self.__getEntry(bid)['vars']
+    def getVars(self, bid, taint):
+        self.__db.execute("SELECT vars FROM files WHERE bid=? AND taint=?",
+            (bid, taint))
+        v = self.__db.fetchone()
+        if v:
+            return pickle.loads(v[0])
+        else:
+            return {}
 
 
 class Base:
@@ -237,7 +282,7 @@ class VarReference(Base):
             for i in self.path:
                 data = data[i]
         except:
-            self.barf("invalid field reference")
+            return None
         if not isinstance(data, str):
             self.barf("invalid field reference")
         return data
@@ -296,9 +341,9 @@ def doArchiveClean(argv):
     with scanner:
         if not args.noscan:
             scanner.scan(args.verbose)
-        for bid in scanner.getBuildIds():
+        for bid,taint in scanner.getBuildIds():
             if bid in retained: continue
-            if retainExpr.evalBool(scanner.getVars(bid)):
+            if retainExpr.evalBool(scanner.getVars(bid, taint)):
                 retained.add(bid)
                 todo = set(scanner.getReferencedBuildIds(bid))
                 while todo:
@@ -307,20 +352,23 @@ def doArchiveClean(argv):
                     retained.add(n)
                     todo.update(scanner.getReferencedBuildIds(n))
 
-        for bid in scanner.getBuildIds():
+        for bid,taint in scanner.getBuildIds():
             if bid in retained: continue
             victim = asHexStr(bid)
-            victim = os.path.join(victim[0:2], victim[2:4], victim[4:] + "-1.tgz")
+            victim = os.path.join(victim[0:2], victim[2:4],
+                victim[4:] + "-1" + ("-"+asHexStr(taint) if taint else "") + ".tgz")
             if args.dry_run:
                 print(victim)
             else:
                 try:
+                    if args.verbose:
+                        print("rm", victim)
                     os.unlink(victim)
                 except FileNotFoundError:
                     pass
                 except OSError as e:
                     raise BobError("Cannot remove {}: {}".format(victim, str(e)))
-                scanner.remove(bid)
+                scanner.remove(bid, taint)
 
 availableArchiveCmds = {
     "scan" : (doArchiveScan, "Scan archive for new artifacts"),
