@@ -242,6 +242,11 @@ New behavior
     The default value of the :ref:`configuration-recipes-relocatable` property
     is always ``True``.
 
+Starting with Bob 0.15 the new behavior will also enable fingerprinting if a
+fingerprint script has been defined. In case of a non-relocatable package the
+fingerprint will additionally encode the workspace path. This enables safe
+artifact exchange even outside of a sandbox.
+
 .. _policies-offlineBuild:
 
 offlineBuild
