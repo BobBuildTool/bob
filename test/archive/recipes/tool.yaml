@@ -1,0 +1,6 @@
+provideTools:
+    t:
+        path: "."
+        fingerprint: |
+            echo ${FINGERPRINT:-Bob}
+
