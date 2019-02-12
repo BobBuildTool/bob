@@ -1,0 +1,20 @@
+root: True
+
+depends:
+    - name: tool
+      use: [tools]
+
+buildTools: [t]
+buildScript: "true"
+
+multiPackage:
+    alpha:
+        metaEnvironment:
+            TYPE: alpha
+        packageScript: |
+            echo alpha > result.txt
+    bravo:
+        metaEnvironment:
+            TYPE: bravo
+        packageScript: |
+            echo bravo > result.txt
