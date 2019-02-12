@@ -1,0 +1,11 @@
+archive:
+    -
+        backend: file
+        path: "output"
+
+environment:
+    UNUSED: foo
+
+whitelist:
+    - FINGERPRINT_ROOT
+    - FINGERPRINT_TOOL

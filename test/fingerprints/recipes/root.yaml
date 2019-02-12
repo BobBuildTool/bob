@@ -1,0 +1,16 @@
+root: True
+
+depends:
+    - name: tool
+      use: [tools]
+
+fingerprint: |
+    echo "${FINGERPRINT_ROOT:-}"
+
+buildScript: |
+    date -Ins > result.txt
+
+packageVars: [UNUSED]
+packageTools: [tool]
+packageScript: |
+    cp $1/result.txt .
