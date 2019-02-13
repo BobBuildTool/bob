@@ -2066,9 +2066,9 @@ def doJenkinsSetOptions(recipes, argv):
     if options.get("artifacts.copy") not in [None, "archive", "jenkins"]:
         parser.error("Invalid option for artifacts.copy. Only 'archive' and 'jenkins' are allowed!")
     if options.get("artifacts.copy", "jenkins") == "archive":
-        if not args.upload:
+        if not config.get('upload', False):
             parser.error("Archive sharing can not be used without upload enabled! Exiting..")
-        if not args.download:
+        if not config.get('download', False):
             parser.error("Archive sharing can not be used without download enabled! Exiting..")
 
     BobState().setJenkinsConfig(args.name, config)
