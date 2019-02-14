@@ -304,7 +304,8 @@ class GitScm(Scm):
                         'refs/remotes/origin/'+self.__branch+'..HEAD')
                     if output:
                         status.add(ScmTaint.unpushed_main,
-                            joinLines("> unpushed commits:", indent(output, '   ')))
+                            joinLines("> unpushed commits on {}:".format(self.__branch),
+                                indent(output, '   ')))
                     onCorrectBranch = True
 
             # Check for modifications wrt. checked out commit
@@ -323,7 +324,7 @@ class GitScm(Scm):
                 *what)
             if output:
                 status.add(ScmTaint.unpushed_local,
-                    joinLines("> unpushed commits:", indent(output, '   ')))
+                    joinLines("> unpushed local commits:", indent(output, '   ')))
 
         except BuildError as e:
             status.add(ScmTaint.error, e.slogan)
