@@ -88,7 +88,17 @@ class UrlScm(Scm):
     def asScript(self):
         options = "-sSgLf"
         if not self.__sslVerify: options += "k"
-        ret = """
+        ret = ""
+        if self.__url[0] == '/':
+            # Local files: copy only if newer (u), target never is a directory (T)
+            tpl = """
+{HEADER}
+mkdir -p {DIR}
+cd {DIR}
+cp -uT {URL} {FILE}
+"""
+        else:
+            tpl = """
 {HEADER}
 mkdir -p {DIR}
 cd {DIR}
@@ -103,7 +113,8 @@ else
         mv $F {FILE}
     )
 fi
-""".format(HEADER=super().asScript(), DIR=quote(self.__dir), URL=quote(self.__url),
+"""
+        ret = tpl.format(HEADER=super().asScript(), DIR=quote(self.__dir), URL=quote(self.__url),
            FILE=quote(self.__fn), OPTIONS=options)
 
         if self.__digestSha1:
