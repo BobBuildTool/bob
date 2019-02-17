@@ -18,11 +18,27 @@ from .state import DevelopDirOracle
 
 __all__ = ['doStatus']
 
+# Flag to headline verbosity. The description is shown on the next level.
+FLAG_TO_VERBOSITY = {
+    ScmTaint.attic          : DEBUG,
+    ScmTaint.collides       : NORMAL,       # not modified, but will break the build
+    ScmTaint.error          : IMPORTANT,    # error, modified
+    ScmTaint.modified       : NORMAL,       # modified
+    ScmTaint.new            : DEBUG,
+    ScmTaint.overridden     : DEBUG,
+    ScmTaint.switched       : NORMAL,       # modified
+    ScmTaint.unknown        : NORMAL,       # cannot tell, could be modified
+    ScmTaint.unpushed_main  : NORMAL,       # modified
+    ScmTaint.unpushed_local : INFO,         # not modified but user may loose data
+}
+assert set(FLAG_TO_VERBOSITY.keys()) == set(ScmTaint)
+
 class PackagePrinter:
     def __init__(self, verbose, showClean, showOverrides, checkoutStep = None):
         self.verbose = verbose
+        self.flagVerbosity = FLAG_TO_VERBOSITY.copy()
         self.showClean = showClean
-        self.showOverrides = showOverrides
+        if showOverrides: self.flagVerbosity[ScmTaint.overridden] = NORMAL
         self.headerShown = checkoutStep is None
         self.checkoutStep = checkoutStep
 
@@ -36,29 +52,31 @@ class PackagePrinter:
         print(colorize("   STATUS {0: <4} {1}".format(flags, message), color))
 
     def show(self, status, dir):
+        detailedFlags = { flag for flag,severity in self.flagVerbosity.items()
+            if severity < self.verbose }
+
+        # Determine severity of headline. If showClean start directly at NORMAL
+        # level.
+        severity = NORMAL if self.showClean else DEBUG
+        for flag in status.flags:
+            severity = min(self.flagVerbosity[flag], severity)
+
         flags = str(status)
         if status.error:
-            severity = IMPORTANT
             color = ERROR
         elif status.dirty or (status.flags & {ScmTaint.unknown, ScmTaint.collides}):
-            severity = NORMAL
             color = WARNING
+        elif flags:
+            color = EXECUTED
         else:
-            color = EXECUTED if flags else DEFAULT
-            if (ScmTaint.overridden in status.flags) and self.showOverrides:
-                severity = NORMAL
-            elif self.showClean:
-                severity = NORMAL
-            else:
-                # otherwise show only with '-vv'
-                severity = DEBUG
+            color = DEFAULT
 
         if severity <= self.verbose:
             self.__printHeader()
             self.__printStatus(flags, dir, color)
-            # show detailed description on first '-v'
-            if (INFO <= self.verbose) and status.description:
-                for line in status.description.splitlines():
+            description = status.description(detailedFlags)
+            if description:
+                for line in description.splitlines():
                     print('   ' + line)
 
     def skipped(self):
