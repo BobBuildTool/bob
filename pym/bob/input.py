@@ -2517,6 +2517,7 @@ class RecipeSet:
                 schema.Optional('sandboxInvariant') : bool,
                 schema.Optional('uniqueDependency') : bool,
                 schema.Optional('mergeEnvironment') : bool,
+                schema.Optional('secureSSL') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         )
