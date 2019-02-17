@@ -78,8 +78,8 @@ Options
     Show checkouts that have active :ref:`configuration-config-scmOverrides`
     (``O``) even if the SCM is unchanged. Override information is always
     displayed if a checkout is shown but a ``STATUS`` line is normally only
-    emitted if the SCM was modified. See :ref:`manpage-bob-status-verbosity`
-    below.
+    emitted if the SCM was modified. Adding ``-v`` will additionally show the
+    detailed override status. See :ref:`manpage-bob-status-verbosity` below.
 
 ``-v, --verbose``
     Increase verbosity. May be specified multiple times.  See
@@ -133,18 +133,23 @@ refers to the existing checkout.
 Verbosity
 ---------
 
-By default only modified checkouts are shown. If there is not enough
-information available to determine the SCM status or if there was an error
-while retrieving then the checkout is show too.
+By default only modified checkouts (``M``, ``S`` and ``U`` flags) are shown. If
+there is a collision (``C`` flag) or not enough information available to
+determine the SCM status (``?`` flag) or if there was an error while retrieving
+(``E`` flag) then the checkout is show too.
 
 By adding one or more ``-v`` options the display of less important information
 can be enabled. The following levels are available:
 
-- ``-v`` shows a detailed description of each listed flag. In particular the
-  modified files of an SCM are listed.
-- ``-vv`` additionally shows the status of SCMs that are not modified, .e.g.
-  without flags or only ``A``, ``N`` and ``O``. If you want to display this
-  information without also enabling the detailed descriptions (see above) use
-  ``--show-clean`` or ``--show-overrides``.
-- ``-vvv`` additionally shows skipped workspaces that do not exist.
-
+- ``-v`` shows a detailed description of all important flags (``C``, ``E``,
+  ``M``, ``S``, ``U`` and ``?``). In particular the modified files and dirty
+  commits of a SCM are listed. This level also shows git checkouts that have
+  only unpushed commits that are not related to the configured branch (``u``
+  flag), but without detailed description.
+- ``-vv`` shows the full list of commits related to the ``u`` flag. Additionally
+  the status of SCMs that are not modified is shown, .e.g. without flags or only
+  ``A``, ``N`` and ``O``. If you want to display this information without
+  also enabling the detailed descriptions (see above) use ``--show-clean`` or
+  ``--show-overrides``.
+- ``-vvv`` enables the detailed description of the ``A``, ``N`` and ``O``
+  flags. Additionally skipped workspaces that do not exist are shown.
