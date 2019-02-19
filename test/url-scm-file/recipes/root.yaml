@@ -1,0 +1,9 @@
+root: true
+
+checkoutSCM:
+  - scm: url
+    url: ${URL}
+
+buildScript: cp $1/* .
+
+packageScript: cp $1/* .
