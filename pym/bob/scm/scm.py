@@ -113,12 +113,13 @@ class ScmStatus:
     mode.
     """
 
-    def __init__(self, *flags, description=""):
-        self.__flags = set(flags)
-        self.__description = description
+    def __init__(self, flag=None, description=""):
+        self.__flags = {}
+        if flag is not None:
+            self.__flags[flag] = description
 
     def __str__(self):
-        return "".join(sorted(f.value for f in self.__flags))
+        return "".join(sorted(f.value for f in self.flags))
 
     @property
     def clean(self):
@@ -139,7 +140,7 @@ class ScmStatus:
         visible upstream. On the other hand unpushed changes on unrelated
         branches (unpushed_local) do not count.
         """
-        return bool(self.__flags & {ScmTaint.modified, ScmTaint.error,
+        return bool(self.flags & {ScmTaint.modified, ScmTaint.error,
             ScmTaint.switched, ScmTaint.unpushed_main})
 
     @property
@@ -150,7 +151,7 @@ class ScmStatus:
         Set if the SCM command returned a error code or something unexpected
         happened while gathering the status.
         """
-        return ScmTaint.error in self.__flags
+        return ScmTaint.error in self.flags
 
     @property
     def expendable(self):
@@ -160,25 +161,35 @@ class ScmStatus:
         This is more strict than 'dirty' because it includes unrelated local
         branches that the user might have created.
         """
-        return not self.dirty and self.__flags.isdisjoint(
+        return not self.dirty and self.flags.isdisjoint(
             {ScmTaint.unpushed_local, ScmTaint.unknown})
 
     @property
     def flags(self):
-        return frozenset(self.__flags)
+        return frozenset(self.__flags.keys())
 
-    @property
-    def description(self):
-        return self.__description
+    def description(self, subset=None):
+        if subset:
+            flags = {
+                flag : description for flag,description in self.__flags.items()
+                if flag in subset
+            }
+        else:
+            flags = self.__flags
+
+        # join active descriptions sorted by flag value
+        return joinLines(*(d for f,d in
+            sorted(flags.items(), key=lambda x: x[0].value)))
 
     def add(self, flag, description=""):
-        self.__flags.add(flag)
-        if description:
-            self.__description = joinLines(self.__description, description)
+        if flag in self.__flags:
+            self.__flags[flag] = joinLines(self.__flags[flag], description)
+        else:
+            self.__flags[flag] = description
 
     def merge(self, other):
-        self.__flags |= other.__flags
-        self.__description = joinLines(self.__description, other.__description)
+        for flag,description in other.__flags.items():
+            self.add(flag, description)
 
 
 class Scm(metaclass=ABCMeta):
