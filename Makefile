@@ -34,6 +34,7 @@ pym:
 	@python3 -m compileall pym
 
 install: all
+	@rm -rf $(DESTDIR)/lib/bob
 	@mkdir -p $(DESTDIR)/bin $(DESTDIR)/lib/bob/bin
 	@cp bin/namespace-sandbox $(DESTDIR)/lib/bob/bin
 	@cp bin/namespace-sandbox $(DESTDIR)/bin/bob-namespace-sandbox
@@ -46,9 +47,7 @@ install: all
 	fi
 	@if [ -d .git ] ; then \
 		git describe --tags --dirty > $(DESTDIR)/lib/bob/version 2> /dev/null \
-		|| rm -rf $(DESTDIR)/lib/bob/version ; \
-	else \
-		rm -rf $(DESTDIR)/lib/bob/version ; \
+		|| rm -f $(DESTDIR)/lib/bob/version ; \
 	fi
 ifdef SPHINX
 	@for num in 1 7 ; do \
