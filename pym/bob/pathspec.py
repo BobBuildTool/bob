@@ -5,6 +5,7 @@
 
 from .errors import BobError
 from .stringparser import isFalse, isTrue, Env
+from .utils import infixBinaryOp
 from collections import OrderedDict
 from itertools import chain
 from fnmatch import fnmatchcase
@@ -359,9 +360,6 @@ class NotOperator(BaseASTNode):
 class BinaryBoolOperator(BaseASTNode):
     def __init__(self, s, loc, toks):
         super().__init__(s, loc)
-        assert len(toks) == 1, toks
-        toks = toks[0]
-        assert len(toks) == 3
         self.left = toks[0]
         self.right = toks[2]
         self.opStr = op = toks[1]
@@ -450,9 +448,6 @@ class FunctionCall(BaseASTNode):
 class BinaryStrOperator(BaseASTNode):
     def __init__(self, s, loc, toks, graphIterator):
         super().__init__(s, loc)
-        assert len(toks) == 1, toks
-        toks = toks[0]
-        assert len(toks) == 3
         self.left = toks[0]
         self.right = toks[2]
         self.opStr = op = toks[1]
@@ -733,14 +728,14 @@ class PackageSet:
             locationPath ^ stringLiteral ^ functionCall,
             [
                 ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks, self.__getGraphRoot)),
-                ('<',  2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
-                ('<=', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
-                ('>',  2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
-                ('>=', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
-                ('==', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
-                ('!=', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryStrOperator(s, loc, toks, self.__getGraphIter)),
-                ('&&', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryBoolOperator(s, loc, toks)),
-                ('||', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: BinaryBoolOperator(s, loc, toks))
+                ('<',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
+                ('<=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
+                ('>',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
+                ('>=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
+                ('==', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
+                ('!=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
+                ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator)),
+                ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator))
             ])
         predicate = '[' + predExpr + ']'
         step = abbreviatedStep | (pyparsing.Optional(axisSpecifier) +

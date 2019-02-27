@@ -426,3 +426,24 @@ def processDefines(defs):
         key, _sep, value = define.partition('=')
         defines[key] = value
     return defines
+
+
+def infixBinaryOp(handler, *args, **kwargs):
+    """Handy wrapper to make sure binary operator handlers are called with only
+    two arguments.
+
+    Consecutive terms with the same operator are given as batch to the handler
+    by pyparsing. E.g. 'a || b || c' will be seen as: [[a, '||', b, '||', c)]].
+    This wrapper will recursively chop it up so that the given handler is
+    always called with only two operands as expected for a binary operator.
+    """
+
+    def wrap(s, loc, toks):
+        assert len(toks) == 1, toks
+        toks = toks[0]
+        while len(toks) > 3:
+            toks = [ wrap(s, loc, [toks[0:3]]) ] + toks[3:]
+        assert len(toks) == 3
+        return handler(s, loc, toks, *args, **kwargs)
+
+    return wrap
