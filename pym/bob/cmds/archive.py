@@ -5,7 +5,7 @@
 
 from ..audit import Audit
 from ..errors import BobError
-from ..utils import binStat, asHexStr
+from ..utils import binStat, asHexStr, infixBinaryOp
 import argparse
 import gzip
 import json
@@ -198,7 +198,6 @@ class NotPredicate(Base):
 class AndPredicate(Base):
     def __init__(self, s, loc, toks):
         super().__init__(s, loc)
-        toks = toks[0]
         self.left = toks[0]
         self.right = toks[2]
 
@@ -214,7 +213,6 @@ class AndPredicate(Base):
 class OrPredicate(Base):
     def __init__(self, s, loc, toks):
         super().__init__(s, loc)
-        toks = toks[0]
         self.left = toks[0]
         self.right = toks[2]
 
@@ -230,7 +228,6 @@ class OrPredicate(Base):
 class ComparePredicate(Base):
     def __init__(self, s, loc, toks):
         super().__init__(s, loc)
-        toks = toks[0]
         self.left = toks[0]
         self.right = toks[2]
         op = toks[1]
@@ -311,14 +308,14 @@ def doArchiveClean(argv):
         stringLiteral | varReference,
         [
             ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotPredicate(s, loc, toks)),
-            ('<',  2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: ComparePredicate(s, loc, toks)),
-            ('<=', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: ComparePredicate(s, loc, toks)),
-            ('>',  2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: ComparePredicate(s, loc, toks)),
-            ('>=', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: ComparePredicate(s, loc, toks)),
-            ('==', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: ComparePredicate(s, loc, toks)),
-            ('!=', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: ComparePredicate(s, loc, toks)),
-            ('&&', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: AndPredicate(s, loc, toks)),
-            ('||', 2, pyparsing.opAssoc.LEFT,  lambda s, loc, toks: OrPredicate(s, loc, toks))
+            ('<',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
+            ('<=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
+            ('>',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
+            ('>=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
+            ('==', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
+            ('!=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
+            ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(AndPredicate)),
+            ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(OrPredicate))
         ])
 
     parser = argparse.ArgumentParser(prog="bob archive clean")
