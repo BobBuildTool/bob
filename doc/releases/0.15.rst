@@ -1,0 +1,295 @@
+Bob 0.15 Release Notes
+======================
+
+Changes made since Bob 0.14.0 include the following.
+
+Prerequisites
+-------------
+
+Bob requires Python 3.5 or later starting with 0.15.
+
+New features
+------------
+
+Recipes
+~~~~~~~
+
+* Added the ``sslVerify`` SCM attribute to git, svn and url SCMs.
+
+  The boolean attribute controls whether to verify the SSL certificate when
+  fetching. It defaults to ``true`` but might be set to ``false`` to ignore
+  certificate problems. The default for git is defined by the
+  :ref:`policies-secureSSL` policy.
+
+* Introduced the ``netAccess`` :ref:`configuration-recipes-provideTools`
+  property.
+
+  Starting with the introduction of the :ref:`policies-offlineBuild` policy the
+  network access is usually restricted during build and package steps. There
+  might be tools that need network access and are used during these steps,
+  though. This can be configured with the
+  :ref:`configuration-recipes-netAccess` recipe properties but if the recipe
+  does not know the exact tool it might not want to set these properties
+  unconditionally.
+
+  The main use case are proprietary compilers that need to talk to a license
+  server. The recipe should not bother which compiler is used exactly.
+
+* :ref:`configuration-recipes-provideTools` gained the ``environment`` property.
+
+  Certain tools (e.g. the C-compiler) and their associated environment
+  variables (``CC``, ``LD``, ...) are related to each other and must be defined
+  and used together. Traditionally they are provided more or less independently
+  of each other by a tools recipe with ``provideTools`` and ``provideVars``.
+  This has several drawbacks:
+
+  * Not all recipes that define the same tool (e.g. the compiler) are
+    providing the same set of environment variables.
+  * Different tools might provide the same variables.
+
+  By defining the environment variables with the tool their value can be picked
+  up where it is actually used. This does not pollute the environment with
+  variables that are only used in conjunction with the tool and are not used
+  elsewhere.
+
+  To prevent ambiguities each variable must only be defined by one tool. The
+  parsing will fail if two tools are used in the same recipe that define the
+  same variable. The reason is that Bob assumes that tools are independent of
+  each other and no particular order is defined among them.
+
+* Host fingerprint support.
+
+  The fingerprint feature is used to track all dependencies of the recipes to
+  the host environment in a generic manner. This is done by defining small
+  scripts in the recipes that are invoked when the fingerprint is required. The
+  output of these scripts is then taken as fingerprint.
+
+  Fingerprints may range from the host C-compiler up to some libraries that are
+  used by certain packages from the host. Because such external dependencies
+  limit the exchange of artifacts between hosts the fingerprint is attached to
+  binary artifacts to prevent unintended sharing between incompatible systems.
+
+  The fingerprints are also used to detect relevant changes of the host
+  environment. A package is always rebuilt if the fingerprint changes.
+  The fingerprint is thus like an external build trigger. There are two major
+  cases why Bob wants to rebuild when the fingerprint changes:
+
+  * The package was built inside the sandbox and now the user builds outside of
+    the sandbox (or vice versa).
+  * The package was built without sandbox and the fingerprint changes. Bob has
+    to assume that the external dependency has changed its state and thus an
+    incremental rebuild is needed.
+
+  If a package is not relocatable the workspace path is also some kind of host
+  dependency. Bob treats the installation path of these tools as an additional
+  fingerprint. This enables safe exchange of such artifacts that were
+  previously only up-/downloaded when building inside a sandbox.
+
+  See :ref:`configuration-recipes-fingerprint` and
+  :ref:`configuration-recipes-provideTools` for further details.
+
+* Allow local files with the "url" SCM.
+
+  If the URL starts with ``/``, it is treated as a local file and is just
+  copied with ``cp`` instead of downloaded using ``curl``.  This makes it
+  possible to easily build from tarballs in a sandbox that has no network
+  access and no ``curl`` command.
+
+User configuration (default.yaml)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added ``require`` keyword.
+
+  User configuration files may also require sometimes specific files to be
+  included. Therefore the ``require`` keyword is introduced. The ``require``
+  keyword throws an error for missing files. Other than that it behaves just
+  like the existing ``include`` keyword.
+
+  See :ref:`configuration-config-usr`.
+
+* Added the ``sslVerify`` http archive backend attribute.
+
+  The boolean attribute controls whether to verify the SSL certificate when
+  fetching/uploading to/from HTTPS servers. The default depends on the
+  :ref:`policies-secureSSL` policy. The new behavior is to default to ``true``
+  but it might be set to ``false`` to ignore certificate problems.
+
+
+Bob build / bob dev
+~~~~~~~~~~~~~~~~~~~
+
+* Gained parallel build support.
+
+  If requested by ``-j`` a number of jobs can run simultaneously. Any
+  checkout/build/package step that needs to be executed are counted as a job.
+  Downloads and uploads of binary artifacts are separate jobs too. If a job
+  fails the other currently running jobs are still finished before Bob returns.
+  No new jobs are scheduled, though, unless the ``-k`` option is given.
+
+  If the ``-j`` option is given without an argument, Bob will run as many jobs
+  as there are processors on the machine.
+
+* Added the ``--no-link-deps`` option.
+
+  Creating links to dependencies confuses indexers like OpenGrok. This switch
+  is there to disable the creation of linked dependencies.
+
+Bob clean
+~~~~~~~~~
+
+The ``clean`` command has been extend to develop mode and attic directories.
+It will now purge unused workspace directories from develop mode builds too.
+If requested, it also removes attic directories.
+
+At the same time the default is changed to 'develop' mode. This streamlines the
+behaviour with the other commands in Bob that also work in 'develop' mode by
+default. Together with the added ``--(no-)sandbox`` options it's configuration
+is finally consistent with the other commands.
+
+If the user removes source workspaces (``-s`` or ``--attic`` options) Bob will
+now check the SCMs in these directories for unsaved changes. The directory will
+only be deleted if no changes are found.
+
+Attic directories are tracked starting with Bob 0.15. Any attic directories
+that were created with an older version of Bob in a project are not known and
+will not be cleaned. Bob will print a warning in case the project was created
+with an older version and attic directories should be cleaned.
+
+Bob status
+~~~~~~~~~~
+
+* Flag directories that will move to the attic or will be created.
+
+  If the recipe is changed for a SCM checkout it will be moved to the attic
+  when the checkout is run the next time. Bob now flags the directory as ``A``
+  (as in "attic") so that the user knows about the stale state. Likewise the
+  ``N`` flag shows checkouts that do not exist in the workspace yet but will be
+  created on the next run.
+
+* Print override status as yaml.
+
+  The ``scmOverrides`` configuration is done in a yaml file. Print the active
+  overrides in the same format for consistency.
+
+* The package argument is now optional.
+
+  If no package is given then all known checkouts are scanned for changes. This
+  will only give meaningful results if the project was created with Bob 0.15,
+  though, because older versions of Bob did not store enough information about
+  the project.
+
+* Added an ``--attic`` switch to display information about the attic
+  directories.
+
+  The switch is orthogonal to the package argument. If a package is selected
+  then all attic directories of this package are displayed. Otherwise all known
+  attic directories are scanned.
+
+* For git repositories ``bob status`` will now check all unpushed commits.
+
+  This does not only check local branches for unpushed commits but all refs.
+  Therefore stash, detached HEAD, etc. are checked as well.
+
+* Improved output verbosity and streamlined its selection.
+
+  The ``--show-clean`` was added to explicitly show unchanged checkouts. These
+  are now hidden by default. The behaviour of the ``-v`` and ``--show-clean``
+  options has been made more consistent. See
+  :ref:`manpage-bob-status-verbosity` of the ``bob status`` manpage.
+
+* The ``--sandbox`` / ``--no-sandbox`` options were added.
+
+Bob query-meta, query-scm, query-recipe
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* The ``--sandbox`` / ``--no-sandbox`` options were added.
+
+Changed behaviour
+-----------------
+
+Backwards compatible policies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added :ref:`policies-mergeEnvironment` policy.
+
+  The ``environment`` and ``privateEnvironment`` sections of the recipes and
+  classes it inherits from are merged when the packages are calculated.
+  Traditionally this was done on a key-by-key basis without variable
+  substitution. Keys from the recipe or an inherited class would simply shadow
+  keys from later inherited classes. This had the effect that the definitions
+  of later inherited classes were lost.
+
+  The new behavior is to make all environment keys eligible to variable
+  substitution. The definitions of the recipe has the highest precedence
+  (i.e. it is substituted last). Declarations of classes are substituted
+  in their inheritance order, that is, the last inherited class has the
+  highest precedence.
+
+  See :ref:`policies-mergeEnvironment` for more details.
+
+* Added the :ref:`policies-secureSSL` policy.
+
+  Due to historical reasons Bob did not check for SSL certificate errors
+  everywhere. While most parts were already secure the git SCM and HTTPS
+  archive backend were still insecure by default. This is rectified by the
+  secureSSL policy where the new behavior is to always check the certificate.
+
+Other behavioural changes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* ``bob jenkins`` defaults to secure SSL connections.
+
+  Always use secure SSL connections by default. If the user still needs to
+  connect to insecure HTTPS servers the ``--no-ssl-verify`` option may be used.
+
+* The default project directory name of the built-in ``bob project`` generators
+  have been shortened.
+
+  By default the package path was used for the project directory. If the built
+  package was deep in the hierarchy this could lead to excessively long path
+  names. Instead Bob now uses the project name (which defaults to the package
+  name) as directory name.
+
+  This could theoretically create clashes if different variants of a recipe are
+  built simultaneously. But the user can handle that by the ``--destination``
+  option rather than creating excessively long paths by default.
+
+* Fixed the :ref:`policies-sandboxInvariant` policy.
+
+  Setting the :ref:`policies-sandboxInvariant` policy to the new behaviour had
+  exactly the opposite effect as intended. It caused artifacts of sandbox and
+  non-sandbox builds to be always incompatible to each other. This has been
+  rectified.
+
+Backwards incompatible changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* The default mode of the ``bob clean`` command was changed from release mode
+  to develop mode. This makes its behaviour consistent with all other Bob
+  commands.
+
+* The :ref:`extending-hooks-string` and :class:`bob.input.PluginState` APIs
+  have changed.
+
+  Due to the redesigned package calculation it is not possible to pass the
+  :class:`bob.input.Tool` or :class:`bob.input.Package` objects to the plugins
+  anymore that use  :class:`bob.input.PluginState`. Plugins requiring the old
+  API still work but the ``tools`` and ``package`` arguments are filled with
+  empty values.
+
+  Similarly the string functions lost the ``tools`` parameter. The ``sandbox``
+  parameter was converted to a plain ``bool``.
+
+  This changes the behaviour and projects relying on the removed parameters will
+  have to be refactored. But at least the parsing should not crash. A warning
+  is displayed for every usage of a deprecated API.
+
+Performance improvements
+------------------------
+
+* Refactored package calculation.
+
+  The internal logic of the package calculation was optiomized. The parsing
+  time and memory footptrint are improved by up to an order of magnitude.
+
+* ``bob graph`` scales much better on large package graphs.
