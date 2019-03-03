@@ -112,7 +112,7 @@ __bob_complete_path()
 
 __bob_clean()
 {
-   __bob_complete_words "-c -D -h --help --dry-run -s --src -v --verbose"
+   __bob_complete_words "--attic -c -D --develop --dry-run -h --help --release -s --src -v --verbose"
 }
 
 __bob_cook()
@@ -124,7 +124,7 @@ __bob_cook()
    elif [[ "$prev" = "--always-checkout" ]] ; then
       COMPREPLY=( )
    else
-      __bob_complete_path "--destination -f --force -n --no-deps -p --with-provided --without-provided -b --build-only -B --checkout-only --normal --clean --incremental --always-checkout --resume -q --quiet -v --verbose --no-logfiles -D -c -e -E --upload --download --sandbox --no-sandbox --clean-checkout --no-link-deps --link-deps"
+      __bob_complete_path "--destination -j --jobs -k --keep-going -f --force -n --no-deps -p --with-provided --without-provided -b --build-only -B --checkout-only --normal --clean --incremental --always-checkout --resume -q --quiet -v --verbose --no-logfiles -D -c -e -E --upload --download --sandbox --no-sandbox --clean-checkout --no-link-deps --link-deps"
    fi
 }
 
@@ -156,7 +156,7 @@ __bob_help()
 
 __bob_ls()
 {
-   __bob_complete_path "-a --all -c -r --recursive --sandbox --no-sandbox"
+   __bob_complete_path "-a --all -c -D -d --direct --no-sandbox -o --origin -p --prefixed -r --recursive --sandbox -u --unsorted"
 }
 
 __bob_jenkins_add()
@@ -221,7 +221,7 @@ __bob_jenkins_prune()
 {
    case "$cur" in
       -*)
-         __bob_complete_words "-h --help"
+         __bob_complete_words "-h --help --intermediate --no-ssl-verify --obsolete -q --quiet -v --verbose"
          ;;
       *)
          __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
@@ -233,7 +233,7 @@ __bob_jenkins_push()
 {
    case "$cur" in
       -*)
-         __bob_complete_words "-h --help -f --force --no-trigger"
+         __bob_complete_words "-f --force -h --help --no-ssl-verify --no-trigger -q --quiet -v --verbose"
          ;;
       *)
          __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
@@ -304,15 +304,20 @@ __bob_project()
       c="${COMP_WORDS[parse_pos]}"
       : $((parse_pos++))
       case "$c" in
+         -D | -c | -e | --download | -j)
+            : $((parse_pos++))
+            ;;
          -*) ;;
          *) command="$c" ; break ;;
       esac
    done
 
-   if [[ -z "$command" ]] ; then
+   if [[ "$prev" = "--download" ]] ; then
+         __bob_complete_words "yes no deps"
+   elif [[ -z "$command" ]] ; then
       case "$cur" in
          -*)
-            __bob_complete_words "-D -E -e -n -c"
+            __bob_complete_words "-b -c -D --download -E -e -j --list -n --no-sandbox --resume --sandbox"
             ;;
          *)
             __bob_complete_words "$($bob --color=never project --list 2>/dev/null)"
@@ -325,7 +330,7 @@ __bob_project()
 
 __bob_query_scm()
 {
-    __bob_complete_path "-c -f --default -r --sandbox --no-sandbox"
+    __bob_complete_path "-c -D -f --default -r --recursive --sandbox --no-sandbox"
 }
 
 __bob_query_path()
@@ -335,7 +340,7 @@ __bob_query_path()
 
 __bob_query_meta()
 {
-  __bob_complete_path " -c -D -r --sandbox --no-sandbox"
+  __bob_complete_path " -c -D -r --recursive --sandbox --no-sandbox"
 }
 
 __bob_query_recipe()
