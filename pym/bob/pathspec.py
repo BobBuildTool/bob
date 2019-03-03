@@ -26,6 +26,11 @@ pyparsing.ParserElement.enablePackrat()
 #     HongKong, China, 95-106
 
 
+class SandboxSentinel:
+    def isEnabled(self):
+        return False
+sandboxSentinel = SandboxSentinel()
+
 def markLocation(line, loc):
     if len(line) <= 60:
         # line is short enough
@@ -406,8 +411,8 @@ class StringLiteral(BaseASTNode):
             env.setFunArgs({
                 "package" : pkg,
                 "recipe" : pkg.getRecipe(),
-                "sandbox" : pkg._getSandboxRaw(),
-                "tools" : pkgStep.getTools()
+                "sandbox" : (pkg._getSandboxRaw() or sandboxSentinel).isEnabled(),
+                "__tools" : pkgStep.getTools()
             })
             env.setFuns(self.stringFunctions)
             return env.substitute(self.literal, self.literal, False)
@@ -440,8 +445,8 @@ class FunctionCall(BaseASTNode):
         extra = {
             "package" : pkg,
             "recipe" : pkg.getRecipe(),
-            "sandbox" : pkg._getSandboxRaw(),
-            "tools" : pkgStep.getTools()
+            "sandbox" : (pkg._getSandboxRaw() or sandboxSentinel).isEnabled(),
+            "__tools" : pkgStep.getTools()
         }
         return self.fun(args, env=env, **extra)
 

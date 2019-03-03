@@ -10,8 +10,6 @@ from types import MappingProxyType
 import fnmatch
 import re
 
-isToolDefinedDeprecated = WarnOnce("Recipe uses deprecated 'is-tool-defined' function. Will always evaluate to 'false'!")
-
 def checkGlobList(name, allowed):
     if allowed is None: return True
     ok = False
@@ -372,10 +370,9 @@ def funSandboxEnabled(args, sandbox, **options):
     if len(args) != 0: raise ParseError("is-sandbox-enabled expects no arguments")
     return "true" if sandbox else "false"
 
-def funToolDefined(args, recipe, **options):
+def funToolDefined(args, __tools, **options):
     if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
-    isToolDefinedDeprecated.warn(recipe.getName())
-    return "false"
+    return "true" if (args[0] in __tools) else "false"
 
 def funMatchScm(args, **options):
     if len(args) != 2: raise ParseError("matchScm expects two arguments")

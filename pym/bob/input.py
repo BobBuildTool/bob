@@ -2063,7 +2063,8 @@ class Recipe(object):
         tools = inputTools.derive()
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
-        inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
+        inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
+            "__tools" : tools })
         env = inputEnv.filter(self.__filterEnv)
         for i in self.__varSelf:
             env = env.derive({ key : env.substitute(value, "environment::"+key)
@@ -2092,7 +2093,8 @@ class Recipe(object):
         depDiffTools = diffTools.copy()
         thisDeps = {}
         for dep in self.__deps:
-            env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
+            env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
+                "__tools" : tools })
 
             if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
             r = self.__recipeSet.getRecipe(dep.recipe)
@@ -2202,7 +2204,8 @@ class Recipe(object):
             env.update(tool.environment)
 
         # apply private environment
-        env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled })
+        env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
+            "__tools" : tools })
         for i in self.__varPrivate:
             env = env.derive({ key : env.substitute(value, "privateEnvironment::"+key)
                                for key, value in i.items() })
