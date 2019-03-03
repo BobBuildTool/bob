@@ -179,11 +179,8 @@ class TestStringFunctions(TestCase):
         self.assertEqual(funSandboxEnabled([], sandbox=True), "true")
 
     def testToolDefined(self):
-        """deprecated is-tool-defined always returns false"""
-        attrs = {'getName.return_value' : "test"}
-        recipe = MagicMock(**attrs)
         with self.assertRaises(ParseError):
-            funToolDefined([], recipe=recipe, tools={})
-        self.assertEqual(funToolDefined(["a"], recipe=recipe, tools={"a":1, "b":2}), "false")
-        self.assertEqual(funToolDefined(["c"], recipe=recipe, tools={"a":1, "b":2}), "false")
+            funToolDefined([], __tools={})
+        self.assertEqual(funToolDefined(["a"], __tools={"a":1, "b":2}), "true")
+        self.assertEqual(funToolDefined(["c"], __tools={"a":1, "b":2}), "false")
 
