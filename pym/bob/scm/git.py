@@ -33,6 +33,7 @@ class GitScm(Scm):
         schema.Optional('rev') : str,
         schema.Optional(schema.Regex('^remote-.*')) : str,
         schema.Optional('sslVerify') : bool,
+        schema.Optional('recursive') : bool,
     })
     REMOTE_PREFIX = "remote-"
 
@@ -72,6 +73,10 @@ class GitScm(Scm):
                     raise ParseError("Invalid remote name: " + stripped_key)
                 self.__remotes.update({stripped_key : val})
         self.__sslVerify = spec.get('sslVerify', secureSSL)
+        self.__recursive = ""
+        self.__recursive = spec.get('recursive', self.__recursive)
+        if self.__recursive:
+            self.__recursive = "--recursive"
 
     def getProperties(self):
         properties = super().getProperties()
@@ -87,6 +92,7 @@ class GitScm(Scm):
                     ("refs/heads/" + self.__branch))
             ),
             'sslVerify' : self.__sslVerify,
+            'recursive' : self.__recursive,
         })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
@@ -160,7 +166,7 @@ class GitScm(Scm):
                         echo "Warning: not updating {DIR} because branch was changed manually..." >&2
                     fi
                 else
-                    if ! git clone -b {BRANCH} {URL} {DIR} ; then
+                    if ! git clone {RECURSIVE} -b {BRANCH} {URL} {DIR} ; then
                         rm -rf {DIR}/.git {DIR}/*
                         exit 1
                     fi
@@ -171,7 +177,8 @@ class GitScm(Scm):
                             URL=self.__url,
                             BRANCH=self.__branch,
                             DIR=self.__dir,
-                            REMOTES=remotes_script)
+                            REMOTES=remotes_script,
+                            RECURSIVE=self.__recursive)
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this git module.
