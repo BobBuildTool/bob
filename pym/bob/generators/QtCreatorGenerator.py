@@ -239,6 +239,7 @@ def qtProjectGenerator(package, argv, extra):
 
     # now go through all checkout dirs to find all header / include files
     for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
+        name = name.replace(':', '_')
         newPath = os.path.join(symlinkDir, name)
         if not args.update: os.symlink(os.path.join(os.getcwd(), path), newPath)
         for root, directories, filenames in os.walk(newPath):
