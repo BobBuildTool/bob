@@ -299,7 +299,7 @@ class GitScm(Scm):
                 if self.__tag not in output:
                     actual = ("'" + ", ".join(output) + "'") if output else "not on any tag"
                     status.add(ScmTaint.switched,
-                        "> tag: configured: '{}', actual: '{}'".format(self.__tag, actual))
+                        "> tag: configured: '{}', actual: {}".format(self.__tag, actual))
 
                 # Need to check if the tag still exists. Otherwise the "git
                 # log" command at the end will trip.
