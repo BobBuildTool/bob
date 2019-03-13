@@ -283,6 +283,7 @@ class GitScm(Scm):
         status = ScmStatus()
         try:
             onCorrectBranch = False
+            onTag = False
             output = self.callGit(workspacePath, 'ls-remote' ,'--get-url')
             if output != self.__url:
                 status.add(ScmTaint.switched,
@@ -299,6 +300,14 @@ class GitScm(Scm):
                     actual = ("'" + ", ".join(output) + "'") if output else "not on any tag"
                     status.add(ScmTaint.switched,
                         "> tag: configured: '{}', actual: '{}'".format(self.__tag, actual))
+
+                # Need to check if the tag still exists. Otherwise the "git
+                # log" command at the end will trip.
+                try:
+                    self.callGit(workspacePath, 'rev-parse', 'tags/'+self.__tag)
+                    onTag = True
+                except BuildError:
+                    pass
             elif self.__branch:
                 output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD')
                 if output != self.__branch:
@@ -322,9 +331,12 @@ class GitScm(Scm):
             # The following shows all unpushed commits reachable by any ref
             # (local branches, stash, detached HEAD, etc).
             # Exclude HEAD if the configured branch is checked out to not
-            # double-count them. Does not mark the SCM as dirty.
+            # double-count them. Does not mark the SCM as dirty. Exclude the
+            # configured tag too if it is checked out. Otherwise the tag would
+            # count as unpushed if it is not on a remote branch.
             what = ['--all', '--not', '--remotes']
             if onCorrectBranch: what.append('HEAD')
+            if onTag: what.append("tags/"+self.__tag)
             output = self.callGit(workspacePath, 'log', '--oneline', '--decorate',
                 *what)
             if output:
