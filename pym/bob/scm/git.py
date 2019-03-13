@@ -101,8 +101,16 @@ class GitScm(Scm):
         for name, url in self.__remotes.items():
             remotes_array.append("BOB_GIT_REMOTES[{NAME}]={URL}"
                                     .format(NAME=quote(name), URL=quote(url)))
-        # create script to handle remotes
-        remotes_script = dedent("""\
+
+        # Assemble generic header including the remote handling
+        header = super().asScript()
+        if not self.__sslVerify:
+            header += "\nexport GIT_SSL_NO_VERIFY=true"
+        header += "\n" + dedent("""\
+            if [ ! -d {DIR}/.git ] ; then
+                git init {DIR}
+            fi
+            cd {DIR}
             (
                 {REMOTES_ARRAY}
                 # remove remotes from array that are already known to Git
@@ -125,11 +133,9 @@ class GitScm(Scm):
                 for REMOTE_NAME in "${{!BOB_GIT_REMOTES[@]}}" ; do
                     git remote add "$REMOTE_NAME" "${{BOB_GIT_REMOTES[$REMOTE_NAME]}}"
                 done
-            )""").format(REMOTES_ARRAY="\n    ".join(remotes_array))
+            )""").format(REMOTES_ARRAY="\n    ".join(remotes_array),
+                         DIR=quote(self.__dir))
 
-        header = super().asScript()
-        if not self.__sslVerify:
-            header += "\nexport GIT_SSL_NO_VERIFY=true"
         if self.__tag or self.__commit:
             refSpec = "'+refs/heads/*:refs/remotes/origin/*' "
             if self.__commit:
@@ -138,45 +144,30 @@ class GitScm(Scm):
                 refSpec += quote("refs/tags/{0}:refs/tags/{0}".format(self.__tag))
             return dedent("""\
                 {HEADER}
-                if [ ! -d {DIR}/.git ] ; then
-                    git init {DIR}
-                fi
-                cd {DIR}
-                {REMOTES}
                 # checkout only if HEAD is invalid
                 if ! git rev-parse --verify -q HEAD >/dev/null ; then
                     git fetch origin {REFSPEC}
                     git checkout -q {REF}
                 fi
                 """).format(HEADER=header,
-                            URL=self.__url,
-                            REF=self.__commit if self.__commit else "tags/"+self.__tag,
-                            REFSPEC=refSpec,
-                            DIR=self.__dir,
-                            REMOTES=remotes_script)
+                            REF=self.__commit if self.__commit else "tags/"+quote(self.__tag),
+                            REFSPEC=refSpec)
         else:
             return dedent("""\
                 {HEADER}
-                if [ ! -d {DIR}/.git ] ; then
-                    git init {DIR}
-                fi
-                cd {DIR}
-                {REMOTES}
                 git fetch -p origin
                 if ! git rev-parse --verify -q HEAD >/dev/null ; then
                     # checkout only if HEAD is invalid
                     git checkout -b {BRANCH} remotes/origin/{BRANCH}
-                elif [[ $(git rev-parse --abbrev-ref HEAD) == "{BRANCH}" ]] ; then
+                elif [[ $(git rev-parse --abbrev-ref HEAD) == {BRANCH} ]] ; then
                     # pull only if on original branch
                     git merge --ff-only refs/remotes/origin/{BRANCH}
                 else
-                    echo "Warning: not updating {DIR} because branch was changed manually..." >&2
+                    echo Warning: not updating {DIR} because branch was changed manually... >&2
                 fi
                 """).format(HEADER=header,
-                            URL=self.__url,
-                            BRANCH=self.__branch,
-                            DIR=self.__dir,
-                            REMOTES=remotes_script)
+                            BRANCH=quote(self.__branch),
+                            DIR=quote(self.__dir))
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this git module.
