@@ -131,6 +131,11 @@ class GitScm(Scm):
         if not self.__sslVerify:
             header += "\nexport GIT_SSL_NO_VERIFY=true"
         if self.__tag or self.__commit:
+            refSpec = "'+refs/heads/*:refs/remotes/origin/*' "
+            if self.__commit:
+                refSpec += self.__commit
+            else:
+                refSpec += quote("refs/tags/{0}:refs/tags/{0}".format(self.__tag))
             return dedent("""\
                 {HEADER}
                 if [ ! -d {DIR}/.git ] ; then
@@ -140,33 +145,33 @@ class GitScm(Scm):
                 {REMOTES}
                 # checkout only if HEAD is invalid
                 if ! git rev-parse --verify -q HEAD >/dev/null ; then
-                    git fetch -t origin '+refs/heads/*:refs/remotes/origin/*'
+                    git fetch origin {REFSPEC}
                     git checkout -q {REF}
                 fi
                 """).format(HEADER=header,
                             URL=self.__url,
                             REF=self.__commit if self.__commit else "tags/"+self.__tag,
+                            REFSPEC=refSpec,
                             DIR=self.__dir,
                             REMOTES=remotes_script)
         else:
             return dedent("""\
                 {HEADER}
-                if [ -d {DIR}/.git ] ; then
-                    cd {DIR}
-                    if [[ $(git rev-parse --abbrev-ref HEAD) == "{BRANCH}" ]] ; then
-                        git fetch -p origin
-                        git merge --ff-only refs/remotes/origin/{BRANCH}
-                    else
-                        echo "Warning: not updating {DIR} because branch was changed manually..." >&2
-                    fi
-                else
-                    if ! git clone -b {BRANCH} {URL} {DIR} ; then
-                        rm -rf {DIR}/.git {DIR}/*
-                        exit 1
-                    fi
-                    cd {DIR}
+                if [ ! -d {DIR}/.git ] ; then
+                    git init {DIR}
                 fi
+                cd {DIR}
                 {REMOTES}
+                git fetch -p origin
+                if ! git rev-parse --verify -q HEAD >/dev/null ; then
+                    # checkout only if HEAD is invalid
+                    git checkout -b {BRANCH} remotes/origin/{BRANCH}
+                elif [[ $(git rev-parse --abbrev-ref HEAD) == "{BRANCH}" ]] ; then
+                    # pull only if on original branch
+                    git merge --ff-only refs/remotes/origin/{BRANCH}
+                else
+                    echo "Warning: not updating {DIR} because branch was changed manually..." >&2
+                fi
                 """).format(HEADER=header,
                             URL=self.__url,
                             BRANCH=self.__branch,
