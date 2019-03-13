@@ -48,7 +48,19 @@ class TestGitScmStatus(TestCase):
         self.callGit('git add test.txt', cwd=self.repodir)
         self.callGit('git commit -m "first commit"', cwd=self.repodir)
 
-        self.callGit('git clone ' + self.repodir + ' ' + self.repodir_local, cwd='/tmp')
+        # create a regular and a orphaned tag (one that is on no branch)
+        self.callGit("git tag -a -m '1.0' v1.0", cwd=self.repodir)
+        self.callGit("git checkout --detach", cwd=self.repodir)
+        with open(os.path.join(self.repodir, "test.txt"), "w") as f:
+            f.write("foo")
+        self.callGit('git commit -a -m "second commit"', cwd=self.repodir)
+        self.callGit("git tag -a -m '1.1' v1.1", cwd=self.repodir)
+
+        # clone repository
+        self.callGit('git init .', cwd=self.repodir_local)
+        self.callGit('git remote add origin ' + self.repodir, cwd=self.repodir_local)
+        self.callGit('git fetch origin', cwd=self.repodir_local)
+        self.callGit('git checkout master', cwd=self.repodir_local)
 
         # setup user name and email for travis
         self.callGit('git config user.email "bob@bob.bob"', cwd=self.repodir_local)
@@ -126,3 +138,8 @@ class TestGitScmStatus(TestCase):
         self.assertEqual(s.flags, {ScmTaint.switched})
         self.assertTrue(s.dirty)
 
+    def testOrphanedOk(self):
+        self.callGit('git fetch origin tag v1.1', cwd=self.repodir_local)
+        self.callGit('git checkout tags/v1.1', cwd=self.repodir_local)
+        s = self.statusGitScm({ 'tag' : 'v1.1' })
+        self.assertEqual(s.flags, set())
