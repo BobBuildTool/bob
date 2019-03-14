@@ -261,6 +261,15 @@ Other behavioural changes
   non-sandbox builds to be always incompatible to each other. This has been
   rectified.
 
+* On git checkouts only tags that are on branches are cloned by default.
+  Previously all tags have been cloned. This is done to prevent ``bob status``
+  from flagging a repository as having unpushed commits because orphaned tags
+  are not referenced from remote heads. Note that git does not fetch such tags
+  anyway on a ``git pull`` or ``git fetch``. The user has to fetch orphaned
+  tags explicitly either by naming them on the command line or with the
+  ``--tags`` option. If the recipe requests such a tag to be checked out then
+  it will still be fetched explicitly by Bob.
+
 Backwards incompatible changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
