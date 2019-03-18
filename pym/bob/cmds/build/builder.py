@@ -303,12 +303,12 @@ esac
     def makeRunnable(wrapFmt):
         baseDir = os.getcwd()
 
-        def fmt(step, mode, props):
+        def fmt(step, mode, props, referrer):
             if mode == 'workspace':
                 ret = wrapFmt(step, props)
             else:
                 assert mode == 'exec'
-                if step.getSandbox() is None:
+                if referrer.getSandbox() is None:
                     ret = os.path.join(baseDir, wrapFmt(step, props))
                 else:
                     ret = os.path.join("/bob", asHexStr(step.getVariantId()))
@@ -602,7 +602,7 @@ esac
                     step.getExecPath(), ".."))) ))
             addDep = lambda s: (sandboxMounts.append("mounts+=( -M {} -m {} )".format(
                     quote(os.path.abspath(s.getWorkspacePath())),
-                    quote(s.getExecPath()) )) if s.isValid() else None)
+                    quote(s.getExecPath(step)) )) if s.isValid() else None)
             for s in step.getAllDepSteps(): addDep(s)
             # special handling to mount all previous steps of current package
             s = step
@@ -632,7 +632,7 @@ esac
                         '${'+key+'+'+key+'="$'+key+'"}'
                         for key in self.__envWhiteList ])),
                     ARGS=" ".join([
-                        quote(a.getExecPath())
+                        quote(a.getExecPath(step))
                         for a in step.getArguments() ]),
                     SANDBOX_CMD="\n    ".join(sandboxMounts + [" ".join(sandbox)]),
                     SANDBOX_SETUP=sandboxSetup,
@@ -668,14 +668,14 @@ esac
                 """))
             print("declare -A BOB_ALL_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(a.getPackage().getName()),
-                                   quote(a.getExecPath()))
+                                   quote(a.getExecPath(step)))
                     for a in step.getAllDepSteps() ] ))), file=f)
             print("declare -A BOB_DEP_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(a.getPackage().getName()),
-                                   quote(a.getExecPath()))
+                                   quote(a.getExecPath(step)))
                     for a in step.getArguments() if a.isValid() ] ))), file=f)
             print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(n), quote(os.path.join(t.getStep().getExecPath(), t.getPath())))
+                [ "[{}]={}".format(quote(n), quote(os.path.join(t.getStep().getExecPath(step), t.getPath())))
                     for (n,t) in step.getTools().items()] ))), file=f)
             print("", file=f)
             print("# Environment:", file=f)
@@ -1060,7 +1060,7 @@ esac
         # directories we have to make a clean build if any of the
         # dependency directories change.
         buildDigest = [self.__getIncrementalVariantId(buildStep), buildStep.getExecPath()] + \
-            [ i.getExecPath() for i in buildStep.getArguments() if i.isValid() ]
+            [ i.getExecPath(buildStep) for i in buildStep.getArguments() if i.isValid() ]
 
         # get directory into shape
         (prettyBuildPath, created) = self._constructDir(buildStep, "build")

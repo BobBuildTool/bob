@@ -288,14 +288,14 @@ class JenkinsJob:
 
             cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
                 [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                       a.getExecPath())
+                                       a.getExecPath(d))
                     for a in d.getAllDepSteps() ] ))))
             cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
                 [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                       a.getExecPath())
+                                       a.getExecPath(d))
                     for a in d.getArguments() if a.isValid() ] ))))
             cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
-                [ "    [{}]={}".format(quote(n), os.path.join(t.getStep().getExecPath(), t.getPath()))
+                [ "    [{}]={}".format(quote(n), os.path.join(t.getStep().getExecPath(d), t.getPath()))
                     for (n,t) in d.getTools().items()] ))))
             env = { key: quote(value) for (key, value) in d.getEnv().items() }
             env.update({
@@ -309,7 +309,7 @@ class JenkinsJob:
                 cmds.append("export {}={}".format(k, v))
 
             cmds.append("set -- {}".format(" ".join(
-                [ a.getExecPath() for a in d.getArguments() ])))
+                [ a.getExecPath(d) for a in d.getArguments() ])))
             cmds.append("declare -p > " +
                 ("" if d.getSandbox() is None else "/workspace/") +
                 JenkinsJob._envName(d))
@@ -360,7 +360,7 @@ class JenkinsJob:
                 cmds.append("mounts+=( -M \"$WORKSPACE/{}\" -w {} )".format(
                     d.getWorkspacePath(), d.getExecPath()))
                 addDep = lambda s: (cmds.append("mounts+=( -M \"$WORKSPACE/{}\" -m {} )"
-                    .format(s.getWorkspacePath(), s.getExecPath())) if s.isValid() else None)
+                    .format(s.getWorkspacePath(), s.getExecPath(d))) if s.isValid() else None)
                 for s in d.getAllDepSteps(): addDep(s)
                 # special handling to mount all previous steps of current package
                 s = d
@@ -1248,12 +1248,12 @@ def jenkinsNamePersister(jenkins, wrapFmt, uuid):
         if uuid: ret = ret + "-" + uuid
         return ret
 
-    def fmt(step, mode, props):
+    def fmt(step, mode, props, referrer):
         if mode == 'workspace':
             return persist(step, props)
         else:
             assert mode == 'exec'
-            if step.getSandbox() is None:
+            if referrer.getSandbox() is None:
                 return os.path.join("$PWD", quote(persist(step, props)))
             else:
                 return os.path.join("/bob", asHexStr(step.getVariantId()), "workspace")

@@ -975,14 +975,17 @@ class Step:
         """
         return self._coreStep.getLabel()
 
-    def getExecPath(self):
+    def getExecPath(self, referrer=None):
         """Return the execution path of the step.
 
         The execution path is where the step is actually run. It may be distinct
-        from the workspace path if the build is performed in a sandbox.
+        from the workspace path if the build is performed in a sandbox. The
+        ``referrer`` is an optional parameter that represents a step that refers
+        to this step while building.
         """
         if self.isValid():
-            return self.__pathFormatter(self, 'exec', self.__package._getStates())
+            return self.__pathFormatter(self, 'exec', self.__package._getStates(),
+                referrer or self)
         else:
             return "/invalid/exec/path/of/{}".format(self.__package.getName())
 
@@ -994,7 +997,8 @@ class Step:
         script but the one from getExecPath() instead.
         """
         if self.isValid():
-            return self.__pathFormatter(self, 'workspace', self.__package._getStates())
+            return self.__pathFormatter(self, 'workspace', self.__package._getStates(),
+                self)
         else:
             return "/invalid/workspace/path/of/{}".format(self.__package.getName())
 
@@ -1004,7 +1008,7 @@ class Step:
         The returned list is intended to be passed as PATH environment variable.
         The paths are sorted by name.
         """
-        return sorted([ os.path.join(tool.step.getExecPath(), tool.path)
+        return sorted([ os.path.join(tool.step.getExecPath(self), tool.path)
             for tool in self.getTools().values() ])
 
     def getLibraryPaths(self):
@@ -1016,7 +1020,7 @@ class Step:
         """
         paths = []
         for (name, tool) in sorted(self.getTools().items()):
-            paths.extend([ os.path.join(tool.step.getExecPath(), l) for l in tool.libs ])
+            paths.extend([ os.path.join(tool.step.getExecPath(self), l) for l in tool.libs ])
         return paths
 
     def getTools(self):
