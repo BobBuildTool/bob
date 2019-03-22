@@ -406,7 +406,8 @@ class JenkinsJob:
             cmd.extend(["-E", var, quote(val)])
         recipesAudit = step.getPackage().getRecipe().getRecipeSet().getScmAudit()
         if recipesAudit is not None:
-            cmd.extend(["--recipes", quote(json.dumps(recipesAudit.dump()))])
+            cmd.extend(["--recipes",
+                quote(json.dumps(recipesAudit.dump(), sort_keys=True))])
         # environment is only persisted if a shell script is run
         if step.getJenkinsScript() is not None:
             cmd.extend(["--env", JenkinsJob._envName(step)])
