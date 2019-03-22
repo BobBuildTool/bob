@@ -168,15 +168,21 @@ class JenkinsJob:
     def makeRoot(self):
         self.__isRoot = True
 
-    def getDescription(self, date):
-        description = [
+    def getDescription(self, date, warnLazy):
+        description = []
+        if warnLazy:
+            description.extend([
+                "<em><h2>Warning: lazily updated!</h2></em>",
+                "<p>The description of the jobs is updated lazily by Bob. It remains unchanged unless the job must be updated. Changes of the recipes that do not affect this job won't be reflected in the description.</p>",
+            ])
+        description.extend([
             "<h2>Recipe</h2>",
             "<p>Name: " + self.__recipe.getName()
                 + "<br/>Source: " + self.__recipe.getRecipeSet().getScmStatus()
                 + "<br/>Configured: " + date
                 + "<br/>Bob version: " + BOB_VERSION + "</p>",
             "<h2>Packages</h2>", "<ul>"
-        ]
+        ])
         namesPerVariant = { vid : ", ".join(sorted(names)) for (vid, names)
             in self.__namesPerVariant.items() }
         for (vid, names) in sorted(namesPerVariant.items(), key=lambda x: x[1]):
@@ -598,7 +604,8 @@ class JenkinsJob:
             else:
                 auth = None
 
-        root.find("description").text = self.getDescription(date)
+        root.find("description").text = self.getDescription(date,
+            options.get('jobs.update', "always") == "lazy")
         scmTrigger = xml.etree.ElementTree.SubElement(
             triggers, "hudson.triggers.SCMTrigger")
         xml.etree.ElementTree.SubElement(scmTrigger, "spec").text = options.get("scm.poll")
@@ -1839,6 +1846,12 @@ def doJenkinsPush(recipes, argv):
     def printInfo(job, *args): printLine(1, job, *args)
     def printDebug(job, *args): printLine(2, job, *args)
 
+    updatePolicy = options.get('jobs.update', "always")
+    if updatePolicy not in ("always", "description", "lazy"):
+        raise BuildError("'jobs.update' extended option has unsupported value!");
+    updateAlways = updatePolicy == "always"
+    updateDescription = updatePolicy in ("always", "description")
+
     # connect to server
     with JenkinsConnection(config, args.ssl_verify) as connection:
         # verify plugin state
@@ -1872,6 +1885,9 @@ def doJenkinsPush(recipes, argv):
                     BobState().delJenkinsJob(args.name, name)
                 else:
                     oldJobConfig = BobState().getJenkinsJobConfig(args.name, name)
+                    # Amend possibly missing fields
+                    oldJobConfig.setdefault('lazyHash', oldJobConfig.get('hash'))
+                    oldJobConfig.setdefault('lazyWarning', False)
             else:
                 origXML = None
 
@@ -1907,6 +1923,8 @@ def doJenkinsPush(recipes, argv):
                 newScheduleHash = hashlib.sha1(scheduleHashXML).digest()
                 newJobConfig = {
                     'hash' : newJobHash,
+                    'lazyHash' : newScheduleHash,
+                    'lazyWarning' : not updateDescription,
                     'scheduledHash' : newScheduleHash,
                     'descrHash' : newDescrHash,
                     'enabled' : True,
@@ -1922,17 +1940,23 @@ def doJenkinsPush(recipes, argv):
                     printInfo(name, "Unchanged. Skipping...")
                     continue
 
-                # updated config.xml?
-                if oldJobConfig.get('hash') != newJobConfig['hash']:
+                # Updated config.xml? Depending on the update mode not all
+                # changes are considered an acutal reconfiguration.
+                if (oldJobConfig['lazyHash'] != newJobConfig['lazyHash']) or \
+                   (updateAlways and (oldJobConfig.get('hash') != newJobConfig['hash'])):
                     printNormal(name, "Set new configuration...")
                     connection.updateConfig(name, jobXML)
                     oldJobConfig['hash'] = newJobConfig['hash']
+                    oldJobConfig['lazyHash'] = newJobConfig['lazyHash']
+                    oldJobConfig['lazyWarning'] = newJobConfig['lazyWarning']
                     oldJobConfig['descrHash'] = newJobConfig['descrHash']
                     BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
-                elif oldJobConfig.get('descrHash') != newJobConfig['descrHash']:
+                elif (updateDescription and (oldJobConfig.get('descrHash') != newJobConfig['descrHash'])) or \
+                     (oldJobConfig['lazyWarning'] != newJobConfig['lazyWarning']):
                     # just set description
                     printInfo(name, "Update description...")
                     connection.setDescription(name, description)
+                    oldJobConfig['lazyWarning'] = newJobConfig['lazyWarning']
                     oldJobConfig['descrHash'] = newJobConfig['descrHash']
                     BobState().setJenkinsJobConfig(args.name, name, oldJobConfig)
                 else:
@@ -1941,6 +1965,8 @@ def doJenkinsPush(recipes, argv):
                 printNormal(name, "Initial creation...")
                 oldJobConfig = {
                     'hash' : newJobConfig['hash'],
+                    'lazyHash' : newJobConfig['lazyHash'],
+                    'lazyWarning' : newJobConfig['lazyWarning'],
                     'descrHash' : newJobConfig['descrHash'],
                     'enabled' : True
                 }
