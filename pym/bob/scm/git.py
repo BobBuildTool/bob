@@ -226,21 +226,34 @@ class GitScm(Scm):
             "hudson.plugins.git.extensions.impl.CleanCheckout")
         ElementTree.SubElement(extensions,
             "hudson.plugins.git.extensions.impl.PruneStaleBranch")
+        # set git clone options
         shallow = options.get("scm.git.shallow")
-        if shallow is not None:
-            try:
-                shallow = int(shallow)
-                if shallow < 0: raise ValueError()
-            except ValueError:
-                raise BuildError("Invalid 'git.shallow' option: " + str(shallow))
-            if shallow > 0:
-                co = ElementTree.SubElement(extensions,
+        timeout = options.get("scm.git.timeout")
+        if shallow is not None or timeout is not None:
+            co = ElementTree.SubElement(extensions,
                     "hudson.plugins.git.extensions.impl.CloneOption")
-                ElementTree.SubElement(co, "shallow").text = "true"
-                ElementTree.SubElement(co, "noTags").text = "false"
-                ElementTree.SubElement(co, "reference").text = ""
-                ElementTree.SubElement(co, "depth").text = str(shallow)
-                ElementTree.SubElement(co, "honorRefspec").text = "false"
+            if shallow is not None:
+                try:
+                    shallow = int(shallow)
+                    if shallow < 0: raise ValueError()
+                except ValueError:
+                    raise BuildError("Invalid 'git.shallow' option: " + str(shallow))
+                if shallow > 0:
+                    ElementTree.SubElement(co, "shallow").text = "true"
+                    ElementTree.SubElement(co, "noTags").text = "false"
+                    ElementTree.SubElement(co, "reference").text = ""
+                    ElementTree.SubElement(co, "depth").text = str(shallow)
+                    ElementTree.SubElement(co, "honorRefspec").text = "false"
+
+            if timeout is not None:
+                try:
+                    timeout = int(timeout)
+                    if timeout < 0: raise ValueError()
+                except ValueError:
+                    raise BuildError("Invalid 'git.timeout' option: " + str(shallow))
+                if timeout > 0:
+                    ElementTree.SubElement(co, "timeout").text = str(timeout)
+
         if isTrue(options.get("scm.ignore-hooks", "0")):
             ElementTree.SubElement(extensions,
                 "hudson.plugins.git.extensions.impl.IgnoreNotifyCommit")
