@@ -743,20 +743,28 @@ esac
     def getStatistic(self):
         return self.__statistic
 
-    def __createTask(self, coro, step=None, tracker=None):
+    def __createTask(self, coro, step=None, checkoutOnly=False, tracker=None):
+        """Create and return task for coroutine.
+
+        The optional ``step``, ``checkoutOnly`` and the ``tracker`` arguments
+        are used to prevent duplicate runs of the same coroutine. Task that
+        only differ in the ``checkoutOnly`` parameter wait for each other.
+        """
         tracked = (step is not None) and (tracker is not None)
 
-        async def wrapTask():
+        async def wrapTask(coro, fence):
             try:
                 task = asyncio.Task.current_task()
                 self.__allTasks.add(task)
+                if fence is not None:
+                    await fence
                 ret = await coro()
                 self.__allTasks.remove(task)
                 if tracked:
                     # Only remove us from the task list if we finished successfully.
                     # Other concurrent tasks might want to cook the same step again.
                     # They have to get the same exception again.
-                    del tracker[step.getWorkspacePath()]
+                    del tracker[(step.getWorkspacePath(), checkoutOnly)]
                 return ret
             except BuildError as e:
                 if not self.__keepGoing:
@@ -780,11 +788,19 @@ esac
                 raise CancelBuildException
 
         if tracked:
-            path = step.getWorkspacePath()
+            path = (step.getWorkspacePath(), checkoutOnly)
             task = tracker.get(path)
             if task is not None: return task
 
-        task = asyncio.get_event_loop().create_task(wrapTask())
+            # Is there a concurrent task running for *not* checkoutOnly? If yes
+            # then we have to wait for it to not call the same coroutine
+            # concurrently.
+            alternatePath = (step.getWorkspacePath(), not checkoutOnly)
+            alternateTask = tracker.get(alternatePath)
+        else:
+            alternateTask = None
+
+        task = asyncio.get_event_loop().create_task(wrapTask(coro, alternateTask))
         if tracked:
             tracker[path] = task
 
@@ -801,7 +817,7 @@ esac
         async def dispatcher():
             if self.__jobs > 1:
                 packageJobs = [
-                    self.__createTask(lambda s=step: self._cookTask(s, checkoutOnly, depth), step)
+                    self.__createTask(lambda s=step: self._cookTask(s, checkoutOnly, depth), step, checkoutOnly)
                     for step in steps ]
                 await gatherTasks(packageJobs)
             else:
@@ -872,7 +888,7 @@ esac
         if self.__jobs > 1:
             # spawn the child tasks
             tasks = [
-                self.__createTask(lambda s=step: self._cookStep(s, checkoutOnly, depth), step, self.__cookTasks)
+                self.__createTask(lambda s=step: self._cookStep(s, checkoutOnly, depth), step, checkoutOnly, self.__cookTasks)
                 for step in steps
             ]
 
@@ -1334,7 +1350,7 @@ esac
     async def __getBuildIdList(self, steps, depth):
         if self.__jobs > 1:
             tasks = [
-                self.__createTask(lambda s=step: self.__getBuildIdTask(s, depth), step, self.__buildIdTasks)
+                self.__createTask(lambda s=step: self.__getBuildIdTask(s, depth), step, False, self.__buildIdTasks)
                 for step in steps
             ]
             ret = await self.__yieldJobWhile(gatherTasks(tasks))
