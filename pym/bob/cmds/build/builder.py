@@ -1139,8 +1139,10 @@ esac
         # package is not explicitly relocatable and built outside the sandbox.
         mayUpOrDownload = self.__recipes.getPolicy('allRelocatable') or \
             packageStep.isRelocatable() or (packageStep.getSandbox() is not None)
-        packageBuildId = await self._getBuildId(packageStep, depth)
-        packageFingerprint = await self._getFingerprint(packageStep.getPackage())
+        if not checkoutOnly:
+            # don't compute these ids if they are not necessary
+            packageBuildId = await self._getBuildId(packageStep, depth)
+            packageFingerprint = await self._getFingerprint(packageStep.getPackage())
 
         # Dissect input parameters that lead to current workspace the last time
         oldWasDownloaded, oldInputHashes, oldInputBuildId, oldInputFingerprint = \
