@@ -223,6 +223,32 @@ jobs.policy
         the upstream job which might not necessarily have published one because
         it failed before archiving them.
 
+jobs.update
+    Whenever the recipes are changed Bob has to update the individual Jenkins
+    jobs that are affected by the change. This switch controls how the
+    description and audit trail information is updated if only these are
+    affected by the change. Their update may be deferred unless strictly
+    necessary and still generate a correct build result at the expense of the
+    freshness of this information.
+
+    always
+        Always update the description and audit trail information if they
+        change. This is the default. Note that ``bob jenkins push`` will always
+        update the description because the date and time of the update is part
+        of the job description.
+
+    description
+        Keep the description up-to-date but defer audit trail updates unless
+        strictly necessary. This may provide marginal speed gains but will
+        still update all jobs because the description contains the recipe
+        version and update time.
+
+    lazy
+        Only update a job if it will build a different artifact than before.
+        The description and audit trail information will be left unchanged
+        otherwise. This will provide considerable speed improvements at the
+        expense of an outdated description of the unchanged jobs.
+
 scm.git.shallow
     Instruct the Jenkins git plugin to create shallow clones with a history
     truncated to the specified number of commits. If the parameter is unset
