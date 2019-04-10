@@ -21,7 +21,7 @@ concurrent uploads the artifact must appear atomically for unrelated readers.
 
 from .errors import BuildError
 from .tty import stepAction, SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR
-from .utils import asHexStr, removePath, isWindows
+from .utils import asHexStr, hashFile, removePath, isWindows
 from pipes import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 import argparse
@@ -983,6 +983,230 @@ class AzureUploader:
         except AzureException as e:
             raise ArtifactUploadError(str(e))
 
+class ArtifactoryArchive(BaseArchive):
+    def __init__(self, spec=None):
+        if spec:
+            super().__init__(spec)
+            self.__url = spec['url']
+            self.__username = spec.get('username', None)
+            self.__key = spec.get('key', None)
+        try:
+            from artifactory import ArtifactoryPath
+        except ImportError:
+            raise BuildError("dohq-artifactory Python3 library not installed!")
+
+    def setArgs(self, args):
+        self.__url = args.url
+        self.__username = args.username
+        self.__key = args.key
+
+    @staticmethod
+    def __makeBlobName(buildId, suffix):
+        packageResultId = buildIdToName(buildId)
+        return "/".join([packageResultId[0:2], packageResultId[2:4],
+            packageResultId[4:] + suffix])
+
+    def _remoteName(self, buildId, suffix):
+        return "{}/{}".format(self.__url, self.__makeBlobName(buildId, suffix))
+
+    def _makeArtifactoryPath(self, blobName):
+        from artifactory import ArtifactoryPath
+
+        if self.__username and self.__key:
+            return ArtifactoryPath(
+                "{}/{}".format(self.__url, blobName.replace(os.sep, '_')),
+                auth=(self.__username, self.__key))
+        elif self.__key:
+            return ArtifactoryPath(
+                "{}/{}".format(self.__url, blobName.replace(os.sep, '_')),
+                apikey=self.__key)
+        else:
+            return ArtifactoryPath(
+                "{}/{}".format(self.__url, blobName.replace(os.sep, '_')))
+
+    def _openDownloadFile(self, buildId, suffix):
+        from artifactory import ArtifactoryPath
+        try:
+            fd = self._makeArtifactoryPath(self.__makeBlobName(buildId,suffix)).open()
+            return ArtifactoryDownloader(fd)
+        except RuntimeError as e:
+            raise ArtifactDownloadError(str(e))
+
+    def _openUploadFile(self, buildId, suffix):
+        blobName = self.__makeBlobName(buildId,suffix)
+        from artifactory import ArtifactoryPath
+        try:
+            fd = self._makeArtifactoryPath(blobName)
+            try:
+                fd.open()
+                if fd.exists():
+                    raise ArtifactExistsError()
+            except RuntimeError:
+                pass
+        except RuntimeError as e:
+            raise ArtifactUploadError(str(e))
+        (tmpFd, tmpName) = mkstemp()
+        os.close(tmpFd)
+        return ArtifactoryUploader(self, fd, tmpName, blobName)
+
+    def upload(self, step, buildIdFile, fingerprintFile, tgzFile):
+        if not self.canUploadJenkins():
+            return ""
+
+        args = []
+        if self.__key: args.append("--key=" + self.__key)
+        if self.__username: args.append("--username=" + self.__username)
+
+        return "\n" + textwrap.dedent("""\
+            # upload artifact
+            cd $WORKSPACE
+            bob _upload artifactory {ARGS} {URL} {BUILDID} {SUFFIX} {RESULT}{FIXUP}
+            """.format(ARGS=" ".join(map(quote, args)),
+                       URL=self.__url, BUILDID=quote(buildIdFile),
+                       RESULT=quote(tgzFile),
+                       FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
+                       SUFFIX=artifactSuffixJenkins(fingerprintFile)))
+
+    def download(self, step, buildIdFile, fingerprintFile, tgzFile):
+        if not self.canDownloadJenkins():
+            return ""
+
+        args = []
+        if self.__key: args.append("--key=" + self.__key)
+        if self.__username: args.append("--username=" + self.__username)
+
+        return "\n" + textwrap.dedent("""\
+            if [[ ! -e {RESULT} ]] ; then
+                bob _download artifactory {ARGS} {URL} {BUILDID} {SUFFIX} {RESULT} || echo Download failed: $?
+            fi
+            """.format(ARGS=" ".join(map(quote, args)),
+                       URL=self.__url, BUILDID=quote(buildIdFile),
+                       RESULT=quote(tgzFile), SUFFIX=artifactSuffixJenkins(fingerprintFile)))
+
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+        if not self.canUploadJenkins():
+            return ""
+
+        args = []
+        if self.__key: args.append("--key=" + self.__key)
+        if self.__username: args.append("--username=" + self.__username)
+
+        return "\n" + textwrap.dedent("""\
+            # upload live build-id
+            cd $WORKSPACE
+            bob _upload artifactory {ARGS} {URL} {LIVEBUILDID} {SUFFIX} {BUILDID}{FIXUP}
+            """.format(ARGS=" ".join(map(quote, args)),
+                       URL=self.__url, LIVEBUILDID=quote(liveBuildId),
+                       BUILDID=quote(buildId),
+                       FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
+                       SUFFIX=BUILDID_SUFFIX))
+
+    @staticmethod
+    def scriptDownload(args):
+        archive, remoteBlob, localFile = ArtifactoryArchive.scriptGetService(args)
+
+        from artifactory import ArtifactoryPath
+
+        # Download into temporary file and rename if downloaded successfully
+        tmpName = None
+        try:
+            (tmpFd, tmpName) = mkstemp(dir=".")
+
+            path = archive._makeArtifactoryPath(remoteBlob)
+
+            with path.open() as fd:
+                os.write(tmpFd, fd.read())
+
+            os.close(tmpFd)
+            os.rename(tmpName, localFile)
+            tmpName = None
+        except (OSError, RuntimeError) as e:
+            raise BuildError("Download failed: " + str(e))
+        finally:
+            if tmpName is not None: os.unlink(tmpName)
+
+    @staticmethod
+    def scriptUpload(args):
+        archive, remoteBlob, localFile = ArtifactoryArchive.scriptGetService(args)
+
+        from artifactory import ArtifactoryPath, md5sum, sha1sum
+        try:
+            sha1 = sha1sum(localFile)
+            md5 = md5sum(localFile)
+            with open(localFile, 'rb') as f:
+                fd = archive._makeArtifactoryPath(remoteBlob)
+                if fd.exists:
+                    print("skipped")
+                else:
+                    fd.deploy(f, sha1=sha1, md5=md5);
+            print("OK")
+        except (OSError, RuntimeError) as e:
+            raise BuildError("Upload failed: " + str(e))
+
+    @staticmethod
+    def scriptGetService(args):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('url')
+        parser.add_argument('buildid')
+        parser.add_argument('suffix')
+        parser.add_argument('file')
+        parser.add_argument('--key')
+        parser.add_argument('--username')
+        args = parser.parse_args(args)
+
+        try:
+            from artifactory import ArtifactoryPath
+        except ImportError:
+            raise BuildError("artifactory Python3 library not installed!")
+
+        try:
+            with open(args.buildid, 'rb') as f:
+                remoteBlob = ArtifactoryArchive.__makeBlobName(f.read(), args.suffix)
+        except OSError as e:
+            raise BuildError(str(e))
+
+        archive = ArtifactoryArchive()
+        archive.setArgs(args)
+
+        return (archive, remoteBlob, args.file)
+
+class ArtifactoryDownloader:
+    def __init__(self, fd):
+        self.fd = fd
+    def __enter__(self):
+        return (None, self.fd)
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.fd.close()
+        return False
+
+class ArtifactoryUploader:
+    def __init__(self, artifactory, fd, name, remoteName):
+        self.__artifactory = artifactory
+        self.__name = name
+        self.__remoteName = remoteName
+
+    def __enter__(self):
+        return (self.__name, None)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            if exc_type is None:
+                self.__upload()
+        finally:
+            os.unlink(self.__name)
+        return False
+
+    def __upload(self):
+        from artifactory import ArtifactoryPath, md5sum, sha1sum
+
+        sha1 = sha1sum(self.__name)
+        md5 = md5sum(self.__name)
+        try:
+            with open(self.__name, 'rb') as f:
+                fd = self.__artifactory._makeArtifactoryPath(self.__remoteName)
+                fd.deploy(f, sha1=sha1, md5=md5);
+        except RuntimeError as e:
+            raise ArtifactUploadError("upload failed  "+ str(e))
 
 class MultiArchive:
     def __init__(self, archives):
@@ -1056,6 +1280,8 @@ def getSingleArchiver(recipes, archiveSpec):
         return CustomArchive(archiveSpec, recipes.envWhiteList())
     elif archiveBackend == "azure":
         return AzureArchive(archiveSpec)
+    elif archiveBackend == "artifactory":
+        return ArtifactoryArchive(archiveSpec)
     elif archiveBackend == "none":
         return DummyArchive()
     else:
@@ -1072,6 +1298,8 @@ def doDownload(args, bobRoot):
     archiveBackend = args[0]
     if archiveBackend == "azure":
         AzureArchive.scriptDownload(args[1:])
+    elif archiveBackend == "artifactory":
+        ArtifactoryArchive.scriptDownload(args[1:])
     else:
         raise BuildError("Invalid archive backend: "+archiveBackend)
 
@@ -1079,5 +1307,7 @@ def doUpload(args, bobRoot):
     archiveBackend = args[0]
     if archiveBackend == "azure":
         AzureArchive.scriptUpload(args[1:])
+    elif archiveBackend == "artifactory":
+        ArtifactoryArchive.scriptUpload(args[1:])
     else:
         raise BuildError("Invalid archive backend: "+archiveBackend)
