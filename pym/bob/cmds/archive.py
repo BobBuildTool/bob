@@ -20,11 +20,11 @@ import tarfile
 pyparsing.ParserElement.enablePackrat()
 
 class ArchiveScanner:
-    CUR_VERSION = 1
+    CUR_VERSION = 2
 
     def __init__(self):
         self.__dirSchema = re.compile(r'[0-9a-zA-Z]{2}')
-        self.__archiveSchema = re.compile(r'[0-9a-zA-Z]{36}-1(-[0-9a-zA-Z]{40})?.tgz')
+        self.__archiveSchema = re.compile(r'[0-9a-zA-Z]{36,}-1.tgz')
         self.__db = None
         self.__cleanup = False
 
@@ -42,11 +42,9 @@ class ArchiveScanner:
             if vsn is None:
                 self.__db.executescript("""
                     CREATE TABLE files(
-                        bid BLOB NOT NULL,
-                        taint BLOB NOT NULL,
+                        bid BLOB PRIMARY KEY NOT NULL,
                         stat BLOB,
-                        vars BLOB,
-                        PRIMARY KEY(bid, taint)
+                        vars BLOB
                     );
                     CREATE TABLE refs(
                         bid BLOB NOT NULL,
@@ -55,8 +53,9 @@ class ArchiveScanner:
                     );
                     """)
                 self.__db.execute("INSERT INTO meta VALUES ('vsn', ?)", (self.CUR_VERSION,))
-            elif vsn[0] > self.CUR_VERSION:
-                raise BobError("Archive database was created by a newer version of Bob!")
+            elif vsn[0] != self.CUR_VERSION:
+                raise BobError("Archive database was created by an incompatible version of Bob!",
+                    help="Delete '.bob-archive.sqlite3' and run again to re-index.")
         except sqlite3.Error as e:
             raise BobError("Cannot open cache: " + str(e))
         return self
@@ -87,28 +86,27 @@ class ArchiveScanner:
                     for l3 in os.listdir(l2):
                         m = self.__archiveSchema.fullmatch(l3)
                         if not m: continue
-                        taint = m.group(1) and m.group(1)[1:]
-                        self.__scan(os.path.join(l2, l3), taint, verbose)
+                        self.__scan(os.path.join(l2, l3), verbose)
         except OSError as e:
             raise BobError("Error scanning archive: " + str(e))
         finally:
             self.__db.execute("END")
 
-    def __scan(self, fileName, taint, verbose):
+    def __scan(self, fileName, verbose):
         try:
             st = binStat(fileName)
-            bid = bytes.fromhex(fileName[0:2] + fileName[3:5] + fileName[6:42])
-            taint = bytes.fromhex(taint) if taint else b''
+            bidHex, sep, suffix = fileName.partition("-")
+            bid = bytes.fromhex(bidHex[0:2] + bidHex[3:5] + bidHex[6:])
 
             # Validate entry in caching db. Delete entry if stat has changed.
             # The database will clean the 'refs' table automatically.
-            self.__db.execute("SELECT stat FROM files WHERE bid=? AND taint=?",
-                                (bid, taint))
+            self.__db.execute("SELECT stat FROM files WHERE bid=?",
+                                (bid,))
             cachedStat = self.__db.fetchone()
             if cachedStat is not None:
                 if cachedStat[0] == st: return
-                self.__db.execute("DELETE FROM files WHERE bid=? AND taint=?",
-                    (bid, taint))
+                self.__db.execute("DELETE FROM files WHERE bid=?",
+                    (bid,))
 
             # read audit trail
             if verbose: print("scan", fileName)
@@ -138,8 +136,8 @@ class ArchiveScanner:
                 'build' : artifact.getBuildInfo(),
                 'metaEnv' : artifact.getMetaEnv(),
             })
-            self.__db.execute("INSERT INTO files VALUES (?, ?, ?, ?)",
-                (bid, taint, st, vrs))
+            self.__db.execute("INSERT INTO files VALUES (?, ?, ?)",
+                (bid, st, vrs))
             self.__db.executemany("INSERT OR IGNORE INTO refs VALUES (?, ?)",
                 [ (bid, r) for r in audit.getReferencedBuildIds() ])
         except tarfile.TarError as e:
@@ -147,23 +145,23 @@ class ArchiveScanner:
         except OSError as e:
             raise BobError(str(e))
 
-    def remove(self, bid, taint):
+    def remove(self, bid):
         self.__cleanup = True
-        self.__db.execute("DELETE FROM files WHERE bid=? AND taint=?",
-            (bid, taint))
+        self.__db.execute("DELETE FROM files WHERE bid=?",
+            (bid,))
 
     def getBuildIds(self):
-        self.__db.execute("SELECT bid,taint FROM files")
-        return self.__db.fetchall()
+        self.__db.execute("SELECT bid FROM files")
+        return [ r[0] for r in self.__db.fetchall() ]
 
     def getReferencedBuildIds(self, bid):
         self.__db.execute("SELECT ref FROM refs WHERE bid=?",
             (bid,))
         return [ r[0] for r in self.__db.fetchall() ]
 
-    def getVars(self, bid, taint):
-        self.__db.execute("SELECT vars FROM files WHERE bid=? AND taint=?",
-            (bid, taint))
+    def getVars(self, bid):
+        self.__db.execute("SELECT vars FROM files WHERE bid=?",
+            (bid,))
         v = self.__db.fetchone()
         if v:
             return pickle.loads(v[0])
@@ -338,9 +336,9 @@ def doArchiveClean(argv):
     with scanner:
         if not args.noscan:
             scanner.scan(args.verbose)
-        for bid,taint in scanner.getBuildIds():
+        for bid in scanner.getBuildIds():
             if bid in retained: continue
-            if retainExpr.evalBool(scanner.getVars(bid, taint)):
+            if retainExpr.evalBool(scanner.getVars(bid)):
                 retained.add(bid)
                 todo = set(scanner.getReferencedBuildIds(bid))
                 while todo:
@@ -349,11 +347,10 @@ def doArchiveClean(argv):
                     retained.add(n)
                     todo.update(scanner.getReferencedBuildIds(n))
 
-        for bid,taint in scanner.getBuildIds():
+        for bid in scanner.getBuildIds():
             if bid in retained: continue
             victim = asHexStr(bid)
-            victim = os.path.join(victim[0:2], victim[2:4],
-                victim[4:] + "-1" + ("-"+asHexStr(taint) if taint else "") + ".tgz")
+            victim = os.path.join(victim[0:2], victim[2:4], victim[4:] + "-1.tgz")
             if args.dry_run:
                 print(victim)
             else:
@@ -365,7 +362,7 @@ def doArchiveClean(argv):
                     pass
                 except OSError as e:
                     raise BobError("Cannot remove {}: {}".format(victim, str(e)))
-                scanner.remove(bid, taint)
+                scanner.remove(bid)
 
 availableArchiveCmds = {
     "scan" : (doArchiveScan, "Scan archive for new artifacts"),
