@@ -1,0 +1,30 @@
+multiPackage:
+    tool:
+        provideTools:
+            something:
+                path: "."
+                fingerprint: |
+                    echo "$FINGERPRINT_TOOL"
+
+    upstream:
+        fingerprint: |
+            echo "${FINGERPRINT_ROOT}"
+        packageScript: |
+            echo "${FINGERPRINT_ROOT}" > result.txt
+
+    downstream:
+        root: True 
+        depends: [transitive-upstream]
+        buildScript: |
+            rm -rf *
+            cp -a $2/* .
+        packageScript: |
+            cp -a $1/* .
+
+    consumer:
+        root: True
+        depends:
+            - name: transitive-tool
+              use: [tools]
+        packageTools: [something]
+        packageScript: "true"

@@ -1,0 +1,23 @@
+root: True
+
+packageVars: [CANARY]
+packageScript: |
+    echo "${CANARY:-unset}" > result.txt
+
+# never fingerpint if $CANARY not set
+fingerprintIf: "$(ne,${CANARY:-},)"
+fingerprint: |
+    if [[ $CANARY != dummy ]] ; then
+        touch $CANARY
+    fi
+    echo "${CANARY}"
+
+multiPackage:
+    never:
+        fingerprintIf: "false"
+
+    default: {}
+
+    always:
+        environment:
+            CANARY: dummy

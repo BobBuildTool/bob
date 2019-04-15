@@ -1,0 +1,45 @@
+multiPackage:
+    image:
+        multiPackage:
+            "1":
+                packageScript: echo sandbox-1 > id.txt
+            "2":
+                packageScript: echo sandbox-2 > id.txt
+        provideSandbox:
+            paths: ["/bin", "/usr/bin"]
+            mount:
+                - "/bin"
+                - "/etc"
+                - "/lib"
+                - ["/lib32", "/lib32", [nofail]]
+                - ["/lib64", "/lib64", [nofail]]
+                - "/usr"
+
+    inside:
+        multiPackage:
+            "1":
+                depends:
+                    - name: sandbox-image-1
+                      use: [sandbox]
+            "2":
+                depends:
+                    - name: sandbox-image-2
+                      use: [sandbox]
+        fingerprint: "cat /id.txt || cat /etc/machine-id"
+        buildScript: |
+            cp /id.txt . 2>/dev/null || cat /etc/machine-id > id.txt
+        packageScript: |
+            cp -a $1/* .
+
+    outside:
+        root: true
+        depends:
+            - sandbox-inside-1
+            - sandbox-inside-2
+        buildScript: |
+            mkdir -p 1 2
+            cp -a $2/id.txt 1/
+            cp -a $3/id.txt 2/
+        packageScript:
+            cp -a $1/* .
+
