@@ -1461,7 +1461,7 @@ esac
             script = step._getFingerprintScript()
             fingerprint = self.__fingerprints.get(script)
             if fingerprint is None:
-                with stepAction(step, "FNGRPRNT", step.getPackage().getName(), TRACE) as a:
+                with stepAction(step, "FNGRPRNT", step.getPackage().getName(), DEBUG) as a:
                     fingerprint = await self.__runFingerprintScript(script, a)
                 self.__fingerprints[script] = fingerprint
         else:
