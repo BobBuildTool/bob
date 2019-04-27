@@ -262,7 +262,9 @@ def hashEngine():
             else:
                 inFile = open(args.spec, "r")
 
-            res = __process(inFile.readline().strip(), inFile, args.state)
+            res = b''
+            for cmd in inFile:
+                res += __process(cmd.strip(), inFile, args.state)
             if args.output == "-":
                 sys.stdout.buffer.write(res)
             else:
@@ -341,17 +343,21 @@ def __process(l, inFile, stateDir):
     elif l.startswith("g"):
         from .scm.git import GitScm
         return bytes.fromhex(GitScm.processLiveBuildIdSpec(l[1:]))
-    else:
+    elif l:
         print("Malformed spec:", l, file=sys.stderr)
         sys.exit(1)
+    else:
+        return b''
 
 def __processBlock(h, inFile, stateDir):
-    while True:
-        l = inFile.readline().strip()
+    for l in inFile:
+        l = l.strip()
         if l.startswith("}"):
             return h.digest()
         else:
             h.update(__process(l, inFile, stateDir))
+    print("Malformed spec: unfinished block", file=sys.stderr)
+    sys.exit(1)
 
 if __name__ == '__main__':
     if sys.argv[1] == 'bob':
