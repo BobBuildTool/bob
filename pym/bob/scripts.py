@@ -338,6 +338,12 @@ def __process(l, inFile, stateDir):
             fn = fn[1:]
             skipEmpty = True
         return __processBlock(hashlib.new(fn), inFile, stateDir, skipEmpty)
+    elif l.startswith("["):
+        exp,sep,l = l[1:].partition("]")
+        start,sep,end = exp.partition(":")
+        start = int(start) if start else None
+        end = int(end) if end else None
+        return __process(l, inFile, stateDir)[start:end]
     elif l.startswith("#"):
         import os.path
         if stateDir:
