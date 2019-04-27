@@ -83,9 +83,11 @@ Recipes
   If a package is not relocatable the workspace path is also some kind of host
   dependency. Bob treats the installation path of these tools as an additional
   fingerprint. This enables safe exchange of such artifacts that were
-  previously only up-/downloaded when building inside a sandbox.
+  previously only up-/downloaded when building inside a sandbox. This is only
+  done if the :ref:`policies-allRelocatable` policy is set to the new
+  behaviour, though.
 
-  See :ref:`configuration-recipes-fingerprint` and
+  See :ref:`configuration-recipes-fingerprintScript` and
   :ref:`configuration-recipes-provideTools` for further details.
 
 * Allow local files with the "url" SCM.
