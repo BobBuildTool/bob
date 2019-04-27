@@ -65,47 +65,33 @@ def dissectPackageInputState(oldInputBuildId):
 
     Excluding the legacy storage, two formats are persisted:
 
-      built: [ BuildId(+Fingerprint)?, InputHash1, ...]
-      downloaded: BuildId(+Fingerprint)?
-
-    The fingerprint is always concatenated with the build-id.
+      built: [ BuildId, InputHash1, ...]
+      downloaded: BuildId
 
     Returned tuple:
-        (wasDownloaded:bool, inputHashes:list, buildId:bytes, fingerprint:bytes)
+        (wasDownloaded:bool, inputHashes:list, buildId:bytes)
     """
     if (isinstance(oldInputBuildId, list) and (len(oldInputBuildId) >= 1)):
         oldWasDownloaded = False
         oldInputHashes = oldInputBuildId[1:]
-        # Bob versions < 0.15 stored the build-id only if the package could
-        # actually be up/downloaded.
         oldInputBuildId = oldInputBuildId[0]
-        if isinstance(oldInputBuildId, bytes):
-            oldInputFingerprint = oldInputBuildId[20:]
-            oldInputBuildId = oldInputBuildId[:20]
-        else:
-            oldInputFingerprint = b''
     elif isinstance(oldInputBuildId, bytes):
         oldWasDownloaded = True
         oldInputHashes = None
-        oldInputFingerprint = oldInputBuildId[20:]
-        oldInputBuildId = oldInputBuildId[:20]
     else:
         # created by old Bob version or new workspace
         oldWasDownloaded = False
         oldInputHashes = oldInputBuildId
-        oldInputFingerprint = b''
 
-    return (oldWasDownloaded, oldInputHashes, oldInputBuildId, oldInputFingerprint)
+    return (oldWasDownloaded, oldInputHashes, oldInputBuildId)
 
-def packageInputDownloaded(buildId, fingerprint):
+def packageInputDownloaded(buildId):
     assert isinstance(buildId, bytes)
-    assert isinstance(fingerprint, bytes)
-    return buildId + fingerprint
+    return buildId
 
-def packageInputBuilt(buildId, fingerprint, inputHashes):
+def packageInputBuilt(buildId, inputHashes):
     assert isinstance(buildId, bytes)
-    assert isinstance(fingerprint, bytes)
-    return [buildId + fingerprint] + inputHashes
+    return [buildId] + inputHashes
 
 
 class RestartBuildException(Exception):
@@ -454,8 +440,7 @@ esac
             buildId = resultHash
         else:
             buildId = await self._getBuildId(step, depth)
-        fingerprint = await self._getFingerprint(step.getPackage())
-        audit = Audit.create(step.getVariantId(), buildId, resultHash, fingerprint)
+        audit = Audit.create(step.getVariantId(), buildId, resultHash)
         audit.addDefine("bob", BOB_VERSION)
         audit.addDefine("recipe", step.getPackage().getRecipe().getName())
         audit.addDefine("package", "/".join(step.getPackage().getStack()))
@@ -1093,7 +1078,7 @@ esac
         # run build if input has changed
         buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
             for i in buildStep.getAllDepSteps() if i.isValid() ]
-        buildFingerprint = await self._getFingerprint(buildStep.getPackage())
+        buildFingerprint = await self._getFingerprint(buildStep)
         if buildFingerprint: buildInputHashes.append(buildFingerprint)
         if checkoutOnly:
             stepMessage(buildStep, "BUILD", "skipped due to --checkout-only ({})".format(prettyBuildPath),
@@ -1142,10 +1127,9 @@ esac
         if not checkoutOnly:
             # don't compute these ids if they are not necessary
             packageBuildId = await self._getBuildId(packageStep, depth)
-            packageFingerprint = await self._getFingerprint(packageStep.getPackage())
 
         # Dissect input parameters that lead to current workspace the last time
-        oldWasDownloaded, oldInputHashes, oldInputBuildId, oldInputFingerprint = \
+        oldWasDownloaded, oldInputHashes, oldInputBuildId = \
             dissectPackageInputState(BobState().getInputHashes(prettyPackagePath))
 
         # If possible try to download the package. If we downloaded the
@@ -1166,9 +1150,6 @@ esac
             if (oldInputBuildId is not None) and (oldInputBuildId != packageBuildId):
                 prune = True
                 reason = "build-id changed"
-            elif oldInputFingerprint != packageFingerprint:
-                prune = True
-                reason = "fingerprint changed"
             elif self.__force:
                 prune = True
                 reason = "build forced"
@@ -1190,11 +1171,11 @@ esac
             if BobState().getResultHash(prettyPackagePath) is None:
                 audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
                 wasDownloaded = await self.__archive.downloadPackage(packageStep,
-                    packageBuildId, packageFingerprint, audit, prettyPackagePath)
+                    packageBuildId, audit, prettyPackagePath)
                 if wasDownloaded:
                     self.__statistic.packagesDownloaded += 1
                     BobState().setInputHashes(prettyPackagePath,
-                        packageInputDownloaded(packageBuildId, packageFingerprint))
+                        packageInputDownloaded(packageBuildId))
                     packageHash = hashWorkspace(packageStep)
                     workspaceChanged = True
                     wasDownloaded = True
@@ -1221,10 +1202,12 @@ esac
             packageInputs.extend(packageStep.getAllDepSteps())
             packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
                 for i in packageInputs if i.isValid() ]
+            packageFingerprint = await self._getFingerprint(packageStep)
+            if packageFingerprint: packageInputHashes.append(packageFingerprint)
             if checkoutOnly:
                 stepMessage(packageStep, "PACKAGE", "skipped due to --checkout-only ({})".format(prettyPackagePath),
                     SKIPPED, IMPORTANT)
-            elif (not self.__force) and (oldInputHashes == packageInputHashes) and (oldInputFingerprint == packageFingerprint):
+            elif (not self.__force) and (oldInputHashes == packageInputHashes):
                 stepMessage(packageStep, "PACKAGE", "skipped (unchanged input for {})".format(prettyPackagePath),
                     SKIPPED, IMPORTANT)
             else:
@@ -1240,7 +1223,7 @@ esac
                 audit = await self._generateAudit(packageStep, depth, packageHash)
                 if mayUpOrDownload and self.__archive.canUploadLocal():
                     await self.__archive.uploadPackage(packageStep, packageBuildId,
-                        packageFingerprint, audit, prettyPackagePath)
+                        audit, prettyPackagePath)
 
         # Rehash directory if content was changed
         if workspaceChanged:
@@ -1248,10 +1231,10 @@ esac
             BobState().setVariantId(prettyPackagePath, packageDigest)
             if wasDownloaded:
                 BobState().setInputHashes(prettyPackagePath,
-                    packageInputDownloaded(packageBuildId, packageFingerprint))
+                    packageInputDownloaded(packageBuildId))
             else:
                 BobState().setInputHashes(prettyPackagePath,
-                    packageInputBuilt(packageBuildId, packageFingerprint, packageInputHashes))
+                    packageInputBuilt(packageBuildId, packageInputHashes))
 
     async def __queryLiveBuildId(self, step):
         """Predict live build-id of checkout step.
@@ -1380,7 +1363,9 @@ esac
         else:
             ret = self.__buildDistBuildIds.get(path)
             if ret is None:
-                ret = await step.getDigestCoro(lambda x: self.__getBuildIdList(x, depth+1), True)
+                fingerprint = await self._getFingerprint(step)
+                ret = await step.getDigestCoro(lambda x: self.__getBuildIdList(x, depth+1),
+                    True, fingerprint=fingerprint)
                 self.__buildDistBuildIds[path] = ret
 
         return ret
@@ -1434,8 +1419,7 @@ esac
                 ret = dep.getVariantId()
             return ret
 
-        r = step.getDigest(getStoredVId)
-        return r
+        return step.getDigest(getStoredVId)
 
     async def __yieldJobWhile(self, coro):
         """Yield the job slot while waiting for a coroutine.
@@ -1457,35 +1441,36 @@ esac
         if not self.__running: raise CancelBuildException
         return ret
 
-    async def _getFingerprint(self, package):
-        # Fingerprinting is not supported if we're on the old policy...
-        if not self.__recipes.getPolicy('allRelocatable'):
+    async def _getFingerprint(self, step):
+        # Inside a sandbox the situation is clear. The variant-id and build-id
+        # are already tied directly to the sandbox variant-id by getDigest().
+        # This is pessimistic but easier than calculating the fingerprint
+        # inside the sandbox.
+        if step.getSandbox() is not None:
             return b''
 
-        # A relocatable package with no fingerprinting is easy
-        script = package._getFingerprintScript()
-        if not script and package.isRelocatable():
+        # A relocatable step with no fingerprinting is easy
+        isFingerprinted = step._isFingerprinted()
+        trackRelocation = step.isPackageStep() and not step.isRelocatable() and \
+            self.__recipes.getPolicy('allRelocatable')
+        if not isFingerprinted and not trackRelocation:
             return b''
-
-        # Inside a sandbox the situation is clear. Tie the fingerprint directly
-        # to the sandbox variant-id. This is pessimistic but easier than
-        # calculating the fingerprint inside the sandbox.
-        packageStep = package.getPackageStep()
-        sandbox = packageStep.getSandbox()
-        if sandbox is not None:
-            return sandbox.getStep().getVariantId()
 
         # Execute the fingerprint script (or use cached result)
-        fingerprint = self.__fingerprints.get(script)
-        if fingerprint is None:
-            with stepAction(packageStep, "FNGRPRNT", package.getName(), TRACE) as a:
-                fingerprint = await self.__runFingerprintScript(script, a)
-            self.__fingerprints[script] = fingerprint
+        if isFingerprinted:
+            script = step._getFingerprintScript()
+            fingerprint = self.__fingerprints.get(script)
+            if fingerprint is None:
+                with stepAction(step, "FNGRPRNT", step.getPackage().getName(), TRACE) as a:
+                    fingerprint = await self.__runFingerprintScript(script, a)
+                self.__fingerprints[script] = fingerprint
+        else:
+            fingerprint = b''
 
         # If the package is not relocatable the exec path is mixed into the
         # fingerprint to tag the relocation information at the artifact.
-        if not package.isRelocatable():
-            fingerprint += packageStep.getExecPath().encode(
+        if trackRelocation:
+            fingerprint += step.getExecPath().encode(
                 locale.getpreferredencoding(False), 'replace')
 
         return hashlib.sha1(fingerprint).digest()
@@ -1501,6 +1486,7 @@ esac
         stdout = stderr = None
         with tempfile.TemporaryDirectory() as tmp:
             try:
+                runEnv["BOB_CWD"] = tmp
                 proc = await asyncio.create_subprocess_exec("/bin/bash", "-x", "-c",
                     script, cwd=tmp, env=runEnv, stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)

@@ -50,13 +50,13 @@ JENKINS_SCRIPT_END = "BOB_JENKINS_SANDBOXED_SCRIPT"
 # directory even if script fails.
 FINGERPRINT_SCRIPT_TEMPLATE = """\
 (
-trap 'rm -rf "$T"' EXIT
-T=$(mktemp -d)
-cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | env {ENV} BOB_CWD="$T" bash -x | sha1sum | cut -d ' ' -f1 > {OUTPUT}
+    trap 'rm -rf "$T"' EXIT
+    T=$(mktemp -d)
+    cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | env {ENV} BOB_CWD="$T" bash -x
 cd $BOB_CWD
 {SCRIPT}
 BOB_JENKINS_FINGERPRINT_SCRIPT
-)
+{RELOC}) > {OUTPUT}
 """
 
 SHARED_GENERATION = '-1'
@@ -114,27 +114,41 @@ def wrapCommandArguments(cmd, arguments):
     return ret
 
 class SpecHasher:
-    """Track digest calculation and output as spec for bob-hash-engine"""
+    """Track digest calculation and output as spec for bob-hash-engine.
+
+    Re-implements bob.input.DigestHasher as bob-hash-engine script.
+    """
 
     def __init__(self):
-        self.lines = ["{sha1"]
+        self.selfLines = []
+        self.hostLines = []
 
     def update(self, data):
         if isinstance(data, bytes):
-            self.lines.extend(iter(genHexSlice(asHexStr(data))))
+            self.selfLines.extend(iter(genHexSlice(asHexStr(data))))
         else:
-            self.lines.append("<" + JenkinsJob._buildIdName(data))
+            self.selfLines.append(data)
+
+    def fingerprint(self, data):
+        if isinstance(data, bytes):
+            self.hostLines.extend(iter(genHexSlice(asHexStr(data))))
+        else:
+            self.hostLines.append(data)
 
     def digest(self):
-        return "\n".join(self.lines + ["}"])
+        ret = ["{sha1"] + self.selfLines + ["}"]
+        if self.hostLines:
+            ret += ["{?sha1"] + self.hostLines + ["}"]
+        return ret
 
+    @staticmethod
+    def sliceRecipes(depBuildId):
+        return "[:20]<" + depBuildId
 
-def getBuildIdSpec(step):
-    """Return bob-hash-engine spec to calculate build-id of step"""
-    if step.isCheckoutStep():
-        return "#" + step.getWorkspacePath()
-    else:
-        return step.getDigest(lambda s: s, True, SpecHasher)
+    @staticmethod
+    def sliceHost(depBuildId):
+        return "[20:]<" + depBuildId
+
 
 def genUuid():
     ret = "".join(random.sample("0123456789abcdef", 8))
@@ -394,9 +408,20 @@ class JenkinsJob:
         return "\n".join(cmds)
 
     def dumpStepBuildIdGen(self, step):
-        return [ "bob-hash-engine --state .state -o {} <<'EOF'".format(JenkinsJob._buildIdName(step)),
-                 getBuildIdSpec(step),
-                 "EOF" ]
+        """Return bob-hash-engine call to calculate build-id of step"""
+
+        ret = [ "bob-hash-engine --state .state -o {} <<'EOF'".format(JenkinsJob._buildIdName(step)) ]
+
+        if step.isCheckoutStep():
+            ret.append("#" + step.getWorkspacePath())
+        else:
+            fingerprint = self._fingerprintName(step)
+            if fingerprint: fingerprint = "{sha1\n<" + fingerprint + "\n}"
+            ret.extend(step.getDigest(lambda s: JenkinsJob._buildIdName(s), True,
+                SpecHasher, fingerprint=fingerprint))
+
+        ret.append("EOF")
+        return ret
 
     def dumpStepAuditGen(self, step):
         cmd = [
@@ -436,11 +461,6 @@ class JenkinsJob:
         cmd.append("$(hexdump -v -e '/1 \"%02x\"' " + JenkinsJob._buildIdName(step) + ")")
         cmd.append("$(echo \"#{}\" | bob-hash-engine --state .state | hexdump -v -e '/1 \"%02x\"')"
                     .format(step.getWorkspacePath()))
-        fingerprint = self._fingerprintName(step.getPackage())
-        if isinstance(fingerprint, bytes):
-            cmd.append(asHexStr(fingerprint))
-        elif isinstance(fingerprint, str):
-            cmd.append("$(< {})".format(quote(fingerprint)))
 
         # wrap lines
         ret = []
@@ -502,31 +522,27 @@ class JenkinsJob:
     def _canaryName(d):
         return ".state/" + d.getWorkspacePath().replace('/', '_') + ".canary"
 
-    def _fingerprintName(self, package):
-        """Determine static fingerprint or return file name where it is stored.
+    def _fingerprintName(self, step):
+        """Return fingerprint file name if one is required.
 
         Depending on the fingerprint state returns the following values:
 
           * None if no fingerprint is needed
-          * bytes() if the fingerprint is static
           * str() with the name of the file where the fingerprint is stored
 
         See bob.cmds.build.builder.LocalBuilder._getFingerprint() for the master
         algorithm.
         """
-        if not self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
+        if step.getSandbox() is not None:
             return None
 
-        script = package._getFingerprintScript()
-        if not script and package.isRelocatable():
+        isFingerprinted = step._isFingerprinted()
+        trackRelocation = step.isPackageStep() and not step.isRelocatable() and \
+            self.__recipe.getRecipeSet().getPolicy('allRelocatable')
+        if not isFingerprinted and not trackRelocation:
             return None
 
-        packageStep = package.getPackageStep()
-        sandbox = packageStep.getSandbox()
-        if sandbox is not None:
-            return sandbox.getStep().getVariantId()
-
-        return packageStep.getWorkspacePath().replace('/', '_') + ".fingerprint"
+        return step.getWorkspacePath().replace('/', '_') + ".fingerprint"
 
     def dumpXML(self, orig, nodes, windows, credentials, clean, options, date, authtoken):
         if orig:
@@ -664,20 +680,24 @@ class JenkinsJob:
         prepareCmds.append("set -x")
 
         fingerprints = set()
-        def ensureFingerprint(package):
-            fingerprint = self._fingerprintName(package)
-            if isinstance(fingerprint, str) and (fingerprint not in fingerprints):
+        def ensureFingerprint(step):
+            fingerprint = self._fingerprintName(step)
+            if (fingerprint is not None) and (fingerprint not in fingerprints):
                 # ok, we really have to compute it
-                script = package._getFingerprintScript()
-                if not package.isRelocatable():
-                    script += "\necho -n " + quote(package.getPackageStep().getExecPath())
-                envWhiteList = package.getRecipe().getRecipeSet().envWhiteList()
+                script = step._getFingerprintScript()
+                if step.isPackageStep() and not step.isRelocatable() and \
+                   self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
+                    reloc = "echo -n " + step.getExecPath() + "\n"
+                else:
+                    reloc = ""
+                envWhiteList = step.getPackage().getRecipe().getRecipeSet().envWhiteList()
                 envWhiteList |= set(['PATH'])
                 env = ["-i"]
                 env.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
-                prepareCmds.append("\n# fingerprint " + package.getName())
+                prepareCmds.append("\n# fingerprint " + step.getPackage().getName())
                 prepareCmds.append(FINGERPRINT_SCRIPT_TEMPLATE.format(
-                    ENV=" ".join(env), SCRIPT=script, OUTPUT=quote(fingerprint)))
+                    ENV=" ".join(env), SCRIPT=script, OUTPUT=quote(fingerprint),
+                    RELOC=reloc))
                 fingerprints.add(fingerprint)
 
             return fingerprint
@@ -784,11 +804,10 @@ class JenkinsJob:
                                    SHARED=sharedDir,
                                    DOWNLOAD_CMD=self.__archive.download(d,
                                                     JenkinsJob._buildIdName(d),
-                                                    ensureFingerprint(d.getPackage()),
                                                     JenkinsJob._tgzName(d))))
                     else:
                         prepareCmds.append(self.__archive.download(d,
-                            JenkinsJob._buildIdName(d), ensureFingerprint(d.getPackage()),
+                            JenkinsJob._buildIdName(d),
                             JenkinsJob._tgzName(d)))
 
             # extract deps
@@ -864,11 +883,14 @@ class JenkinsJob:
             "# create build-ids"
         ]
         for d in sorted(self.__checkoutSteps.values()):
+            ensureFingerprint(d)
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
             buildIdCalc.extend(self.dumpStepLiveBuildIdGen(d))
         for d in sorted(self.__buildSteps.values()):
+            ensureFingerprint(d)
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
         for d in sorted(self.__packageSteps.values()):
+            ensureFingerprint(d)
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
         checkout = xml.etree.ElementTree.SubElement(
             builders, "hudson.tasks.Shell")
@@ -898,7 +920,7 @@ class JenkinsJob:
                not d.isRelocatable() and (d.getSandbox() is None):
                 continue
             cmd = self.__archive.download(d, JenkinsJob._buildIdName(d),
-                ensureFingerprint(d.getPackage()), JenkinsJob._tgzName(d))
+                JenkinsJob._tgzName(d))
             if not cmd: continue
             downloadCmds.append(cmd)
         if downloadCmds:
@@ -926,7 +948,6 @@ class JenkinsJob:
         # package steps
         publish = []
         for d in sorted(self.__packageSteps.values()):
-            ensureFingerprint(d.getPackage())
             package = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
@@ -944,7 +965,7 @@ class JenkinsJob:
                       not d.isRelocatable() and \
                       (d.getSandbox() is None) and \
                       (options.get("artifacts.copy", "jenkins") == "jenkins")
-                    else self.__archive.upload(d, JenkinsJob._buildIdName(d), ensureFingerprint(d.getPackage()), JenkinsJob._tgzName(d))
+                    else self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             ])
             if options.get("artifacts.copy", "jenkins") == "jenkins":
                 publish.append(JenkinsJob._tgzName(d))
