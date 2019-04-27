@@ -19,6 +19,7 @@ class RecipesTmp:
         self.tmpdir = TemporaryDirectory()
         os.chdir(self.tmpdir.name)
         os.mkdir("recipes")
+        os.mkdir("classes")
 
     def tearDown(self):
         self.tmpdir.cleanup()
@@ -28,14 +29,19 @@ class RecipesTmp:
         with open(os.path.join("recipes", name+".yaml"), "w") as f:
             f.write(textwrap.dedent(content))
 
+    def writeClass(self, name, content):
+        with open(os.path.join("classes", name+".yaml"), "w") as f:
+            f.write(textwrap.dedent(content))
+
     def writeConfig(self, content):
         with open("config.yaml", "w") as f:
             f.write(yaml.dump(content))
 
-    def generate(self):
+    def generate(self, sandboxEnabled=False):
         recipes = RecipeSet()
         recipes.parse()
-        return recipes.generatePackages(lambda x,y: "unused")
+        return recipes.generatePackages(lambda x,y: "unused",
+            sandboxEnabled=sandboxEnabled)
 
 
 class TestUserConfig(TestCase):
@@ -556,3 +562,310 @@ class TestToolEnvironment(RecipesTmp, TestCase):
 
         packages = self.generate()
         self.assertRaises(ParseError, packages.getRootPackage)
+
+class TestFingerprints(RecipesTmp, TestCase):
+    """Test fingerprint impact.
+
+    Everything is done with sandbox. Without sandbox the handling moves to the
+    build-id that is implemented in the build backend. This should be covered
+    by the 'fingerprints' black box test.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.writeRecipe("sandbox", """\
+            provideSandbox:
+                paths: ["/"]
+            """)
+
+    def testCheckoutNotFingerprinted(self):
+        """Checkout steps are independent of fingerprints"""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: sandbox
+                  use: [sandbox]
+            checkoutScript: "true"
+            buildScript: "true"
+            packageScript: "true"
+
+            multiPackage:
+                "1": { }
+                "2":
+                    fingerprintScript: "echo bob"
+                    fingerprintIf: True
+            """)
+        packages = self.generate(True)
+        r1 = packages.walkPackagePath("root-1")
+        r2 = packages.walkPackagePath("root-2")
+
+        self.assertEqual(r1.getCheckoutStep().getVariantId(),
+            r2.getCheckoutStep().getVariantId())
+        self.assertNotEqual(r1.getBuildStep().getVariantId(),
+            r2.getBuildStep().getVariantId())
+        self.assertNotEqual(r1.getPackageStep().getVariantId(),
+            r2.getPackageStep().getVariantId())
+
+    def testCheckoutToolFingerpintIndependent(self):
+        """Checkout steps are not influenced by tool fingerprint scripts.
+
+        But the build and package steps must be still affetcted, though.
+        """
+
+        common = textwrap.dedent("""\
+            root: True
+            depends:
+                - name: sandbox
+                  use: [sandbox]
+                  forward: True
+                - name: tool
+                  use: [tools]
+            checkoutScript: "true"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("root1", common + "checkoutTools: [plainTool]\n")
+        self.writeRecipe("root2", common + "checkoutTools: [fingerprintedTool]\n")
+        self.writeRecipe("tool", """\
+            provideTools:
+                plainTool:
+                    path: "."
+                fingerprintedTool:
+                    path: "."
+                    fingerprintScript: "echo bob"
+                    fingerprintIf: True
+            """)
+        packages = self.generate(True)
+        r1 = packages.walkPackagePath("root1")
+        r2 = packages.walkPackagePath("root2")
+
+        self.assertEqual(r1.getCheckoutStep().getVariantId(),
+            r2.getCheckoutStep().getVariantId())
+        self.assertNotEqual(r1.getBuildStep().getVariantId(),
+            r2.getBuildStep().getVariantId())
+        self.assertNotEqual(r1.getPackageStep().getVariantId(),
+            r2.getPackageStep().getVariantId())
+
+    def testResultTransitive(self):
+        """Fingerprint is transitive when using a tainted result"""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: sandbox
+                  use: [sandbox]
+                  forward: True
+            buildScript: "true"
+            multiPackage:
+                clean:
+                    depends:
+                        - dep-clean
+                tainted:
+                    depends:
+                        - dep-tainted
+            """)
+        self.writeRecipe("dep", """\
+            packageScript: "true"
+            multiPackage:
+                clean: { }
+                tainted:
+                    fingerprintScript: "echo bob"
+                    fingerprintIf: True
+            """)
+        packages = self.generate(True)
+        r1 = packages.walkPackagePath("root-clean")
+        r2 = packages.walkPackagePath("root-tainted")
+
+        self.assertNotEqual(r1.getPackageStep().getVariantId(),
+            r2.getPackageStep().getVariantId())
+
+    def testToolNotTransitive(self):
+        """Using a fingerprinted tool does not influence digest"""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: sandbox
+                  use: [sandbox]
+                  forward: True
+            buildTools: [ tool ]
+            buildScript: "true"
+            multiPackage:
+                clean:
+                    depends:
+                        - name: tools-clean
+                          use: [tools]
+                tainted:
+                    depends:
+                        - name: tools-tainted
+                          use: [tools]
+            """)
+        self.writeRecipe("tools", """\
+            packageScript: "true"
+            provideTools:
+                tool: "."
+            multiPackage:
+                clean: { }
+                tainted:
+                    fingerprintScript: "echo bob"
+                    fingerprintIf: True
+            """)
+        packages = self.generate(True)
+
+        r1 = packages.walkPackagePath("root-clean")
+        r2 = packages.walkPackagePath("root-tainted")
+        self.assertEqual(r1.getPackageStep().getVariantId(),
+            r2.getPackageStep().getVariantId())
+
+        self.assertFalse(packages.walkPackagePath("root-clean/tools-clean")
+            .getPackageStep()._isFingerprinted())
+        self.assertTrue(packages.walkPackagePath("root-tainted/tools-tainted")
+            .getPackageStep()._isFingerprinted())
+
+    def testSandboxNotTransitive(self):
+        """Using a fingerprinted sandbox does not influence digest"""
+
+        self.writeRecipe("root", """\
+            root: True
+            multiPackage:
+                clean:
+                    depends:
+                        - name: sandbox-clean
+                          use: [tools]
+                tainted:
+                    depends:
+                        - name: sandbox-tainted
+                          use: [tools]
+            """)
+        self.writeRecipe("sandbox", """\
+            packageScript: "true"
+            provideSandbox:
+                paths: ["/"]
+            multiPackage:
+                clean: { }
+                tainted:
+                    fingerprintScript: "echo bob"
+                    fingerprintIf: True
+            """)
+        packages = self.generate(True)
+
+        r1 = packages.walkPackagePath("root-clean")
+        r2 = packages.walkPackagePath("root-tainted")
+        self.assertEqual(r1.getPackageStep().getVariantId(),
+            r2.getPackageStep().getVariantId())
+
+        self.assertFalse(packages.walkPackagePath("root-clean/sandbox-clean")
+            .getPackageStep()._isFingerprinted())
+        self.assertTrue(packages.walkPackagePath("root-tainted/sandbox-tainted")
+            .getPackageStep()._isFingerprinted())
+
+    def testByDefaultIncluded(self):
+        """If no 'fingerprintIf' is given the 'fingerprintScript' must be evaluated.
+
+        Parsed without sandbox to make sure fingerprint scripts are considered.
+        """
+
+        self.writeRecipe("root", """\
+            root: True
+            fingerprintScript: |
+                must-be-included
+            multiPackage:
+                clean: { }
+                tainted:
+                    fingerprintScript: |
+                        taint-script
+                    fingerprintIf: True
+            """)
+
+        packages = self.generate()
+
+        ps = packages.walkPackagePath("root-clean").getPackageStep()
+        self.assertFalse(ps._isFingerprinted())
+        self.assertFalse("must-be-included" in ps._getFingerprintScript())
+        ps = packages.walkPackagePath("root-tainted").getPackageStep()
+        self.assertTrue(ps._isFingerprinted())
+        self.assertTrue("must-be-included" in ps._getFingerprintScript())
+        self.assertTrue("taint-script" in ps._getFingerprintScript())
+
+    def testToolCanEnable(self):
+        """Tools must be able to amend and enable fingerprinting."""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tools
+                  use: [tools]
+            fingerprintIf: False
+            fingerprintScript: |
+                must-not-be-included
+            packageTools: [tool]
+            """)
+        self.writeRecipe("tools", """\
+            packageScript: "true"
+            provideTools:
+                tool:
+                    path: "."
+                    fingerprintScript: "tool-script"
+                    fingerprintIf: True
+            """)
+
+        packages = self.generate()
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertTrue(ps._isFingerprinted())
+        self.assertFalse("must-not-be-included" in ps._getFingerprintScript())
+        self.assertTrue("tool-script" in ps._getFingerprintScript())
+
+    def testDisabledNotIncluded(self):
+        """The 'fingerprintScript' must not be included if 'fingerprintIf' is False."""
+
+        self.writeClass("unspecified", """\
+            fingerprintScript: |
+                unspecified
+            """)
+        self.writeClass("static-disabled", """\
+            fingerprintIf: False
+            fingerprintScript: |
+                static-disabled
+            """)
+        self.writeClass("static-enabled", """\
+            fingerprintIf: True
+            fingerprintScript: |
+                static-enabled
+            """)
+        self.writeClass("dynamic", """\
+            fingerprintIf: "${ENABLE_FINGERPRINTING}"
+            fingerprintScript: |
+                dynamic
+            """)
+        self.writeRecipe("root", """\
+            root: True
+            inherit:
+                - unspecified
+                - static-disabled
+                - static-enabled
+                - dynamic
+            multiPackage:
+                dyn-enabled:
+                    environment:
+                        ENABLE_FINGERPRINTING: "true"
+                dyn-disabled:
+                    environment:
+                        ENABLE_FINGERPRINTING: "false"
+            """)
+
+        packages = self.generate()
+
+        ps = packages.walkPackagePath("root-dyn-enabled").getPackageStep()
+        self.assertTrue(ps._isFingerprinted())
+        self.assertTrue("unspecified" in ps._getFingerprintScript())
+        self.assertFalse("static-disabled" in ps._getFingerprintScript())
+        self.assertTrue("static-enabled" in ps._getFingerprintScript())
+        self.assertTrue("dynamic" in ps._getFingerprintScript())
+
+        ps = packages.walkPackagePath("root-dyn-disabled").getPackageStep()
+        self.assertTrue(ps._isFingerprinted())
+        self.assertTrue("unspecified" in ps._getFingerprintScript())
+        self.assertFalse("static-disabled" in ps._getFingerprintScript())
+        self.assertTrue("static-enabled" in ps._getFingerprintScript())
+        self.assertFalse("dynamic" in ps._getFingerprintScript())
