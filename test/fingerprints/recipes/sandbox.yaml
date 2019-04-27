@@ -25,7 +25,7 @@ multiPackage:
                 depends:
                     - name: sandbox-image-2
                       use: [sandbox]
-        fingerprint: "cat /id.txt || cat /etc/machine-id"
+        fingerprintScript: "cat /id.txt || cat /etc/machine-id"
         buildScript: |
             cp /id.txt . 2>/dev/null || cat /etc/machine-id > id.txt
         packageScript: |

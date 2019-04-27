@@ -4,7 +4,7 @@ depends:
     - name: tool
       use: [tools]
 
-fingerprint: |
+fingerprintScript: |
     echo "${FINGERPRINT_ROOT:-}"
 
 buildScript: |

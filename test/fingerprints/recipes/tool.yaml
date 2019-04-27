@@ -1,5 +1,5 @@
 provideTools:
     tool:
         path: "."
-        fingerprint: |
+        fingerprintScript: |
             echo "$FINGERPRINT_TOOL"
