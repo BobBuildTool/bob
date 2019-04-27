@@ -332,7 +332,12 @@ def __process(l, inFile, stateDir):
             return f.read()
     elif l.startswith("{"):
         import hashlib
-        return __processBlock(hashlib.new(l[1:]), inFile, stateDir)
+        fn = l[1:]
+        skipEmpty = False
+        if fn.startswith("?"):
+            fn = fn[1:]
+            skipEmpty = True
+        return __processBlock(hashlib.new(fn), inFile, stateDir, skipEmpty)
     elif l.startswith("#"):
         import os.path
         if stateDir:
@@ -349,13 +354,15 @@ def __process(l, inFile, stateDir):
     else:
         return b''
 
-def __processBlock(h, inFile, stateDir):
+def __processBlock(h, inFile, stateDir, skipEmpty):
     for l in inFile:
         l = l.strip()
         if l.startswith("}"):
-            return h.digest()
+            return h.digest() if not skipEmpty else b''
         else:
-            h.update(__process(l, inFile, stateDir))
+            data = __process(l, inFile, stateDir)
+            if data: skipEmpty = False
+            h.update(data)
     print("Malformed spec: unfinished block", file=sys.stderr)
     sys.exit(1)
 
