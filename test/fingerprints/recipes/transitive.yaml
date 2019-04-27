@@ -3,11 +3,11 @@ multiPackage:
         provideTools:
             something:
                 path: "."
-                fingerprint: |
+                fingerprintScript: |
                     echo "$FINGERPRINT_TOOL"
 
     upstream:
-        fingerprint: |
+        fingerprintScript: |
             echo "${FINGERPRINT_ROOT}"
         packageScript: |
             echo "${FINGERPRINT_ROOT}" > result.txt

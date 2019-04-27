@@ -6,7 +6,7 @@ packageScript: |
 
 # never fingerpint if $CANARY not set
 fingerprintIf: "$(ne,${CANARY:-},)"
-fingerprint: |
+fingerprintScript: |
     if [[ $CANARY != dummy ]] ; then
         touch $CANARY
     fi
