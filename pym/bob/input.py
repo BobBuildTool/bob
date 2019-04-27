@@ -37,7 +37,6 @@ warnDepends = WarnOnce("The same package is named multiple times as dependency!"
     help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
 warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
 warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
-warnFingerprint = Warn("The 'fingerprint' property is ignored when the 'allRelocatable' policy is unset or off.")
 
 def overlappingPaths(p1, p2):
     p1 = os.path.normcase(os.path.normpath(p1)).split(os.sep)
@@ -75,6 +74,43 @@ class __uidGen:
         return self.cur
 
 uidGen = __uidGen().get
+
+class DigestHasher:
+    def __init__(self):
+        self.__recipes = bytearray()
+        self.__host = bytearray()
+
+    def update(self, real):
+        """Add bytes to recipe-internal part of digest."""
+        self.__recipes.extend(real)
+
+    def fingerprint(self, imag):
+        """Add bytes of fingerprint to host part of digest."""
+        self.__host.extend(imag)
+
+    def digest(self):
+        """Calculate final digest value.
+
+        If no host fingerprints were added only the recipe-internal digest is
+        emitted. Otherwise the fingerprint digest is appended. This keeps the
+        calculation backwards compatible (Bob <0.15).
+        """
+        if self.__host:
+            return hashlib.sha1(self.__recipes).digest() + \
+                   hashlib.sha1(self.__host).digest()
+        else:
+            return hashlib.sha1(self.__recipes).digest()
+
+    @staticmethod
+    def sliceRecipes(digest):
+        """Extract recipe-internal digest part."""
+        return digest[:20]
+
+    @staticmethod
+    def sliceHost(digest):
+        """Extract host fingerprint digest part (if any)."""
+        return digest[20:]
+
 
 class PluginProperty:
     """Base class for plugin property handlers.
@@ -654,14 +690,14 @@ class CoreStep(CoreItem):
             [ d.coreStep for n,d in sorted(self.getTools().items()) ] + (
             [ sandbox.coreStep] if sandbox else [])
 
-    def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
-        h = hasher()
+    def getDigest(self, calculate, forceSandbox=False):
+        h = DigestHasher()
+        if self.isFingerprinted() and self.getSandbox():
+            h.fingerprint(DigestHasher.sliceRecipes(calculate(self.getSandbox().coreStep)))
         sandbox = not self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
             self.getSandbox(forceSandbox)
         if sandbox:
-            d = calculate(sandbox.coreStep)
-            if d is None: return None
-            h.update(d)
+            h.update(DigestHasher.sliceRecipes(calculate(sandbox.coreStep)))
             h.update(struct.pack("<I", len(sandbox.paths)))
             for p in sandbox.paths:
                 h.update(struct.pack("<I", len(p)))
@@ -676,9 +712,7 @@ class CoreStep(CoreItem):
             h.update(b'\x00\x00\x00\x00')
         h.update(struct.pack("<I", len(self.getTools())))
         for (name, tool) in sorted(self.getTools().items(), key=lambda t: t[0]):
-            d = calculate(tool.coreStep)
-            if d is None: return None
-            h.update(d)
+            h.update(DigestHasher.sliceRecipes(calculate(tool.coreStep)))
             h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
             h.update(tool.path.encode("utf8"))
             for l in tool.libs:
@@ -691,9 +725,9 @@ class CoreStep(CoreItem):
         args = [ arg for arg in (a.refGetDestination() for a in self.args) if arg.isValid ]
         h.update(struct.pack("<I", len(args)))
         for arg in args:
-            d = calculate(arg)
-            if d is None: return None
-            h.update(d)
+            arg = calculate(arg)
+            h.update(DigestHasher.sliceRecipes(arg))
+            h.fingerprint(DigestHasher.sliceHost(arg))
         return h.digest()
 
     def getResultId(self):
@@ -760,6 +794,10 @@ class CoreStep(CoreItem):
                 True) if not self.corePackage.recipe.getRecipeSet().sandboxInvariant \
                       else self.variantId
         return ret
+
+    def isFingerprinted(self):
+        return not self.isCheckoutStep() and (self.corePackage.fingerprint or
+               any(t.fingerprint for t in self.getTools().values()))
 
 
 class Step:
@@ -855,14 +893,16 @@ class Step:
         """Get Package object that is the parent of this Step."""
         return self.__package
 
-    def getDigest(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
+    def getDigest(self, calculate, forceSandbox=False, hasher=DigestHasher, fingerprint=None):
         h = hasher()
+        if self._coreStep.isFingerprinted() and self.getSandbox():
+            h.fingerprint(hasher.sliceRecipes(calculate(self.getSandbox().getStep())))
+        elif fingerprint:
+            h.fingerprint(fingerprint)
         sandbox = not self.__package.getRecipe().getRecipeSet().sandboxInvariant and \
             self.getSandbox(forceSandbox)
         if sandbox:
-            d = calculate(sandbox.getStep())
-            if d is None: return None
-            h.update(d)
+            h.update(hasher.sliceRecipes(calculate(sandbox.getStep())))
             h.update(struct.pack("<I", len(sandbox.getPaths())))
             for p in sandbox.getPaths():
                 h.update(struct.pack("<I", len(p)))
@@ -877,9 +917,7 @@ class Step:
             h.update(b'\x00\x00\x00\x00')
         h.update(struct.pack("<I", len(self.getTools())))
         for (name, tool) in sorted(self.getTools().items(), key=lambda t: t[0]):
-            d = calculate(tool.step)
-            if d is None: return None
-            h.update(d)
+            h.update(hasher.sliceRecipes(calculate(tool.step)))
             h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
             h.update(tool.path.encode("utf8"))
             for l in tool.libs:
@@ -889,22 +927,25 @@ class Step:
         for (key, val) in sorted(self._coreStep.digestEnv.items()):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
-        args = [ a for a in self.getArguments() if a.isValid() ]
+        args = [ calculate(a) for a in self.getArguments() if a.isValid() ]
         h.update(struct.pack("<I", len(args)))
         for arg in args:
-            d = calculate(arg)
-            if d is None: return None
-            h.update(d)
+            h.update(hasher.sliceRecipes(arg))
+            h.fingerprint(hasher.sliceHost(arg))
         return h.digest()
 
-    async def getDigestCoro(self, calculate, forceSandbox=False, hasher=hashlib.sha1):
+    async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher, fingerprint=None):
         h = hasher()
+        if self._coreStep.isFingerprinted() and self.getSandbox():
+            [d] = await calculate([self.getSandbox().getStep()])
+            h.fingerprint(hasher.sliceRecipes(d))
+        elif fingerprint:
+            h.fingerprint(fingerprint)
         sandbox = not self.__package.getRecipe().getRecipeSet().sandboxInvariant and \
             self.getSandbox(forceSandbox)
         if sandbox:
             [d] = await calculate([sandbox.getStep()])
-            if d is None: return None
-            h.update(d)
+            h.update(hasher.sliceRecipes(d))
             h.update(struct.pack("<I", len(sandbox.getPaths())))
             for p in sandbox.getPaths():
                 h.update(struct.pack("<I", len(p)))
@@ -921,8 +962,7 @@ class Step:
         tools = sorted(self.getTools().items(), key=lambda t: t[0])
         toolsDigests = await calculate([ tool.step for name,tool in tools ])
         for ((name, tool), d) in zip(tools, toolsDigests):
-            if d is None: return None
-            h.update(d)
+            h.update(hasher.sliceRecipes(d))
             h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
             h.update(tool.path.encode("utf8"))
             for l in tool.libs:
@@ -936,8 +976,8 @@ class Step:
         argsDigests = await calculate(args)
         h.update(struct.pack("<I", len(args)))
         for d in argsDigests:
-            if d is None: return None
-            h.update(d)
+            h.update(hasher.sliceRecipes(d))
+            h.fingerprint(hasher.sliceHost(d))
         return h.digest()
 
     def getVariantId(self):
@@ -1084,6 +1124,20 @@ class Step:
         return [ a.refDeref(p.getStack(), p._getInputTools(), p._getInputSandboxRaw(),
                             self.__pathFormatter, refCache)
                     for a in self._coreStep.providedDeps ]
+
+    def _isFingerprinted(self):
+        return self._coreStep.isFingerprinted()
+
+    def _getFingerprintScript(self):
+        if not self._coreStep.isFingerprinted():
+            return ""
+
+        ret = []
+        fingerprint = self.__package.getRecipe().fingerprint
+        if fingerprint: ret.append(fingerprint)
+        ret.extend(t.fingerprint for n,t in sorted(self.getTools().items())
+                                         if t.fingerprint )
+        return mangleFingerprints(joinScripts(ret), self.getEnv())
 
 
 class CoreCheckoutStep(CoreStep):
@@ -1511,15 +1565,6 @@ class Package(object):
     def isRelocatable(self):
         """Returns True if the packages is relocatable."""
         return self.__corePackage.recipe.isRelocatable()
-
-    def _getFingerprintScript(self):
-        ret = []
-        fingerprint = self.__corePackage.fingerprint
-        if fingerprint: ret.append(fingerprint)
-        packageStep = self.getPackageStep()
-        ret.extend(t.fingerprint for n,t in sorted(packageStep.getTools().items())
-                                         if t.fingerprint )
-        return mangleFingerprints(joinScripts(ret), packageStep.getEnv())
 
 
 # FIXME: implement this on our own without the Template class. How to do proper
@@ -1993,12 +2038,6 @@ class Recipe(object):
             providedDeps |= l
         self.__provideDeps = providedDeps
 
-        # warn about unsupported combinations
-        if (any(t.fingerprint for t in self.__provideTools.values()) or
-            self.__fingerprint is not None) and \
-           not self.__recipeSet.getPolicy('allRelocatable'):
-            warnFingerprint.warn(self.__packageName)
-
     def getRecipeSet(self):
         return self.__recipeSet
 
@@ -2228,15 +2267,14 @@ class Recipe(object):
                 doFingerprint = True
             else:
                 doFingerprint = env.evaluate(self.__fingerprintIf, "fingerprintIf")
-            fingerprint = self.__fingerprint if doFingerprint else ""
         else:
-            fingerprint = ""
+            doFingerprint = False
 
         # create package
         # touchedTools = tools.touchedKeys()
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
         p = CorePackage(self, tools.detach(), diffTools, sandbox, diffSandbox,
-                directPackages, indirectPackages, states, uidGen(), fingerprint)
+                directPackages, indirectPackages, states, uidGen(), doFingerprint)
 
         # optional checkout step
         if self.__checkout != (None, None, [], []):
@@ -2391,6 +2429,10 @@ Every dependency must only be given once."""
     @property
     def toolDepPackage(self):
         return self.__toolDepPackage
+
+    @property
+    def fingerprint(self):
+        return self.__fingerprint
 
 
 class PackageMatcher:

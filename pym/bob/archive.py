@@ -60,21 +60,6 @@ def writeFileOrHandle(name, fileobj, content):
     with open(name, "wb") as f:
         f.write(content)
 
-def artifactSuffixLocal(fingerprint):
-    if fingerprint:
-        return "-" + asHexStr(fingerprint) + ARTIFACT_SUFFIX
-    else:
-        return ARTIFACT_SUFFIX
-
-def artifactSuffixJenkins(fingerprintFile):
-    if fingerprintFile is None:
-        return ARTIFACT_SUFFIX
-    elif isinstance(fingerprintFile, bytes):
-        return "-" + asHexStr(fingerprintFile) + ARTIFACT_SUFFIX
-    else:
-        assert isinstance(fingerprintFile, str)
-        return "-$(< " + quote(fingerprintFile) + ")" + ARTIFACT_SUFFIX
-
 
 class DummyArchive:
     """Archive that does nothing"""
@@ -97,16 +82,16 @@ class DummyArchive:
     def canUploadJenkins(self):
         return False
 
-    async def uploadPackage(self, step, buildId, fingerprint, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content):
         pass
 
-    async def downloadPackage(self, step, buildId, fingerprint, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content):
         return False
 
-    def upload(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def upload(self, step, buildIdFile, tgzFile):
         return ""
 
-    def download(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def download(self, step, buildIdFile, tgzFile):
         return ""
 
     async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
@@ -194,12 +179,12 @@ class BaseArchive:
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
 
-    async def downloadPackage(self, step, buildId, fingerprint, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content):
         if not self.canDownloadLocal():
             return False
 
         loop = asyncio.get_event_loop()
-        suffix = artifactSuffixLocal(fingerprint)
+        suffix = ARTIFACT_SUFFIX
         details = " from {}".format(self._remoteName(buildId, suffix))
         with stepAction(step, "DOWNLOAD", content, details=details) as a:
             try:
@@ -267,12 +252,12 @@ class BaseArchive:
     def _openUploadFile(self, buildId, suffix):
         raise ArtifactUploadError("not implemented")
 
-    async def uploadPackage(self, step, buildId, fingerprint, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content):
         if not self.canUploadLocal():
             return
 
         loop = asyncio.get_event_loop()
-        suffix = artifactSuffixLocal(fingerprint)
+        suffix = ARTIFACT_SUFFIX
         details = " to {}".format(self._remoteName(buildId, suffix))
         with stepAction(step, "UPLOAD", content, details=details) as a:
             try:
@@ -400,11 +385,10 @@ class LocalArchive(BaseArchive):
                          FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
                          GEN=ARCHIVE_GENERATION, SUFFIX=suffix))
 
-    def upload(self, step, buildIdFile, fingerprintFile, tgzFile):
-        return self.__uploadJenkins(step, buildIdFile, tgzFile,
-                                    artifactSuffixJenkins(fingerprintFile))
+    def upload(self, step, buildIdFile, tgzFile):
+        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
 
-    def download(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def download(self, step, buildIdFile, tgzFile):
         if not self.canDownloadJenkins():
             return ""
 
@@ -415,7 +399,7 @@ class LocalArchive(BaseArchive):
                 cp "$BOB_DOWNLOAD_FILE" {RESULT} || echo Download failed: $?
             fi
             """.format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-                       GEN=ARCHIVE_GENERATION, SUFFIX=artifactSuffixJenkins(fingerprintFile)))
+                       GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
         return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
@@ -579,7 +563,7 @@ class SimpleHttpArchive(BaseArchive):
         elif response.status not in [200, 201, 204]:
             raise ArtifactUploadError("PUT {} {}".format(response.status, response.reason))
 
-    def upload(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def upload(self, step, buildIdFile, tgzFile):
         # only upload if requested
         if not self.canUploadJenkins():
             return ""
@@ -598,10 +582,10 @@ class SimpleHttpArchive(BaseArchive):
                 fi
             fi""".format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                          FAIL="" if self._ignoreErrors() else "; exit 1",
-                         GEN=ARCHIVE_GENERATION, SUFFIX=artifactSuffixJenkins(fingerprintFile),
+                         GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
                          INSECURE=insecure))
 
-    def download(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def download(self, step, buildIdFile, tgzFile):
         # only download if requested
         if not self.canDownloadJenkins():
             return ""
@@ -614,7 +598,7 @@ class SimpleHttpArchive(BaseArchive):
                 curl -sSg {INSECURE} --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
             fi
             """.format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-                       GEN=ARCHIVE_GENERATION, SUFFIX=artifactSuffixJenkins(fingerprintFile),
+                       GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
                        INSECURE=insecure))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
@@ -742,10 +726,10 @@ class CustomArchive(BaseArchive):
             """.format(BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                        GEN=ARCHIVE_GENERATION, SUFFIX=suffix)) + cmd
 
-    def upload(self, step, buildIdFile, fingerprintFile, tgzFile):
-        return self.__uploadJenkins(step, buildIdFile, tgzFile, artifactSuffixJenkins(fingerprintFile))
+    def upload(self, step, buildIdFile, tgzFile):
+        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
 
-    def download(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def download(self, step, buildIdFile, tgzFile):
         # only download if requested
         if not self.canDownloadJenkins():
             return ""
@@ -758,7 +742,7 @@ if [[ ! -e {RESULT} ]] ; then
     {CMD}
 fi
 """.format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-           GEN=ARCHIVE_GENERATION, SUFFIX=artifactSuffixJenkins(fingerprintFile))
+           GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX)
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
         return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
@@ -852,7 +836,7 @@ class AzureArchive(BaseArchive):
         os.close(tmpFd)
         return AzureUploader(self.__service, self.__container, tmpName, blobName)
 
-    def upload(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def upload(self, step, buildIdFile, tgzFile):
         if not self.canUploadJenkins():
             return ""
 
@@ -868,9 +852,9 @@ class AzureArchive(BaseArchive):
                        CONTAINER=self.__container, BUILDID=quote(buildIdFile),
                        RESULT=quote(tgzFile),
                        FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=artifactSuffixJenkins(fingerprintFile)))
+                       SUFFIX=ARTIFACT_SUFFIX))
 
-    def download(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def download(self, step, buildIdFile, tgzFile):
         if not self.canDownloadJenkins():
             return ""
 
@@ -884,7 +868,7 @@ class AzureArchive(BaseArchive):
             fi
             """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=self.__account,
                        CONTAINER=self.__container, BUILDID=quote(buildIdFile),
-                       RESULT=quote(tgzFile), SUFFIX=artifactSuffixJenkins(fingerprintFile)))
+                       RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
         if not self.canUploadJenkins():
@@ -1022,25 +1006,25 @@ class MultiArchive:
     def canUploadJenkins(self):
         return any(i.canUploadJenkins() for i in self.__archives)
 
-    async def uploadPackage(self, step, buildId, fingerprint, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            await i.uploadPackage(step, buildId, fingerprint, audit, content)
+            await i.uploadPackage(step, buildId, audit, content)
 
-    async def downloadPackage(self, step, buildId, fingerprint, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content):
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            if await i.downloadPackage(step, buildId, fingerprint, audit, content): return True
+            if await i.downloadPackage(step, buildId, audit, content): return True
         return False
 
-    def upload(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def upload(self, step, buildIdFile, tgzFile):
         return "\n".join(
-            i.upload(step, buildIdFile, fingerprintFile, tgzFile) for i in self.__archives
+            i.upload(step, buildIdFile, tgzFile) for i in self.__archives
             if i.canUploadJenkins())
 
-    def download(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def download(self, step, buildIdFile, tgzFile):
         return "\n".join(
-            i.download(step, buildIdFile, fingerprintFile, tgzFile) for i in self.__archives
+            i.download(step, buildIdFile, tgzFile) for i in self.__archives
             if i.canDownloadJenkins())
 
     async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):

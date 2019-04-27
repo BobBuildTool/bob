@@ -66,7 +66,6 @@ class Artifact:
         "build-id" : HexValidator(),
         "artifact-id" : HexValidator(),
         "result-hash" : HexValidator(),
-        schema.Optional("fingerprint") : HexValidator(),
         "meta" : { schema.Optional(str) : str },
         "build" : {
             'sysname'  : str,
@@ -88,7 +87,7 @@ class Artifact:
     })
 
     def __init__(self):
-        self.reset(b'\x00' * 20, b'\x00' * 20, b'\x00' * 20, b'')
+        self.reset(b'\x00' * 20, b'\x00' * 20, b'\x00' * 20)
 
     @classmethod
     def fromData(cls, data):
@@ -103,11 +102,10 @@ class Artifact:
         digestData(d, h)
         self.__id = h.digest()
 
-    def reset(self, variantId, buildId, resultHash, fingerprint):
+    def reset(self, variantId, buildId, resultHash):
         self.__variantId = variantId
         self.__buildId = buildId
         self.__resultHash = resultHash
-        self.__fingerprint = fingerprint
         self.__recipes = None
         self.__defines = {}
         u = os.uname()
@@ -132,7 +130,6 @@ class Artifact:
         self.__variantId = data["variant-id"]
         self.__buildId = data["build-id"]
         self.__resultHash = data["result-hash"]
-        self.__fingerprint = data.get("fingerprint", b'')
 
         recipes = data.get("recipes")
         if recipes is not None:
@@ -190,9 +187,6 @@ class Artifact:
 
         if self.__recipes is not None:
             ret["recipes"] = self.__recipes.dump()
-
-        if self.__fingerprint:
-            ret["fingerprint"] = asHexStr(self.__fingerprint)
 
         return ret
 
@@ -256,9 +250,6 @@ class Artifact:
     def getMetaEnv(self):
         return self.__metaEnv
 
-    def getFingerprint(self):
-        return self.__fingerprint
-
 class Audit:
     SCHEMA = schema.Schema({
         'artifact' : Artifact.SCHEMA,
@@ -299,9 +290,9 @@ class Audit:
         return audit
 
     @classmethod
-    def create(cls, variantId, buildId, resultHash, fingerprint):
+    def create(cls, variantId, buildId, resultHash):
         audit = cls()
-        audit.reset(variantId, buildId, resultHash, fingerprint)
+        audit.reset(variantId, buildId, resultHash)
         return audit
 
     def __merge(self, other):
@@ -352,8 +343,8 @@ class Audit:
         except OSError as e:
             raise BuildError("Cannot write audit: " + str(e))
 
-    def reset(self, variantId, buildId, resultHash, fingerprint):
-        self.__artifact.reset(variantId, buildId, resultHash, fingerprint)
+    def reset(self, variantId, buildId, resultHash):
+        self.__artifact.reset(variantId, buildId, resultHash)
         self.__references = {}
 
     def getId(self):

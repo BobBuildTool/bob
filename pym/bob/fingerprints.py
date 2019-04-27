@@ -95,6 +95,5 @@ def mangleFingerprints(script, env):
     ret.extend(["set -o errexit", "set -o nounset", "set -o pipefail"])
     for n,v in sorted(env.items()):
         ret.append("export {}={}".format(n, quote(v)))
-    ret.append('export BOB_CWD="$PWD"')
     return "\n".join(reversed(ret))
 
