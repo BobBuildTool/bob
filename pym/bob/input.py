@@ -435,7 +435,8 @@ class CoreItem(metaclass=ABCMeta):
 
 
 class AbstractTool:
-    __slots__ = ("path", "libs", "netAccess", "environment", "fingerprintScript")
+    __slots__ = ("path", "libs", "netAccess", "environment",
+        "fingerprintScript", "fingerprintIf")
 
     def __init__(self, spec):
         if isinstance(spec, str):
@@ -444,12 +445,14 @@ class AbstractTool:
             self.netAccess = False
             self.environment = {}
             self.fingerprintScript = ""
+            self.fingerprintIf = False
         else:
             self.path = spec['path']
             self.libs = spec.get('libs', [])
             self.netAccess = spec.get('netAccess', False)
             self.environment = spec.get('environment', {})
             self.fingerprintScript = spec.get('fingerprintScript', "")
+            self.fingerprintIf = spec.get("fingerprintIf")
 
     def prepare(self, coreStepRef, env):
         """Create concrete tool for given step."""
@@ -457,18 +460,21 @@ class AbstractTool:
         libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
         environment = { k : env.substitute(v, "provideTools::environment::"+k)
             for k, v in self.environment.items() }
-        return CoreTool(coreStepRef, path, libs, self.netAccess, environment, self.fingerprintScript)
+        return CoreTool(coreStepRef, path, libs, self.netAccess, environment,
+                        self.fingerprintScript, self.fingerprintIf)
 
 class CoreTool(CoreItem):
-    __slots__ = ("coreStep", "path", "libs", "netAccess", "environment", "fingerprintScript")
+    __slots__ = ("coreStep", "path", "libs", "netAccess", "environment",
+        "fingerprintScript", "fingerprintIf")
 
-    def __init__(self, coreStep, path, libs, netAccess, environment, fingerprintScript):
+    def __init__(self, coreStep, path, libs, netAccess, environment, fingerprintScript, fingerprintIf):
         self.coreStep = coreStep
         self.path = path
         self.libs = libs
         self.netAccess = netAccess
         self.environment = environment
         self.fingerprintScript = fingerprintScript
+        self.fingerprintIf = fingerprintIf
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -798,8 +804,7 @@ class CoreStep(CoreItem):
         return ret
 
     def isFingerprinted(self):
-        return not self.isCheckoutStep() and (self.corePackage.fingerprintScript or
-               any(t.fingerprintScript for t in self.getTools().values()))
+        return not self.isCheckoutStep() and self.corePackage.fingerprintMask != 0
 
 
 class Step:
@@ -1134,11 +1139,14 @@ class Step:
         if not self._coreStep.isFingerprinted():
             return ""
 
+        mask = self._coreStep.corePackage.fingerprintMask
+        scripts = chain(
+            (t.fingerprintScript for n,t in sorted(self.getTools().items())),
+            self.__package.getRecipe().fingerprintScripts)
         ret = []
-        fingerprint = self.__package.getRecipe().fingerprintScript
-        if fingerprint: ret.append(fingerprint)
-        ret.extend(t.fingerprintScript for n,t in sorted(self.getTools().items())
-                                               if t.fingerprintScript )
+        for s in scripts:
+            if mask & 1: ret.append(s)
+            mask >>= 1
         return mangleFingerprints(joinScripts(ret), self.getEnv())
 
 
@@ -1376,10 +1384,10 @@ corePackageInternal = CorePackageInternal()
 class CorePackage:
     __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
         "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "pkgId", "fingerprint")
+        "pkgId", "fingerprintMask")
 
     def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox,
-                 directDepSteps, indirectDepSteps, states, pkgId, fingerprint):
+                 directDepSteps, indirectDepSteps, states, pkgId, fingerprintMask):
         self.recipe = recipe
         self.tools = tools
         self.sandbox = sandbox
@@ -1388,7 +1396,7 @@ class CorePackage:
         self.indirectDepSteps = indirectDepSteps
         self.states = states
         self.pkgId = pkgId
-        self.fingerprint = fingerprint
+        self.fingerprintMask = fingerprintMask
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter):
         tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -1892,8 +1900,14 @@ class Recipe(object):
         self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts)
         self.__build = incHelper.resolve(recipe.get("buildScript"), "buildScript")
         self.__package = incHelper.resolve(recipe.get("packageScript"), "packageScript")
-        self.__fingerprintScript = recipe.get("fingerprintScript")
-        self.__fingerprintIf = recipe.get("fingerprintIf")
+        fingerprintScript = recipe.get("fingerprintScript")
+        fingerprintIf = recipe.get("fingerprintIf", None if fingerprintScript else False)
+        if fingerprintIf != False:
+            self.__fingerprintScripts = [ fingerprintScript ]
+            self.__fingerprintIf = [ fingerprintIf ]
+        else:
+            self.__fingerprintScripts = []
+            self.__fingerprintIf = []
 
         # Consider checkout deterministic by default if no checkout script is
         # involved.
@@ -2002,11 +2016,8 @@ class Recipe(object):
                 joinScripts([cls.__package[0], self.__package[0]]),
                 joinScripts([cls.__package[1], self.__package[1]], "\n")
             )
-            self.__fingerprintScript = joinScripts([cls.__fingerprintScript, self.__fingerprintScript], "\n")
-            if self.__fingerprintIf is None:
-                self.__fingerprintIf = cls.__fingerprintIf
-            elif cls.__fingerprintIf is not None:
-                self.__fingerprintIf = "$(and,{},{})".format(cls.__fingerprintIf, self.__fingerprintIf)
+            self.__fingerprintScripts[0:0] = cls.__fingerprintScripts
+            self.__fingerprintIf[0:0] = cls.__fingerprintIf
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
 
@@ -2262,15 +2273,27 @@ class Recipe(object):
         env.touch(self.__packageVars | self.__packageVarsWeak)
         tools.touch(self.__toolDepPackage)
 
-        # check if fingerprinting has to be applied
-        if self.__fingerprintScript:
-            # By default apply fingerprint. Otherwise evaluate boolean expression.
-            if self.__fingerprintIf is None:
-                doFingerprint = True
-            else:
-                doFingerprint = env.evaluate(self.__fingerprintIf, "fingerprintIf")
-        else:
-            doFingerprint = False
+        # Check if fingerprinting has to be applied. At least one
+        # 'fingerprintIf' must evaluate to 'True'. The mask of included
+        # fingerprints is stored in the package instead of the final string to
+        # save memory.
+        doFingerprint = 0
+        doFingerprintMaybe = 0
+        mask = 1
+        fingerprintConditions = chain(
+            (t.fingerprintIf for t in (toolsView.get(i) for i in sorted(self.__toolDepPackage))
+                             if t is not None),
+            self.__fingerprintIf)
+        for fingerprintIf in fingerprintConditions:
+            if fingerprintIf is None:
+                doFingerprintMaybe |= mask
+            elif fingerprintIf == True:
+                doFingerprint |= mask
+            elif isinstance(fingerprintIf, str) and env.evaluate(fingerprintIf, "fingerprintIf"):
+                doFingerprint |= mask
+            mask <<= 1
+        if doFingerprint:
+            doFingerprint |= doFingerprintMaybe
 
         # create package
         # touchedTools = tools.touchedKeys()
@@ -2433,8 +2456,8 @@ Every dependency must only be given once."""
         return self.__toolDepPackage
 
     @property
-    def fingerprintScript(self):
-        return self.__fingerprintScript
+    def fingerprintScripts(self):
+        return self.__fingerprintScripts
 
 
 class PackageMatcher:
@@ -3079,6 +3102,7 @@ class RecipeSet:
                             { varNameSchema : str },
                             error="provideTools: invalid 'environment' property"),
                         schema.Optional('fingerprintScript') : str,
+                        schema.Optional('fingerprintIf') : schema.Or(None, str, bool),
                     })
                 )
             }),
@@ -3099,7 +3123,7 @@ class RecipeSet:
             schema.Optional('buildNetAccess') : bool,
             schema.Optional('packageNetAccess') : bool,
             schema.Optional('fingerprintScript') : str,
-            schema.Optional('fingerprintIf') : str,
+            schema.Optional('fingerprintIf') : schema.Or(None, str, bool),
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,

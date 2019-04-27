@@ -68,36 +68,30 @@ expect_fail cmp output/1/id.txt output/2/id.txt
 
 # Using results is transitive. Upload once. Download with other fingerprint
 # must fail. Using same fingerprint again must download.
-rm -rf dev work
+rm -rf dev work output/*
 FINGERPRINT_ROOT=x1 run_bob build transitive-downstream --upload
 FINGERPRINT_ROOT=x2 expect_fail run_bob dev transitive-downstream --download forced
 FINGERPRINT_ROOT=x1 run_bob dev transitive-downstream --download forced
 
 # Uploading and downloading with different fingerprint is supposed to work.
-rm -rf dev work
+rm -rf dev work output/*
 FINGERPRINT_TOOL=y1 run_bob build transitive-consumer --upload
-FINGERPRINT_TOOL=y2 run_bob dev transitive-consumer downstream--download forced
+FINGERPRINT_TOOL=y2 run_bob dev transitive-consumer --download forced
 
 # Test conditional fingerprinting
 # ===============================
 
+rm -rf dev work output/*
 CANARY="$PWD/output/canary"
 
-run_bob dev -D CANARY="$CANARY" conditional-never --destination output
-expect_fail test -e "$CANARY"
-if [[ $(< output/result.txt) != $CANARY ]] ; then
-	echo wrong result >&2
-	exit 1
-fi
-
-run_bob dev conditional-default --destination output
+run_bob dev conditional-maybe --destination output
 expect_fail test -e "$CANARY"
 if [[ $(< output/result.txt) != unset ]] ; then
 	echo wrong result >&2
 	exit 1
 fi
 
-run_bob dev -D CANARY="$CANARY" conditional-default --destination output
+run_bob dev -D CANARY="$CANARY" conditional-maybe --destination output
 test -e "$CANARY"
 rm "$CANARY"
 if [[ $(< output/result.txt) != $CANARY ]] ; then
@@ -107,7 +101,7 @@ fi
 
 run_bob dev conditional-always --destination output
 expect_fail test -e "$CANARY"
-if [[ $(< output/result.txt) != dummy ]] ; then
+if [[ $(< output/result.txt) != unset ]] ; then
 	echo wrong result >&2
 	exit 1
 fi

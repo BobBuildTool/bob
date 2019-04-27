@@ -1,12 +1,13 @@
 multiPackage:
     tool:
+        fingerprintIf: True
+        fingerprintScript: |
+            echo "$FINGERPRINT_TOOL"
         provideTools:
-            something:
-                path: "."
-                fingerprintScript: |
-                    echo "$FINGERPRINT_TOOL"
+            something: "."
 
     upstream:
+        fingerprintIf: True
         fingerprintScript: |
             echo "${FINGERPRINT_ROOT}"
         packageScript: |
