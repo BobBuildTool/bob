@@ -7,17 +7,17 @@ packageScript: |
 # never fingerpint if $CANARY not set
 fingerprintIf: "$(ne,${CANARY:-},)"
 fingerprintScript: |
-    if [[ $CANARY != dummy ]] ; then
-        touch $CANARY
-    fi
+    touch $CANARY
     echo "${CANARY}"
 
 multiPackage:
-    never:
-        fingerprintIf: "false"
-
-    default: {}
+    maybe:
+        fingerprintIf: False
+        fingerprintScript: |
+            echo Must not be executed
+            exit 42
 
     always:
-        environment:
-            CANARY: dummy
+        fingerprintIf: True
+        fingerprintScript: |
+            echo Bob

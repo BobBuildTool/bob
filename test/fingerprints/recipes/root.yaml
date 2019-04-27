@@ -4,6 +4,7 @@ depends:
     - name: tool
       use: [tools]
 
+fingerprintIf: True
 fingerprintScript: |
     echo "${FINGERPRINT_ROOT:-}"
 

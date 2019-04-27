@@ -1,6 +1,7 @@
 provideTools:
     t:
         path: "."
+        fingerprintIf: True
         fingerprintScript: |
             echo ${FINGERPRINT:-Bob}
 
