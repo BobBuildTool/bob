@@ -337,7 +337,7 @@ Host dependency fingerprinting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Bob closely tracks the input of all packages. This includes all checked out
-sources and the dependencies to other packages. If anything is changed Bob can
+sources and the dependencies to other packages. If something is changed Bob can
 accurately determine which packages have to be rebuilt. This information is
 also used to find matching binary artifacts. If a recipe depends on resources
 that are outside of the declared recipes the situation changes, though. Bob
@@ -345,18 +345,32 @@ cannot infer what external resources are actually used and how these influence
 the build result.
 
 A common host dependency that "taints" the build result is the host compiler.
-While the host compiler typically does not change it limits the portablilty
+While the host compiler typically does not change it limits the portability
 across machines in the form of binary artifacts. The dependency on the host
 architecture is obvious but also the libc has to be considered. This can be
-extended to other libaries that might be used by the recipe.
+extended to other libraries that might be used by the recipe.
 
 To let Bob know about the usage and state of an external host resource a
-fingerprint script can be used in the recipe. The ouput of the fingerprint
+fingerprint script can be used in the recipe. The output of the fingerprint
 script is used to "tag" the created package. If the fingerprint changes the
 package is rebuilt. The fingerprint is also attached to the binary artifact.
 To download a binary artifact of a package the fingerprint has to match.
 
-See :ref:`configuration-recipes-fingerprint` and
+The fingerprint does not apply to the `checkoutScript`, though. If the result
+of your `checkoutScript` depends on the host that it runs on, you have to set
+:ref:`configuration-recipes-checkoutdeterministic` to `False`. The fingerprint
+serves only as virtual input to the build and package steps to declare to Bob
+what part of the host is used by the recipe.
+
+The impact of the host that is declared by a fingerprint script applies only to
+the result of a recipe. Specifically, it does not apply to the implied
+*behaviour* of any provided tools. This means that when using a tool from
+another recipe that is directly or indirectly affected by a fingerprint the
+using recipe is not affected. The rationale for this exception of transitivity
+is that it typically does not matter *where* a tool is built but but how it
+*behaves*.
+
+See :ref:`configuration-recipes-fingerprintScript` and
 :ref:`configuration-recipes-provideTools` where fingerprint scripts can be
 configured.
 
@@ -551,6 +565,8 @@ digestSHA1        | Digest of the file / part. Either pre calculate it using
 start             | Optionally. Defaults to 1.
 end               | Optionally. Defaults to last line of file.
 ================= ==================================================================
+
+.. _configuration-recipes-checkoutdeterministic:
 
 checkoutDeterministic
 ~~~~~~~~~~~~~~~~~~~~~
@@ -857,10 +873,10 @@ is accepted as sandbox which would also be the default if left out.
    might be removed completely.
 
 
-.. _configuration-recipes-fingerprint:
+.. _configuration-recipes-fingerprintScript:
 
-fingerprint
-~~~~~~~~~~~
+fingerprintScript
+~~~~~~~~~~~~~~~~~
 
 Type: String
 
@@ -871,21 +887,28 @@ irrelevant to Bob as long as it detects all relevant external influences of the
 build result and that subsequent executions of the script generate the same
 output if the external components have not changed.
 
+.. note::
+   Defining a ``fingerprintScript`` does not enable fingerprinting yet. At
+   least one inherited class, used tool or the recipe itself must enable it by
+   setting :ref:`configuration-recipes-fingerprintIf` accordingly.
+
 Bob will incrementally rebuild the package whenever the fingerprint script
 output changes. The output of the script is also used to tag binary artifacts.
 An artifacts will only be downloaded if the fingerprint script generated the
 same output. This enables Bob to prevent false sharing of binary artifacts
-across otherise incompatible machines.
+across otherwise incompatible machines.
 
 The fingerprint script is executed in an empty temporary directory. It does not
-have access to any dependenices of the recipe nor to the checked out sources.
+have access to any dependencies of the recipe nor to the checked out sources.
 All environment variables of the package that were declared in the recipe (see
 :ref:`configuration-recipes-vars` ) are set. The usual bash options are applied
 (``nounset``, ``errexit``, ``pipefail``) too. If the script returns with a
 non-zero exit status it will fail the build. The output on stderr is ignored
 but will be displayed in the error message if the script fails. The scripts of
-inherited classes are concatenated. Any fingerprint scripts that are defined by
-used tools (see :ref:`configuration-recipes-provideTools`) are concatenated too.
+inherited classes are concatenated (but only if their
+:ref:`configuration-recipes-fingerprintIf` condition did not evaluate to
+``false``). Any fingerprint scripts that are defined by used tools (see
+:ref:`configuration-recipes-provideTools`) are concatenated too.
 
 For common fingerprint tasks the following built-in functions are provided by
 Bob:
@@ -910,21 +933,38 @@ These helpers can be used in the fingerprint script. Their actual
 implementation and output may change in the future as more systems are
 supported by Bob.
 
+.. _configuration-recipes-fingerprintIf:
+
 fingerprintIf
 ~~~~~~~~~~~~~
 
-Type: String
+Type: String | Boolean | ``null``
 
-This string is evaluated as boolean expression. The fingerprint of a package is
-only calculated if the string is interpreted as true. It can be used e.g. to
-apply a fingerprint only if the package is built for the host and not
-cross-compiled.
+By default no fingerprinting is done unless at least one inherited class, used
+tool or the recipe explicitly enables it. This is done by either setting
+``fingerprintIf`` to ``True`` or by a boolean expression string that is
+evaluated to ``True``. This can be used e.g. to apply a fingerprint only if the
+package is built for the host and not cross-compiled. The
+:ref:`configuration-recipes-fingerprintScript` of the recipe is only evaluated
+if ``fingerprintIf`` is true. Otherwise the fingerprint script is ignored even
+if some other class enables fingerprinting.  Setting ``fingerprintIf`` to
+``False`` will unconditionally disable the associated ``fingerprintScript``.
 
-Example::
+A ``null`` value has a special semantic. It does not enable fingerprinting for
+a package but retains the associated ``fingerprint`` script. If some
+inherited class, the recipe or a used tool does enable fingerprinting then the
+fingerprint script will still be evaluated. This is useful for classes to
+provide some fingerprinting functions but, unless an inheriting recipe defines
+a ``fingerprint`` script, does not enable fingerprinting of the recipe by
+itself.
 
-   fingerprintIf: "$(eq,${TOOLCHAIN},host)"
+Examples::
 
-If not given it defaults to ``true``.
+   fingerprintIf: True                       # unconditionally enable fingerprinting
+   fingerprintIf: "$(eq,${TOOLCHAIN},host)"  # boolean experession
+   fingerprintIf: null                       # same as if unset
+
+If not given it defaults to ``null``.
 
 inherit
 ~~~~~~~
@@ -1074,7 +1114,8 @@ consuming recipes. Example::
          environment:
             CC: gcc
             LD: ld
-         fingerprint: |
+         fingerprintIf: True
+         fingerprintScript: |
             bob-libc-version gcc
 
 The ``path`` attribute is always needed.  The ``libs`` attribute, if present,
@@ -1098,11 +1139,13 @@ recipe they must define distinct variables because no particular order between
 tools is defined. The values defined in this attribute are subject to variable
 substitution.
 
-The ``fingerprint`` attribute defines a fingerprint script like in a normal
-recipe by :ref:`configuration-recipes-fingerprint`. A fingerprint script
-defined by a tool is implicitly added to the fingerprint scripts of all recipes
-that use the particular tool. Use it to automatically apply a fingerprint to
-all recipes whose result will depend on the host environment by using the tool.
+The ``fingerprintScript`` attribute defines a fingerprint script like in a
+normal recipe by :ref:`configuration-recipes-fingerprintScript`. A fingerprint
+script defined by a tool is implicitly added to the fingerprint scripts of all
+recipes that use the particular tool. Use it to automatically apply a
+fingerprint to all recipes whose result will depend on the host environment by
+using the tool.  The ``fingerprintIf`` attribute is handled the in the same
+way.
 
 If no attributes except ``path`` are present the declaration may be abbreviated
 by giving the relative path directly::
