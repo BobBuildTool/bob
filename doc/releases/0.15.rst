@@ -157,6 +157,18 @@ that were created with an older version of Bob in a project are not known and
 will not be cleaned. Bob will print a warning in case the project was created
 with an older version and attic directories should be cleaned.
 
+Bob Jenkins
+~~~~~~~~~~~
+
+* Added the ``jobs.update`` option
+
+  Updating a Jenkins job is costly. On projects with hundreds of jobs the
+  overhead can be significant when just the description or audit trail
+  information is updated but the job is not actually scheduled. The
+  'jobs.update' option adds a knob to control the update behaviour and provide
+  lazy update methods.
+
+
 Bob status
 ~~~~~~~~~~
 
