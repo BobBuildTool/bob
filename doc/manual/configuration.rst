@@ -943,6 +943,14 @@ Bob:
 
     This helper should typically be used with the host compiler recipe.
 
+``bob-hash-libraries``
+   Takes a list of libraries as arguments that should be hashed. This will link
+   an executable that links with the given libraries, call ``ldd`` and hash all
+   used libraries.
+
+   Use this helper if no other information is available about a library /
+   libraries except the name.
+
 These helpers can be used in the fingerprint script. Their actual
 implementation and output may change in the future as more systems are
 supported by Bob.
