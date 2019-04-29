@@ -81,7 +81,22 @@ EOF
     ${1:-${CXX:-c++}} -o conftest conftest.cpp >/dev/null
     ./conftest
 }
-""")
+"""),
+
+    ("bob-hash-libraries", r"""
+bob-hash-libraries()
+{
+    declare -a opts=( -o canary -xc - )
+    local i
+
+    for i in "$@" ; do
+        opts+=( -l "$i" )
+    done
+
+    echo "int main(){return 0;}" | ${CC:-cc} "${opts[@]}"
+    sha1sum $(ldd canary | grep -o -e '/[^[:space:]]*' | sort -u)
+}
+"""),
 ]
 
 def mangleFingerprints(script, env):
