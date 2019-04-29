@@ -477,6 +477,20 @@ If a step depends on a certain variable then the result of the following step
 is already indirectly dependent on this variable. Thus it can be set during the
 following step anyway.
 
+The following variables are populated internally by Bob and might be added to
+the variable list:
+
+* ``BOB_RECIPE_NAME`` - name of the recipe that defined the package
+* ``BOB_PACKAGE_NAME`` - name of the actual package. Might be different from
+  the recipe name if ``multiPackage`` is used.
+
+Note that you should keep the usage of these variables to a minimum because
+they may force separate builds of packages that are otherwise identical.  For
+example using ``BOB_PACKAGE_NAME`` in ``buildVars`` will force separate builds
+of all involved ``multiPackage`` keys even if they have a common
+``buildScript`` because ``BOB_PACKAGE_NAME`` will be unique for each
+``multiPackage`` entry.
+
 .. _configuration-recipes-vars-weak:
 
 {checkout,build,package}VarsWeak
