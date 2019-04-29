@@ -333,6 +333,8 @@ Plugins may provide additional functions as described in
 empty string, "0" and "false" (case insensitive) are considered as logical
 "false".  Any other value is considered as "true".
 
+.. _configuration-principle-fingerprinting:
+
 Host dependency fingerprinting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
