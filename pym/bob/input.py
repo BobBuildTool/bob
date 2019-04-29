@@ -2269,6 +2269,10 @@ class Recipe(object):
         # meta variables override existing variables but can not be substituted
         env.update(self.__metaEnv)
 
+        # set fixed built-in variables
+        env['BOB_RECIPE_NAME'] = self.__baseName
+        env['BOB_PACKAGE_NAME'] = self.__packageName
+
         # record used environment and tools
         env.touch(self.__packageVars | self.__packageVarsWeak)
         tools.touch(self.__toolDepPackage)
