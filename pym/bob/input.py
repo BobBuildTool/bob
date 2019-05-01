@@ -1680,6 +1680,37 @@ class ScmValidator:
                 None)
         return data
 
+class VarDefineValidator:
+    def __init__(self, keyword):
+        self.__varName = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+        self.__keyword = keyword
+
+    def validate(self, data):
+        if not isinstance(data, dict):
+            raise schema.SchemaUnexpectedTypeError(
+                "{}: must be a dictionary".format(self.__keyword), None)
+        for key,value in sorted(data.items()):
+            if not isinstance(key, str):
+                raise schema.SchemaUnexpectedTypeError(
+                    "{}: bad variable '{}'. Environment variable names must be strings!"
+                        .format(self.__keyword, key),
+                    None)
+            if key.startswith("BOB_"):
+                raise schema.SchemaWrongKeyError(
+                    "{}: bad variable '{}'. Environment variables starting with 'BOB_' are reserved!"
+                        .format(self.__keyword, key),
+                    None)
+            if self.__varName.match(key) is None:
+                raise schema.SchemaWrongKeyError(
+                    "{}: bad variable name '{}'.".format(self.__keyword, key),
+                    None)
+            if not isinstance(value, str):
+                raise schema.SchemaUnexpectedTypeError(
+                    "{}: bad variable '{}'. Environment variable values must be strings!"
+                        .format(self.__keyword, key),
+                    None)
+        return data
+
 
 RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]+$')
 MULTIPACKAGE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]*$')
@@ -3031,7 +3062,7 @@ class RecipeSet:
             self.__parseUserConfig(p + ".yaml", relativeIncludes)
 
     def __createSchemas(self):
-        varNameSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
+        varNameUseSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
         varFilterSchema = schema.Regex(r'^!?[][A-Za-z_*?][][A-Za-z0-9_*?]*$')
         recipeFilterSchema = schema.Regex(r'^!?[][0-9A-Za-z_.+:*?-]+$')
         toolNameSchema = schema.Regex(r'^[0-9A-Za-z_.+:-]+$')
@@ -3044,9 +3075,7 @@ class RecipeSet:
             schema.Optional('name') : str,
             schema.Optional('use') : useClauses,
             schema.Optional('forward') : bool,
-            schema.Optional('environment') : schema.Schema({
-                varNameSchema : str
-            }),
+            schema.Optional('environment') : VarDefineValidator("depends::environment"),
             schema.Optional('if') : str
         }
         dependsClause = schema.Schema([
@@ -3064,12 +3093,12 @@ class RecipeSet:
             schema.Optional('checkoutTools') : [ toolNameSchema ],
             schema.Optional('buildTools') : [ toolNameSchema ],
             schema.Optional('packageTools') : [ toolNameSchema ],
-            schema.Optional('checkoutVars') : [ varNameSchema ],
-            schema.Optional('buildVars') : [ varNameSchema ],
-            schema.Optional('packageVars') : [ varNameSchema ],
-            schema.Optional('checkoutVarsWeak') : [ varNameSchema ],
-            schema.Optional('buildVarsWeak') : [ varNameSchema ],
-            schema.Optional('packageVarsWeak') : [ varNameSchema ],
+            schema.Optional('checkoutVars') : [ varNameUseSchema ],
+            schema.Optional('buildVars') : [ varNameUseSchema ],
+            schema.Optional('packageVars') : [ varNameUseSchema ],
+            schema.Optional('checkoutVarsWeak') : [ varNameUseSchema ],
+            schema.Optional('buildVarsWeak') : [ varNameUseSchema ],
+            schema.Optional('packageVarsWeak') : [ varNameUseSchema ],
             schema.Optional('checkoutDeterministic') : bool,
             schema.Optional('checkoutSCM') : ScmValidator({
                 'git' : GitScm.SCHEMA,
@@ -3079,21 +3108,15 @@ class RecipeSet:
             }),
             schema.Optional('checkoutAssert') : [ CheckoutAssert.SCHEMA ],
             schema.Optional('depends') : dependsClause,
-            schema.Optional('environment') : schema.Schema({
-                varNameSchema : str
-            }),
+            schema.Optional('environment') : VarDefineValidator("environment"),
             schema.Optional('filter') : schema.Schema({
                 schema.Optional('environment') : [ varFilterSchema ],
                 schema.Optional('tools') : [ recipeFilterSchema ],
                 schema.Optional('sandbox') : [ recipeFilterSchema ]
             }),
             schema.Optional('inherit') : [str],
-            schema.Optional('privateEnvironment') : schema.Schema({
-                varNameSchema : str
-            }),
-            schema.Optional('metaEnvironment') : schema.Schema({
-                varNameSchema : str
-            }),
+            schema.Optional('privateEnvironment') : VarDefineValidator("privateEnvironment"),
+            schema.Optional('metaEnvironment') : VarDefineValidator("metaEnvironment"),
             schema.Optional('provideDeps') : [str],
             schema.Optional('provideTools') : schema.Schema({
                 str: schema.Or(
@@ -3102,24 +3125,18 @@ class RecipeSet:
                         'path' : str,
                         schema.Optional('libs') : [str],
                         schema.Optional('netAccess') : bool,
-                        schema.Optional('environment') : schema.Schema(
-                            { varNameSchema : str },
-                            error="provideTools: invalid 'environment' property"),
+                        schema.Optional('environment') : VarDefineValidator("provideTools::environment"),
                         schema.Optional('fingerprintScript') : str,
                         schema.Optional('fingerprintIf') : schema.Or(None, str, bool),
                     })
                 )
             }),
-            schema.Optional('provideVars') : schema.Schema({
-                varNameSchema : str
-            }),
+            schema.Optional('provideVars') : VarDefineValidator("provideVars"),
             schema.Optional('provideSandbox') : schema.Schema({
                 'paths' : [str],
                 schema.Optional('mount') : schema.Schema([ MountValidator() ],
                     error="provideSandbox: invalid 'mount' property"),
-                schema.Optional('environment') : schema.Schema(
-                    { varNameSchema : str },
-                    error="provideSandbox: invalid 'environment' property"),
+                schema.Optional('environment') : VarDefineValidator("provideSandbox::environment"),
             }),
             schema.Optional('root') : bool,
             schema.Optional('shared') : bool,
