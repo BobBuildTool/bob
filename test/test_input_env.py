@@ -4,8 +4,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from unittest import TestCase
+import schema
 
-from bob.input import Env
+from bob.input import Env, VarDefineValidator
 
 class TestEnv(TestCase):
 
@@ -64,3 +65,21 @@ class TestEnv(TestCase):
         e1 = Env()
         e1.touch(['foo'])
         self.assertEqual(e1.touchedKeys(), set(['foo']))
+
+
+class TestVarDefineValidator(TestCase):
+    def setUp(self):
+        self.v = VarDefineValidator("foo")
+
+    def testValid(self):
+        self.assertEqual(self.v.validate({"FOO": "bar"}), {"FOO": "bar"})
+
+    def testWrongTypes(self):
+        self.assertRaises(schema.SchemaError, self.v.validate, "boom")
+        self.assertRaises(schema.SchemaError, self.v.validate, {1 : "bar"})
+        self.assertRaises(schema.SchemaError, self.v.validate, {"foo" : True})
+
+    def testWrongNames(self):
+        self.assertRaises(schema.SchemaError, self.v.validate, {"0abc" : "bar"})
+        self.assertRaises(schema.SchemaError, self.v.validate, {"BOB_FOO" : "bar"})
+
