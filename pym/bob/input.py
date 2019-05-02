@@ -1155,13 +1155,12 @@ class CoreCheckoutStep(CoreStep):
 
     def __init__(self, corePackage, checkout=None, fullEnv=Env(), digestEnv=Env(), env=Env()):
         if checkout:
-            isValid = (checkout[0] is not None) or bool(checkout[2])
-
             recipeSet = corePackage.recipe.getRecipeSet()
             overrides = recipeSet.scmOverrides()
             self.scmList = [ Scm(scm, fullEnv, overrides, recipeSet)
                 for scm in checkout[2]
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
+            isValid = (checkout[0] is not None) or bool(self.scmList)
 
             # Validate that SCM paths do not overlap
             knownPaths = []
