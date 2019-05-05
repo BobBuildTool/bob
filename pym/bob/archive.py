@@ -31,6 +31,7 @@ import concurrent.futures.process
 import gzip
 import hashlib
 import http.client
+import json
 import os
 import os.path
 import signal
@@ -249,7 +250,7 @@ class BaseArchive:
         except OSError as e:
             raise BuildError("Cannot download artifact: " + str(e))
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, env):
         raise ArtifactUploadError("not implemented")
 
     async def uploadPackage(self, step, buildId, audit, content):
@@ -259,20 +260,24 @@ class BaseArchive:
         loop = asyncio.get_event_loop()
         suffix = ARTIFACT_SUFFIX
         details = " to {}".format(self._remoteName(buildId, suffix))
+
+        env = step.getEnv()
+        env.update(step.getPackage().getMetaEnv())
+
         with stepAction(step, "UPLOAD", content, details=details) as a:
             try:
                 msg, kind = await loop.run_in_executor(None, BaseArchive._uploadPackage,
-                    self, buildId, suffix, audit, content)
+                    self, buildId, suffix, audit, content, env)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Upload of package interrupted.")
 
-    def _uploadPackage(self, buildId, suffix, audit, content):
+    def _uploadPackage(self, buildId, suffix, audit, content, env):
         # restore signals to default so that Ctrl+C kills us
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openUploadFile(buildId, suffix) as (name, fileobj):
+            with self._openUploadFile(buildId, suffix, env) as (name, fileobj):
                 pax = { 'bob-archive-vsn' : "1" }
                 with gzip.open(name or fileobj, 'wb', 6) as gzf:
                     with tarfile.open(name, "w", fileobj=gzf,
@@ -293,19 +298,23 @@ class BaseArchive:
             return
 
         loop = asyncio.get_event_loop()
+        env = step.getEnv()
+        env.update(step.getPackage().getMetaEnv())
         with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
             try:
-                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalLiveBuildId, self, liveBuildId, buildId)
+                msg, kind = await loop.run_in_executor(None,
+                        BaseArchive._uploadLocalLiveBuildId, self,
+                        liveBuildId, buildId, env)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Upload of build-id interrupted.")
 
-    def _uploadLocalLiveBuildId(self, liveBuildId, buildId):
+    def _uploadLocalLiveBuildId(self, liveBuildId, buildId, env):
         # restore signals to default so that Ctrl+C kills us
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openUploadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
+            with self._openUploadFile(liveBuildId, BUILDID_SUFFIX, env) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, buildId)
         except ArtifactExistsError:
             return ("skipped (exists in archive)", SKIPPED)
@@ -340,7 +349,7 @@ class LocalArchive(BaseArchive):
         else:
             raise ArtifactNotFoundError()
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, env):
         (packageResultPath, packageResultFile) = self._getPath(buildId, suffix)
         if os.path.isfile(packageResultFile):
             raise ArtifactExistsError()
@@ -516,7 +525,7 @@ class SimpleHttpArchive(BaseArchive):
                 raise ArtifactDownloadError("{} {}".format(response.status,
                                                            response.reason))
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, env):
         (ok, result) = self.__retry(lambda: self.__openUploadFile(buildId, suffix))
         if ok:
             return result
@@ -701,7 +710,7 @@ class CustomArchive(BaseArchive):
         finally:
             if tmpName is not None: os.unlink(tmpName)
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, env):
         (tmpFd, tmpName) = mkstemp()
         os.close(tmpFd)
         return CustomUploader(tmpName, self._makeUrl(buildId, suffix), self.__whiteList,
@@ -823,7 +832,7 @@ class AzureArchive(BaseArchive):
         finally:
             if tmpName is not None: os.unlink(tmpName)
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, env):
         from azure.common import AzureException
 
         blobName = self.__makeBlobName(buildId, suffix)
@@ -990,6 +999,7 @@ class ArtifactoryArchive(BaseArchive):
             self.__url = spec['url']
             self.__username = spec.get('username', None)
             self.__key = spec.get('key', None)
+            self.__properties = spec.get('properties', None)
         try:
             from artifactory import ArtifactoryPath
         except ImportError:
@@ -999,6 +1009,7 @@ class ArtifactoryArchive(BaseArchive):
         self.__url = args.url
         self.__username = args.username
         self.__key = args.key
+        self.__properties = args.properties
 
     @staticmethod
     def __makeBlobName(buildId, suffix):
@@ -1032,9 +1043,9 @@ class ArtifactoryArchive(BaseArchive):
         except RuntimeError as e:
             raise ArtifactDownloadError(str(e))
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, env):
         blobName = self.__makeBlobName(buildId,suffix)
-        from artifactory import ArtifactoryPath
+
         try:
             fd = self._makeArtifactoryPath(blobName)
             try:
@@ -1047,27 +1058,44 @@ class ArtifactoryArchive(BaseArchive):
             raise ArtifactUploadError(str(e))
         (tmpFd, tmpName) = mkstemp()
         os.close(tmpFd)
-        return ArtifactoryUploader(self, fd, tmpName, blobName)
 
-    def upload(self, step, buildIdFile, fingerprintFile, tgzFile):
-        if not self.canUploadJenkins():
-            return ""
+        properties = {}
+        if self.__properties:
+            from .stringparser import Env
+            _env = Env(env)
+            properties = { k : _env.substitute(v, "properties::environment::"+k)
+                for k, v in self.__properties.items() }
+        return ArtifactoryUploader(self, fd, tmpName, blobName, properties)
 
+    def _getArgs(self, step):
         args = []
         if self.__key: args.append("--key=" + self.__key)
         if self.__username: args.append("--username=" + self.__username)
+        if self.__properties:
+            from .stringparser import Env
+            env = step.getEnv()
+            env.update(step.getPackage().getMetaEnv())
+            _env = Env(env)
+            properties = { k : _env.substitute(v, "properties::environment::"+k)
+                for k, v in self.__properties.items() }
+            args.append("--properties="+json.dumps(properties))
+        return args
+
+    def upload(self, step, buildIdFile, tgzFile):
+        if not self.canUploadJenkins():
+            return ""
 
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
             bob _upload artifactory {ARGS} {URL} {BUILDID} {SUFFIX} {RESULT}{FIXUP}
-            """.format(ARGS=" ".join(map(quote, args)),
+            """.format(ARGS=" ".join(map(quote, self._getArgs(step))),
                        URL=self.__url, BUILDID=quote(buildIdFile),
                        RESULT=quote(tgzFile),
                        FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=artifactSuffixJenkins(fingerprintFile)))
+                       SUFFIX=ARTIFACT_SUFFIX))
 
-    def download(self, step, buildIdFile, fingerprintFile, tgzFile):
+    def download(self, step, buildIdFile, tgzFile):
         if not self.canDownloadJenkins():
             return ""
 
@@ -1081,21 +1109,17 @@ class ArtifactoryArchive(BaseArchive):
             fi
             """.format(ARGS=" ".join(map(quote, args)),
                        URL=self.__url, BUILDID=quote(buildIdFile),
-                       RESULT=quote(tgzFile), SUFFIX=artifactSuffixJenkins(fingerprintFile)))
+                       RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
         if not self.canUploadJenkins():
             return ""
 
-        args = []
-        if self.__key: args.append("--key=" + self.__key)
-        if self.__username: args.append("--username=" + self.__username)
-
         return "\n" + textwrap.dedent("""\
             # upload live build-id
             cd $WORKSPACE
             bob _upload artifactory {ARGS} {URL} {LIVEBUILDID} {SUFFIX} {BUILDID}{FIXUP}
-            """.format(ARGS=" ".join(map(quote, args)),
+            """.format(ARGS=" ".join(map(quote, self._getArgs(step))),
                        URL=self.__url, LIVEBUILDID=quote(liveBuildId),
                        BUILDID=quote(buildId),
                        FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
@@ -1127,7 +1151,7 @@ class ArtifactoryArchive(BaseArchive):
 
     @staticmethod
     def scriptUpload(args):
-        archive, remoteBlob, localFile = ArtifactoryArchive.scriptGetService(args)
+        archive, remoteBlob, localFile, properties = ArtifactoryArchive.scriptGetService(args)
 
         from artifactory import ArtifactoryPath, md5sum, sha1sum
         try:
@@ -1135,10 +1159,16 @@ class ArtifactoryArchive(BaseArchive):
             md5 = md5sum(localFile)
             with open(localFile, 'rb') as f:
                 fd = archive._makeArtifactoryPath(remoteBlob)
-                if fd.exists:
+                if fd.exists():
                     print("skipped")
                 else:
-                    fd.deploy(f, sha1=sha1, md5=md5);
+                    fd.deploy(f, sha1=sha1, md5=md5)
+                    if properties:
+                        try:
+                            fd.properties = properties
+                        except RuntimeError:
+                            # properties available only in Artifactory Pro
+                            pass
             print("OK")
         except (OSError, RuntimeError) as e:
             raise BuildError("Upload failed: " + str(e))
@@ -1152,6 +1182,7 @@ class ArtifactoryArchive(BaseArchive):
         parser.add_argument('file')
         parser.add_argument('--key')
         parser.add_argument('--username')
+        parser.add_argument('--properties', type=str)
         args = parser.parse_args(args)
 
         try:
@@ -1168,7 +1199,11 @@ class ArtifactoryArchive(BaseArchive):
         archive = ArtifactoryArchive()
         archive.setArgs(args)
 
-        return (archive, remoteBlob, args.file)
+        properties = None
+        if args.properties:
+            properties = json.loads(args.properties)
+
+        return (archive, remoteBlob, args.file, properties)
 
 class ArtifactoryDownloader:
     def __init__(self, fd):
@@ -1180,10 +1215,11 @@ class ArtifactoryDownloader:
         return False
 
 class ArtifactoryUploader:
-    def __init__(self, artifactory, fd, name, remoteName):
+    def __init__(self, artifactory, fd, name, remoteName, properties):
         self.__artifactory = artifactory
         self.__name = name
         self.__remoteName = remoteName
+        self.__properties = properties
 
     def __enter__(self):
         return (self.__name, None)
@@ -1204,7 +1240,13 @@ class ArtifactoryUploader:
         try:
             with open(self.__name, 'rb') as f:
                 fd = self.__artifactory._makeArtifactoryPath(self.__remoteName)
-                fd.deploy(f, sha1=sha1, md5=md5);
+                fd.deploy(f, sha1=sha1, md5=md5)
+                if self.__properties:
+                    try:
+                        fd.properties = self.__properties
+                    except RuntimeError:
+                        # properties available only in Artifactory Pro
+                        pass
         except RuntimeError as e:
             raise ArtifactUploadError("upload failed  "+ str(e))
 

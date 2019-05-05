@@ -2555,6 +2555,7 @@ class ArchiveValidator:
         artifactoryArchive.update({
             'url' : str,
             schema.Optional('key') : str,
+            schema.Optional('properties') : schema.Schema({ schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') : str }),
             schema.Optional('username') : str,
         })
         self.__backends = {
