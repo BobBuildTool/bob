@@ -86,8 +86,11 @@ class UrlScm(Scm):
         return ret
 
     def asScript(self):
-        options = "-sSgLf"
-        if not self.__sslVerify: options += "k"
+        curlOptions="-sSgLf"
+        wgetOptions="-q --no-glob"
+        if not self.__sslVerify:
+            curlOptions+="k"
+            wgetOptions+=" --no-check-certificate"
         ret = ""
         if self.__url[0] == '/':
             # Local files: copy only if newer (u), target never is a directory (T)
@@ -98,24 +101,34 @@ cd {DIR}
 cp -uT {URL} {FILE}
 """
         else:
+            # do command logic inside the shell script to leave it to the backend
             tpl = """
 {HEADER}
 mkdir -p {DIR}
 cd {DIR}
 if [ -e {FILE} ] ; then
-    curl {OPTIONS} -o {FILE} -z {FILE} {URL}
+    if [ -x "$(command -v curl)" ] ; then
+        curl {CURL_OPTIONS} -o {FILE} -z {FILE} {URL}
+    fi
 else
     (
         F=$(mktemp)
         trap 'rm -f $F' EXIT
         set -e
-        curl {OPTIONS} -o $F {URL}
+        if [ -x "$(command -v curl)" ] ; then
+            curl {CURL_OPTIONS} -o $F {URL}
+        elif [ -x "$(command -v wget)" ] ; then
+            wget {WGET_OPTIONS} -O $F {URL}
+        else
+            >&2 echo "\nERROR: Don't know how to download. Please install 'curl'!\n"
+            exit 1
+        fi
         mv $F {FILE}
     )
 fi
 """
         ret = tpl.format(HEADER=super().asScript(), DIR=quote(self.__dir), URL=quote(self.__url),
-           FILE=quote(self.__fn), OPTIONS=options)
+           FILE=quote(self.__fn), CURL_OPTIONS=curlOptions, WGET_OPTIONS=wgetOptions)
 
         if self.__digestSha1:
             ret += "echo {DIGEST}\ \ {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
