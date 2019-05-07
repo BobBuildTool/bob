@@ -47,9 +47,9 @@ def getVersion():
 
     if not version:
         # Last fallback. See http://semver.org/ and adjust accordingly.
-        version = "unknown"
+        version = "0.15.0-rc1"
 
-    return "0.15-dev-" + version
+    return version
 
 def getBobInputHash():
     from .utils import hashDirectory
