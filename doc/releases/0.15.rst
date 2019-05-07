@@ -97,6 +97,12 @@ Recipes
   possible to easily build from tarballs in a sandbox that has no network
   access and no ``curl`` command.
 
+* Add ``BOB_RECIPE_NAME`` and ``BOB_PACKAGE_NAME`` built-in variables
+
+  These variables are set internally by Bob and can be consumed by a recipe or
+  class to know which recipe/package is built. For example it might be used to
+  name the artifact (think rpm/deb/ipkg pacakge) like the recipe.
+
 User configuration (default.yaml)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -286,6 +292,15 @@ Other behavioural changes
 
 Backwards incompatible changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Recipes cannot define variables starting with ``BOB_``
+
+  Variable names starting with ``BOB_`` have historically been used by Bob all
+  over the place. This release added even some more (``BOB_RECIPE_NAME``,
+  ``BOB_PACKAGE_NAME``). To prevent accidential breakage of recipes by future
+  versions of Bob that define additional variables, Bob will reject recipes
+  that define variables in this name space. This may break existing recipes but
+  it cannot be guaranteed that they will work with future versions either.
 
 * The default mode of the ``bob clean`` command was changed from release mode
   to develop mode. This makes its behaviour consistent with all other Bob
