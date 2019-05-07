@@ -81,12 +81,12 @@ def addRunSteps(outFile, runTargets):
 
 def addBuildConfig(outFile, num, name, buildArgs, buildMeFile):
     outFile.write('<valuemap type="QVariantMap" key="ProjectExplorer.Target.BuildConfiguration.' + str(num) + '">\n')
-    outFile.write('<value type="QString" key="ProjectExplorer.BuildConfiguration.BuildDirectory">' + (os.getcwd() if not isWindows() else os.popen('pwd -W').read().replace('\n', '')) + '</value>\n')
+    outFile.write('<value type="QString" key="ProjectExplorer.BuildConfiguration.BuildDirectory">' + (os.getcwd() if not isWindows() else os.popen('pwd -W').read().strip()) + '</value>\n')
     outFile.write('<valuemap type="QVariantMap" key="ProjectExplorer.BuildConfiguration.BuildStepList.0">\n')
     outFile.write(' <valuemap type="QVariantMap" key="ProjectExplorer.BuildStepList.Step.0">\n')
     outFile.write('  <value type="bool" key="ProjectExplorer.BuildStep.Enabled">true</value>\n')
     if isWindows():
-        outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Arguments">-msys2 -defterm -no-start -use-full-path -here -c "PATH=~/bob:/usr/bin /usr/bin/sh ' + buildMeFile + ' -v ' + buildArgs + '"</value>\n')
+        outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Arguments">-msys2 -defterm -no-start -use-full-path -here -c "PATH=' + os.getenv('PATH') + ' sh ' + buildMeFile + ' -v ' + buildArgs + '"</value>\n')
         outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Command">' + os.path.normpath(os.path.join(os.getenv('WD').replace('\\', '/'), '..', '..', 'msys2_shell.cmd')) + '</value>\n')
     else:
         outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Arguments">' + buildArgs + '</value>\n')
@@ -104,7 +104,7 @@ def addBuildConfig(outFile, num, name, buildArgs, buildMeFile):
     outFile.write('<value type="int" key="ProjectExplorer.BuildConfiguration.BuildStepListCount">1</value>\n')
     outFile.write('<value type="bool" key="ProjectExplorer.BuildConfiguration.ClearSystemEnvironment">false</value>\n')
     outFile.write('<valuelist type="QVariantList" key="ProjectExplorer.BuildConfiguration.UserEnvironmentChanges">\n')
-    outFile.write(' <value type="QString">' + "PATH=" + os.environ['PATH'] + '</value>\n')
+    outFile.write(' <value type="QString">' + 'PATH=' + os.environ['PATH'] + '</value>\n')
     outFile.write('</valuelist>\n')
     outFile.write('<value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">Vorgabe</value>\n')
     outFile.write('<value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">' + name + '</value>\n')
@@ -209,7 +209,7 @@ def qtProjectGenerator(package, argv, extra):
         projectName = package.getName().replace('::', '__')
     if not destination:
         # use package name for project directory
-        destination = os.path.join(os.getcwd() if not isWindows() else os.popen('pwd -W').read().replace('\n', ''), "projects", projectName)
+        destination = os.path.join(os.getcwd() if not isWindows() else os.popen('pwd -W').read().strip(), "projects", projectName)
         destination = destination.replace('::', '__')
     if args.overwrite:
         removePath(destination)
@@ -247,7 +247,7 @@ def qtProjectGenerator(package, argv, extra):
     for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
         name = name.replace('::', '__')
         if isWindows():
-            newPath = os.path.join(os.popen('pwd -W').read().replace('\n', ''), path)
+            newPath = os.path.join(os.popen('pwd -W').read().strip(), path)
         else:
             newPath = os.path.join(symlinkDir, name)
             if not args.update: os.symlink(os.path.join(os.getcwd(), path), newPath)
@@ -471,7 +471,7 @@ def qtProjectGenerator(package, argv, extra):
                     try:
                         ftype = magic.from_file(os.path.join(root, filename))
                         if 'executable' in ftype and 'x86' in ftype:
-                            runTargets.append(RunStep(os.path.join(os.getcwd() if not isWindows() else os.popen('pwd -W').read().replace('\n', ''), root), filename))
+                            runTargets.append(RunStep(os.path.join(os.getcwd() if not isWindows() else os.popen('pwd -W').read().strip(), root), filename))
                     except OSError:
                         pass
 
