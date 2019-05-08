@@ -31,10 +31,10 @@ e.g.:
 * ``hexdump``
 * ``curl`` as the default URL SCM downloader
 * source code management handlers as used (``curl``, ``cvs``, ``git``, ``svn``)
-* extractors based on the supported extensions (``7z``, GNU ``tar``, ``guzip``, ``unxz``, ``unzip``)
+* extractors based on the supported extensions (``7z``, GNU ``tar``, ``gunzip``, ``unxz``, ``unzip``)
 * ``azure-storage-blob`` Python library if the ``azure`` archive backend is
   used. Either install via pip (``python3 -m pip install azure-storage-blob``)
-  or download from `GitGub <https://github.com/Azure/azure-storage-python>`_.
+  or download from `GitHub <https://github.com/Azure/azure-storage-python>`_.
 
 Build
 =====
