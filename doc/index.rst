@@ -20,6 +20,7 @@ Contents
 .. toctree::
    :maxdepth: 2
 
+   installation
    tutorial/index
    manual/index
    manpages/index
