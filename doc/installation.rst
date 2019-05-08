@@ -5,32 +5,36 @@ Dependencies
 ============
 
 Bob is built with Python3 (>=3.5) and needs the following additional packages
-and Python modules that are not in the standard library to be build:
+and Python modules that are not part of the standard library:
 
-* `PyYAML`_. Either install via pip (``pip3 install PyYAML``) or the package
+* `PyYAML`_. Either install via pip (``python3 -m pip install PyYAML``) or the package
   that comes with your distribution (e.g. python3-yaml on Debian).
-* `schema`_. Either install via pip (``pip3 install schema``) or the package
+* `schema`_. Either install via pip (``python3 -m pip install schema``) or the package
   that comes with your distribution (e.g. python3-schema on Debian).
-* `python-magic`_. Either install via pip (``pip3 install python-magic``) or the
+* `python-magic`_. Either install via pip (``python3 -m pip install python-magic``) or the
   package that comes with your distribution (e.g. python3-magic on Debian).
-* `pyparsing`_. Either install via pip (``pip3 install pyparsing``) or the
+* `pyparsing`_. Either install via pip (``python3 -m pip install pyparsing``) or the
   package that comes with your distribution (e.g. python3-pyparsing on Debian).
-* gcc to build the namespace-sandbox feature
-* `python3-sphinx`_. Only needed for generating man pages.
+
+To build bob you need the following tools:
+
+* ``gcc``
+* ``make``
+* `python3-sphinx`_ (optional). Only needed for generating man pages.
 
 Apart from the build dependencies additional run time dependencies could arise,
 e.g.:
 
-* curl as the default URL SCM downloader
-* extractors based on the supported extensions (e.g. 7z, xz, ...)
-* source code management handlers (e.g. git, svn, ...)
-
-.. _PyYAML: http://pyyaml.org/
-.. _schema: https://pypi.org/project/schema/
-.. _python-magic: https://pypi.org/project/python-magic/
-.. _pyparsing: http://pyparsing.wikispaces.com/
-.. _python3-sphinx: http://www.sphinx-doc.org/
-.. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
+* GNU ``bash`` >= 4.x
+* GNU coreutils (``cp``, ``ln``, ``sha1sum``, ...)
+* GNU ``tar``
+* ``hexdump``
+* ``curl`` as the default URL SCM downloader
+* source code management handlers as used (``curl``, ``cvs``, ``git``, ``svn``)
+* extractors based on the supported extensions (``7z``, GNU ``tar``, ``guzip``, ``unxz``, ``unzip``)
+* ``azure-storage-blob`` Python library if the ``azure`` archive backend is
+  used. Either install via pip (``python3 -m pip install azure-storage-blob``)
+  or download from `GitGub <https://github.com/Azure/azure-storage-python>`_.
 
 Build
 =====
@@ -66,8 +70,8 @@ following steps::
    zsh$ bashcompinit
    zsh$ source contrib/bash-completion
 
-Sanbox capabilities
-===================
+Sandbox capabilities
+====================
 
 You might have to tweak your kernel settings in order to use the sandbox
 feature. Bob uses Linux's `user namespaces`_ to run the build in a clean
@@ -83,3 +87,10 @@ not permitted" error when building. Add the line ::
 
 to your ``/etc/sysctl.conf`` (or wherever your distro stores that).
 
+
+.. _PyYAML: http://pyyaml.org/
+.. _schema: https://pypi.org/project/schema/
+.. _python-magic: https://pypi.org/project/python-magic/
+.. _pyparsing: http://pyparsing.wikispaces.com/
+.. _python3-sphinx: http://www.sphinx-doc.org/
+.. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
