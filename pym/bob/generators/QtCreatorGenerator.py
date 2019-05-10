@@ -11,14 +11,24 @@ import os
 import shutil
 import stat
 import xml.etree.ElementTree
+import shutil
+import subprocess
 from os.path import expanduser
 from os.path import join
-from bob.utils import removePath
+from bob.utils import removePath, isWindows
 from bob.errors import BuildError
 from bob.utils import summonMagic, hashFile
 from collections import OrderedDict, namedtuple
 from bob.tty import colorize
 from pipes import quote
+
+# helper to get linux or windows (MSYS2 support) cwd
+pwd = None
+def cwd():
+    global pwd
+    if pwd == None and isWindows():
+        pwd = os.popen('pwd -W').read().strip()
+    return os.getcwd() if not isWindows() else pwd
 
 # scan package recursivelely with its dependencies and build a list of checkout dirs
 def getCheckOutDirs(package, excludes, dirs):
@@ -79,12 +89,18 @@ def addRunSteps(outFile, runTargets):
 
 def addBuildConfig(outFile, num, name, buildArgs, buildMeFile):
     outFile.write('<valuemap type="QVariantMap" key="ProjectExplorer.Target.BuildConfiguration.' + str(num) + '">\n')
-    outFile.write('<value type="QString" key="ProjectExplorer.BuildConfiguration.BuildDirectory">' + os.getcwd() + '</value>\n')
+    outFile.write('<value type="QString" key="ProjectExplorer.BuildConfiguration.BuildDirectory">' + cwd() + '</value>\n')
     outFile.write('<valuemap type="QVariantMap" key="ProjectExplorer.BuildConfiguration.BuildStepList.0">\n')
     outFile.write(' <valuemap type="QVariantMap" key="ProjectExplorer.BuildStepList.Step.0">\n')
     outFile.write('  <value type="bool" key="ProjectExplorer.BuildStep.Enabled">true</value>\n')
-    outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Arguments">' + buildArgs + '</value>\n')
-    outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Command">' + buildMeFile + '</value>\n')
+    if isWindows():
+        outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Arguments">-msys2 -defterm -no-start -use-full-path -here -c "PATH=' + os.getenv('PATH') + ' sh ' + buildMeFile + ' -v ' + buildArgs + '"</value>\n')
+        if os.getenv('WD') is None:
+            raise BuildError("Cannot create QtCreator project for Windows! MSYS2 must be started by msys2_shell.cmd script!")
+        outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Command">' + os.path.normpath(os.path.join(os.getenv('WD').replace('\\', '/'), '..', '..', 'msys2_shell.cmd')) + '</value>\n')
+    else:
+        outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Arguments">' + buildArgs + '</value>\n')
+        outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Command">' + buildMeFile + '</value>\n')
     outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.WorkingDirectory">%{buildDir}</value>\n')
     outFile.write('  <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">' + name + '</value>\n')
     outFile.write('  <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName"></value>\n')
@@ -200,11 +216,11 @@ def qtProjectGenerator(package, argv, extra):
     getCheckOutDirs(package, excludes, dirs)
     if not projectName:
         # use package name for project name
-        projectName = package.getName()
+        projectName = package.getName().replace('::', '__')
     if not destination:
         # use package name for project directory
-        destination = os.path.join(os.getcwd(), "projects", projectName)
-        destination = destination.replace(':', '_')
+        destination = os.path.join(cwd(), "projects", projectName)
+        destination = destination.replace('::', '__')
     if args.overwrite:
         removePath(destination)
     if not os.path.exists(destination):
@@ -239,8 +255,12 @@ def qtProjectGenerator(package, argv, extra):
 
     # now go through all checkout dirs to find all header / include files
     for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
-        newPath = os.path.join(symlinkDir, name)
-        if not args.update: os.symlink(os.path.join(os.getcwd(), path), newPath)
+        if isWindows():
+            name = name.replace('::', '__')
+            newPath = os.path.join(cwd(), path)
+        else:
+            newPath = os.path.join(symlinkDir, name)
+            if not args.update: os.symlink(os.path.join(cwd(), path), newPath)
         for root, directories, filenames in os.walk(newPath):
             hasInclude = False
             if (((os.path.sep + '.git' + os.path.sep) in root) or
@@ -248,9 +268,15 @@ def qtProjectGenerator(package, argv, extra):
                 continue
             for filename in filenames:
                 if source.match(filename) or cmake.match(filename) or filename == 'CMakeLists.txt':
-                    sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
+                    if isWindows():
+                        sList.append(os.path.join(root,filename))
+                    else:
+                        sList.append(os.path.join(cwd(), os.path.join(root,filename)))
                 if args.filter and additionalFiles.match(filename):
-                    sList.append(os.path.join(os.getcwd(), os.path.join(root,filename)))
+                    if isWindows():
+                        sList.append(os.path.join(root,filename))
+                    else:
+                        sList.append(os.path.join(cwd(), os.path.join(root,filename)))
                 if not hasInclude and include.match(filename):
                     hasInclude = True
             if hasInclude:
@@ -291,7 +317,10 @@ def qtProjectGenerator(package, argv, extra):
     name = None
     kits = []
     try:
-        profiles = xml.etree.ElementTree.parse(os.path.join(expanduser('~'), ".config/QtProject/qtcreator/profiles.xml")).getroot()
+        if isWindows():
+            profiles = xml.etree.ElementTree.parse(os.path.join(os.getenv('APPDATA'), "QtProject/qtcreator/profiles.xml")).getroot()
+        else:
+            profiles = xml.etree.ElementTree.parse(os.path.join(expanduser('~'), ".config/QtProject/qtcreator/profiles.xml")).getroot()
         for profile in profiles:
             for valuemap in profile:
                 id = None
@@ -452,7 +481,7 @@ def qtProjectGenerator(package, argv, extra):
                     try:
                         ftype = magic.from_file(os.path.join(root, filename))
                         if 'executable' in ftype and 'x86' in ftype:
-                            runTargets.append(RunStep(os.path.join(os.getcwd(), root), filename))
+                            runTargets.append(RunStep(os.path.join(cwd(), root), filename))
                     except OSError:
                         pass
 
