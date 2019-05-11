@@ -112,6 +112,9 @@ QtCreator project generator
                            [--exclude Excludes] [--include Includes] [--kit KIT]
                            [-S START_INCLUDES] [-C CONFIG_DEF]
 
+This generator also supports generation of project files for native Windows QtCreator 
+by using MSYS2. The prerequisite is, that MSYS2 must be started by msys2_shell.cmd script.
+
 The QtCreator project generator has the following specific options. They have
 to be passed on the command line *after* the package name.
 
