@@ -178,6 +178,23 @@ archive:
             self.executeBobJenkinsCmd("push -q myTestJenkins")
         assert(type(c.exception) == BuildError)
 
+    def testSetGitTimeoutClone(self):
+        self.executeBobJenkinsCmd("set-options -o scm.git.timeout=42 myTestJenkins")
+        self.executeBobJenkinsCmd("push -q myTestJenkins")
+        send = self.jenkinsMock.getServerData()
+        config = ElementTree.fromstring(send[0][1])
+        for clone in config.iter('hudson.plugins.git.extensions.impl.CloneOption'):
+            found = 0
+            for a in clone.getiterator():
+                if a.tag == 'timeout':
+                    assert(a.text == '42')
+                    found += 1
+            assert(found == 1)
+        self.executeBobJenkinsCmd("set-options -o scm.git.timeout=-10 myTestJenkins")
+        with self.assertRaises(Exception) as c:
+            self.executeBobJenkinsCmd("push -q myTestJenkins")
+        assert(type(c.exception) == BuildError)
+
     def testSetPrefix(self):
         self.executeBobJenkinsCmd("set-options -p abcde- myTestJenkins")
         self.executeBobJenkinsCmd("push -q myTestJenkins")

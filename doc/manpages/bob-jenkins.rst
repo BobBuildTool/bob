@@ -259,6 +259,10 @@ scm.git.shallow
        change log. Jenkins will not be able to find the reference commit of
        the last run if the branch advanced by more commits than were cloned.
 
+scm.git.timeout
+    Instruct the Jenkins git plugin to use the given timeout (minutes) for clone 
+    and fetch operations.
+
 scm.ignore-hooks
     Boolean option (possible values: '0' or 'false' resp. '1' or 'true') to set
     the "Ignore post-commit hooks" option on all jobs. This instructs Jenkins
