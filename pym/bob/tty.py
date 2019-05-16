@@ -119,6 +119,9 @@ class BaseTUI:
     def cleanup(self):
         pass
 
+    def setProgress(self, done, num):
+        pass
+
     def _isVisible(self, severity):
         if isinstance(severity, int):
             return severity <= self.__verbosity
@@ -236,6 +239,8 @@ class ParallelTtyUI(BaseTUI):
         self.__maxJobs = maxJobs
         self.__jobs = {}
         self.__slots = [None] * maxJobs
+        self.__tasksDone = 0
+        self.__tasksNum = 1
 
         # disable cursor
         print("\x1b[?25l")
@@ -260,8 +265,11 @@ class ParallelTtyUI(BaseTUI):
         self.__putFooter()
 
     def __putFooter(self):
-        print("\r\x1b[?7l\x1b[2K====== {}/{} jobs running "
-                .format(len(self.__jobs), self.__maxJobs), end="")
+        print("\r\x1b[?7l\x1b[2K====== {}/{} jobs running, {}% ({}/{} tasks) done "
+                .format(len(self.__jobs), self.__maxJobs,
+                        self.__tasksDone*100//self.__tasksNum,
+                        self.__tasksDone, self.__tasksNum),
+              end="")
         i = 0
         while i < self.__maxJobs:
             num = self.__slots[i]
@@ -326,6 +334,10 @@ class ParallelTtyUI(BaseTUI):
         print("\x1b[?25h")
         import termios
         termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
+
+    def setProgress(self, done, num):
+        self.__tasksDone = done
+        self.__tasksNum = num
 
 
 class ParallelDumbUIAction(BaseTUIAction):
@@ -424,6 +436,9 @@ def stepExec(step, action, message, severity=-2, details=""):
 def setVerbosity(verbosity):
     verbosity = max(ALWAYS, min(TRACE, verbosity))
     __tui.setVerbosity(verbosity)
+
+def setProgress(done, num):
+    __tui.setProgress(done, num)
 
 def setTui(maxJobs):
     global __tui

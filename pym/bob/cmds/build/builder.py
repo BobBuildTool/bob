@@ -9,7 +9,7 @@ from ...audit import Audit
 from ...errors import BobError, BuildError, MultiBobError
 from ...input import RecipeSet
 from ...state import BobState
-from ...tty import log, stepMessage, stepAction, stepExec, \
+from ...tty import log, stepMessage, stepAction, stepExec, setProgress, \
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from ...utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
@@ -728,7 +728,7 @@ esac
     def getStatistic(self):
         return self.__statistic
 
-    def __createTask(self, coro, step=None, checkoutOnly=False, tracker=None):
+    def __createTask(self, coro, step=None, checkoutOnly=False, tracker=None, count=False):
         """Create and return task for coroutine.
 
         The optional ``step``, ``checkoutOnly`` and the ``tracker`` arguments
@@ -750,6 +750,9 @@ esac
                     # Other concurrent tasks might want to cook the same step again.
                     # They have to get the same exception again.
                     del tracker[(step.getWorkspacePath(), checkoutOnly)]
+                if count:
+                    self.__tasksDone += 1
+                    setProgress(self.__tasksDone, self.__tasksNum)
                 return ret
             except BuildError as e:
                 if not self.__keepGoing:
@@ -785,6 +788,10 @@ esac
         else:
             alternateTask = None
 
+        if count:
+            self.__tasksNum += 1
+            setProgress(self.__tasksDone, self.__tasksNum)
+
         task = asyncio.get_event_loop().create_task(wrapTask(coro, alternateTask))
         if tracked:
             tracker[path] = task
@@ -819,6 +826,8 @@ esac
             self.__allTasks = set()
             self.__buildErrors = []
             self.__runners = asyncio.BoundedSemaphore(self.__jobs)
+            self.__tasksDone = 0
+            self.__tasksNum = 0
 
             j = self.__createTask(dispatcher)
             try:
@@ -873,7 +882,7 @@ esac
         if self.__jobs > 1:
             # spawn the child tasks
             tasks = [
-                self.__createTask(lambda s=step: self._cookStep(s, checkoutOnly, depth), step, checkoutOnly, self.__cookTasks)
+                self.__createTask(lambda s=step: self._cookStep(s, checkoutOnly, depth), step, checkoutOnly, self.__cookTasks, True)
                 for step in steps
             ]
 
