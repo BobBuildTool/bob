@@ -138,9 +138,7 @@ class GitScm(Scm):
 
         if self.__tag or self.__commit:
             refSpec = "'+refs/heads/*:refs/remotes/origin/*' "
-            if self.__commit:
-                refSpec += self.__commit
-            else:
+            if self.__tag:
                 refSpec += quote("refs/tags/{0}:refs/tags/{0}".format(self.__tag))
             return dedent("""\
                 {HEADER}
