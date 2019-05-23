@@ -189,13 +189,30 @@ def qtProjectGenerator(package, argv, extra):
 
     dirs = []
     excludes = []
-    if args.excludes:
-        for e in args.excludes:
-            excludes.append(re.compile(e))
+    try:
+        if args.excludes:
+            for e in args.excludes:
+                excludes.append(re.compile(e))
 
-    if args.include:
-        for e in args.include:
-            excludes.append(re.compile(r"^((?!"+e+").)*$"))
+        if args.include:
+            for e in args.include:
+                excludes.append(re.compile(r"^((?!"+e+").)*$"))
+
+        # regex for all source / header files
+        source  = re.compile(r".*\.[ch](pp)?$")
+        include = re.compile(r".*\.[h](pp)?$")
+        cmake = re.compile(r".*\.cmake$")
+
+        if args.filter:
+           additionalFiles = re.compile(args.filter)
+
+        # use default kit "Desktop" if no kit is given
+        if args.kit is None:
+            _kit = re.compile(r".*Desktop.*")
+        else:
+            _kit = re.compile(r""+args.kit)
+    except re.error as e:
+        raise ParseError("Invalid regular expression '{}': {}".format(e.pattern), e)
 
     getCheckOutDirs(package, excludes, dirs)
     if not projectName:
@@ -222,14 +239,6 @@ def qtProjectGenerator(package, argv, extra):
        if os.path.exists(symlinkDir):
           shutil.rmtree(symlinkDir)
        os.makedirs(symlinkDir)
-
-    # regex for all source / header files
-    source  = re.compile(r".*\.[ch](pp)?$")
-    include = re.compile(r".*\.[h](pp)?$")
-    cmake = re.compile(r".*\.cmake$")
-
-    if args.filter:
-       additionalFiles = re.compile(args.filter)
 
     # lists for storing all found sources files / include directories / defines
     sList = []
@@ -269,12 +278,6 @@ def qtProjectGenerator(package, argv, extra):
             if os.path.exists(e):
                 for root, directories, filenames in os.walk(e):
                     hList.append(os.path.join(e,root))
-
-    # use default kit "Desktop" if no kit is given
-    if args.kit is None:
-        _kit = re.compile(r".*Desktop.*")
-    else:
-        _kit = re.compile(r""+args.kit)
 
     # compose start includes
     for i in args.start_includes:
