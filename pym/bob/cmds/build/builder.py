@@ -806,8 +806,14 @@ esac
                     for step in steps ]
                 await gatherTasks(packageJobs)
             else:
+                packageJobs = []
                 for step in steps:
-                    await self._cookTask(step, checkoutOnly, depth)
+                    job = self.__createTask(lambda s=step: self._cookTask(s, checkoutOnly, depth),
+                                            step, checkoutOnly)
+                    packageJobs.append(job)
+                    await asyncio.wait({job})
+                # retrieve results as last step to --keep-going
+                for job in packageJobs: job.result()
 
         loop = asyncio.get_event_loop()
         self.__restart = True
@@ -880,8 +886,14 @@ esac
             # wait for all tasks to finish
             await self.__yieldJobWhile(gatherTasks(tasks))
         else:
+            tasks = []
             for step in steps:
-                await self.__yieldJobWhile(self._cookStep(step, checkoutOnly, depth))
+                task = self.__createTask(lambda s=step: self._cookStep(s, checkoutOnly, depth),
+                                         step, checkoutOnly, self.__cookTasks)
+                tasks.append(task)
+                await self.__yieldJobWhile(asyncio.wait({task}))
+            # retrieve results as last step to --keep-going
+            for t in tasks: t.result()
 
     async def _cookStep(self, step, checkoutOnly, depth):
         await self.__runners.acquire()
@@ -1340,9 +1352,14 @@ esac
             ]
             ret = await self.__yieldJobWhile(gatherTasks(tasks))
         else:
-            ret = []
+            tasks = []
             for step in steps:
-                ret.append(await self.__yieldJobWhile(self.__getBuildIdTask(step, depth)))
+                task = self.__createTask(lambda s=step: self.__getBuildIdTask(s, depth),
+                                         step, False, self.__buildIdTasks)
+                tasks.append(task)
+                await self.__yieldJobWhile(asyncio.wait({task}))
+            # retrieve results as last step to --keep-going
+            ret = [ t.result() for t in tasks ]
         return ret
 
     async def __getBuildIdTask(self, step, depth):
