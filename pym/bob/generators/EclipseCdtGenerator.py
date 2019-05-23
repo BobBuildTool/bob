@@ -221,17 +221,20 @@ def eclipseCdtGenerator(package, argv, extra):
 
     # setup list of exclude packages
     excludePackages = []
-    for e in args.excludes:
-        exp = re.compile(e)
-        for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
-            if exp.match(name):
-                excludePackages.append(name)
-    includeDirs = []
-    # find additional include dirs
-    for i in args.additional_includes:
-        if os.path.exists(i):
-            for root, directories, filenames in os.walk(i):
-                includeDirs.append(os.path.join(i,root))
+    try:
+        for e in args.excludes:
+            exp = re.compile(e)
+            for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
+                if exp.match(name):
+                    excludePackages.append(name)
+        includeDirs = []
+        # find additional include dirs
+        for i in args.additional_includes:
+            if os.path.exists(i):
+                for root, directories, filenames in os.walk(i):
+                    includeDirs.append(os.path.join(i,root))
+    except re.error as e:
+        raise ParseError("Invalid regular expression '{}': {}".format(e.pattern), e)
 
     with open(os.path.join(destination, ".cproject"), 'w') as cProjectFile:
         cProjectFile.write(cProjectHeader)
