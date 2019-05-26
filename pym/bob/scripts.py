@@ -232,22 +232,6 @@ def bob(bobRoot):
 
     return ret
 
-def hashTree():
-    parser = argparse.ArgumentParser(description="""Calculate hash sum of a directory.
-        To speed up repeated hashing of the same directory specify a state cache
-        with '-s'. This cache holds the calculated file caches. Unmodified files
-        will not be read again in subsequent runs.""")
-    parser.add_argument('-s', '--state', help="State cache path")
-    parser.add_argument('dir', help="Directory")
-    args = parser.parse_args()
-
-    def cmd():
-        digest = hashPath(args.dir, args.state)
-        print(asHexStr(digest))
-        return 0
-
-    return catchErrors(cmd)
-
 def hashEngine():
     parser = argparse.ArgumentParser(description="Create hash based on spec.")
     parser.add_argument('-o', dest="output", metavar="OUTPUT", default="-", help="Output file (default: stdout)")
