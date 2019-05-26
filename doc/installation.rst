@@ -57,18 +57,18 @@ Shell completion
 ================
 
 Bob comes with a bash completion script. If you installed Bob the completion
-should already be available (given that ``$(DESTDIR)/share/bash-completion/``
+should already be available (given that ``$(DESTDIR)/share/bash-completion/completions``
 exists on your system). Otherwise simply source the script
-contrib/bash-completion from your ~/.bashrc file. Optionally you can copy the
+contrib/bash-completion/bob from your ~/.bashrc file. Optionally you can copy the
 script to some global directory that is picked up automatically (e.g.  ``cp
-contrib/bash-completion /etc/bash_completion.d/bob`` on Debian).
+contrib/bash-completion/bob /etc/bash_completion.d/bob`` on Debian).
 
 Zsh is able to understand the completion script too. Enable it with the
 following steps::
 
    zsh$ autoload bashcompinit
    zsh$ bashcompinit
-   zsh$ source contrib/bash-completion
+   zsh$ source contrib/bash-completion/bob
 
 Sandbox capabilities
 ====================

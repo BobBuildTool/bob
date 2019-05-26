@@ -42,8 +42,8 @@ install: all
 	@ln -sf ../lib/bob/bob $(DESTDIR)/bin
 	@ln -sf ../lib/bob/bob-audit-engine $(DESTDIR)/bin
 	@ln -sf ../lib/bob/bob-hash-engine $(DESTDIR)/bin
-	@if [ -d $(DESTDIR)/share/bash-completion ] ; then \
-		ln -s $(DESTDIR)/lib/bob/contrib/bash-completion $(DESTDIR)/share/bash-completion/bob ; \
+	@if [ -d $(DESTDIR)/share/bash-completion/completions ] ; then \
+		ln -s $(DESTDIR)/lib/bob/contrib/bash-completion/bob $(DESTDIR)/share/bash-completion/completions/bob ; \
 	fi
 	@if [ -d .git ] ; then \
 		git describe --tags --dirty > $(DESTDIR)/lib/bob/version 2> /dev/null \
