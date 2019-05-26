@@ -1,0 +1,6 @@
+graft doc
+prune doc/_build
+include doc/_build/.gitignore
+graft src
+prune bin
+prune test

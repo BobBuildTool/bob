@@ -2,5 +2,10 @@
 *.pyc
 .*.swp
 .coverage
+*.egg-info/
 __pycache__/
+/.eggs/
+/build/
+/dist/
 /htmlcov
+/pym/bob/version.py

@@ -64,14 +64,19 @@ copyright = '2016, TechniSat Digital GmbH'
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
-from bob import BOB_VERSION
-bobVersion = BOB_VERSION
+try:
+    # Use the setuptools_scm version by default
+    from bob.version import version as bobVersion
+except ImportError:
+    # Fall back to integrated heuristics
+    from bob import BOB_VERSION
+    bobVersion = BOB_VERSION
 
-# Strip "-dirty" if building on Read the Docs. They change conf.py and thus
-# always taint the repository.
-if os.environ.get('READTHEDOCS') == 'True':
-    if bobVersion.endswith('-dirty'):
-        bobVersion = bobVersion[:-6]
+    # Strip "-dirty" if building on Read the Docs. They change conf.py and thus
+    # always taint the repository.
+    if os.environ.get('READTHEDOCS') == 'True':
+        if bobVersion.endswith('-dirty'):
+            bobVersion = bobVersion[:-6]
 
 # The short X.Y version.
 version = bobVersion

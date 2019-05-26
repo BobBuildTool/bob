@@ -109,6 +109,12 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
     startTime = time.time()
 
+    try:
+        from ...develop.make import makeSandboxHelper
+        makeSandboxHelper()
+    except ImportError:
+        pass
+
     if sys.platform == 'win32':
         loop = asyncio.ProactorEventLoop()
         asyncio.set_event_loop(loop)
