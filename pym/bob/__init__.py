@@ -5,51 +5,13 @@
 
 import sys
 
-# validate Python version
-if sys.version_info.major != 3:
-    print("Bob requires Python 3")
-    sys.exit(1)
-elif sys.version_info.minor < 5:
-    print("Bob requires at least Python 3.5")
-    sys.exit(1)
-
-def getVersion():
-    import os, re
-
-    version = ""
-    root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
-
-    # try to read extra version if installed by the Makefile
-    vsnFile = os.path.join(root, "version")
-    if os.path.isfile(vsnFile):
-        try:
-            with open(vsnFile) as f:
-                version = f.read()
-        except OSError:
-            pass
-    elif os.path.isdir(os.path.join(root, ".git")):
-        import subprocess
-        try:
-            version = subprocess.check_output("git describe --tags --dirty".split(" "),
-                cwd=root, universal_newlines=True, stderr=subprocess.DEVNULL)
-        except (subprocess.CalledProcessError, OSError):
-            pass
-
-    if version:
-        if re.match(r"^v[0-9]+(\.[0-9]+){2}(-.*)?$", version):
-            # strip white spaces and leading 'v' from tag name
-            version = version.strip().lstrip("v")
-        else:
-            import sys
-            print("Warning: inferred version of Bob does not match schema:",
-                version, file=sys.stderr)
-            version = ""
-
-    if not version:
-        # Last fallback. See http://semver.org/ and adjust accordingly.
-        version = "unknown"
-
-    return "0.16-dev-" + version
+# First try to see if we're running a development version. If we do we take the
+# version from git and make sure everything is up-to-date. Otherwise Bob was
+# installed via pip and we can import the installed version.
+try:
+    from .develop.version import BOB_VERSION
+except ImportError:
+    from .version import version as BOB_VERSION
 
 def getBobInputHash():
     from .utils import hashDirectory
@@ -60,7 +22,6 @@ def getBobInputHash():
     return hashDirectory(root, ignoreDirs=['__pycache__', 'cmds'])
 
 try:
-    BOB_VERSION = getVersion()
     BOB_INPUT_HASH = getBobInputHash()
 except KeyboardInterrupt:
     sys.exit(1)
