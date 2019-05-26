@@ -552,7 +552,7 @@ esac
         if step.getSandbox() is not None:
             sandboxSetup = "\"$(mktemp -d)\""
             sandboxMounts = [ "declare -a mounts=( )" ]
-            sandbox = [ quote(os.path.join(self.__bobRoot, "bin", "namespace-sandbox")) ]
+            sandbox = [ quote(os.path.join(self.__bobRoot, "bin", "bob-namespace-sandbox")) ]
             if self.__verbose >= TRACE:
                 sandbox.append('-D')
             sandbox.extend(["-S", "\"$_sandbox\""])
