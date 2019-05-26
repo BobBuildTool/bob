@@ -25,9 +25,9 @@ SPHINX := $(shell command -v sphinx-build 2>/dev/null)
 
 .PHONY: all install pym check doc
 
-all: bin/namespace-sandbox check pym doc
+all: bin/bob-namespace-sandbox check pym doc
 
-bin/namespace-sandbox: $(patsubst %,$(DIR)/%,$(SOURCE) $(HEADERS))
+bin/bob-namespace-sandbox: $(patsubst %,$(DIR)/%,$(SOURCE) $(HEADERS))
 	@gcc -o $@ -std=c99 $^ -lm
 
 pym:
@@ -36,8 +36,8 @@ pym:
 install: all
 	@rm -rf $(DESTDIR)/lib/bob
 	@mkdir -p $(DESTDIR)/bin $(DESTDIR)/lib/bob/bin
-	@cp bin/namespace-sandbox $(DESTDIR)/lib/bob/bin
-	@cp bin/namespace-sandbox $(DESTDIR)/bin/bob-namespace-sandbox
+	@cp bin/bob-namespace-sandbox $(DESTDIR)/lib/bob/bin
+	@cp bin/bob-namespace-sandbox $(DESTDIR)/bin/bob-namespace-sandbox
 	@cp -r bob bob-audit-engine bob-hash-engine bob-hash-tree contrib pym $(DESTDIR)/lib/bob
 	@ln -sf ../lib/bob/bob $(DESTDIR)/bin
 	@ln -sf ../lib/bob/bob-audit-engine $(DESTDIR)/bin
