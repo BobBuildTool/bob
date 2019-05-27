@@ -17,7 +17,6 @@ install:
     - pip install pyparsing
 
 script:
-    - make
     - ./test/run-tests.sh
 
 after_success:
