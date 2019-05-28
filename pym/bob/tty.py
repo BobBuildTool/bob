@@ -329,6 +329,7 @@ class ParallelTtyUI(BaseTUI):
         return ParallelTtyUIAction(self, job, slot, name, msg, ellipsis, showDetails)
 
     def cleanup(self):
+        self.__putFooter()
         for i in range(max(len(self.__jobs), self.__maxJobs)+1):
             print()
         print("\x1b[?25h")
