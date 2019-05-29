@@ -19,8 +19,7 @@ and Python modules that are not part of the standard library:
 To build bob you need the following tools:
 
 * ``gcc``
-* ``make``
-* `python3-sphinx`_ (optional). Only needed for generating man pages.
+* `python3-sphinx`_
 
 Apart from the build dependencies additional run time dependencies could arise,
 e.g.:
@@ -36,39 +35,67 @@ e.g.:
   used. Either install via pip (``python3 -m pip install azure-storage-blob``)
   or download from `GitHub <https://github.com/Azure/azure-storage-python>`_.
 
-Build
-=====
+Install
+=======
 
-For the basic usage there is no installation needed. Just clone the repository
-and compile::
+There are several options how to install Bob on your system. If in doubt stick
+to the standard ``pip`` method.
+
+PyPI release versions
+---------------------
+
+To get the latest released version just use ``pip`` to download the package and
+its depedencies from PyPI::
+
+   $ python3 -m pip install BobBuildTool [--user]
+
+Release versions are supposed to be stable and keep backwards compatibility.
+
+Install latest development version
+----------------------------------
+
+If you want to test pre-release versions you can instruct ``pip`` to fetch
+and build the package directly from git::
+
+   $ python3 -m pip install --user git+https://github.com/BobBuildTool/bob
+
+Note that during development minor breakages can occur.
+
+Hacking on Bob
+--------------
+
+For the basic hacking there is no installation needed. Just clone the
+repository::
 
    $ git clone https://github.com/BobBuildTool/bob.git
    $ cd bob
-   $ make
 
 and add this directory to your ``$PATH`` or set a symlink to ``bob`` from a
-directory that is already in ``$PATH``. For regular usage it is recommended to
-install Bob. The default install prefix is ``/usr/local`` which can be
-overridden by defining ``DESTDIR``::
+directory that is already in ``$PATH``. You will have to manually install all
+required dependencies and the bash completion, though.
 
-    $ make install DESTDIR=/usr
+.. attention::
+   The ``pip install -e .`` resp. ``python3 setup.py develop`` commands do
+   *not* work for Bob. The problem is that these installtion variants are only
+   really working for pure python projects. In contrast to that Bob comes with
+   manpages and C helper applets that are not built by these commands.
 
 Shell completion
 ================
 
 Bob comes with a bash completion script. If you installed Bob the completion
-should already be available (given that ``$(DESTDIR)/share/bash-completion/``
+should already be available (given that ``$(DESTDIR)/share/bash-completion/completions``
 exists on your system). Otherwise simply source the script
-contrib/bash-completion from your ~/.bashrc file. Optionally you can copy the
+contrib/bash-completion/bob from your ~/.bashrc file. Optionally you can copy the
 script to some global directory that is picked up automatically (e.g.  ``cp
-contrib/bash-completion /etc/bash_completion.d/bob`` on Debian).
+contrib/bash-completion/bob /etc/bash_completion.d/bob`` on Debian).
 
 Zsh is able to understand the completion script too. Enable it with the
 following steps::
 
    zsh$ autoload bashcompinit
    zsh$ bashcompinit
-   zsh$ source contrib/bash-completion
+   zsh$ source contrib/bash-completion/bob
 
 Sandbox capabilities
 ====================

@@ -24,12 +24,16 @@ def doHelp(availableCommands, argv, bobRoot):
         manPage = "bob" + args.command
         manSection = "7"
 
-    inSourceLoc = os.path.join(bobRoot, "doc", "_build", "man", manPage+"."+manSection)
     try:
-        if os.path.isfile(inSourceLoc):
-            ret = subprocess.call(["man", inSourceLoc])
-        else:
-            ret = subprocess.call(["man", manSection, manPage])
+        from ..develop.make import makeManpages
+        makeManpages()
+        manArgs = [ os.path.join(bobRoot, "doc", "_build", "man",
+            manPage+"."+manSection) ]
+    except ImportError:
+        manArgs = [manSection, manPage]
+
+    try:
+        ret = subprocess.call(["man"] + manArgs)
     except OSError:
         ret = 1
 

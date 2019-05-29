@@ -145,7 +145,10 @@ Please open an issue at https://github.com/BobBuildTool/bob with the following b
 
     return ret
 
-def bob(bobRoot):
+def bob(bobRoot = None):
+    if not bobRoot:
+        bobRoot = os.path.dirname(os.path.realpath(os.path.abspath(sys.argv[0])))
+        bobRoot = os.path.join(bobRoot, "..")
     origSysStdOut = sys.stdout
     origSysStdErr = sys.stderr
     logging.disable(logging.ERROR)
@@ -231,22 +234,6 @@ def bob(bobRoot):
         finalize()
 
     return ret
-
-def hashTree():
-    parser = argparse.ArgumentParser(description="""Calculate hash sum of a directory.
-        To speed up repeated hashing of the same directory specify a state cache
-        with '-s'. This cache holds the calculated file caches. Unmodified files
-        will not be read again in subsequent runs.""")
-    parser.add_argument('-s', '--state', help="State cache path")
-    parser.add_argument('dir', help="Directory")
-    args = parser.parse_args()
-
-    def cmd():
-        digest = hashPath(args.dir, args.state)
-        print(asHexStr(digest))
-        return 0
-
-    return catchErrors(cmd)
 
 def hashEngine():
     parser = argparse.ArgumentParser(description="Create hash based on spec.")
