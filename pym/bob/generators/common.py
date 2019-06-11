@@ -46,6 +46,7 @@ class BaseScanner:
     def __init__(self, isRoot=False, stack="", additionalFiles=[]):
         self.isRoot = isRoot
         self.stack = stack
+        self.workspacePath = ''
         self.__additionalFiles = additionalFiles
         self.__headers = set()
         self.__sources = set()
