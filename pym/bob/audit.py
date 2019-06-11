@@ -13,7 +13,7 @@ import gzip
 import hashlib
 import io
 import json
-import os
+import platform
 import pickle
 import schema
 import struct
@@ -108,10 +108,10 @@ class Artifact:
         self.__resultHash = resultHash
         self.__recipes = None
         self.__defines = {}
-        u = os.uname()
+        u = platform.uname()
         self.__build = {
-            'sysname'  : u.sysname,
-            'nodename' : u.nodename,
+            'sysname'  : u.system,
+            'nodename' : u.node,
             'release'  : u.release,
             'version'  : u.version,
             'machine'  : u.machine,
