@@ -6,17 +6,18 @@
 from distutils.command.build import build as build_orig
 from setuptools import setup, find_packages, Command
 from setuptools.dist import Distribution
-from sphinx.setup_command import BuildDoc
 import os
 import sys
 
 
-# Simple override of Distribution that forces "Root-Is-Purelib: false"
+# Simple override of Distribution that forces "Root-Is-Purelib: false" on Linux
+# because of the statically linked bob-namespace-sandbox applet. Use the
+# original logic on other platforms.
 class BinaryDistribution(Distribution):
     def has_ext_modules(self):
-        return True
+        return (sys.platform == "linux") or super().has_ext_modules()
 
-# Additional command that builds the bob-namespace-sandbox applet
+# Additional command that builds the bob-namespace-sandbox applet on Linux.
 class BuildApps(Command):
     description = "Build helper apps"
     user_options = []
@@ -44,26 +45,27 @@ class BuildApps(Command):
 # documentation and applet builds.
 class build(build_orig):
     sub_commands = [
-        ('build_sphinx', None),
         ('build_apps', BuildApps.enabled )
     ] + build_orig.sub_commands
 
-setup(
-    name = "BobBuildTool",
-    use_scm_version = {
-        # let setuptools_scm handle this
-        'write_to' : "pym/bob/version.py"
-    },
+cmdclass = {
+    'build' : build,
+    'build_apps': BuildApps,
+}
+data_files = []
 
-    # Locate the python stuff. Exclude the development stuff in the release
-    # version.
-    packages = find_packages("pym", exclude=["bob.develop"]),
-    package_dir = {'' : 'pym'},
+# Installation time dependencies only needed by setup.py
+setup_requires = [
+    'setuptools_scm',   # automatically get package version
+]
 
-    # The 'data_files' is used when acutally installing the package (either
-    # directly, via bdist or bdist_wheel). In case of an sdist the MANIFEST.in
-    # file makes sure that the sphinx input files are included.
-    data_files = [
+# Sphinx manpages and bash completion do not work on Windows
+if sys.platform != 'win32':
+    from sphinx.setup_command import BuildDoc
+    cmdclass['build_sphinx'] = BuildDoc
+    build.sub_commands.append(('build_sphinx', None))
+    setup_requires.append('sphinx')
+    data_files.extend([
         ('share/man/man1', [
             'doc/_build/man/bob-archive.1',
             'doc/_build/man/bob-build.1',
@@ -85,17 +87,35 @@ setup(
         ('share/bash-completion/completions', [
             'contrib/bash-completion/bob'
         ]),
-        ('bin', ['bin/bob-namespace-sandbox']), # FIXME: only package on linux
-    ],
+    ])
+
+# Sandbox helper is only built on Linux
+if sys.platform == "linux":
+    data_files.extend([
+        ('bin', ['bin/bob-namespace-sandbox'])
+    ])
+
+setup(
+    name = "BobBuildTool",
+    use_scm_version = {
+        # let setuptools_scm handle this
+        'write_to' : "pym/bob/version.py"
+    },
+
+    # Locate the python stuff. Exclude the development stuff in the release
+    # version.
+    packages = find_packages("pym", exclude=["bob.develop"]),
+    package_dir = {'' : 'pym'},
+
+    # The 'data_files' is used when acutally installing the package (either
+    # directly, via bdist or bdist_wheel). In case of an sdist the MANIFEST.in
+    # file makes sure that the sphinx input files are included.
+    data_files = data_files,
 
     # Not quite a regular python package
     zip_safe=False,
     distclass=BinaryDistribution,
-    cmdclass = {
-        'build' : build,
-        'build_sphinx' : BuildDoc,
-        'build_apps': BuildApps,
-    },
+    cmdclass = cmdclass,
 
     # Our runtime dependencies
     python_requires = '>=3.5',
@@ -112,10 +132,7 @@ setup(
     },
 
     # Installation time dependencies only needed by setup.py
-    setup_requires = [
-        'setuptools_scm',   # automatically get package version
-        'sphinx',           # Needed to build documentation during install
-    ],
+    setup_requires = setup_requires,
 
     # Provide executables
     entry_points = {
