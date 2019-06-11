@@ -5,14 +5,6 @@
 
 import sys
 
-# First try to see if we're running a development version. If we do we take the
-# version from git and make sure everything is up-to-date. Otherwise Bob was
-# installed via pip and we can import the installed version.
-try:
-    from .develop.version import BOB_VERSION
-except ImportError:
-    from .version import version as BOB_VERSION
-
 def getBobInputHash():
     from .utils import hashDirectory
     import os
@@ -21,10 +13,18 @@ def getBobInputHash():
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
     return hashDirectory(root, ignoreDirs=['__pycache__', 'cmds'])
 
+# First try to see if we're running a development version. If we do we take the
+# version from git and make sure everything is up-to-date. Otherwise Bob was
+# installed via pip and we can import the installed version.
 try:
-    BOB_INPUT_HASH = getBobInputHash()
-except KeyboardInterrupt:
-    sys.exit(1)
+    from .develop.version import BOB_VERSION
+    try:
+        BOB_INPUT_HASH = getBobInputHash()
+    except KeyboardInterrupt:
+        sys.exit(1)
+except ImportError:
+    from .version import version as BOB_VERSION
+    BOB_INPUT_HASH = BOB_VERSION.encode("utf-8")
 
 # global debug switches
 DEBUG = {
