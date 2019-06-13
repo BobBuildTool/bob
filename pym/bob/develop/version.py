@@ -20,7 +20,7 @@ def getVersion():
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', '..')
 
     # try to query git
-    if os.path.isdir(os.path.join(root, ".git")):
+    if os.path.exists(os.path.join(root, ".git")):
         import subprocess
         try:
             version = subprocess.check_output("git describe --tags --dirty".split(" "),
