@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from unittest import TestCase
+import yaml
 
 from bob.errors import ParseError
 from bob.input import ScmOverride
@@ -205,3 +206,19 @@ class TestScmOverride(TestCase):
             'branch' : "develop"
         })
 
+    def testDump(self):
+        """Test that a scmOverride correctly converts back to yaml"""
+        spec = {
+            'match' : { 'url' : "*git.com*" },
+            'set' : { 'url' : "mirror", "branch" : "feature" },
+            'del' : [ 'tag', 'commit' ],
+            'replace' : {
+                "url" : {
+                    "pattern" : "pattern",
+                    "replacement" : "replacement",
+                }
+            }
+        }
+
+        o = ScmOverride(spec)
+        self.assertEqual(spec, yaml.load(str(o)))
