@@ -6,7 +6,7 @@ scmOverrides:
           dir: "not_working_but_replaced_below"
       replace:
           dir:
-            pattern: "^.*$"
+            pattern: "^.*\\$"
             replacement: "git"
     -
       match:
