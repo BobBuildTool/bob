@@ -15,19 +15,8 @@ class ScmOverride:
         self.__match = override.get("match", {})
         self.__del = override.get("del", [])
         self.__set = override.get("set", {})
-        self.__replaceRaw = override.get("replace", {})
-        self.__init()
-
-    def __init(self):
-        self.__replace = { key : (re.compile(subst["pattern"]), subst["replacement"])
-            for (key, subst) in self.__replaceRaw.items() }
-
-    def __getstate__(self):
-        return (self.__match, self.__del, self.__set, self.__replaceRaw)
-
-    def __setstate__(self, s):
-        (self.__match, self.__del, self.__set, self.__replaceRaw) = s
-        self.__init()
+        self.__replace = { key : (subst["pattern"], subst["replacement"])
+            for (key, subst) in override.get("replace", {}).items() }
 
     def __doesMatch(self, scm, env):
         for (key, value) in self.__match.items():
@@ -45,9 +34,14 @@ class ScmOverride:
             (other.__match, other.__del, other.__set, other.__replace))
 
     def __applyEnv(self, env):
-        rm = [ env.substitute(d, "svmOverride::del") for d in self.__del ]
-        set = { k : env.substitute(v, "svmOverride::set"+k) for (k,v) in self.__set.items() }
-        replace = { k : env.substitute(v, "svmOverride::replace"+k) for (k,v) in self.__replace.items() }
+        rm = [ env.substitute(d, "svmOverrides::del") for d in self.__del ]
+        set = { k : env.substitute(v, "svmOverrides::set: "+k) for (k,v) in self.__set.items() }
+        replace = {
+            k : ( re.compile(env.substitute(pat, "scmOverrides::replace::pattern: "+pat)),
+                  env.substitute(rep, "scmOverrides::replace::replacement: "+rep)
+                )
+            for (k, (pat, rep)) in self.__replace.items()
+        }
         return rm, set, replace
 
     def mangle(self, scm, env):
@@ -71,7 +65,10 @@ class ScmOverride:
         if self.__match: spec['match'] = self.__match
         if self.__del: spec['del'] = self.__del
         if self.__set: spec['set'] = self.__set
-        if self.__replaceRaw: spec['replace'] = self.__replaceRaw
+        if self.__replace: spec['replace'] = {
+            key : { "pattern" : pat, "replacement" : rep }
+            for (key, (pat, rep)) in self.__replace.items()
+        }
         return yaml.dump(spec, default_flow_style=False).rstrip()
 
 
