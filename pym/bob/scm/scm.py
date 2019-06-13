@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ..errors import ParseError
 from ..utils import joinLines
 from abc import ABCMeta, abstractmethod
 from enum import Enum
@@ -36,12 +37,16 @@ class ScmOverride:
     def __applyEnv(self, env):
         rm = [ env.substitute(d, "svmOverrides::del") for d in self.__del ]
         set = { k : env.substitute(v, "svmOverrides::set: "+k) for (k,v) in self.__set.items() }
-        replace = {
-            k : ( re.compile(env.substitute(pat, "scmOverrides::replace::pattern: "+pat)),
-                  env.substitute(rep, "scmOverrides::replace::replacement: "+rep)
-                )
-            for (k, (pat, rep)) in self.__replace.items()
-        }
+        try:
+            replace = {
+                k : ( re.compile(env.substitute(pat, "scmOverrides::replace::pattern: "+pat)),
+                      env.substitute(rep, "scmOverrides::replace::replacement: "+rep)
+                    )
+                for (k, (pat, rep)) in self.__replace.items()
+            }
+        except re.error as e:
+            raise ParseError("Invalid scmOverrides replace pattern: '{}': {}"
+                .format(e.pattern, str(e)))
         return rm, set, replace
 
     def mangle(self, scm, env):
