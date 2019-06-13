@@ -5,6 +5,7 @@
 
 from unittest import TestCase
 
+from bob.errors import ParseError
 from bob.input import ScmOverride
 from bob.stringparser import Env
 
@@ -89,6 +90,34 @@ class TestScmOverride(TestCase):
             'url' : "git@acme.test:foo/bar.git",
             'branch' : "develop"
         })
+
+        # test substitiution
+        o = ScmOverride({
+            'replace' : {
+                'url' : {
+                    'pattern'     : "@${FROM_HOST}:",
+                    'replacement' : "@${TO_HOST}:"
+                }
+            }
+        })
+        match, scm = o.mangle(self.scm, Env({"FROM_HOST":"git.com", "TO_HOST":"acme.test"}))
+        self.assertEqual(scm, {
+            'scm' : "git",
+            'url' : "git@acme.test:foo/bar.git",
+            'branch' : "develop"
+        })
+
+    def testReplaceInvalid(self):
+        """Test that invalid regexes are handled gracefully"""
+        o = ScmOverride({
+            'replace' : {
+                'url' : {
+                    'pattern'     : "*",
+                    'replacement' : "foo"
+                }
+            }
+        })
+        self.assertRaises(ParseError, o.mangle, self.scm, Env())
 
     def testMatch(self):
         """Test matching (multiple) keys"""
