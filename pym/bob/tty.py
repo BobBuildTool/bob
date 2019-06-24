@@ -453,12 +453,26 @@ def setTui(maxJobs):
 
 def cleanup():
     __tui.cleanup()
+    if __onTTY and sys.platform == "win32":
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value)
 
 # module initialization
 
 __onTTY = (sys.stdout.isatty() and sys.stderr.isatty())
 __useColor = False
 __tui = SingleTUI(NORMAL)
+
+if __onTTY and sys.platform == "win32":
+    # Try to set ENABLE_VIRTUAL_TERMINAL_PROCESSING flag. Enables vt100 color
+    # codes on Windows 10 console. If this fails we inhibit color code usage
+    # because it will clutter the output.
+    import ctypes
+    import ctypes.wintypes
+    __origMode = ctypes.wintypes.DWORD()
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetConsoleMode(kernel32.GetStdHandle(-11), ctypes.byref(__origMode))
+    if not kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value | 4):
+        __onTTY = False
 
 def setColorMode(mode):
     global __useColor
