@@ -45,10 +45,17 @@ def sliceString(data, chunk):
     return iter(genSlice())
 
 def removePath(path):
+    if sys.platform == "win32":
+        def onerror(func, path, exc):
+            os.chmod(path, stat.S_IWRITE)
+            os.unlink(path)
+    else:
+        onerror = None
+
     try:
         if os.path.lexists(path):
             if os.path.isdir(path) and not os.path.islink(path):
-                shutil.rmtree(path)
+                shutil.rmtree(path, onerror=onerror)
             else:
                 os.unlink(path)
     except OSError as e:
