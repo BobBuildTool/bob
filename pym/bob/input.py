@@ -1729,7 +1729,7 @@ class UniquePackageList:
             self.cache[name] = ref
             self.ret.append(ref)
         elif ref2.refGetDestination().variantId != step.variantId:
-            self.errorHandler(name, stack + ref.refGetStack(), stack + ref2.refGetStack())
+            self.errorHandler(name, self.stack + ref.refGetStack(), self.stack + ref2.refGetStack())
 
     def extend(self, gen):
         for i in gen: self.append(i)
