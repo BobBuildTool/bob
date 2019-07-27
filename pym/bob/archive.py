@@ -450,7 +450,7 @@ class LocalArchiveUploader:
 class SimpleHttpArchive(BaseArchive):
     def __init__(self, spec, secureSSL):
         super().__init__(spec)
-        self.__url = urllib.parse.urlparse(Env().substitute(spec["url"], ""))
+        self.__url = urllib.parse.urlparse(Env(os.environ).substitute(spec["url"], ""))
         self.__connection = None
         self.__sslVerify = spec.get("sslVerify", secureSSL)
 
