@@ -19,6 +19,7 @@ it must not be overwritten. The backend should make sure that even on
 concurrent uploads the artifact must appear atomically for unrelated readers.
 """
 
+from .stringparser import Env
 from .errors import BuildError
 from .tty import stepAction, SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR
 from .utils import asHexStr, removePath, isWindows
@@ -449,7 +450,7 @@ class LocalArchiveUploader:
 class SimpleHttpArchive(BaseArchive):
     def __init__(self, spec, secureSSL):
         super().__init__(spec)
-        self.__url = urllib.parse.urlparse(spec["url"])
+        self.__url = urllib.parse.urlparse(Env().substitute(spec["url"], ""))
         self.__connection = None
         self.__sslVerify = spec.get("sslVerify", secureSSL)
 
