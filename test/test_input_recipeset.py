@@ -28,16 +28,26 @@ class RecipesTmp:
         self.tmpdir.cleanup()
         os.chdir(self.cwd)
 
-    def writeRecipe(self, name, content):
-        with open(os.path.join("recipes", name+".yaml"), "w") as f:
+    def writeRecipe(self, name, content, layer=[]):
+        path = os.path.join("",
+            *(os.path.join("layers", l) for l in layer),
+            "recipes")
+        if path: os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, name+".yaml"), "w") as f:
             f.write(textwrap.dedent(content))
 
-    def writeClass(self, name, content):
-        with open(os.path.join("classes", name+".yaml"), "w") as f:
+    def writeClass(self, name, content, layer=[]):
+        path = os.path.join("",
+            *(os.path.join("layers", l) for l in layer),
+            "classes")
+        if path: os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, name+".yaml"), "w") as f:
             f.write(textwrap.dedent(content))
 
-    def writeConfig(self, content):
-        with open("config.yaml", "w") as f:
+    def writeConfig(self, content, layer=[]):
+        path = os.path.join("", *(os.path.join("layers", l) for l in layer))
+        if path: os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "config.yaml"), "w") as f:
             f.write(yaml.dump(content))
 
     def generate(self, sandboxEnabled=False):
@@ -872,3 +882,79 @@ class TestFingerprints(RecipesTmp, TestCase):
         self.assertFalse("static-disabled" in ps._getFingerprintScript())
         self.assertTrue("static-enabled" in ps._getFingerprintScript())
         self.assertFalse("dynamic" in ps._getFingerprintScript())
+
+
+class TestLayers(RecipesTmp, TestCase):
+    """Test layer support.
+
+    Test the various properties of layers and their error handling.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.writeConfig({
+            "bobMinimumVersion" : "0.15",
+            "layers" : [ "l1_n1", "l1_n2" ],
+        })
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - foo
+                - bar
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+        self.writeConfig({
+            "bobMinimumVersion" : "0.15",
+            "layers" : [ "l2" ],
+        }, layer=["l1_n1"])
+        self.writeRecipe("foo", """\
+            depends:
+                - baz
+            buildScript: "true"
+            packageScript: "true"
+            """,
+            layer=["l1_n1"])
+
+        self.writeRecipe("baz", """\
+            buildScript: "true"
+            packageScript: "true"
+            """,
+            layer=["l1_n1", "l2"])
+
+        self.writeRecipe("bar", """\
+            buildScript: "true"
+            packageScript: "true"
+            """,
+            layer=["l1_n2"])
+
+    def testRegular(self):
+        """Test that layers can be parsed"""
+        self.generate()
+
+    def testRecipeObstruction(self):
+        """Test that layers must not provide identical recipes"""
+        self.writeRecipe("foo", """\
+            depends:
+                - baz
+            buildScript: "true"
+            packageScript: "true"
+            """,
+            layer=["l1_n2"])
+        self.assertRaises(ParseError, self.generate)
+
+    def testClassObstruction(self):
+        """Test that layers must not provide identical classes"""
+        self.writeClass("c", "", layer=["l1_n1", "l2"])
+        self.writeClass("c", "", layer=["l1_n2"])
+        self.assertRaises(ParseError, self.generate)
+
+    def testMinimumVersion(self):
+        """Test that (sub-)layers cannot request a higher minimum version"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.14",
+            "layers" : [ "l1_n1", "l1_n2" ],
+        })
+        self.assertRaises(ParseError, self.generate)
+
