@@ -10,8 +10,11 @@ import os
 import textwrap
 import yaml
 
+from bob import DEBUG
 from bob.input import RecipeSet
 from bob.errors import ParseError
+
+DEBUG['ngd'] = True
 
 class RecipesTmp:
     def setUp(self):
