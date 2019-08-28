@@ -10,7 +10,7 @@ Options
     be downloaded from an archive. While this can dramatically decrease the
     build time of large projects it can hamper actually changing and rebuilding
     the packages with modifications. Use this option to instruct Bob to always
-    checkout the sources of the packges that you may want to modify.
+    checkout the sources of the packages that you may want to modify.
 
     This option will just make sure that the sources of matching packages are
     checked out. Bob will still try to find matching binary artifacts to skip
@@ -31,7 +31,7 @@ Options
     Do a clean checkout if SCM state is unclean.
 
     Bob will check all SCMs for local changes at the start of a checkout. If a
-    SCM checkout is tainted (e.g. dirty, switchted branch, unpushed commits,
+    SCM checkout is tainted (e.g. dirty, switched branch, unpushed commits,
     ...) Bob will move it into the attic and do a fresh checkout.
 
     Use this option if you are not sure about the state of the source code. You
@@ -83,10 +83,10 @@ Options
 ``--resume``
     Resume build where it was previously interrupted.
 
-    All packges that were built in the previous invocation of Bob are not
+    All packages that were built in the previous invocation of Bob are not
     checked again. In particular changes to the source code of these packages
     are not considered. Use this option to quickly resume the build if it
-    failed and the error has been corrected in the failing packge.
+    failed and the error has been corrected in the failing package.
 
 ``--sandbox``
     Enable sandboxing
