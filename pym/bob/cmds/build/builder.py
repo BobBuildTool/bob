@@ -326,7 +326,6 @@ esac
         self.__statistic = LocalBuilderStatistic()
         self.__alwaysCheckout = []
         self.__linkDeps = True
-        self.__buildIdLocks = {}
         self.__jobs = 1
         self.__bufferedStdIO = False
         self.__keepGoing = False
