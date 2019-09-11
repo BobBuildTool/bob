@@ -909,17 +909,20 @@ esac
         try:
             if not self.__running:
                 raise CancelBuildException
+            elif not step.isValid():
+                pass
             elif self._wasAlreadyRun(step, checkoutOnly):
                 pass
             elif step.isCheckoutStep():
-                if step.isValid():
-                    await self._cookCheckoutStep(step, depth)
+                await self._cook(step.getAllDepSteps(), step.getPackage(), False, depth+1)
+                await self._cookCheckoutStep(step, depth)
             elif step.isBuildStep():
-                if step.isValid():
-                    await self._cookBuildStep(step, checkoutOnly, depth)
-                    self._setAlreadyRun(step, False, checkoutOnly)
+                await self._cook(step.getAllDepSteps(), step.getPackage(), checkoutOnly, depth+1)
+                await self._cookBuildStep(step, checkoutOnly, depth)
+                self._setAlreadyRun(step, False, checkoutOnly)
             else:
-                assert step.isPackageStep() and step.isValid()
+                assert step.isPackageStep()
+                # package step handles recursion itself
                 await self._cookPackageStep(step, checkoutOnly, depth)
                 self._setAlreadyRun(step, False, checkoutOnly)
         except BuildError as e:
@@ -937,10 +940,6 @@ esac
         self.__statistic.addOverrides(overrides)
         overrides = len(overrides)
         overridesString = ("(" + str(overrides) + " scm " + ("overrides" if overrides > 1 else "override") +")") if overrides else ""
-
-        # depth first
-        await self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
-                  False, depth+1)
 
         # get directory into shape
         (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
@@ -1069,10 +1068,6 @@ esac
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
     async def _cookBuildStep(self, buildStep, checkoutOnly, depth):
-        # depth first
-        await self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
-                   checkoutOnly, depth+1)
-
         # Add the execution path of the build step to the buildDigest to
         # detect changes between sandbox and non-sandbox builds. This is
         # necessary in any build mode. Include the actual directories of
