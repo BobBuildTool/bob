@@ -307,6 +307,7 @@ esac
         self.__recipes = recipes
         self.__wasRun= {}
         self.__wasSkipped = {}
+        self.__wasDownloadTried = {}
         self.__verbose = max(ALWAYS, min(TRACE, verbose))
         self.__noLogFile = noLogFile
         self.__force = force
@@ -325,11 +326,11 @@ esac
         self.__statistic = LocalBuilderStatistic()
         self.__alwaysCheckout = []
         self.__linkDeps = True
-        self.__buildIdLocks = {}
         self.__jobs = 1
         self.__bufferedStdIO = False
         self.__keepGoing = False
         self.__fingerprints = { None : b'', "" : b'' }
+        self.__workspaceLocks = {}
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -427,6 +428,15 @@ esac
             for path, (vid, isCheckoutStep) in self.__wasRun.items()
             if isCheckoutStep }
 
+    def _wasDownloadTried(self, step):
+        return self.__wasDownloadTried.get(step.getWorkspacePath(), False)
+
+    def _setDownloadTried(self, step):
+        self.__wasDownloadTried[step.getWorkspacePath()] = True
+
+    def _clearDownloadTried(self):
+        self.__downloadDisposition = {}
+
     def _constructDir(self, step, label):
         created = False
         workDir = step.getWorkspacePath()
@@ -434,6 +444,13 @@ esac
             os.makedirs(workDir)
             created = True
         return (workDir, created)
+
+    def __workspaceLock(self, step):
+        path = step.getWorkspacePath()
+        ret = self.__workspaceLocks.get(path)
+        if ret is None:
+            self.__workspaceLocks[path] = ret = asyncio.Lock()
+        return ret
 
     async def _generateAudit(self, step, depth, resultHash, executed=True):
         if step.isCheckoutStep():
@@ -737,7 +754,7 @@ esac
         """
         tracked = (step is not None) and (tracker is not None)
 
-        async def wrapTask(coro, fence):
+        async def wrapTask(coro, trackingKey, fence):
             try:
                 task = asyncio.Task.current_task()
                 self.__allTasks.add(task)
@@ -749,7 +766,7 @@ esac
                     # Only remove us from the task list if we finished successfully.
                     # Other concurrent tasks might want to cook the same step again.
                     # They have to get the same exception again.
-                    del tracker[(step.getWorkspacePath(), checkoutOnly)]
+                    del tracker[trackingKey]
                 if count:
                     self.__tasksDone += 1
                     setProgress(self.__tasksDone, self.__tasksNum)
@@ -776,23 +793,25 @@ esac
                 raise CancelBuildException
 
         if tracked:
-            path = (step.getWorkspacePath(), checkoutOnly)
+            sandbox = step.getSandbox() and step.getSandbox().getStep().getVariantId()
+            path = (step.getWorkspacePath(), sandbox, checkoutOnly)
             task = tracker.get(path)
             if task is not None: return task
 
             # Is there a concurrent task running for *not* checkoutOnly? If yes
             # then we have to wait for it to not call the same coroutine
             # concurrently.
-            alternatePath = (step.getWorkspacePath(), not checkoutOnly)
+            alternatePath = (step.getWorkspacePath(), sandbox, not checkoutOnly)
             alternateTask = tracker.get(alternatePath)
         else:
+            path = None
             alternateTask = None
 
         if count:
             self.__tasksNum += 1
             setProgress(self.__tasksDone, self.__tasksNum)
 
-        task = asyncio.get_event_loop().create_task(wrapTask(coro, alternateTask))
+        task = asyncio.get_event_loop().create_task(wrapTask(coro, path, alternateTask))
         if tracked:
             tracker[path] = task
 
@@ -909,19 +928,57 @@ esac
         try:
             if not self.__running:
                 raise CancelBuildException
+            elif not step.isValid():
+                pass
             elif self._wasAlreadyRun(step, checkoutOnly):
                 pass
             elif step.isCheckoutStep():
-                if step.isValid():
-                    await self._cookCheckoutStep(step, depth)
+                await self._cook(step.getAllDepSteps(), step.getPackage(), False, depth+1)
+                async with self.__workspaceLock(step):
+                    if not self._wasAlreadyRun(step, checkoutOnly):
+                        await self._cookCheckoutStep(step, depth)
             elif step.isBuildStep():
-                if step.isValid():
-                    await self._cookBuildStep(step, checkoutOnly, depth)
-                    self._setAlreadyRun(step, False, checkoutOnly)
+                await self._cook(step.getAllDepSteps(), step.getPackage(), checkoutOnly, depth+1)
+                async with self.__workspaceLock(step):
+                    if not self._wasAlreadyRun(step, checkoutOnly):
+                        await self._cookBuildStep(step, checkoutOnly, depth)
+                        self._setAlreadyRun(step, False, checkoutOnly)
             else:
-                assert step.isPackageStep() and step.isValid()
-                await self._cookPackageStep(step, checkoutOnly, depth)
-                self._setAlreadyRun(step, False, checkoutOnly)
+                assert step.isPackageStep()
+                self._preparePackageStep(step)
+
+                # Prohibit up-/download if we are on the old allRelocatable
+                # policy and the package is not explicitly relocatable and
+                # built outside the sandbox.
+                mayUpOrDownload = self.__recipes.getPolicy('allRelocatable') or \
+                    step.isRelocatable() or (step.getSandbox() is not None)
+
+                # Calculate build-id and fingerprint of expected artifact if
+                # needed. Must be done without the workspace lock because it
+                # recurses.
+                if checkoutOnly:
+                    buildId = None
+                else:
+                    buildId = await self._getBuildId(step, depth)
+
+                # Try to download if possible. Will only be tried once per
+                # invocation!
+                downloaded = False
+                if mayUpOrDownload and not checkoutOnly:
+                    async with self.__workspaceLock(step):
+                        if not self._wasDownloadTried(step):
+                            downloaded = await self._downloadPackage(step, depth, buildId)
+                            self._setDownloadTried(step)
+                            if downloaded:
+                                self._setAlreadyRun(step, False, checkoutOnly)
+
+                # Recurse and build if not downloaded
+                if not downloaded:
+                    await self._cook(step.getAllDepSteps(), step.getPackage(), checkoutOnly, depth+1)
+                    async with self.__workspaceLock(step):
+                        if not self._wasAlreadyRun(step, checkoutOnly):
+                            await self._cookPackageStep(step, checkoutOnly, depth, mayUpOrDownload, buildId)
+                            self._setAlreadyRun(step, False, checkoutOnly)
         except BuildError as e:
             e.setStack(step.getPackage().getStack())
             raise
@@ -937,10 +994,6 @@ esac
         self.__statistic.addOverrides(overrides)
         overrides = len(overrides)
         overridesString = ("(" + str(overrides) + " scm " + ("overrides" if overrides > 1 else "override") +")") if overrides else ""
-
-        # depth first
-        await self._cook(checkoutStep.getAllDepSteps(), checkoutStep.getPackage(),
-                  False, depth+1)
 
         # get directory into shape
         (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
@@ -1069,10 +1122,6 @@ esac
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
     async def _cookBuildStep(self, buildStep, checkoutOnly, depth):
-        # depth first
-        await self._cook(buildStep.getAllDepSteps(), buildStep.getPackage(),
-                   checkoutOnly, depth+1)
-
         # Add the execution path of the build step to the buildDigest to
         # detect changes between sandbox and non-sandbox builds. This is
         # necessary in any build mode. Include the actual directories of
@@ -1126,7 +1175,7 @@ esac
             BobState().setVariantId(prettyBuildPath, buildDigest[0])
             BobState().setInputHashes(prettyBuildPath, buildInputHashes)
 
-    async def _cookPackageStep(self, packageStep, checkoutOnly, depth):
+    def _preparePackageStep(self, packageStep):
         # get directory into shape
         (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
         packageDigest = packageStep.getVariantId()
@@ -1140,16 +1189,9 @@ esac
             # invalidate result if folder was created
             BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
 
-        # Calculate build-id and fingerprint of expected artifact. Prohibit
-        # up-/download if we are on the old allRelocatable policy and the
-        # package is not explicitly relocatable and built outside the sandbox.
-        mayUpOrDownload = self.__recipes.getPolicy('allRelocatable') or \
-            packageStep.isRelocatable() or (packageStep.getSandbox() is not None)
-        if not checkoutOnly:
-            # don't compute these ids if they are not necessary
-            packageBuildId = await self._getBuildId(packageStep, depth)
-
+    async def _downloadPackage(self, packageStep, depth, packageBuildId):
         # Dissect input parameters that lead to current workspace the last time
+        prettyPackagePath = packageStep.getWorkspacePath()
         oldWasDownloaded, oldInputHashes, oldInputBuildId = \
             dissectPackageInputState(BobState().getInputHashes(prettyPackagePath))
 
@@ -1166,7 +1208,8 @@ esac
         #   build-id changed -> prune and try download, fall back to build
         workspaceChanged = False
         wasDownloaded = False
-        if (not checkoutOnly) and mayUpOrDownload and (depth >= self.__downloadDepth):
+        packageDigest = packageStep.getVariantId()
+        if depth >= self.__downloadDepth:
             # prune directory if we previously downloaded/built something different
             if (oldInputBuildId is not None) and (oldInputBuildId != packageBuildId):
                 prune = True
@@ -1207,45 +1250,6 @@ esac
                     SKIPPED, IMPORTANT)
                 wasDownloaded = True
 
-        # Run package step if we have not yet downloaded the package or if
-        # downloads are not possible anymore. Even if the package was
-        # previously downloaded the oldInputHashes will be None to trigger
-        # an actual build.
-        if not wasDownloaded:
-            # depth first
-            await self._cook(packageStep.getAllDepSteps(), packageStep.getPackage(),
-                       checkoutOnly, depth+1)
-
-            # Take checkout step into account because it is guaranteed to
-            # be available and the build step might reference it (think of
-            # "make -C" or cross-workspace symlinks.
-            packageInputs = [ packageStep.getPackage().getCheckoutStep() ]
-            packageInputs.extend(packageStep.getAllDepSteps())
-            packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
-                for i in packageInputs if i.isValid() ]
-            packageFingerprint = await self._getFingerprint(packageStep)
-            if packageFingerprint: packageInputHashes.append(packageFingerprint)
-            if checkoutOnly:
-                stepMessage(packageStep, "PACKAGE", "skipped due to --checkout-only ({})".format(prettyPackagePath),
-                    SKIPPED, IMPORTANT)
-            elif (not self.__force) and (oldInputHashes == packageInputHashes):
-                stepMessage(packageStep, "PACKAGE", "skipped (unchanged input for {})".format(prettyPackagePath),
-                    SKIPPED, IMPORTANT)
-            else:
-                with stepExec(packageStep, "PACKAGE", prettyPackagePath) as a:
-                    # invalidate result because folder will be cleared
-                    BobState().delInputHashes(prettyPackagePath)
-                    BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
-                    await self._runShell(packageStep, "package", True, a)
-                    packageHash = hashWorkspace(packageStep)
-                    packageDigest = self.__getIncrementalVariantId(packageStep)
-                    workspaceChanged = True
-                    self.__statistic.packagesBuilt += 1
-                audit = await self._generateAudit(packageStep, depth, packageHash)
-                if mayUpOrDownload and self.__archive.canUploadLocal():
-                    await self.__archive.uploadPackage(packageStep, packageBuildId,
-                        audit, prettyPackagePath)
-
         # Rehash directory if content was changed
         if workspaceChanged:
             BobState().setResultHash(prettyPackagePath, packageHash)
@@ -1253,9 +1257,57 @@ esac
             if wasDownloaded:
                 BobState().setInputHashes(prettyPackagePath,
                     packageInputDownloaded(packageBuildId))
-            else:
-                BobState().setInputHashes(prettyPackagePath,
-                    packageInputBuilt(packageBuildId, packageInputHashes))
+
+        return wasDownloaded
+
+    async def _cookPackageStep(self, packageStep, checkoutOnly, depth, mayUpOrDownload, packageBuildId):
+        # Dissect input parameters that lead to current workspace the last time
+        prettyPackagePath = packageStep.getWorkspacePath()
+        oldWasDownloaded, oldInputHashes, oldInputBuildId = \
+            dissectPackageInputState(BobState().getInputHashes(prettyPackagePath))
+
+        # Take checkout step into account because it is guaranteed to
+        # be available and the build step might reference it (think of
+        # "make -C" or cross-workspace symlinks.
+        workspaceChanged = False
+        packageInputs = [ packageStep.getPackage().getCheckoutStep() ]
+        packageInputs.extend(packageStep.getAllDepSteps())
+        packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
+            for i in packageInputs if i.isValid() ]
+        packageFingerprint = await self._getFingerprint(packageStep)
+        if packageFingerprint: packageInputHashes.append(packageFingerprint)
+
+        # Run package step if we have not yet downloaded the package or if
+        # downloads are not possible anymore. Even if the package was
+        # previously downloaded the oldInputHashes will be None to trigger
+        # an actual build.
+        if checkoutOnly:
+            stepMessage(packageStep, "PACKAGE", "skipped due to --checkout-only ({})".format(prettyPackagePath),
+                SKIPPED, IMPORTANT)
+        elif (not self.__force) and (oldInputHashes == packageInputHashes):
+            stepMessage(packageStep, "PACKAGE", "skipped (unchanged input for {})".format(prettyPackagePath),
+                SKIPPED, IMPORTANT)
+        else:
+            with stepExec(packageStep, "PACKAGE", prettyPackagePath) as a:
+                # invalidate result because folder will be cleared
+                BobState().delInputHashes(prettyPackagePath)
+                BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
+                await self._runShell(packageStep, "package", True, a)
+                packageHash = hashWorkspace(packageStep)
+                packageDigest = self.__getIncrementalVariantId(packageStep)
+                workspaceChanged = True
+                self.__statistic.packagesBuilt += 1
+            audit = await self._generateAudit(packageStep, depth, packageHash)
+            if mayUpOrDownload and self.__archive.canUploadLocal():
+                await self.__archive.uploadPackage(packageStep, packageBuildId,
+                    audit, prettyPackagePath)
+
+        # Rehash directory if content was changed
+        if workspaceChanged:
+            BobState().setResultHash(prettyPackagePath, packageHash)
+            BobState().setVariantId(prettyPackagePath, packageDigest)
+            BobState().setInputHashes(prettyPackagePath,
+                packageInputBuilt(packageBuildId, packageInputHashes))
 
     async def __queryLiveBuildId(self, step):
         """Predict live build-id of checkout step.
@@ -1416,6 +1468,7 @@ esac
 
         # Forget all executed build- and package-steps
         self._clearWasRun()
+        self._clearDownloadTried()
 
         # start from scratch
         raise RestartBuildException()
