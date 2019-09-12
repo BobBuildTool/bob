@@ -43,9 +43,13 @@ import urllib.parse
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
+BUILDID_SUFFIX_WIN = ".winbuildid"
 
 def buildIdToName(bid):
     return asHexStr(bid) + ARCHIVE_GENERATION
+
+def buildIdSuffix(isWin = isWindows()):
+    return BUILDID_SUFFIX_WIN if isWin else BUILDID_SUFFIX
 
 def readFileOrHandle(name, fileobj):
     if fileobj is not None:
@@ -100,7 +104,7 @@ class DummyArchive:
     async def downloadLocalLiveBuildId(self, step, liveBuildId):
         return None
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return ""
 
 class ArtifactNotFoundError(Exception):
@@ -223,7 +227,7 @@ class BaseArchive:
             return None
 
         loop = asyncio.get_event_loop()
-        with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
+        with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
             try:
                 ret, msg, kind = await loop.run_in_executor(None,
                     BaseArchive._downloadLocalLiveBuildId, self, liveBuildId)
@@ -237,7 +241,7 @@ class BaseArchive:
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openDownloadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
+            with self._openDownloadFile(liveBuildId, buildIdSuffix()) as (name, fileobj):
                 ret = readFileOrHandle(name, fileobj)
             return (ret, None, None)
         except ArtifactNotFoundError:
@@ -293,7 +297,7 @@ class BaseArchive:
             return
 
         loop = asyncio.get_event_loop()
-        with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
+        with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
             try:
                 msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalLiveBuildId, self, liveBuildId, buildId)
                 a.setResult(msg, kind)
@@ -305,7 +309,7 @@ class BaseArchive:
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openUploadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
+            with self._openUploadFile(liveBuildId, buildIdSuffix()) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, buildId)
         except ArtifactExistsError:
             return ("skipped (exists in archive)", SKIPPED)
@@ -401,8 +405,8 @@ class LocalArchive(BaseArchive):
             """.format(DIR=quote(self.__basePath), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                        GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
-        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
+        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -601,7 +605,7 @@ class SimpleHttpArchive(BaseArchive):
                        GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
                        INSECURE=insecure))
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         # only upload if requested
         if not self.canUploadJenkins():
             return ""
@@ -620,7 +624,7 @@ class SimpleHttpArchive(BaseArchive):
             """.format(URL=quote(self.__url.geturl()), LIVEBUILDID=quote(liveBuildId),
                        BUILDID=quote(buildId),
                        FAIL="" if self._ignoreErrors() else "; exit 1",
-                       GEN=ARCHIVE_GENERATION, SUFFIX=BUILDID_SUFFIX,
+                       GEN=ARCHIVE_GENERATION, SUFFIX=buildIdSuffix(isWin),
                        INSECURE=insecure))
 
 class SimpleHttpDownloader:
@@ -744,8 +748,8 @@ fi
 """.format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
            GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX)
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
-        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
+        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
 class CustomDownloader:
     def __init__(self, name):
@@ -870,7 +874,7 @@ class AzureArchive(BaseArchive):
                        CONTAINER=self.__container, BUILDID=quote(buildIdFile),
                        RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         if not self.canUploadJenkins():
             return ""
 
@@ -886,7 +890,7 @@ class AzureArchive(BaseArchive):
                        CONTAINER=quote(self.__container), LIVEBUILDID=quote(liveBuildId),
                        BUILDID=quote(buildId),
                        FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=BUILDID_SUFFIX))
+                       SUFFIX=buildIdSuffix(isWin)))
 
     @staticmethod
     def scriptDownload(args):
@@ -1040,9 +1044,9 @@ class MultiArchive:
             if ret is not None: break
         return ret
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return "\n".join(
-            i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId)
+            i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId, isWin)
             for i in self.__archives if i.canUploadJenkins())
 
 
