@@ -46,6 +46,62 @@ The packages in this directory will be named
 You can also see that there are other files (initramfs/...) that are included
 by recipes but are otherwise ignored by Bob.
 
+Additionally to the single project tree configuration Bob supports layers. A
+layer has the same structure as shown above but is merged with the other layers
+during parsing. This structure is recursive (a layer may contain another layer)
+but is flattened during parsing. A typical structure might look like the
+following::
+ 
+    .
+    ├── classes
+    │   └── ...
+    ├── config.yaml
+    ├── default.yaml
+    ├── layers
+    │   ├── bsp
+    │   │   ├── default.yaml
+    │   │   └── recipes
+    │   │       ├── linux.yaml
+    │   │       └── toolchain
+    │   │           └── arm-linux-gnueabihf.yaml
+    │   └── myapp
+    │       └── recipes
+    │           └── fancy-app.yaml
+    └── recipes
+        ├── busybox.yaml
+        ├── initramfs
+        │   ├── inittab
+        │   └── rcS
+        ├── initramfs.yaml
+        ├── toolchain
+        │   ├── make.yaml
+        │   └── x86.yaml
+        └── vexpress.yaml
+
+Conceptually the recipes (and classes) from the ``bsp`` and ``myapp`` layers
+are parsed together at the same level with the recipes of the project root. The
+recipes may reference each other freely. The only restriction is that a
+particular recipe or class must only be defined by one layer. It is not allowed
+to "overwrite" a recipe in a layer above.
+
+Layers must be configured in ``config.yaml`` to be picked up. This is just a
+simple list of layer names that are then expected in the ``layers`` directory::
+
+    layers:
+        - myapp
+        - bsp
+
+The order of layers is important with respect to settings made by
+``default.yaml`` in the various layers. The project root has the highest
+precedence. The layers in ``config.yaml`` are named from highest to lowest
+precedence. A layer with a higher precedence can override settings from layers
+of lower precedence.
+
+Layers allow you to structure your projects into larger entities that can be
+reused in other projects. This modularity helps to separate different aspects
+of bigger projects like the used toolchain, the board support package and the
+applications integration.
+
 Principle operation
 -------------------
 
