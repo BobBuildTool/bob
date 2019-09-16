@@ -43,9 +43,13 @@ import urllib.parse
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
+BUILDID_SUFFIX_WIN = ".winbuildid"
 
 def buildIdToName(bid):
     return asHexStr(bid) + ARCHIVE_GENERATION
+
+def buildIdSuffix(isWin = isWindows()):
+    return BUILDID_SUFFIX_WIN if isWin else BUILDID_SUFFIX
 
 def readFileOrHandle(name, fileobj):
     if fileobj is not None:
@@ -100,7 +104,7 @@ class DummyArchive:
     async def downloadLocalLiveBuildId(self, step, liveBuildId):
         return None
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return ""
 
 class ArtifactNotFoundError(Exception):
@@ -223,7 +227,7 @@ class BaseArchive:
             return None
 
         loop = asyncio.get_event_loop()
-        with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
+        with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
             try:
                 ret, msg, kind = await loop.run_in_executor(None,
                     BaseArchive._downloadLocalLiveBuildId, self, liveBuildId)
@@ -237,7 +241,7 @@ class BaseArchive:
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openDownloadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
+            with self._openDownloadFile(liveBuildId, buildIdSuffix()) as (name, fileobj):
                 ret = readFileOrHandle(name, fileobj)
             return (ret, None, None)
         except ArtifactNotFoundError:
@@ -293,7 +297,7 @@ class BaseArchive:
             return
 
         loop = asyncio.get_event_loop()
-        with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
+        with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
             try:
                 msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalLiveBuildId, self, liveBuildId, buildId)
                 a.setResult(msg, kind)
@@ -305,7 +309,7 @@ class BaseArchive:
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openUploadFile(liveBuildId, BUILDID_SUFFIX) as (name, fileobj):
+            with self._openUploadFile(liveBuildId, buildIdSuffix()) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, buildId)
         except ArtifactExistsError:
             return ("skipped (exists in archive)", SKIPPED)
@@ -369,7 +373,7 @@ class LocalArchive(BaseArchive):
             # upload artifact
             cd $WORKSPACE
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-            BOB_UPLOAD_FILE="{DIR}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
+            BOB_UPLOAD_FILE={DIR}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
             if [[ ! -e ${{BOB_UPLOAD_FILE}} ]] ; then
                 (
                     set -eE
@@ -381,7 +385,7 @@ class LocalArchive(BaseArchive):
                         [[ -r "$BOB_UPLOAD_FILE" ]] || exit 2
                     fi
                 ){FIXUP}
-            fi""".format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(resultFile),
+            fi""".format(DIR=quote(self.__basePath), BUILDID=quote(buildIdFile), RESULT=quote(resultFile),
                          FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
                          GEN=ARCHIVE_GENERATION, SUFFIX=suffix))
 
@@ -395,14 +399,14 @@ class LocalArchive(BaseArchive):
         return "\n" + textwrap.dedent("""\
             if [[ ! -e {RESULT} ]] ; then
                 BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-                BOB_DOWNLOAD_FILE="{DIR}/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
+                BOB_DOWNLOAD_FILE={DIR}"/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
                 cp "$BOB_DOWNLOAD_FILE" {RESULT} || echo Download failed: $?
             fi
-            """.format(DIR=self.__basePath, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
+            """.format(DIR=quote(self.__basePath), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                        GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
-        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
+        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -574,13 +578,13 @@ class SimpleHttpArchive(BaseArchive):
             # upload artifact
             cd $WORKSPACE
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-            BOB_UPLOAD_URL="{URL}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
+            BOB_UPLOAD_URL={URL}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
             if ! curl --output /dev/null --silent --head --fail {INSECURE} "$BOB_UPLOAD_URL" ; then
                 BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {RESULT} "$BOB_UPLOAD_URL" || true)
                 if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
                     echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
                 fi
-            fi""".format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
+            fi""".format(URL=quote(self.__url.geturl()), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                          FAIL="" if self._ignoreErrors() else "; exit 1",
                          GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
                          INSECURE=insecure))
@@ -594,14 +598,14 @@ class SimpleHttpArchive(BaseArchive):
         return "\n" + textwrap.dedent("""\
             if [[ ! -e {RESULT} ]] ; then
                 BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-                BOB_DOWNLOAD_URL="{URL}/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
+                BOB_DOWNLOAD_URL={URL}"/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
                 curl -sSg {INSECURE} --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
             fi
-            """.format(URL=self.__url.geturl(), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
+            """.format(URL=quote(self.__url.geturl()), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
                        GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
                        INSECURE=insecure))
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         # only upload if requested
         if not self.canUploadJenkins():
             return ""
@@ -612,15 +616,15 @@ class SimpleHttpArchive(BaseArchive):
             # upload live build-id
             cd $WORKSPACE
             BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {LIVEBUILDID}){GEN}"
-            BOB_UPLOAD_URL="{URL}/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
+            BOB_UPLOAD_URL={URL}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
             BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {BUILDID} "$BOB_UPLOAD_URL" || true)
             if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
                 echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
             fi
-            """.format(URL=self.__url.geturl(), LIVEBUILDID=quote(liveBuildId),
+            """.format(URL=quote(self.__url.geturl()), LIVEBUILDID=quote(liveBuildId),
                        BUILDID=quote(buildId),
                        FAIL="" if self._ignoreErrors() else "; exit 1",
-                       GEN=ARCHIVE_GENERATION, SUFFIX=BUILDID_SUFFIX,
+                       GEN=ARCHIVE_GENERATION, SUFFIX=buildIdSuffix(isWin),
                        INSECURE=insecure))
 
 class SimpleHttpDownloader:
@@ -744,8 +748,8 @@ fi
 """.format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
            GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX)
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
-        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
+        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
 class CustomDownloader:
     def __init__(self, name):
@@ -848,8 +852,8 @@ class AzureArchive(BaseArchive):
             # upload artifact
             cd $WORKSPACE
             bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {BUILDID} {SUFFIX} {RESULT}{FIXUP}
-            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=self.__account,
-                       CONTAINER=self.__container, BUILDID=quote(buildIdFile),
+            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
+                       CONTAINER=quote(self.__container), BUILDID=quote(buildIdFile),
                        RESULT=quote(tgzFile),
                        FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
                        SUFFIX=ARTIFACT_SUFFIX))
@@ -866,11 +870,11 @@ class AzureArchive(BaseArchive):
             if [[ ! -e {RESULT} ]] ; then
                 bob _download azure {ARGS} {ACCOUNT} {CONTAINER} {BUILDID} {SUFFIX} {RESULT} || echo Download failed: $?
             fi
-            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=self.__account,
+            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
                        CONTAINER=self.__container, BUILDID=quote(buildIdFile),
                        RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         if not self.canUploadJenkins():
             return ""
 
@@ -882,11 +886,11 @@ class AzureArchive(BaseArchive):
             # upload live build-id
             cd $WORKSPACE
             bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {LIVEBUILDID} {SUFFIX} {BUILDID}{FIXUP}
-            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=self.__account,
-                       CONTAINER=self.__container, LIVEBUILDID=quote(liveBuildId),
+            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
+                       CONTAINER=quote(self.__container), LIVEBUILDID=quote(liveBuildId),
                        BUILDID=quote(buildId),
                        FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=BUILDID_SUFFIX))
+                       SUFFIX=buildIdSuffix(isWin)))
 
     @staticmethod
     def scriptDownload(args):
@@ -1040,9 +1044,9 @@ class MultiArchive:
             if ret is not None: break
         return ret
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId):
+    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return "\n".join(
-            i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId)
+            i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId, isWin)
             for i in self.__archives if i.canUploadJenkins())
 
 

@@ -473,7 +473,7 @@ class JenkinsJob:
         ret.append(line)
         return "\n".join(ret)
 
-    def dumpStepLiveBuildIdGen(self, step):
+    def dumpStepLiveBuildIdGen(self, step, isWin):
         # This makes only sense if we can upload the result. OTOH the live
         # build-id file acts as an indicator of a first-time/clean checkout. We
         # have to still create it so that we don't accidentally upload rogue
@@ -488,7 +488,7 @@ class JenkinsJob:
             buildId = JenkinsJob._buildIdName(step)
             ret = [ "bob-hash-engine --state .state -o {} <<'EOF'".format(liveBuildId),
                     spec, "EOF" ]
-            ret.append(self.__archive.uploadJenkinsLiveBuildId(step, liveBuildId, buildId))
+            ret.append(self.__archive.uploadJenkinsLiveBuildId(step, liveBuildId, buildId, isWin))
 
         # Without sandbox we only upload the live build-id on the initial
         # checkout. Otherwise accidental modifications of the sources can
@@ -885,7 +885,7 @@ class JenkinsJob:
         for d in sorted(self.__checkoutSteps.values()):
             ensureFingerprint(d)
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
-            buildIdCalc.extend(self.dumpStepLiveBuildIdGen(d))
+            buildIdCalc.extend(self.dumpStepLiveBuildIdGen(d, windows))
         for d in sorted(self.__buildSteps.values()):
             ensureFingerprint(d)
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))

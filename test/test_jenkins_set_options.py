@@ -136,15 +136,15 @@ archive:
         self.executeBobJenkinsCmd("set-options --download myTestJenkins")
         self.executeBobJenkinsCmd("push -q myTestJenkins")
         send = self.jenkinsMock.getServerData()
-        assert('BOB_DOWNLOAD_URL="http://localhost:8001/upload/' in send[0][1].decode('utf-8'))
+        assert('BOB_DOWNLOAD_URL=http://localhost:8001/upload' in send[0][1].decode('utf-8'))
         self.executeBobJenkinsCmd("set-options --reset --add-root test myTestJenkins")
         self.executeBobJenkinsCmd("push -q myTestJenkins")
         send = self.jenkinsMock.getServerData()
-        assert('BOB_DOWNLOAD_URL="http://localhost:8001/upload/' not in send[0][1].decode('utf-8'))
+        assert('BOB_DOWNLOAD_URL=http://localhost:8001/upload' not in send[0][1].decode('utf-8'))
         self.executeBobJenkinsCmd("set-options --upload myTestJenkins")
         self.executeBobJenkinsCmd("push -q myTestJenkins")
         send = self.jenkinsMock.getServerData()
-        assert('BOB_UPLOAD_URL="http://localhost:8001/upload/' in send[0][1].decode('utf-8'))
+        assert('BOB_UPLOAD_URL=http://localhost:8001/upload' in send[0][1].decode('utf-8'))
 
     def testSetURL(self):
         self.newJenkinsMock = JenkinsMock()

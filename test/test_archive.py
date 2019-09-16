@@ -413,7 +413,7 @@ class BaseTester:
             self.__testArtifact(bid)
 
             # upload live build-id
-            script = archive.uploadJenkinsLiveBuildId(None, "test.buildid", "test.buildid")
+            script = archive.uploadJenkinsLiveBuildId(None, "test.buildid", "test.buildid", False)
             callJenkinsScript(script, tmp)
 
             # test that live-build-id is uploaded
@@ -426,7 +426,7 @@ class BaseTester:
                 script = archive.upload(DummyStep(), "error.buildid", "result.tgz")
                 callJenkinsScript(script, tmp)
             with self.assertRaises(subprocess.CalledProcessError):
-                script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid")
+                script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid", False)
                 callJenkinsScript(script, tmp)
 
     def testUploadJenkinsNoFail(self):
@@ -443,7 +443,7 @@ class BaseTester:
             # these uploads must not fail even though they do not succeed
             script = archive.upload(DummyStep(), "error.buildid", "result.tgz")
             callJenkinsScript(script, tmp)
-            script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid")
+            script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid", False)
             callJenkinsScript(script, tmp)
 
     def testDisabled(self):
@@ -454,7 +454,7 @@ class BaseTester:
         self.assertEqual(archive.download(DummyStep(), "unused", "unused"), "")
 
         self.assertEqual(archive.upload(DummyStep(), "unused", "unused"), "")
-        self.assertEqual(archive.uploadJenkinsLiveBuildId(DummyStep(), "unused", "unused"), "")
+        self.assertEqual(archive.uploadJenkinsLiveBuildId(DummyStep(), "unused", "unused", False), "")
 
         run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
@@ -485,7 +485,7 @@ class TestDummyArchive(TestCase):
     def testUploadJenkins(self):
         ret = DummyArchive().upload(b'\x00'*20, "unused", "unused")
         self.assertEqual(ret, "")
-        ret = DummyArchive().uploadJenkinsLiveBuildId(None, "unused", "unused")
+        ret = DummyArchive().uploadJenkinsLiveBuildId(None, "unused", "unused", False)
         self.assertEqual(ret, "")
 
     def testUploadLocal(self):
