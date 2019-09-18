@@ -738,7 +738,7 @@ esac
                     pass
             if ret != 0 and ret != -int(signal.SIGINT):
                 tmp.seek(0)
-                logger.setError(io.TextIOWrapper(tmp).read().strip())
+                logger.setError(io.TextIOWrapper(tmp, errors='replace').read().strip())
 
         return ret
 
