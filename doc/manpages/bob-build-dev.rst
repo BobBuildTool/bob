@@ -48,7 +48,7 @@ Options
     built package(s).
 
 ``--download MODE``
-    Download from binary archive (yes, no, deps, forced, forced-deps)
+    Download from binary archive (yes, no, deps, forced, forced-deps, packages)
 
     no
       build given module and it's dependencies from sources
@@ -66,6 +66,8 @@ Options
     forced-fallback
       combination of forced and forced-deps modes: if forced fails fall back to
       forced-deps
+    packages=<packages regex>
+      download modules that match a given regular expression, build all other.
 
 ``--incremental``
     Reuse build directory for incremental builds.
