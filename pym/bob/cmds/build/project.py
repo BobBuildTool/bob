@@ -16,6 +16,11 @@ from .builder import LocalBuilder
 from .state import DevelopDirOracle
 
 def doProject(argv, bobRoot):
+    def _downloadArg(arg):
+        if (arg.startswith("packages=") or arg in ['yes', 'no', 'deps']):
+            return arg
+        raise argparse.ArgumentTypeError("{} invalid.".format(arg))
+
     parser = argparse.ArgumentParser(prog="bob project", description='Generate Project Files')
     parser.add_argument('projectGenerator', nargs='?', help="Generator to use.")
     parser.add_argument('package', nargs='?', help="Sub-package that is the root of the project")
@@ -32,7 +37,8 @@ def doProject(argv, bobRoot):
     parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
         help="Preserve whole environment")
     parser.add_argument('--download', metavar="MODE", default="no",
-        help="Download from binary archive (yes, no, deps)", choices=['yes', 'no', 'deps'])
+        help="Download from binary archive (yes, no, deps, packages=<regular expression>)",
+        type=_downloadArg)
     parser.add_argument('--resume', default=False, action='store_true',
         help="Resume build where it was previously interrupted")
     parser.add_argument('-n', dest="execute_prebuild", default=True, action='store_false',

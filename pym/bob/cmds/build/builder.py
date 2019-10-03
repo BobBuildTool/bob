@@ -318,6 +318,7 @@ esac
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
         self.__downloadDepthForce = 0xffff
+        self.__downloadPackages = None
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
@@ -355,6 +356,12 @@ esac
             self.__archive.wantDownload(True)
             self.__downloadDepth = 0
             self.__downloadDepthForce = 1
+        elif mode.startswith('packages='):
+            self.__archive.wantDownload(True)
+            try:
+                self.__downloadPackages = re.compile(mode[9:])
+            except re.error as e:
+                raise BuildError("Invalid download regex '{}': {}".format(e.pattern), e)
         else:
             assert mode == 'no'
             self.__archive.wantDownload(False)
@@ -1209,7 +1216,8 @@ esac
         workspaceChanged = False
         wasDownloaded = False
         packageDigest = packageStep.getVariantId()
-        if depth >= self.__downloadDepth:
+        if depth >= self.__downloadDepth or (self.__downloadPackages and
+                self.__downloadPackages.match(packageStep.getPackage().getName())):
             # prune directory if we previously downloaded/built something different
             if (oldInputBuildId is not None) and (oldInputBuildId != packageBuildId):
                 prune = True

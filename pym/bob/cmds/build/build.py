@@ -38,6 +38,11 @@ def runHook(recipes, hook, args):
     return ret
 
 def commonBuildDevelop(parser, argv, bobRoot, develop):
+    def _downloadArgument(arg):
+        if arg.startswith('packages=') or arg in ['yes', 'no', 'deps', 'forced', 'forced-deps', 'forced-fallback']:
+            return arg
+        raise argparse.ArgumentTypeError("{} invalid.".format(arg))
+
     parser.add_argument('packages', metavar='PACKAGE', type=str, nargs='+',
         help="(Sub-)package to build")
     parser.add_argument('--destination', metavar="DEST", default=None,
@@ -94,8 +99,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('--no-link-deps', default=None, help="Do not add linked dependencies to workspace paths",
         dest='link_deps', action='store_false')
     parser.add_argument('--download', metavar="MODE", default=None,
-        help="Download from binary archive (yes, no, deps, forced, forced-deps, forced-fallback)",
-        choices=['yes', 'no', 'deps', 'forced', 'forced-deps', 'forced-fallback'])
+        help="Download from binary archive (yes, no, deps, forced, forced-deps, forced-fallback, packages=<packages>",
+        type=_downloadArgument)
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=None,
         help="Enable sandboxing")
