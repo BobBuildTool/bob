@@ -31,7 +31,7 @@ Options
     Use config File
 
 ``--download MODE``
-    Download from binary archive (yes, no, deps, forced, forced-deps)
+    Download from binary archive (yes, no, deps, packages)
 
     See :ref:`bob-dev(1) <manpage-dev>` for details.
 
