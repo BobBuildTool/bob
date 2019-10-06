@@ -1217,7 +1217,7 @@ esac
         wasDownloaded = False
         packageDigest = packageStep.getVariantId()
         if depth >= self.__downloadDepth or (self.__downloadPackages and
-                self.__downloadPackages.match(packageStep.getPackage().getName())):
+                self.__downloadPackages.search(packageStep.getPackage().getName())):
             # prune directory if we previously downloaded/built something different
             if (oldInputBuildId is not None) and (oldInputBuildId != packageBuildId):
                 prune = True
@@ -1371,7 +1371,7 @@ esac
         name = step.getPackage().getName()
         path = step.getWorkspacePath()
         if not os.path.exists(step.getWorkspacePath()) and \
-           not any(pat.match(name) for pat in self.__alwaysCheckout) and \
+           not any(pat.search(name) for pat in self.__alwaysCheckout) and \
            step.hasLiveBuildId() and self.__archive.canDownloadLocal():
             with stepAction(step, "QUERY", step.getPackage().getName(), (IMPORTANT, NORMAL)) as a:
                 liveBId = await self.__queryLiveBuildId(step)

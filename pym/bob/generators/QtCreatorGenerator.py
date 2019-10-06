@@ -44,7 +44,7 @@ def getCheckOutDirs(package, excludes, dirs):
         for d in package.getDirectDepSteps():
             excluded = False
             for e in excludes:
-                if (e.match(d.getPackage().getName())):
+                if (e.search(d.getPackage().getName())):
                     excluded = True
                     break
 
@@ -215,9 +215,9 @@ def qtProjectGenerator(package, argv, extra):
                 excludes.append(re.compile(r"^((?!"+e+").)*$"))
 
         # regex for all source / header files
-        source  = re.compile(r".*\.[ch](pp)?$")
-        include = re.compile(r".*\.[h](pp)?$")
-        cmake = re.compile(r".*\.cmake$")
+        source  = re.compile(r"\.[ch](pp)?$")
+        include = re.compile(r"\.[h](pp)?$")
+        cmake = re.compile(r"\.cmake$")
 
         if args.filter:
            additionalFiles = re.compile(args.filter)
@@ -276,17 +276,17 @@ def qtProjectGenerator(package, argv, extra):
                 ((os.path.sep + '.svn' + os.path.sep) in root)):
                 continue
             for filename in filenames:
-                if source.match(filename) or cmake.match(filename) or filename == 'CMakeLists.txt':
+                if source.search(filename) or cmake.search(filename) or filename == 'CMakeLists.txt':
                     if isWindows():
                         sList.append(os.path.join(root,filename))
                     else:
                         sList.append(os.path.join(cwd(), os.path.join(root,filename)))
-                if args.filter and additionalFiles.match(filename):
+                if args.filter and additionalFiles.search(filename):
                     if isWindows():
                         sList.append(os.path.join(root,filename))
                     else:
                         sList.append(os.path.join(cwd(), os.path.join(root,filename)))
-                if not hasInclude and include.match(filename):
+                if not hasInclude and include.search(filename):
                     hasInclude = True
             if hasInclude:
                 oldPath = ""
@@ -333,7 +333,7 @@ def qtProjectGenerator(package, argv, extra):
                         id = str(value.text)
                     if (value.attrib.get('key') == 'PE.Profile.Name'):
                         name = str(value.text)
-                    if (id is not None) and (name is not None) and (_kit.match(name)):
+                    if (id is not None) and (name is not None) and (_kit.search(name)):
                         kits.append([name, id])
                         break
     except FileNotFoundError:

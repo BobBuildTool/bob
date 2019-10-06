@@ -17,7 +17,7 @@ from shutil import copyfile
 def findPackages(package, excludes, highlights, done, maxdepth, donePackages, level = 0):
     def isHighLigh(package):
         for h in highlights:
-            if (h.match(package.getName())):
+            if (h.search(package.getName())):
                 return True
         return False
 
@@ -39,7 +39,7 @@ def findPackages(package, excludes, highlights, done, maxdepth, donePackages, le
     donePackages.add(package._getId())
 
     for e in excludes:
-        if (e.match(package.getName())):
+        if (e.search(package.getName())):
             return
 
     if package.getPackageStep().isValid():
@@ -52,7 +52,7 @@ def findPackages(package, excludes, highlights, done, maxdepth, donePackages, le
 
     for d in package.getDirectDepSteps():
         for e in excludes:
-            if (e.match(d.getPackage().getName())):
+            if (e.search(d.getPackage().getName())):
                 break
         else:
            yield ('link', d.getPackage(), package)

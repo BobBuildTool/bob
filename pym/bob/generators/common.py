@@ -16,9 +16,9 @@ if isWindows():
 else:
     INVALID_CHAR_TRANS = str.maketrans('', '')
 EXCLUDE_DIRS = frozenset(['.git', '.svn', 'CVS'])
-SOURCE_FILES = re.compile(r".*\.[c](pp)?$", re.IGNORECASE)
-HEADER_FILES = re.compile(r".*\.[h](pp)?$", re.IGNORECASE)
-RESOURCE_FILES = re.compile(r".*\.cmake$\|^CMakeLists.txt$", re.IGNORECASE)
+SOURCE_FILES = re.compile(r"\.[c](pp)?$", re.IGNORECASE)
+HEADER_FILES = re.compile(r"\.[h](pp)?$", re.IGNORECASE)
+RESOURCE_FILES = re.compile(r"\.cmake$\|^CMakeLists.txt$", re.IGNORECASE)
 
 def filterDirs(directories):
     i = 0
@@ -57,13 +57,13 @@ class BaseScanner:
     def _addFile(self, root, fileName):
         added = True
 
-        if SOURCE_FILES.match(fileName):
+        if SOURCE_FILES.search(fileName):
             self.__sources.add(os.path.join(root, fileName))
-        elif HEADER_FILES.match(fileName):
+        elif HEADER_FILES.search(fileName):
             self.__headers.add(os.path.join(root, fileName))
-        elif RESOURCE_FILES.match(fileName):
+        elif RESOURCE_FILES.search(fileName):
             self.__resources.add(os.path.join(root, fileName))
-        elif self.__additionalFiles and self.__additionalFiles.match(fileName):
+        elif self.__additionalFiles and self.__additionalFiles.search(fileName):
             self.__resources.add(os.path.join(root, fileName))
         else:
             added = False
@@ -116,7 +116,7 @@ class GenericScanner(BaseScanner):
             hasInclude = False
             for filename in filenames:
                 ret = self._addFile(root, filename) or ret
-                hasInclude = hasInclude or HEADER_FILES.match(filename)
+                hasInclude = hasInclude or HEADER_FILES.search(filename)
             if hasInclude:
                 oldPath = ""
                 # need to recursively add all directories from the include up to cwd to get includes like
@@ -207,7 +207,7 @@ class CommonIDEGenerator:
             packageInfo.checkout = checkoutPath
             for d in package.getBuildStep().getArguments():
                 depName = d.getPackage().getName()
-                if any(e.match(depName) for e in excludes):
+                if any(e.search(depName) for e in excludes):
                     continue
                 if d.getPackage() == package:
                     continue

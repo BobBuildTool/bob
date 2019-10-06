@@ -225,7 +225,7 @@ def eclipseCdtGenerator(package, argv, extra):
         for e in args.excludes:
             exp = re.compile(e)
             for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
-                if exp.match(name):
+                if exp.search(name):
                     excludePackages.append(name)
         includeDirs = []
         # find additional include dirs
