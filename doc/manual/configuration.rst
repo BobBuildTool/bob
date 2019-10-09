@@ -3,15 +3,15 @@
 Configuration
 =============
 
-When building packages Bob executes the instructions defined by the recipes.
+When building packages, Bob executes the instructions defined by the recipes.
 All recipes are located relative to the project root directory in the ``recipes``
 subdirectory. Recipes are YAML files with a defined structure. The name of the
 recipe and the resulting package(s) is derived from the file name by removing
-the trailing '.yaml'. To aid further organization of the recipes they may be
-put into subdirectories under ``recipes``. The directory name gets part of the
+the trailing '.yaml'. To aid further organization of the recipes, they may be
+put into subdirectories under ``recipes``. The directory name becomes part of the
 package name with a ``::``-separator.
 
-To minimize repetition of common functionality there is also an optional
+To minimize repetition of common functionality, there is also an optional
 ``classes`` subdirectory.  Classes have the same structure as recipes and can
 be included from recipes and other classes to factor out common stuff. Files
 that do not have the '.yaml' extension are ignored when parsing the recipes and
@@ -20,7 +20,7 @@ classes directories.
 There are two additional configuration files: ``config.yaml`` and
 ``default.yaml``. The former contains static configuration options while the
 latter holds some options that can have a default value and might be overridden
-on the command line. Putting that all together a typical recipe tree looks like
+on the command line. Putting that all together, a typical recipe tree looks like
 the following::
 
     .
@@ -41,14 +41,14 @@ the following::
         │   └── x86.yaml
         └── vexpress.yaml
 
-Such a recipe and configuration tree is meant to be handled by an SCM. As you
-can see in the above tree there is a ``toolchain`` subdirectory in the recipes.
+Such a recipe and configuration tree is meant to be handled by an SCM (Source Code Manager).
+As you can see in the above tree there is a ``toolchain`` subdirectory in the recipes.
 The packages in this directory will be named
 ``toolchain::arm-linux-gnueabihf``, ``toolchain::make`` and ``toolchain::x86``.
 You can also see that there are other files (initramfs/...) that are included
 by recipes but are otherwise ignored by Bob.
 
-Additionally to the single project tree configuration Bob supports layers. A
+In addition to the single project tree configuration, Bob supports layers. A
 layer has the same structure as shown above but is merged with the other layers
 during parsing. This structure is recursive (a layer may contain another layer)
 but is flattened during parsing. A typical structure might look like the
@@ -110,12 +110,12 @@ Principle operation
 All packages are built by traversing the recipe tree starting from one or more
 root recipes. These are recipes that have the ``root`` attribute set to
 ``True``. There must be at least one root recipe in a project. The tree of
-recipes is traversed depth first. While following the dependencies Bob keeps a
+recipes is traversed depth first. While following the dependencies, Bob keeps a
 local state that consists of the following information:
 
 Environment
     Bob always keeps the full set of variables but only a subset is visible
-    when executing the scripts. Initially only the variables defined in
+    when executing the scripts. Initially, only the variables defined in
     ``default.yaml`` in the ``environment`` section are available. Environment
     variables can be set at various points that are described below in more
     detail.
@@ -124,14 +124,14 @@ Tools
     Tools are aliases for paths to executables. Initially there are no tools.
     They are defined by ``provideTools`` and must be explicitly imported by
     upstream recipes by listing ``tools`` in the ``use`` attribute. Like
-    environment variables the tools are kept as key value pairs where the key
+    environment variables, the tools are kept as key value pairs where the key
     is a string and the value is the executable and library paths that are
     imported when using a tool.
 
 Sandbox
     This defines the root file system and paths that are used to build the
     package.  Unless a sandbox is consumed by listing ``sandbox`` in the
-    ``use`` attribute of a dependency the normal host executables are used.
+    ``use`` attribute of a dependency, the normal host executables are used.
     Sandboxed builds are described in a separate section below.
 
 All of this information is carried as local state when traversing the
@@ -150,7 +150,7 @@ environment and tools.
 
 Checkout
     The checkout step is there to fetch the source code or any external input
-    of the package. Despite the script defined by ``checkoutScript`` Bob
+    of the package. Despite the script defined by ``checkoutScript``, Bob
     supports a number of source code management systems natively. They can be
     listed in ``checkoutSCM`` and are fetched/updated before the
     ``checkoutScript`` is run.
@@ -158,18 +158,18 @@ Checkout
 Build
     This is the step where most of the work should be done to build the
     package. The ``buildScript`` receives the result of the checkout step as
-    argument ``$1`` and any further dependency whose result is consumed is
-    passed in order starting with ``$2``. If no checkout step was provided
+    argument ``$1``, and any further dependency whose result is consumed is
+    passed in order starting with ``$2``. If no checkout step was provided,
     ``$1`` will point to some invalid path.
 
 Package
-    Typically the build step will produce a lot of intermediate files (e.g.
+    Typically, the build step will produce a lot of intermediate files (e.g.
     object files). The package step has the responsibility to distill a clean
     result of the package. The ``packageScript`` will receive a single argument
     with the path to the build step.
 
 Each step of a recipe is executed separately and always in the above order. The
-scripts working directory is already where the result is expected. The scripts
+scripts' working directory is already where the result is expected. The scripts
 should make no assumption about the absolute path or the relative path to other
 steps. Only the working directory might be modified.
 
@@ -201,7 +201,7 @@ A copy of the environment is inherited from the upstream recipe.
    a. Make a dedicated copy of the environment for the dependency.
    b. Set variables given in the ``environment`` attribute of the dependency
       in this copy.
-   c. Descent to the dependency recipe with the that environment.
+   c. Descend to the dependency recipe with that environment.
    d. Merge all variables of the ``provideVars`` section of the dependency
       into the local environment if ``environment`` is listed in the ``use``
       attribute of the dependency.
@@ -209,14 +209,14 @@ A copy of the environment is inherited from the upstream recipe.
       merged variable of the previous step is updated in the forwarded
       environment too.
 
-After all dependencies have been processed the environment variables of tools
+After all dependencies have been processed, the environment variables of tools
 (see :ref:`configuration-recipes-provideTools`) that are used in the recipe are
-merged into the local environment. Finally variables defined in
+merged into the local environment. Finally, variables defined in
 :ref:`configuration-recipes-privateenv` and
 :ref:`configuration-recipes-metaenv` are merged too.
 
 A subset of the resulting local environment can be passed to the three
-execution steps. The available variables to the scripts are defined by
+execution steps. The variables available to the scripts are defined by
 :ref:`configuration-recipes-vars` and :ref:`configuration-recipes-vars-weak`.
 The former property defines variables that are considered to influence the
 build while the latter names variables that are expected to *not* influence the
@@ -245,7 +245,7 @@ relative path to the executable(s) and optionally some library paths for shared
 libraries. Another recipe using a tool gets the path to the executable(s) added
 to its ``$PATH``.
 
-Starting at the root recipe there are no tools. The next steps are repeated
+Starting at the root recipe, there are no tools. The next steps are repeated
 for each recipe as the dependency tree is traversed. A copy of the tool
 aliases is inherited from the upstream recipe.
 
@@ -253,14 +253,14 @@ aliases is inherited from the upstream recipe.
    dependency (named "forwarded tools" thereafter).
 #. For each dependency do the following:
 
-   a. Descent to the dependency recipe with the forwarded tools
+   a. Descend to the dependency recipe with the forwarded tools
    b. Merge all tools of the ``provideTools`` section of the dependency into
       the local tools if ``tools`` is listed in the ``use`` attribute of the
       dependency.
    c. If the ``forward`` attribute of the dependency is ``True`` then any
-      merged tools of the previous step is updated in the forwarded tools too.
+      merged tools of the previous step are updated in the forwarded tools too.
 
-While the full set of tools is carried through the dependency tree only a
+While the full set of tools is carried through the dependency tree, only a
 specified subset of these tools is available when executing the steps of a
 recipe.  The available tools are defined by {checkout,build,package}Tools. A
 tool that is consumed in one step is also set in the following. This means a
@@ -268,7 +268,7 @@ tool consumed through checkoutTools is also available during the build and
 package steps. Likewise, a tool consumed by buildTools is available in the
 package step too.
 
-To define one or more tools a recipe must include a ``provideTools`` section
+To define one or more tools, a recipe must include a ``provideTools`` section
 that defines the relative execution path and library paths of one or more tool
 aliases. These aliases may be picked up by the upstream recipe by having
 ``tools`` in the ``use`` attribute of the dependency.
@@ -276,12 +276,12 @@ aliases. These aliases may be picked up by the upstream recipe by having
 Sandbox operation
 ~~~~~~~~~~~~~~~~~
 
-Unless a sandbox is configured for a recipe the steps are executed directly on
+Unless a sandbox is configured for a recipe, the steps are executed directly on
 the host. Bob adds any consumed tools to the front of ``$PATH`` and controls
-the available environment variables. Apart from this the build result is pretty
+the available environment variables. Apart from this, the build result is pretty
 much dependent on the installed applications of the host.
 
-By utilizing `user namespaces`_ on Linux Bob is able to execute the package
+By utilizing `user namespaces`_ on Linux, Bob is able to execute the package
 steps in a tightly controlled and reproducible environment. This is key to
 enable binary reproducible builds. The sandbox image itself is also represented
 by a recipe in the project.
@@ -295,15 +295,15 @@ sandbox. This sandbox is effective only for the current recipe. If ``forward``
 is additionally set to ``True`` the following dependencies will inherit this
 sandbox for their execution.
 
-Inside the sandbox the result of the consumed or inherited sandbox image is
+Inside the sandbox, the result of the consumed or inherited sandbox image is
 used as root file system. Only direct inputs of the executed step are visible.
 Everything except the working directory and ``/tmp`` is mounted read only to
 restrict side effects. The only component used from the host is the Linux
 kernel and indirectly Python because Bob is written in this language. The
-sandbox image must provide everything to execute the steps. In particular the
+sandbox image must provide everything to execute the steps. In particular, the
 following things must be provided by the sandbox image:
 
-* There must be a ``etc/passwd`` file containing the "nobody" user with uid
+* There must be an ``etc/passwd`` file containing the "nobody" user with uid
   65534.
 * There must *not* be a ``home`` directory. Bob creates this directory on
   demand and will fail if it already exists.
@@ -316,9 +316,9 @@ following things must be provided by the sandbox image:
 String substitution
 ~~~~~~~~~~~~~~~~~~~
 
-At most places where strings are handled in keywords it is possible to use
-variable substitution. These substitutions might be simple variables but also a
-variety of string processing functions are available that can optionally be
+At most places where strings are handled in keywords, it is possible to use
+variable substitution. These substitutions might be simple variables, but a
+variety of string processing functions is also available that can optionally be
 extended by plugins. The following syntax is supported:
 
 * Variable substitution
@@ -337,7 +337,7 @@ extended by plugins. The following syntax is supported:
 * ``$(fun,arg1,...)``: Substitutes the result of calling ``fun`` with the given
   arguments. Unlike unix shells, which employ word splitting at whitespaces, the
   function arguments are separated by commas. Any white spaces are kept and belong
-  to the arguments. To put a comma or closing brace into an argument it has to
+  to the arguments. To put a comma or closing parenthesis into an argument it has to
   be escaped by a backslash or double/single quotes.
 * Quoting
     * ``"..."``: Double quotes begin a new substitution context that runs until
@@ -355,10 +355,10 @@ The following built in string functions are supported:
   ``right`` are equal, ``false`` otherwise.
 * ``$(match,string,pattern[,flags])``: Returns ``true`` if ``pattern`` is found
   in ``string``, ``false`` otherwise. Quoting the pattern is recommended. Flags
-  are optional. The only supported flag by now is ``i`` to ignore case while
+  are optional. The only currently supported flag is ``i`` to ignore case while
   searching.
 * ``$(if-then-else,condition,then,else)``: The expansion of ``condition`` is
-  interpreted as boolean value. If the contition is true the expansion of
+  interpreted as a boolean value. If the condition is true the expansion of
   ``then`` is returned. Otherwise ``else`` is returned.
 * ``$(is-sandbox-enabled)``: Return ``true`` if a sandbox is enabled in the
   current context, ``false`` otherwise.
@@ -369,11 +369,11 @@ The following built in string functions are supported:
 * ``$(not,condition)``: Interpret the expansion of ``condition`` as boolean
   value and return the opposite.
 * ``$(or,condition1,condition2,...)``: Expand each condition and then interpret
-  each condition as boolean.  Return ``true`` when the first is true, otherwise
-  ``false``.
+  each condition as boolean.  Return ``false`` when all conditions are false, otherwise
+  ``true``.
 * ``$(and,condition1,condition2,...)``: Expand each condition and the interpret
-  each condition as booelan. Rreturn ``false`` when the first is false,
-  otherwise ``true``.
+  each condition as booelan. Return ``true`` when all conditions are true,
+  otherwise ``false``.
 * ``$(strip,text)``: Remove leading and trailing whitespaces from the expansion
   of ``text``.
 * ``$(subst,from,to,text)``: Replace every occurence of ``from`` with ``to`` in
@@ -390,7 +390,7 @@ as they work on packages:
 
 Plugins may provide additional functions as described in
 :ref:`extending-hooks-string`. If a string is interpreted as a boolean then the
-empty string, "0" and "false" (case insensitive) are considered as logical
+empty string, "0" (zero) and "false" (case insensitive) are considered as logical
 "false".  Any other value is considered as "true".
 
 .. _configuration-principle-fingerprinting:
@@ -399,42 +399,42 @@ Host dependency fingerprinting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Bob closely tracks the input of all packages. This includes all checked out
-sources and the dependencies to other packages. If something is changed Bob can
+sources and the dependencies to other packages. If something is changed, Bob can
 accurately determine which packages have to be rebuilt. This information is
 also used to find matching binary artifacts. If a recipe depends on resources
-that are outside of the declared recipes the situation changes, though. Bob
+that are outside of the declared recipes, the situation changes though. Bob
 cannot infer what external resources are actually used and how these influence
 the build result.
 
 A common host dependency that "taints" the build result is the host compiler.
-While the host compiler typically does not change it limits the portability
+While the host compiler typically does not change, it limits the portability
 across machines in the form of binary artifacts. The dependency on the host
-architecture is obvious but also the libc has to be considered. This can be
+architecture is obvious, but also the libc has to be considered. This can be
 extended to other libraries that might be used by the recipe.
 
-To let Bob know about the usage and state of an external host resource a
+To let Bob know about the usage and state of an external host resource, a
 fingerprint script can be used in the recipe. The output of the fingerprint
-script is used to "tag" the created package. If the fingerprint changes the
+script is used to "tag" the created package. If the fingerprint changes, the
 package is rebuilt. The fingerprint is also attached to the binary artifact.
-To download a binary artifact of a package the fingerprint has to match.
+To download a binary artifact of a package, the fingerprint has to match.
 
 The fingerprint does not apply to the `checkoutScript`, though. If the result
 of your `checkoutScript` depends on the host that it runs on, you have to set
 :ref:`configuration-recipes-checkoutdeterministic` to `False`. The fingerprint
-serves only as virtual input to the build and package steps to declare to Bob
+serves only as a virtual input to the build and package steps to declare to Bob
 what part of the host is used by the recipe.
 
 The impact of the host that is declared by a fingerprint script applies only to
 the result of a recipe. Specifically, it does not apply to the implied
 *behaviour* of any provided tools. This means that when using a tool from
-another recipe that is directly or indirectly affected by a fingerprint the
+another recipe that is directly or indirectly affected by a fingerprint, the
 using recipe is not affected. The rationale for this exception of transitivity
-is that it typically does not matter *where* a tool is built but but how it
+is that it typically does not matter *where* a tool is built but how it
 *behaves*.
 
 See :ref:`configuration-recipes-fingerprintScript` and
-:ref:`configuration-recipes-provideTools` where fingerprint scripts can be
-configured.
+:ref:`configuration-recipes-provideTools` for information where fingerprint scripts
+can be configured.
 
 Recipe and class keywords
 -------------------------
@@ -460,11 +460,11 @@ matched by ``path`` the files are sorted by name and then concatenated. The
 ``$<<path>>`` syntax imports the file(s) as is and replaces the escape pattern
 with a (possibly temporary) file name which has the same content. Similar to
 that, the ``$<'path'>`` syntax includes the file(s) inline as a quoted string.
-In any case the strings are fully quoted and *not* subject to any parameter
+In any case, the strings are fully quoted and *not* subject to any parameter
 substitution.
 
 .. note::
-   When including files as quoted strings (``$<'path'>`` syntax) they have to
+   When including files as quoted strings (``$<'path'>`` syntax), they have to
    be UTF-8 encoded.
 
 The scripts of any classes that are inherited which define
@@ -480,12 +480,12 @@ are consumed by a {checkout,build,package}Tools declaration are added to the
 front of PATH. The same holds for ``$LD_LIBRARY_PATH`` with the difference of starting
 completely empty.
 
-Additionally the following variables are populated automatically:
+Additionally, the following variables are populated automatically:
 
 * ``BOB_CWD``: The working directory of the current script.
 * ``BOB_ALL_PATHS``: An associative array that holds the paths to the results
-  of all dependencies indexed by the package name. This includes indirect
-  dependencies such as consumed tools or the sandbox too.
+  of all dependencies indexed by the package name. This also includes indirect
+  dependencies such as consumed tools or the sandbox.
 * ``BOB_DEP_PATHS``: An associative array of all direct dependencies. This
   array comes in handy if you want to refer to a dependency by name (e.g.
   ``${BOB_DEP_PATHS[libfoo-dev]}``) instead of the position (e.g. ``$2``).
@@ -525,9 +525,9 @@ This is a list of environment variables that should be set during the execution
 of the checkout/build/package script. This declares the dependency of the
 respective step to the named variables.
 
-It is not an error that a variable listed here is unset. This is especially
+It is not an error if a variable listed here is unset. This is especially
 useful for classes or to implement default behaviour that can be overridden by
-the user from the command line. If you expect a variable to be unset it is your
+the user from the command line. If you expect a variable to be unset, it is your
 responsibility to handle that case in the script. Every reference to such a
 variable should be guarded with ``${VAR-somthing}`` or ``${VAR+something}``.
 
