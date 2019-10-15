@@ -325,6 +325,8 @@ class LocalArchive(BaseArchive):
     def __init__(self, spec):
         super().__init__(spec)
         self.__basePath = os.path.abspath(spec["path"])
+        self.__fileMode = spec.get("fileMode")
+        self.__dirMode = spec.get("directoryMode")
 
     def _getPath(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
@@ -351,9 +353,16 @@ class LocalArchive(BaseArchive):
 
         # open temporary file in destination directory
         if not os.path.isdir(packageResultPath):
-            os.makedirs(packageResultPath, exist_ok=True)
+            if self.__dirMode is not None:
+                oldMask = os.umask(~self.__dirMode & 0o777)
+            try:
+                os.makedirs(packageResultPath, exist_ok=True)
+            finally:
+                if self.__dirMode is not None:
+                    os.umask(oldMask)
         return LocalArchiveUploader(
             NamedTemporaryFile(dir=packageResultPath, delete=False),
+            self.__fileMode,
             packageResultFile)
 
     def __uploadJenkins(self, step, buildIdFile, resultFile, suffix):
@@ -369,6 +378,16 @@ class LocalArchive(BaseArchive):
         if not self.canUploadJenkins():
             return ""
 
+        if self.__dirMode is not None:
+            setDirMode = "umask {:03o}".format(~self.__dirMode & 0o777)
+        else:
+            setDirMode = ":"
+
+        if self.__fileMode is not None:
+            setFileMode = 'chmod {:03o} "$T"'.format(self.__fileMode & 0o777)
+        else:
+            setFileMode = ""
+
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
@@ -380,14 +399,16 @@ class LocalArchive(BaseArchive):
                     T="$(mktemp -p {DIR})"
                     trap 'rm -f $T' EXIT
                     cp {RESULT} "$T"
-                    mkdir -p "${{BOB_UPLOAD_FILE%/*}}"
+                    {SET_FILE_MODE}
+                    ({SET_DIR_MODE} ; mkdir -p "${{BOB_UPLOAD_FILE%/*}}")
                     if ! ln -T "$T" "$BOB_UPLOAD_FILE" ; then
                         [[ -r "$BOB_UPLOAD_FILE" ]] || exit 2
                     fi
                 ){FIXUP}
             fi""".format(DIR=quote(self.__basePath), BUILDID=quote(buildIdFile), RESULT=quote(resultFile),
                          FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                         GEN=ARCHIVE_GENERATION, SUFFIX=suffix))
+                         GEN=ARCHIVE_GENERATION, SUFFIX=suffix,
+                         SET_DIR_MODE=setDirMode, SET_FILE_MODE=setFileMode))
 
     def upload(self, step, buildIdFile, tgzFile):
         return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
@@ -421,8 +442,9 @@ class LocalArchiveDownloader:
         return False
 
 class LocalArchiveUploader:
-    def __init__(self, tmp, destination):
+    def __init__(self, tmp, fileMode, destination):
         self.tmp = tmp
+        self.fileMode = fileMode
         self.destination = destination
     def __enter__(self):
         return (None, self.tmp)
@@ -431,6 +453,8 @@ class LocalArchiveUploader:
         # atomically move file to destination at end of upload
         if exc_type is None:
             if not isWindows():
+                if self.fileMode is not None:
+                    os.chmod(self.tmp.name, self.fileMode)
                 # Cannot use os.rename() because it will unconditionally
                 # replace an existing file. Instead we link the file at the
                 # destination and unlink the temporary file.

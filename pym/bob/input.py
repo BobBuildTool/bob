@@ -2536,6 +2536,8 @@ class ArchiveValidator:
         }
         fileArchive = baseArchive.copy()
         fileArchive["path"] = str
+        fileArchive[schema.Optional("fileMode")] = int
+        fileArchive[schema.Optional("directoryMode")] = int
         httpArchive = baseArchive.copy()
         httpArchive["url"] = str
         httpArchive[schema.Optional("sslVerify")] = bool
