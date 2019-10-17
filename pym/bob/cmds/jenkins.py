@@ -18,7 +18,7 @@ import base64
 import datetime
 import getpass
 import hashlib
-import http.client
+import http.cookiejar
 import json
 import os.path
 import random
@@ -26,7 +26,10 @@ import re
 import ssl
 import sys
 import textwrap
+import urllib
 import urllib.parse
+import urllib.request
+import urllib.response
 import xml.etree.ElementTree
 
 warnCertificate = WarnOnce("Using HTTPS without certificate check.")
@@ -1536,30 +1539,21 @@ class JenkinsConnection:
 
     def __init__(self, config, sslVerify):
         self.__config = config
-        self.__sslVerify = sslVerify
-        self.__init()
-
-    def __init(self):
-        # create connection
         url = self.__config["url"]
-        if url["scheme"] == 'http':
-            connection = http.client.HTTPConnection(url["server"],
-                                                    url.get("port"))
-        elif url["scheme"] == 'https':
-            if self.__sslVerify:
-                ctx = None
-            else:
-                ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-                warnCertificate.warn()
-            connection = http.client.HTTPSConnection(url["server"],
-                                                     url.get("port"), context=ctx)
-        else:
-            raise BuildError("Unsupported Jenkins URL scheme: '{}'".format(
-                url["scheme"]))
-
-        # remember basic settings
-        self.__connection = connection
         self.__headers = { "Content-Type": "application/xml" }
+        self.__root = "{}://{}{}{}".format(url['scheme'], url['server'],
+            ":{}".format(url['port']) if url.get('port') else "", url['path'])
+
+        handlers = []
+
+        # Handle cookies
+        cookies = http.cookiejar.CookieJar()
+        handlers.append(urllib.request.HTTPCookieProcessor(cookies))
+
+        # Optionally disable SSL certificate checks
+        if not sslVerify:
+            handlers.append(urllib.request.HTTPSHandler(
+                context=ssl.SSLContext(ssl.PROTOCOL_SSLv23)))
 
         # handle authorization
         if url.get("username"):
@@ -1570,55 +1564,35 @@ class JenkinsConnection:
             self.__headers['Authorization'] = 'Basic ' + base64.b64encode(
                 userPass.encode("utf-8")).decode("ascii")
 
+        # remember basic settings
+        self.__opener = urllib.request.build_opener(*handlers)
+
         # get CSRF token
-        connection.request("GET", url["path"] + "crumbIssuer/api/xml",
-                           headers=self.__headers)
-        response = connection.getresponse()
-        if response.status == 200:
-            resp = xml.etree.ElementTree.fromstring(response.read())
-            crumb = resp.find("crumb").text
-            field = resp.find("crumbRequestField").text
-            self.__headers[field] = crumb
-        else:
-            # dump response
-            response.read()
+        try:
+            with self._send("GET", "crumbIssuer/api/xml") as response:
+                resp = xml.etree.ElementTree.fromstring(response.read())
+                crumb = resp.find("crumb").text
+                field = resp.find("crumbRequestField").text
+                self.__headers[field] = crumb
+        except urllib.error.HTTPError:
+            pass
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.__connection.close()
         return False
 
-    def _send(self, method, path, body=None, headers=None):
-        if headers is None:
-            headers = self.__headers
-
-        # Retry in case of BadStatusLine or OSError (broken pipe). This happens
-        # sometimes if the server is under load. Running Bob again essentially
-        # does that anyway...
-        retries = 3
-        while True:
-            try:
-                self.__connection.request(method, self.__config["url"]["path"] + path, body,
-                                          headers)
-                return self.__connection.getresponse()
-            except (http.client.BadStatusLine, OSError) as e:
-                retries -= 1
-                if retries <= 0: raise
-                print("Jenkins connection dropped ({}). Retrying...".format(str(e)),
-                      file=sys.stderr)
-                self.__init()
+    def _send(self, method, path, body=None, additionalHeaders={}):
+        headers = self.__headers.copy()
+        headers.update(additionalHeaders)
+        req = urllib.request.Request(self.__root + path, data=body,
+            method=method, headers=headers)
+        return self.__opener.open(req)
 
     def checkPlugins(self):
-        response = self._send("GET", "pluginManager/api/python?depth=1")
-        if response.status != 200:
-            print("Warning: could not verify plugins: HTTP error: {} {}"
-                    .format(response.status, response.reason),
-                file=sys.stderr)
-            response.read()
-        else:
-            try:
+        try:
+            with self._send("GET", "pluginManager/api/python?depth=1") as response:
                 plugins =  ast.literal_eval(response.read().decode("utf8"))["plugins"]
                 required = set(requiredPlugins.keys())
                 for p in plugins:
@@ -1629,88 +1603,94 @@ class JenkinsConnection:
                 if required:
                     raise BuildError("Missing plugin(s): " + ", ".join(
                         requiredPlugins[p] for p in required))
-            except BuildError:
-                raise
-            except:
-                raise BuildError("Malformed Jenkins response while checking plugins!")
+        except BuildError:
+            raise
+        except urllib.error.HTTPError as e:
+            print("Warning: could not verify plugins: HTTP error: {} {}"
+                    .format(e.code, e.reason),
+                file=sys.stderr)
+        except:
+            raise BuildError("Malformed Jenkins response while checking plugins!")
 
     def createJob(self, name, jobXML):
-        response = self._send("POST", "createItem?name=" + name, jobXML)
-        if response.status == 200:
-            response.read()
-            return True
-        if response.status == 400:
-            response.read()
-            return False
-        else:
+        try:
+            with self._send("POST", "createItem?name=" + name, jobXML):
+                return True
+        except urllib.error.HTTPError as e:
+            if e.code == 400:
+                return False
             raise BuildError("Error creating '{}': HTTP error: {} {}"
-                .format(name, response.status, response.reason))
+                .format(name, e.code, e.reason))
 
     def deleteJob(self, name):
-        response = self._send("POST", "job/" + name + "/doDelete")
-        if response.status != 302 and response.status != 404:
-            raise BuildError("Error deleting '{}': HTTP error: {} {}".format(
-                name, response.status, response.reason))
-        response.read()
+        try:
+            with self._send("POST", "job/" + name + "/doDelete"):
+                pass
+        except urllib.error.HTTPError as e:
+            if e.code not in [302, 404]:
+                raise BuildError("Error deleting '{}': HTTP error: {} {}".format(
+                    name, e.code, e.reason))
 
     def fetchConfig(self, name):
-        response = self._send("GET", "job/" + name + "/config.xml")
-        if response.status == 200:
-            return response.read()
-        elif response.status == 404:
-            response.read()
-            return None
-        else:
+        try:
+            with self._send("GET", "job/" + name + "/config.xml") as response:
+                return response.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
             raise BuildError("Warning: could not download '{}' job config: HTTP error: {} {}"
-                    .format(name, response.status, response.reason))
+                    .format(name, e.code, e.reason))
 
     def updateConfig(self, name, jobXML):
-        response = self._send("POST", "job/" + name + "/config.xml", jobXML)
-        if response.status != 200:
+        try:
+            with self._send("POST", "job/" + name + "/config.xml", jobXML):
+                pass
+        except urllib.error.HTTPError as e:
             raise BuildError("Error updating '{}': HTTP error: {} {}"
-                .format(name, response.status, response.reason))
-        response.read()
+                .format(name, e.code, e.reason))
 
     def schedule(self, name):
         ret = True
-        response = self._send("POST", "job/" + name + "/build")
-        if response.status != 201:
+        try:
+            with self._send("POST", "job/" + name + "/build"):
+                pass
+        except urllib.error.HTTPError as e:
             print("Error scheduling '{}': HTTP error: {} {}"
-                    .format(name, response.status, response.reason),
+                    .format(name, e.code, e.reason),
                 file=sys.stderr)
             ret = False
-        response.read()
         return ret
 
     def enableJob(self, name):
-        response = self._send("POST", "job/" + name + "/enable")
-        if response.status != 200 and response.status != 302:
+        try:
+            with self._send("POST", "job/" + name + "/enable"):
+                pass
+        except urllib.error.HTTPError as e:
             raise BuildError("Error enabling '{}': HTTP error: {} {}"
-                .format(name, response.status, response.reason))
-        response.read()
+                .format(name, e.code, e.reason))
 
     def disableJob(self, name):
-        response = self._send("POST", "job/" + name + "/disable")
-        if response.status not in [200, 302, 404]:
-            raise BuildError("Error disabling '{}': HTTP error: {} {}"
-                .format(name, response.status, response.reason))
-        response.read()
-        return response.status != 404
+        try:
+            with self._send("POST", "job/" + name + "/disable"):
+                return True
+        except urllib.error.HTTPError as e:
+            if e.code not in [302, 404]:
+                raise BuildError("Error disabling '{}': HTTP error: {} {}"
+                    .format(name, e.code, e.reason))
+            return e.code != 404
 
     def setDescription(self, name, description):
-        body = urllib.parse.urlencode({"description" : description})
-        headers = self.__headers.copy()
-        headers.update({
+        body = urllib.parse.urlencode({"description" : description}).encode('ascii')
+        headers = {
             "Content-Type" : "application/x-www-form-urlencoded",
             "Accept" : "text/plain"
-        })
-        response = self._send("POST", "job/" + name + "/description", body,
-                              headers)
-        if response.status >= 400:
-            print(name, description, headers, body)
+        }
+        try:
+            with self._send("POST", "job/" + name + "/description", body, headers):
+                pass
+        except urllib.error.HTTPError as e:
             raise BuildError("Error setting description of '{}': HTTP error: {} {}"
-                .format(name, response.status, response.reason))
-        response.read()
+                .format(name, e.code, e.reason))
 
 
 def doJenkinsPrune(recipes, argv):
@@ -2239,7 +2219,7 @@ def doJenkins(argv, bobRoot):
         BobState().setAsynchronous()
         try:
             availableJenkinsCmds[args.subcommand][0](recipes, args.args)
-        except http.client.HTTPException as e:
+        except urllib.error.HTTPError as e:
             raise BuildError("HTTP error: " + str(e))
         except OSError as e:
             raise BuildError("OS error: " + str(e))
