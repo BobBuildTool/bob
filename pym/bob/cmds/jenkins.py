@@ -1815,6 +1815,13 @@ def doJenkinsPush(recipes, argv):
         print("Jenkins '{}' not known.".format(args.name), file=sys.stderr)
         sys.exit(1)
 
+    # Make sure bob-namespace-sandbox is up-to-date
+    try:
+        from ..develop.make import makeSandboxHelper
+        makeSandboxHelper()
+    except ImportError:
+        pass
+
     config = BobState().getJenkinsConfig(args.name)
     existingJobs = BobState().getJenkinsAllJobs(args.name)
     jobs = genJenkinsJobs(recipes, args.name)
