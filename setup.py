@@ -61,33 +61,48 @@ setup_requires = [
 
 # Sphinx manpages and bash completion do not work on Windows
 if sys.platform != 'win32':
-    from sphinx.setup_command import BuildDoc
-    cmdclass['build_sphinx'] = BuildDoc
-    build.sub_commands.append(('build_sphinx', None))
-    setup_requires.append('sphinx')
-    data_files.extend([
-        ('share/man/man1', [
-            'doc/_build/man/bob-archive.1',
-            'doc/_build/man/bob-build.1',
-            'doc/_build/man/bob-clean.1',
-            'doc/_build/man/bob-dev.1',
-            'doc/_build/man/bob-graph.1',
-            'doc/_build/man/bob-jenkins.1',
-            'doc/_build/man/bob-ls.1',
-            'doc/_build/man/bob-project.1',
-            'doc/_build/man/bob-query-meta.1',
-            'doc/_build/man/bob-query-path.1',
-            'doc/_build/man/bob-query-recipe.1',
-            'doc/_build/man/bob-query-scm.1',
-            'doc/_build/man/bob-status.1',
-        ]),
-        ('share/man/man7', [
-            'doc/_build/man/bobpaths.7',
-        ]),
-        ('share/bash-completion/completions', [
-            'contrib/bash-completion/bob'
-        ]),
-    ])
+    try:
+        from sphinx.setup_command import BuildDoc
+        cmdclass['build_sphinx'] = BuildDoc
+        build.sub_commands.append(('build_sphinx', None))
+        setup_requires.append('sphinx')
+        data_files.extend([
+            ('share/man/man1', [
+                'doc/_build/man/bob-archive.1',
+                'doc/_build/man/bob-build.1',
+                'doc/_build/man/bob-clean.1',
+                'doc/_build/man/bob-dev.1',
+                'doc/_build/man/bob-graph.1',
+                'doc/_build/man/bob-jenkins.1',
+                'doc/_build/man/bob-ls.1',
+                'doc/_build/man/bob-project.1',
+                'doc/_build/man/bob-query-meta.1',
+                'doc/_build/man/bob-query-path.1',
+                'doc/_build/man/bob-query-recipe.1',
+                'doc/_build/man/bob-query-scm.1',
+                'doc/_build/man/bob-status.1',
+            ]),
+            ('share/man/man7', [
+                'doc/_build/man/bobpaths.7',
+            ]),
+            ('share/bash-completion/completions', [
+                'contrib/bash-completion/bob'
+            ]),
+        ])
+    except ImportError as e:
+        sys.exit("""=====================================================
+ You don't seem to have "sphinx" installed. "sphinx"
+ is needed for the generation of Bob's man pages.
+ Please run
+
+     pip install sphinx
+
+ and re-try
+
+     pip install BobBuildTool
+
+ afterwards.
+=====================================================""")
 
 # Sandbox helper is only built on Linux
 if sys.platform == "linux":
