@@ -848,6 +848,10 @@ class JenkinsJob:
                         AUDIT=JenkinsJob._auditName(d),
                         WSP_PATH=d.getWorkspacePath()))
 
+        prepareCmds.append("# remove @tmp directories created by some jenkins plugins")
+        for d in sorted(self.__checkoutSteps.values()):
+            prepareCmds.append("rm -rf {}".format(" ".join(quote(d.getWorkspacePath() + "/" + s + "@tmp") for s in d.getScmDirectories())))
+
         # Create first "prepare" shell action. The actual command is set at the
         # end because the prepare commands are generated throughout the
         # generating process.
