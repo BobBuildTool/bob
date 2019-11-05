@@ -332,6 +332,7 @@ esac
         self.__keepGoing = False
         self.__fingerprints = { None : b'', "" : b'' }
         self.__workspaceLocks = {}
+        self.__sandboxHelperPath = None
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -549,6 +550,23 @@ esac
                                         "{:02}-{}".format(i, a.getPackage().getName())))
                 i += 1
 
+    def __getSandboxHelperPath(self):
+        if self.__sandboxHelperPath is None:
+            # If Bob is run from the source directly we have to make sure that
+            # the sandbox helper is up-to-date and use it from there. Otherwise
+            # we assume that Bob is properly installed and that
+            # bob-namespace-sandbox is in $PATH.
+            try:
+                from ...develop.make import makeSandboxHelper
+                makeSandboxHelper()
+                sandboxHelper = os.path.join(self.__bobRoot, "bin", "bob-namespace-sandbox")
+            except ImportError:
+                sandboxHelper = "bob-namespace-sandbox"
+
+            self.__sandboxHelperPath = sandboxHelper
+
+        return self.__sandboxHelperPath
+
     async def _runShell(self, step, scriptName, cleanWorkspace, logger):
         workspacePath = step.getWorkspacePath()
         if cleanWorkspace: emptyDirectory(workspacePath)
@@ -576,7 +594,7 @@ esac
         if step.getSandbox() is not None:
             sandboxSetup = "\"$(mktemp -d)\""
             sandboxMounts = [ "declare -a mounts=( )" ]
-            sandbox = [ quote(os.path.join(self.__bobRoot, "bin", "bob-namespace-sandbox")) ]
+            sandbox = [ quote(self.__getSandboxHelperPath()) ]
             if self.__verbose >= TRACE:
                 sandbox.append('-D')
             sandbox.extend(["-S", "\"$_sandbox\""])
