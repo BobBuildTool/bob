@@ -70,25 +70,12 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         return
 
-    def do_QUIT(self):
-        self.send_response(200)
-        self.end_headers()
-        return
-
     def log_message(self, format, *args):
         return
 
 class StoppableHttpServer (HTTPServer):
     recieveBuf  = []
     transmitBuf = {}
-
-    def serve_forever (self):
-        self.stop = False
-        while not self.stop:
-            self.handle_request()
-
-    def stop_server(self):
-        self.stop = True
 
     def rxJenkinsData(self, data):
         self.recieveBuf.append(data)
@@ -108,16 +95,12 @@ class JenkinsMock():
     def start_mock_server(self, port):
         self.mock_server = StoppableHttpServer(('localhost', port), MockServerRequestHandler)
         self.mock_server_thread = Thread(target=self.mock_server.serve_forever)
-        self.mock_server_thread.setDaemon(True)
         self.mock_server_thread.start()
 
     def stop_mock_server(self, port):
-        self.mock_server.stop_server()
-        # send a dummy request to break the while loop...
-        conn = http.client.HTTPConnection("localhost", port)
-        conn.request("QUIT", "/")
-        conn.getresponse()
-        self.mock_server.socket.close()
+        self.mock_server.shutdown()
+        self.mock_server_thread.join()
+        self.mock_server.server_close()
 
     def addServerData(self, request, data):
         self.mock_server.addJenkinsData(request, data)

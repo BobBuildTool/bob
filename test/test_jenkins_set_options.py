@@ -157,6 +157,7 @@ archive:
         sendNew = self.newJenkinsMock.getServerData()
         assert(len(send) == 0)
         assert(len(sendNew) != 0)
+        self.newJenkinsMock.stop_mock_server(8081)
 
     def testSetGitShallowClone(self):
         self.executeBobJenkinsCmd("set-options -o scm.git.shallow=42 myTestJenkins")
