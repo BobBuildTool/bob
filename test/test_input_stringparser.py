@@ -38,6 +38,7 @@ class TestStringParser(TestCase):
 
     def testNoSubst(self):
         self.assertEqual(self.p.parse("string"), "string")
+        self.assertEqual(self.p.parse("'string'"), "string")
         self.assertEqual(self.p.parse('asdf"123"gf'), "asdf123gf")
         self.assertEqual(self.p.parse('a\'sd\'f"123"gf'), "asdf123gf")
 
