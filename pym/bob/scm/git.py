@@ -8,7 +8,7 @@ from ..stringparser import isTrue
 from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
 from ..utils import joinLines
 from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
-from pipes import quote
+from shlex import quote
 from textwrap import dedent, indent
 from xml.etree import ElementTree
 import asyncio

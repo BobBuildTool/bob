@@ -6,7 +6,7 @@
 from ..errors import ParseError
 from ..utils import asHexStr, hashFile
 from .scm import Scm, ScmAudit
-from pipes import quote
+from shlex import quote
 import hashlib
 import os.path
 import re

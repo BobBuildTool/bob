@@ -16,7 +16,7 @@ from abc import ABCMeta, abstractmethod
 from base64 import b64encode
 from itertools import chain
 from glob import glob
-from pipes import quote
+from shlex import quote
 from os.path import expanduser
 from string import Template
 from textwrap import dedent

@@ -7,7 +7,7 @@ from ..errors import ParseError
 from ..utils import joinLines
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from pipes import quote
+from shlex import quote
 import fnmatch
 import re
 
