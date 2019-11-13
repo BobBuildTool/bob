@@ -1560,11 +1560,15 @@ class JenkinsConnection:
                 context=ssl.SSLContext(ssl.PROTOCOL_SSLv23)))
 
         # handle authorization
-        if url.get("username"):
+        username = url.get("username")
+        if username is not None:
+            username = urllib.parse.unquote(username)
             passwd = url.get("password")
             if passwd is None:
                 passwd = getpass.getpass()
-            userPass = url["username"] + ":" + passwd
+            else:
+                passwd = urllib.parse.unquote(passwd)
+            userPass = username + ":" + passwd
             self.__headers['Authorization'] = 'Basic ' + base64.b64encode(
                 userPass.encode("utf-8")).decode("ascii")
 
