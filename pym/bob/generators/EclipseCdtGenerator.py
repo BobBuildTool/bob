@@ -15,7 +15,7 @@ from os.path import expanduser
 from os.path import join
 from bob.utils import summonMagic, removePath
 from collections import OrderedDict
-from pipes import quote
+from shlex import quote
 
 # scan package recursivelely with its dependencies and build a list of checkout dirs
 def getCheckOutDirs(package, dirs):

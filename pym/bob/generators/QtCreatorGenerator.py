@@ -20,7 +20,7 @@ from bob.errors import BuildError
 from bob.utils import summonMagic, hashFile
 from collections import OrderedDict, namedtuple
 from bob.tty import colorize
-from pipes import quote
+from shlex import quote
 
 # helper to get linux or windows (MSYS2 support) cwd
 pwd = None

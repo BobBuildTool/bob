@@ -6,7 +6,7 @@
 from ..errors import BuildError
 from ..utils import joinLines
 from .scm import Scm, ScmAudit, ScmTaint, ScmStatus
-from pipes import quote
+from shlex import quote
 from textwrap import indent
 import os, os.path
 import schema

@@ -14,7 +14,7 @@ from ...tty import log, stepMessage, stepAction, stepExec, setProgress, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from ...utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
     isWindows
-from pipes import quote
+from shlex import quote
 from textwrap import dedent
 import argparse
 import asyncio

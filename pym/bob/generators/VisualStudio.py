@@ -5,7 +5,7 @@
 
 from .common import CommonIDEGenerator
 from pathlib import Path, PureWindowsPath
-from pipes import quote
+from shlex import quote
 from uuid import UUID
 from uuid import uuid4 as randomUuid
 from uuid import uuid5 as sha1NsUuid

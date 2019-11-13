@@ -11,7 +11,7 @@ from ..state import BobState
 from ..stringparser import isTrue
 from ..tty import WarnOnce
 from ..utils import asHexStr, processDefines
-from pipes import quote
+from shlex import quote
 import argparse
 import ast
 import base64

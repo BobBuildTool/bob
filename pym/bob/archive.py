@@ -22,7 +22,7 @@ concurrent uploads the artifact must appear atomically for unrelated readers.
 from .errors import BuildError
 from .tty import stepAction, SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR
 from .utils import asHexStr, removePath, isWindows
-from pipes import quote
+from shlex import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 import argparse
 import asyncio
