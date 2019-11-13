@@ -81,13 +81,12 @@ class StringParser:
         i = self.index
         while i < self.end:
             if self.text[i] == "'":
-                i += 1
                 break
             i += 1
         if i >= self.end:
             raise ParseError("Missing closing \"'\"")
-        ret = self.text[self.index:i-1]
-        self.index = i
+        ret = self.text[self.index:i]
+        self.index = i+1
         return ret
 
     def getString(self, delim=[None], keep=False):
