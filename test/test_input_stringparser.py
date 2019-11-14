@@ -41,6 +41,9 @@ class TestStringParser(TestCase):
         self.assertEqual(self.p.parse("'string'"), "string")
         self.assertEqual(self.p.parse('asdf"123"gf'), "asdf123gf")
         self.assertEqual(self.p.parse('a\'sd\'f"123"gf'), "asdf123gf")
+        self.assertEqual(self.p.parse("'${asdf}'"), "${asdf}")
+        self.assertEqual(self.p.parse("'$(echo,foo,bar)'"), "$(echo,foo,bar)")
+        self.assertEqual(self.p.parse("a's\"d\"f'g"), "as\"d\"fg")
 
     def testVariables(self):
         self.assertEqual(self.p.parse("${asdf}"), "qwer")
