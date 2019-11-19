@@ -1437,21 +1437,20 @@ esac
                 self.__createTask(lambda s=step: self.__getBuildIdTask(s, depth), step, False, self.__buildIdTasks)
                 for step in steps
             ]
-            ret = await self.__yieldJobWhile(gatherTasks(tasks))
+            ret = await self.__yieldJobWhile(gatherTasks(tasks), True)
         else:
             tasks = []
             for step in steps:
                 task = self.__createTask(lambda s=step: self.__getBuildIdTask(s, depth),
                                          step, False, self.__buildIdTasks)
                 tasks.append(task)
-                await self.__yieldJobWhile(asyncio.wait({task}))
+                await self.__yieldJobWhile(asyncio.wait({task}), True)
             # retrieve results as last step to --keep-going
             ret = [ t.result() for t in tasks ]
         return ret
 
     async def __getBuildIdTask(self, step, depth):
         async with self.__runners:
-            if not self.__running: raise CancelBuildException
             ret = await self.__getBuildIdSingle(step, depth)
         return ret
 
@@ -1526,7 +1525,7 @@ esac
 
         return step.getDigest(getStoredVId)
 
-    async def __yieldJobWhile(self, coro):
+    async def __yieldJobWhile(self, coro, ignoreExecutionStop = False):
         """Yield the job slot while waiting for a coroutine.
 
         Handles the dirty details of cancellation. Might throw CancelledError
@@ -1543,7 +1542,7 @@ esac
                     acquired = True
                 except concurrent.futures.CancelledError:
                     pass
-        if not self.__running: raise CancelBuildException
+        if not self.__running and not ignoreExecutionStop: raise CancelBuildException
         return ret
 
     async def _getFingerprint(self, step):
