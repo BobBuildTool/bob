@@ -234,19 +234,12 @@ case "${{1:-run}}" in
         fi
         ;;
     shell)
-        if [[ $_keep_env = 1 ]] ; then
-            exec /usr/bin/env {ENV} "$0" "${{_args[@]}}" __shell
-        else
-            exec /usr/bin/env -i {WHITELIST} {ENV} "$0" "${{_args[@]}}" __shell
-        fi
-        ;;
-    __shell)
         cd "${{0%/*}}/workspace"
         rm -f ../audit.json.gz
         if [[ $_keep_env = 1 ]] ; then
-            run /bin/bash -s {ARGS}
+            run /usr/bin/env {ENV} /bin/bash -s {ARGS}
         else
-            run /bin/bash --norc -s {ARGS}
+            run /usr/bin/env -i {WHITELIST} {ENV} /bin/bash --norc -s {ARGS}
         fi
         ;;
     *)
@@ -314,7 +307,10 @@ esac
         self.__skipDeps = skipDeps
         self.__buildOnly = buildOnly
         self.__preserveEnv = preserveEnv
-        self.__envWhiteList = envWhiteList
+        self.__envWhiteList = set(envWhiteList)
+        # Make sure we have the host $PATH available until just before
+        # executing the final script. Will always be overridded there.
+        self.__envWhiteList.add("PATH")
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
         self.__downloadDepthForce = 0xffff
@@ -588,7 +584,6 @@ esac
         else:
             runEnv = { k:v for (k,v) in os.environ.items()
                                      if k in self.__envWhiteList }
-        runEnv.update(stepEnv)
 
         # sandbox
         if step.getSandbox() is not None:
@@ -688,7 +683,7 @@ esac
                 }
                 declare -A _BOB_SOURCES=( [0]="Bob prolog" )
                 trap 'bob_handle_error $? >&2 ; exit 99' ERR
-                trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do rm -f "$i" ; done' EXIT
+                trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do /bin/rm -f "$i" ; done' EXIT
                 set -o errtrace -o nounset -o pipefail
 
                 # Special Bob array variables:
@@ -1584,9 +1579,7 @@ esac
         if self.__preserveEnv:
             runEnv = os.environ.copy()
         else:
-            whiteList = set(self.__envWhiteList)
-            whiteList.add("PATH")
-            runEnv = { k:v for (k,v) in os.environ.items() if k in whiteList }
+            runEnv = { k:v for (k,v) in os.environ.items() if k in self.__envWhiteList }
 
         stdout = stderr = None
         with tempfile.TemporaryDirectory() as tmp:
