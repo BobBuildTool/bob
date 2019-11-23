@@ -1,0 +1,13 @@
+# Empty sandbox that mounts the whole host
+provideSandbox:
+    paths: []
+    mount:
+        - /bin
+        - /etc
+        - /lib
+        - /run
+        - /usr
+        - /var
+       
+        - ["/lib32", "/lib32", [nofail]]
+        - ["/lib64", "/lib64", [nofail]]

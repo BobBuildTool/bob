@@ -76,3 +76,8 @@ expect_output()
 
 	return 0
 }
+
+skip()
+{
+	exit 240
+}

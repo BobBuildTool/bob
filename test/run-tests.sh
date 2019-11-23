@@ -129,8 +129,11 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 				. run.sh 2>&1 | tee log.txt
 			) 2>&1 | tee log-cmd.txt >> log.txt
 
-			if [[ $? -ne 0 ]] ; then
-				echo "FAIL (log follows...)"
+			ret=$?
+			if [[ $ret -eq 240 ]] ; then
+				echo "skipped"
+			elif [[ $ret -ne 0 ]] ; then
+				echo "FAIL (exit $ret, log follows...)"
 				: $((FAILED++))
 				cat -n log-cmd.txt
 			else
