@@ -133,23 +133,24 @@ refers to the existing checkout.
 Verbosity
 ---------
 
-By default only modified checkouts (``M``, ``S`` and ``U`` flags) are shown. If
-there is a collision (``C`` flag) or not enough information available to
-determine the SCM status (``?`` flag) or if there was an error while retrieving
-(``E`` flag) then the checkout is show too.
+By default modified checkouts (``M`` and ``U`` flags) and mismatches with
+respect to the recipes (``A``, ``N`` and ``S`` flags) are shown. Exceptional
+conditions like a collision (``C`` flag), missing information to determine the
+SCM status (``?`` flag) or if there was an error while retrieving the status
+(``E`` flag) are always shown too.
 
 By adding one or more ``-v`` options the display of less important information
 can be enabled. The following levels are available:
 
-- ``-v`` shows a detailed description of all important flags (``C``, ``E``,
-  ``M``, ``S``, ``U`` and ``?``). In particular the modified files and dirty
-  commits of a SCM are listed. This level also shows git checkouts that have
-  only unpushed commits that are not related to the configured branch (``u``
-  flag), but without detailed description.
+- ``-v`` shows a detailed description of all important flags (``A``, ``C``,
+  ``E``, ``M``, ``N``, ``S``, ``U`` and ``?``). In particular the modified
+  files and dirty commits of a SCM are listed. This level also shows git
+  checkouts that have only unpushed commits that are not related to the
+  configured branch (``u`` flag), but without detailed description.
 - ``-vv`` shows the full list of commits related to the ``u`` flag. Additionally
-  the status of SCMs that are not modified is shown, .e.g. without flags or only
-  ``A``, ``N`` and ``O``. If you want to display this information without
+  the status of SCMs that are not modified is shown, i.e. without flags or only
+  the ``O`` flag. If you want to display this information without
   also enabling the detailed descriptions (see above) use ``--show-clean`` or
   ``--show-overrides``.
-- ``-vvv`` enables the detailed description of the ``A``, ``N`` and ``O``
-  flags. Additionally skipped workspaces that do not exist are shown.
+- ``-vvv`` enables the detailed description of the ``O`` flag. Additionally
+  skipped workspaces that do not exist are shown.
