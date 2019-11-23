@@ -1,0 +1,13 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+checkoutDeterministic: True
+checkoutScript: |
+    echo ok
+buildScript: |
+    echo ok
+packageScript: |
+    echo ok
