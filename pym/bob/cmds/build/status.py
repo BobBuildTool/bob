@@ -20,11 +20,11 @@ __all__ = ['doStatus']
 
 # Flag to headline verbosity. The description is shown on the next level.
 FLAG_TO_VERBOSITY = {
-    ScmTaint.attic          : DEBUG,
+    ScmTaint.attic          : NORMAL,
     ScmTaint.collides       : NORMAL,       # not modified, but will break the build
     ScmTaint.error          : IMPORTANT,    # error, modified
     ScmTaint.modified       : NORMAL,       # modified
-    ScmTaint.new            : DEBUG,
+    ScmTaint.new            : NORMAL,
     ScmTaint.overridden     : DEBUG,
     ScmTaint.switched       : NORMAL,       # modified
     ScmTaint.unknown        : NORMAL,       # cannot tell, could be modified
