@@ -147,6 +147,9 @@ class Project:
 
     def generateProject(self, projects, cmd):
         items = []
+        incPaths = []
+        if self.incPaths:
+            for i in self.incPaths: incPaths.append(str(i))
         if self.headers:
             g = ElementTree.Element("ItemGroup")
             for i in self.headers: ElementTree.SubElement(g, "ClInclude", {"Include" : str(i)})
@@ -159,7 +162,6 @@ class Project:
             g = ElementTree.ElementTree("ItemGroup")
             for i in self.resources: ElementTree.SubElement(g, "Text", {"Include" : str(i)})
             items.append(ElementTree.tostring(g, encoding="unicode"))
-        incPaths = []
         if self.dependencies:
             g = ElementTree.Element("ItemGroup")
             for i in sorted(self.dependencies):
