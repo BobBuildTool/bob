@@ -44,6 +44,7 @@ ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
 BUILDID_SUFFIX_WIN = ".winbuildid"
+FINGERPRINT_SUFFIX = ".fprnt"
 
 def buildIdToName(bid):
     return asHexStr(bid) + ARCHIVE_GENERATION
@@ -105,6 +106,15 @@ class DummyArchive:
         return None
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
+        return ""
+
+    async def uploadLocalFingerprint(self, step, key, fingerprint):
+        pass
+
+    async def downloadLocalFingerprint(self, step, key):
+        return None
+
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
         return ""
 
 class ArtifactNotFoundError(Exception):
@@ -320,6 +330,32 @@ class BaseArchive:
                 raise BuildError("Cannot upload file: " + str(e))
         return ("ok", EXECUTED)
 
+    async def uploadLocalFingerprint(self, step, key, fingerprint):
+        if not self.canUploadLocal():
+            return
+
+        loop = asyncio.get_event_loop()
+        with stepAction(step, "CACHE-FPR", self._remoteName(key, FINGERPRINT_SUFFIX)) as a:
+            try:
+                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalFile, self, key, FINGERPRINT_SUFFIX, fingerprint)
+                a.setResult(msg, kind)
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Upload of build-id interrupted.")
+
+    async def downloadLocalFingerprint(self, step, key):
+        if not self.canDownloadLocal():
+            return None
+
+        loop = asyncio.get_event_loop()
+        with stepAction(step, "MAP-FPRNT", self._remoteName(key, FINGERPRINT_SUFFIX)) as a:
+            try:
+                ret, msg, kind = await loop.run_in_executor(None,
+                    BaseArchive._downloadLocalFile, self, key, FINGERPRINT_SUFFIX)
+                if not ret: a.fail(msg, kind)
+                return ret
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Download of fingerprint interrupted.")
+
 
 class LocalArchive(BaseArchive):
     def __init__(self, spec):
@@ -428,6 +464,9 @@ class LocalArchive(BaseArchive):
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
+
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -636,6 +675,8 @@ class SimpleHttpArchive(BaseArchive):
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
 class SimpleHttpDownloader:
     def __init__(self, archiver, response):
@@ -760,6 +801,9 @@ fi
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
+
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
 class CustomDownloader:
     def __init__(self, name):
@@ -890,6 +934,8 @@ class AzureArchive(BaseArchive):
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
     @staticmethod
     def scriptDownload(args):
@@ -1046,6 +1092,24 @@ class MultiArchive:
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return "\n".join(
             i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId, isWin)
+            for i in self.__archives if i.canUploadJenkins())
+
+    async def uploadLocalFingerprint(self, step, key, fingerprint):
+        for i in self.__archives:
+            if not i.canUploadLocal(): continue
+            await i.uploadLocalFingerprint(step, key, fingerprint)
+
+    async def downloadLocalFingerprint(self, step, key):
+        ret = None
+        for i in self.__archives:
+            if not i.canDownloadLocal(): continue
+            ret = await i.downloadLocalFingerprint(step, key)
+            if ret is not None: break
+        return ret
+
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return "\n".join(
+            i.uploadJenkinsFingerprint(step, keyFile, fingerprintFile)
             for i in self.__archives if i.canUploadJenkins())
 
 
