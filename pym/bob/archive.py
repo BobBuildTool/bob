@@ -44,6 +44,7 @@ ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
 BUILDID_SUFFIX_WIN = ".winbuildid"
+FINGERPRINT_SUFFIX = ".fprnt"
 
 def buildIdToName(bid):
     return asHexStr(bid) + ARCHIVE_GENERATION
@@ -105,6 +106,15 @@ class DummyArchive:
         return None
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
+        return ""
+
+    async def uploadLocalFingerprint(self, step, key, fingerprint):
+        pass
+
+    async def downloadLocalFingerprint(self, step, key):
+        return None
+
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
         return ""
 
 class ArtifactNotFoundError(Exception):
@@ -230,18 +240,18 @@ class BaseArchive:
         with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
             try:
                 ret, msg, kind = await loop.run_in_executor(None,
-                    BaseArchive._downloadLocalLiveBuildId, self, liveBuildId)
+                    BaseArchive._downloadLocalFile, self, liveBuildId, buildIdSuffix())
                 if not ret: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Download of build-id interrupted.")
 
-    def _downloadLocalLiveBuildId(self, liveBuildId):
+    def _downloadLocalFile(self, key, suffix):
         # restore signals to default so that Ctrl+C kills us
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openDownloadFile(liveBuildId, buildIdSuffix()) as (name, fileobj):
+            with self._openDownloadFile(key, suffix) as (name, fileobj):
                 ret = readFileOrHandle(name, fileobj)
             return (ret, None, None)
         except ArtifactNotFoundError:
@@ -251,7 +261,7 @@ class BaseArchive:
         except BuildError as e:
             raise
         except OSError as e:
-            raise BuildError("Cannot download artifact: " + str(e))
+            raise BuildError("Cannot download file: " + str(e))
 
     def _openUploadFile(self, buildId, suffix):
         raise ArtifactUploadError("not implemented")
@@ -299,26 +309,52 @@ class BaseArchive:
         loop = asyncio.get_event_loop()
         with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
             try:
-                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalLiveBuildId, self, liveBuildId, buildId)
+                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalFile, self, liveBuildId, buildIdSuffix(), buildId)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Upload of build-id interrupted.")
 
-    def _uploadLocalLiveBuildId(self, liveBuildId, buildId):
+    def _uploadLocalFile(self, key, suffix, content):
         # restore signals to default so that Ctrl+C kills us
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openUploadFile(liveBuildId, buildIdSuffix()) as (name, fileobj):
-                writeFileOrHandle(name, fileobj, buildId)
+            with self._openUploadFile(key, suffix) as (name, fileobj):
+                writeFileOrHandle(name, fileobj, content)
         except ArtifactExistsError:
             return ("skipped (exists in archive)", SKIPPED)
         except (ArtifactUploadError, OSError) as e:
             if self.__ignoreErrors:
                 return ("error ("+str(e)+")", ERROR)
             else:
-                raise BuildError("Cannot upload build-id: " + str(e))
+                raise BuildError("Cannot upload file: " + str(e))
         return ("ok", EXECUTED)
+
+    async def uploadLocalFingerprint(self, step, key, fingerprint):
+        if not self.canUploadLocal():
+            return
+
+        loop = asyncio.get_event_loop()
+        with stepAction(step, "CACHE-FPR", self._remoteName(key, FINGERPRINT_SUFFIX)) as a:
+            try:
+                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalFile, self, key, FINGERPRINT_SUFFIX, fingerprint)
+                a.setResult(msg, kind)
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Upload of build-id interrupted.")
+
+    async def downloadLocalFingerprint(self, step, key):
+        if not self.canDownloadLocal():
+            return None
+
+        loop = asyncio.get_event_loop()
+        with stepAction(step, "MAP-FPRNT", self._remoteName(key, FINGERPRINT_SUFFIX)) as a:
+            try:
+                ret, msg, kind = await loop.run_in_executor(None,
+                    BaseArchive._downloadLocalFile, self, key, FINGERPRINT_SUFFIX)
+                if not ret: a.fail(msg, kind)
+                return ret
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Download of fingerprint interrupted.")
 
 
 class LocalArchive(BaseArchive):
@@ -428,6 +464,9 @@ class LocalArchive(BaseArchive):
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
+
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -591,7 +630,7 @@ class SimpleHttpArchive(BaseArchive):
         elif response.status not in [200, 201, 204]:
             raise ArtifactUploadError("PUT {} {}".format(response.status, response.reason))
 
-    def upload(self, step, buildIdFile, tgzFile):
+    def __uploadJenkins(self, step, keyFile, contentFile, suffix):
         # only upload if requested
         if not self.canUploadJenkins():
             return ""
@@ -601,17 +640,21 @@ class SimpleHttpArchive(BaseArchive):
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
-            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
+            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {KEYFILE}){GEN}"
             BOB_UPLOAD_URL={URL}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
             if ! curl --output /dev/null --silent --head --fail {INSECURE} "$BOB_UPLOAD_URL" ; then
-                BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {RESULT} "$BOB_UPLOAD_URL" || true)
+                BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {CONTENTFILE} "$BOB_UPLOAD_URL" || true)
                 if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
                     echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
                 fi
-            fi""".format(URL=quote(self.__url.geturl()), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
+            fi""".format(URL=quote(self.__url.geturl()), KEYFILE=quote(keyFile),
+                         CONTENTFILE=quote(contentFile),
                          FAIL="" if self._ignoreErrors() else "; exit 1",
-                         GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
+                         GEN=ARCHIVE_GENERATION, SUFFIX=suffix,
                          INSECURE=insecure))
+
+    def upload(self, step, buildIdFile, tgzFile):
+        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
 
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
@@ -630,26 +673,10 @@ class SimpleHttpArchive(BaseArchive):
                        INSECURE=insecure))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        # only upload if requested
-        if not self.canUploadJenkins():
-            return ""
+        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
-        # upload with curl if file does not exist yet on server
-        insecure = "" if self.__sslVerify else "-k"
-        return "\n" + textwrap.dedent("""\
-            # upload live build-id
-            cd $WORKSPACE
-            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {LIVEBUILDID}){GEN}"
-            BOB_UPLOAD_URL={URL}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
-            BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {BUILDID} "$BOB_UPLOAD_URL" || true)
-            if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
-                echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
-            fi
-            """.format(URL=quote(self.__url.geturl()), LIVEBUILDID=quote(liveBuildId),
-                       BUILDID=quote(buildId),
-                       FAIL="" if self._ignoreErrors() else "; exit 1",
-                       GEN=ARCHIVE_GENERATION, SUFFIX=buildIdSuffix(isWin),
-                       INSECURE=insecure))
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
 class SimpleHttpDownloader:
     def __init__(self, archiver, response):
@@ -775,6 +802,9 @@ fi
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
+
 class CustomDownloader:
     def __init__(self, name):
         self.name = name
@@ -864,7 +894,7 @@ class AzureArchive(BaseArchive):
         os.close(tmpFd)
         return AzureUploader(self.__service, self.__container, tmpName, blobName)
 
-    def upload(self, step, buildIdFile, tgzFile):
+    def __uploadJenkins(self, step, keyFile, contentFile, suffix):
         if not self.canUploadJenkins():
             return ""
 
@@ -875,12 +905,15 @@ class AzureArchive(BaseArchive):
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
-            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {BUILDID} {SUFFIX} {RESULT}{FIXUP}
+            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {KEYFILE} {SUFFIX} {CONTENTFILE}{FIXUP}
             """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
-                       CONTAINER=quote(self.__container), BUILDID=quote(buildIdFile),
-                       RESULT=quote(tgzFile),
+                       CONTAINER=quote(self.__container), KEYFILE=quote(keyFile),
+                       CONTENTFILE=quote(contentFile),
                        FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=ARTIFACT_SUFFIX))
+                       SUFFIX=suffix))
+
+    def upload(self, step, buildIdFile, tgzFile):
+        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
 
     def download(self, step, buildIdFile, tgzFile):
         if not self.canDownloadJenkins():
@@ -899,22 +932,10 @@ class AzureArchive(BaseArchive):
                        RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        if not self.canUploadJenkins():
-            return ""
+        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
-        args = []
-        if self.__key: args.append("--key=" + self.__key)
-        if self.__sasToken: args.append("--sas-token=" + self.__sasToken)
-
-        return "\n" + textwrap.dedent("""\
-            # upload live build-id
-            cd $WORKSPACE
-            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {LIVEBUILDID} {SUFFIX} {BUILDID}{FIXUP}
-            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
-                       CONTAINER=quote(self.__container), LIVEBUILDID=quote(liveBuildId),
-                       BUILDID=quote(buildId),
-                       FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=buildIdSuffix(isWin)))
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
     @staticmethod
     def scriptDownload(args):
@@ -1071,6 +1092,24 @@ class MultiArchive:
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return "\n".join(
             i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId, isWin)
+            for i in self.__archives if i.canUploadJenkins())
+
+    async def uploadLocalFingerprint(self, step, key, fingerprint):
+        for i in self.__archives:
+            if not i.canUploadLocal(): continue
+            await i.uploadLocalFingerprint(step, key, fingerprint)
+
+    async def downloadLocalFingerprint(self, step, key):
+        ret = None
+        for i in self.__archives:
+            if not i.canDownloadLocal(): continue
+            ret = await i.downloadLocalFingerprint(step, key)
+            if ret is not None: break
+        return ret
+
+    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
+        return "\n".join(
+            i.uploadJenkinsFingerprint(step, keyFile, fingerprintFile)
             for i in self.__archives if i.canUploadJenkins())
 
 

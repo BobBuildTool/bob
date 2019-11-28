@@ -700,7 +700,8 @@ class CoreStep(CoreItem):
 
     def getDigest(self, calculate, forceSandbox=False):
         h = DigestHasher()
-        if self.isFingerprinted() and self.getSandbox():
+        if self.isFingerprinted() and self.getSandbox() \
+                and not self.corePackage.recipe.getRecipeSet().sandboxFingerprints:
             h.fingerprint(DigestHasher.sliceRecipes(calculate(self.getSandbox().coreStep)))
         sandbox = not self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
             self.getSandbox(forceSandbox)
@@ -902,7 +903,8 @@ class Step:
 
     def getDigest(self, calculate, forceSandbox=False, hasher=DigestHasher, fingerprint=None):
         h = hasher()
-        if self._coreStep.isFingerprinted() and self.getSandbox():
+        if self._coreStep.isFingerprinted() and self.getSandbox() \
+                and not self.__package.getRecipe().getRecipeSet().sandboxFingerprints:
             h.fingerprint(hasher.sliceRecipes(calculate(self.getSandbox().getStep())))
         elif fingerprint:
             h.fingerprint(fingerprint)
@@ -943,7 +945,8 @@ class Step:
 
     async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher, fingerprint=None):
         h = hasher()
-        if self._coreStep.isFingerprinted() and self.getSandbox():
+        if self._coreStep.isFingerprinted() and self.getSandbox() \
+                and not self.__package.getRecipe().getRecipeSet().sandboxFingerprints:
             [d] = await calculate([self.getSandbox().getStep()])
             h.fingerprint(hasher.sliceRecipes(d))
         elif fingerprint:
@@ -2629,6 +2632,7 @@ class RecipeSet:
                 schema.Optional('uniqueDependency') : bool,
                 schema.Optional('mergeEnvironment') : bool,
                 schema.Optional('secureSSL') : bool,
+                schema.Optional('sandboxFingerprints') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
@@ -2709,6 +2713,11 @@ class RecipeSet:
                 "0.15",
                 InfoOnce("secureSSL policy not set. Bob will ignore SSL certificate errors.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#securessl for more information.")
+            ),
+            'sandboxFingerprints' : (
+                "0.16",
+                InfoOnce("sandboxFingerprints policy not set. Sandbox builds of fingerprinted packages are not shared with regular builds.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxfingerprints for more information.")
             ),
         }
         self.__buildHooks = {}
@@ -3290,6 +3299,14 @@ class RecipeSet:
         except AttributeError:
             self.__sandboxInvariant = self.getPolicy("sandboxInvariant")
             return self.__sandboxInvariant
+
+    @property
+    def sandboxFingerprints(self):
+        try:
+            return self.__sandboxFingerprints
+        except AttributeError:
+            self.__sandboxFingerprints = self.getPolicy("sandboxFingerprints")
+            return self.__sandboxFingerprints
 
 
 class YamlCache:

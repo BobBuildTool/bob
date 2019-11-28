@@ -55,7 +55,8 @@ FINGERPRINT_SCRIPT_TEMPLATE = """\
 (
     trap 'rm -rf "$T"' EXIT
     T=$(mktemp -d)
-    cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | env {ENV} BOB_CWD="$T" bash -x
+    {SETUP}
+    cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | {INVOKE}
 cd $BOB_CWD
 {SCRIPT}
 BOB_JENKINS_FINGERPRINT_SCRIPT
@@ -536,7 +537,8 @@ class JenkinsJob:
         See bob.cmds.build.builder.LocalBuilder._getFingerprint() for the master
         algorithm.
         """
-        if step.getSandbox() is not None:
+        if (step.getSandbox() is not None) and \
+                not self.__recipe.getRecipeSet().getPolicy('sandboxFingerprints'):
             return None
 
         isFingerprinted = step._isFingerprinted()
@@ -546,6 +548,86 @@ class JenkinsJob:
             return None
 
         return step.getWorkspacePath().replace('/', '_') + ".fingerprint"
+
+    def _fingerprintCommands(self, step):
+        ret = []
+        fingerprint = self._fingerprintName(step)
+        script = step._getFingerprintScript()
+        if step.isPackageStep() and not step.isRelocatable() and \
+           self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
+            reloc = "echo -n " + step.getExecPath() + "\n"
+        else:
+            reloc = ""
+
+        envWhiteList = step.getPackage().getRecipe().getRecipeSet().envWhiteList()
+        envWhiteList |= set(['PATH'])
+        setup = []
+        invoke = ["-i"]
+        invoke.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
+
+        if step.getSandbox() is not None:
+            invoke.append('BOB_CWD=/bob/fingerprint')
+            script = "export PATH=" + quote(":".join(step.getSandbox().getPaths())) + \
+                "\n" + script
+
+            setup.append("# invoke fingerprint script through sandbox in controlled environment")
+            setup.append("mounts=( )")
+            setup.append("for i in {}/* ; do".format(step.getSandbox().getStep().getWorkspacePath()))
+            setup.append("    mounts+=( -M \"$PWD/$i\" -m \"/${i##*/}\" )")
+            setup.append("done")
+            for (hostPath, sndbxPath, options) in step.getSandbox().getMounts():
+                if "nojenkins" in options: continue
+                line = "-M " + hostPath
+                if "rw" in options:
+                    line += " -w " + sndbxPath
+                elif hostPath != sndbxPath:
+                    line += " -m " + sndbxPath
+                line = "mounts+=( " + line + " )"
+                if "nofail" in options:
+                    setup.append(
+                        """if [[ -e {HOST} ]] ; then {MOUNT} ; fi"""
+                            .format(HOST=hostPath, MOUNT=line)
+                        )
+                else:
+                    setup.append(line)
+
+            invoke.append("bob-namespace-sandbox")
+            invoke.extend(["-S", "\"$T\""])
+            invoke.extend(["-d", "/bob/fingerprint"])
+            invoke.extend(["-W", "/bob/fingerprint"])
+            invoke.extend(["-H", "bob"])
+            invoke.extend(["-d", "/tmp"])
+            invoke.append('-n')
+            invoke.append("\"${mounts[@]}\"")
+            invoke.append("--")
+            invoke.extend(['/bin/bash', '-x'])
+        else:
+            invoke.append('BOB_CWD="$T"')
+            invoke.extend(['bash', '-x'])
+
+        ret.append("\n# fingerprint " + step.getPackage().getName())
+        ret.append(FINGERPRINT_SCRIPT_TEMPLATE.format(
+            SCRIPT=script, OUTPUT=quote(fingerprint),
+            SETUP="\n    ".join(setup),
+            INVOKE="\n        ".join(wrapCommandArguments("env", invoke)),
+            RELOC=reloc))
+
+        if (step.getSandbox() is not None) and self.__archive.canUploadJenkins():
+            scriptKey = asHexStr(hashlib.sha1(step._getFingerprintScript().encode('utf8')).digest())
+            sandbox = self._buildIdName(step.getSandbox().getStep())
+            keyFile = fingerprint + ".key"
+            ret.append(textwrap.dedent("""\
+                bob-hash-engine >{NAME} <<EOF
+                {{sha1
+                ={SCRIPT}
+                <{SANDBOX}
+                }}
+                EOF""".format(NAME=keyFile, SCRIPT=scriptKey,
+                              SANDBOX=sandbox)))
+            ret.append(self.__archive.uploadJenkinsFingerprint(step,
+                keyFile, fingerprint))
+
+        return ret
 
     def dumpXML(self, orig, nodes, windows, credentials, clean, options, date, authtoken):
         if orig:
@@ -687,20 +769,7 @@ class JenkinsJob:
             fingerprint = self._fingerprintName(step)
             if (fingerprint is not None) and (fingerprint not in fingerprints):
                 # ok, we really have to compute it
-                script = step._getFingerprintScript()
-                if step.isPackageStep() and not step.isRelocatable() and \
-                   self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
-                    reloc = "echo -n " + step.getExecPath() + "\n"
-                else:
-                    reloc = ""
-                envWhiteList = step.getPackage().getRecipe().getRecipeSet().envWhiteList()
-                envWhiteList |= set(['PATH'])
-                env = ["-i"]
-                env.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
-                prepareCmds.append("\n# fingerprint " + step.getPackage().getName())
-                prepareCmds.append(FINGERPRINT_SCRIPT_TEMPLATE.format(
-                    ENV=" ".join(env), SCRIPT=script, OUTPUT=quote(fingerprint),
-                    RELOC=reloc))
+                prepareCmds.extend(self._fingerprintCommands(step))
                 fingerprints.add(fingerprint)
 
             return fingerprint

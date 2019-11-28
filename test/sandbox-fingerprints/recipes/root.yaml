@@ -1,0 +1,17 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+fingerprintIf: True
+fingerprintScript: |
+    echo bob
+
+checkoutDeterministic: True
+checkoutScript: |
+    echo ok
+buildScript: |
+    echo ok
+packageScript: |
+    echo ok

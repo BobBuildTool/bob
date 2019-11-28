@@ -28,7 +28,8 @@ class TestStringParser(TestCase):
                 "asdf": "qwer",
                 "xyz" : "123",
                 "null" : "",
-                "indirect" : "asdf"
+                "indirect" : "asdf",
+                "%%" : "percent",
             },
             {"echo" : echo},
             {}, True)
@@ -47,6 +48,7 @@ class TestStringParser(TestCase):
 
     def testVariables(self):
         self.assertEqual(self.p.parse("${asdf}"), "qwer")
+        self.assertEqual(self.p.parse("${%%}"), "percent")
         self.assertEqual(self.p.parse(">${asdf}<"), ">qwer<")
         self.assertEqual(self.p.parse("..${asdf}..${xyz}.."), "..qwer..123..")
 
@@ -64,6 +66,17 @@ class TestStringParser(TestCase):
         self.assertEqual(self.p.parse("${unset:+foobar}"), "")
         self.assertEqual(self.p.parse("${unset-foobar}"), "foobar")
         self.assertEqual(self.p.parse("${unset+foobar}"), "")
+
+        # bare variables
+        self.assertEqual(self.p.parse("$asdf"), "qwer")
+        self.assertEqual(self.p.parse(">$asdf<"), ">qwer<")
+        self.assertEqual(self.p.parse("..$asdf..$xyz.."), "..qwer..123..")
+
+    def testUnsetOk(self):
+        u = StringParser({}, {}, {}, False)
+        self.assertEqual(u.parse("${asdf}"), "")
+        self.assertEqual(u.parse(">${asdf}<"), "><")
+        self.assertEqual(u.parse(">$asdf<"), "><")
 
     def testAdvancedVariabled(self):
         self.assertEqual(self.p.parse("${unset:->${asdf}}"), ">qwer")
@@ -100,6 +113,11 @@ class TestStringParser(TestCase):
         self.assertRaises(ParseError, self.p.parse, "${asdf:")
         self.assertRaises(ParseError, self.p.parse, "$()")
         self.assertRaises(ParseError, self.p.parse, "$(unknown)")
+
+        # bare variables that should fail even if unset variables are allowed
+        u = StringParser({}, {}, {}, False)
+        self.assertRaises(ParseError, u.parse, "$1")
+        self.assertRaises(ParseError, u.parse, "$%%")
 
 class TestStringFunctions(TestCase):
 
