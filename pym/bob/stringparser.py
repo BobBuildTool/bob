@@ -10,6 +10,9 @@ from types import MappingProxyType
 import fnmatch
 import re
 
+NAME_START = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz'
+NAME_CHARS = NAME_START + '0123456789'
+
 def checkGlobList(name, allowed):
     if allowed is None: return True
     ok = False
@@ -77,6 +80,18 @@ class StringParser:
         self.index = i
         return "".join(tok)
 
+    def getRestOfName(self):
+        ret = ''
+        i = self.index
+        while i < self.end:
+            c = self.text[i]
+            if c not in NAME_CHARS: break
+            ret += c
+            i += 1
+
+        self.index = i
+        return ret
+
     def getSingleQuoted(self):
         i = self.index
         while i < self.end:
@@ -103,6 +118,8 @@ class StringParser:
                     s.append(self.getVariable())
                 elif tok == '(':
                     s.append(self.getCommand())
+                elif tok in NAME_START:
+                    s.append(self.getBareVariable(tok))
                 else:
                     raise ParseError("Invalid $-subsitituion")
             elif tok == None:
@@ -149,6 +166,16 @@ class StringParser:
             return self.env[varName]
         else:
             raise ParseError("Unterminated variable: " + str(op))
+
+    def getBareVariable(self, varName):
+        varName += self.getRestOfName()
+        varValue = self.env.get(varName)
+        if varValue is None:
+            if self.nounset:
+                raise ParseError("Unset variable: " + varName)
+            return ""
+        else:
+            return varValue
 
     def getCommand(self):
         words = []
