@@ -321,8 +321,10 @@ extended by plugins. The following syntax is supported:
 
 * Variable substitution
     * ``${var}``: The value of ``var`` is substituted. The variable has to be
-      defined or an error will be raised. Unlike unix shells the braces are
-      always required.
+      defined or an error will be raised. The braces can be omitted if the
+      variable name consists only of letters, numbers and ``_`` and when the
+      name is followed by a character that is not interpreted as part of its
+      name.
     * ``${var:-default}``: If variable ``var`` is unset or null, the expansion
       of ``default`` is substituted. Otherwise the value of ``var`` is
       substituted. Omitting the colon results in a test only for ``var`` being
