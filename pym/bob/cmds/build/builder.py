@@ -9,6 +9,7 @@ from ...audit import Audit
 from ...errors import BobError, BuildError, MultiBobError
 from ...input import RecipeSet
 from ...state import BobState
+from ...stringparser import Env
 from ...tty import log, stepMessage, stepAction, stepExec, setProgress, \
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
@@ -1541,11 +1542,14 @@ esac
         return ret
 
     async def _getFingerprint(self, step, depth):
-        # Inside a sandbox the situation is clear. The variant-id and build-id
-        # are already tied directly to the sandbox variant-id by getDigest().
-        # This is pessimistic but easier than calculating the fingerprint
-        # inside the sandbox.
-        if step.getSandbox() is not None:
+        # Use a shortcut when the sandboxFingerprints policy is not set and the
+        # step is built inside a sandbox. In this case the variant-id and
+        # build-id are already tied directly to the sandbox variant-id by
+        # getDigest(). This is pessimistic but easier than calculating the
+        # fingerprint inside the sandbox and has been the default before Bob
+        # 0.16.
+        sandbox = (step.getSandbox() is not None) and step.getSandbox().getStep()
+        if sandbox and not self.__recipes.getPolicy('sandboxFingerprints'):
             return b''
 
         # A relocatable step with no fingerprinting is easy
@@ -1557,12 +1561,34 @@ esac
 
         # Execute the fingerprint script (or use cached result)
         if isFingerprinted:
-            script = step._getFingerprintScript()
-            fingerprint = self.__fingerprints.get(script)
+            # Cache based on the script digest.
+            key = hashlib.sha1(step._getFingerprintScript().encode('utf8')).digest()
+            if sandbox:
+                # Add the sandbox build-id to the cache key to distinguish
+                # between different sandboxes.
+                sandboxBuildId = await self._getBuildId(sandbox, depth+1)
+                key = hashlib.sha1(key + sandboxBuildId).digest()
+
+            # First look in cache
+            fingerprint = self.__fingerprints.get(key)
+
+            # If no hit and this is built in a sandbox then the artifact cache
+            # may help...
+            if (fingerprint is None) and sandbox:
+                fingerprint = await self.__archive.downloadLocalFingerprint(sandbox, key)
+
+            # When we don't know it yet we really have to execute the script
             if fingerprint is None:
-                with stepAction(step, "FNGRPRNT", step.getPackage().getName(), DEBUG) as a:
-                    fingerprint = await self.__runFingerprintScript(script, a)
-                self.__fingerprints[script] = fingerprint
+                if sandbox:
+                    await self._cook([sandbox], sandbox.getPackage(), False, depth+1)
+                with stepAction(step, "FNGRPRNT", step.getPackage().getName(), INFO) as a:
+                    fingerprint = await self.__runFingerprintScript(step, a)
+
+            # Always cache result. Also upload if this was calculated in a sandbox.
+            if key not in self.__fingerprints:
+                self.__fingerprints[key] = fingerprint
+                if sandbox:
+                    await self.__archive.uploadLocalFingerprint(sandbox, key, fingerprint)
         else:
             fingerprint = b''
 
@@ -1574,17 +1600,53 @@ esac
 
         return hashlib.sha1(fingerprint).digest()
 
-    async def __runFingerprintScript(self, script, logger):
+    async def __runFingerprintScript(self, step, logger):
         if self.__preserveEnv:
             runEnv = os.environ.copy()
         else:
             runEnv = { k:v for (k,v) in os.environ.items() if k in self.__envWhiteList }
 
         stdout = stderr = None
+        script = step._getFingerprintScript()
         with tempfile.TemporaryDirectory() as tmp:
-            try:
+            if step.getSandbox() is not None:
+                runEnv["BOB_CWD"] = "/bob/fingerprint"
+                runEnv["PATH"] = ":".join(step.getSandbox().getPaths())
+
+                cmdArgs = [ self.__getSandboxHelperPath() ]
+                cmdArgs.extend(["-S", tmp])
+                cmdArgs.extend(["-d", "/bob/fingerprint"])
+                cmdArgs.extend(["-W", "/bob/fingerprint"])
+                cmdArgs.extend(["-H", "bob"])
+                cmdArgs.extend(["-d", "/tmp"])
+                cmdArgs.append('-n')
+                sandboxRootFs = os.path.abspath(
+                    step.getSandbox().getStep().getWorkspacePath())
+                for f in os.listdir(sandboxRootFs):
+                    cmdArgs.extend(["-M", os.path.join(sandboxRootFs, f), "-m", "/"+f])
+
+                substEnv = Env(runEnv)
+                for (hostPath, sndbxPath, options) in step.getSandbox().getMounts():
+                    if "nolocal" in options: continue
+                    hostPath = substEnv.substitute(hostPath, hostPath, False)
+                    if "nofail" in options:
+                        if not os.path.exists(hostPath): continue
+                    sndbxPath = substEnv.substitute(sndbxPath, sndbxPath, False)
+                    cmdArgs.extend(["-M", hostPath])
+                    if "rw" in options:
+                        cmdArgs.extend(["-w", sndbxPath])
+                    elif hostPath != sndbxPath:
+                        cmdArgs.extend(["-m", sndbxPath])
+
+                cmdArgs.append("--")
+            else:
                 runEnv["BOB_CWD"] = tmp
-                proc = await asyncio.create_subprocess_exec("/bin/bash", "-x", "-c",
+                cmdArgs = []
+
+            cmdArgs.extend(["/bin/bash", "-x", "-c"])
+
+            try:
+                proc = await asyncio.create_subprocess_exec(*cmdArgs,
                     script, cwd=tmp, env=runEnv, stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             except OSError as e:
