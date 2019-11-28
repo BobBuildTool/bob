@@ -850,7 +850,7 @@ class AzureArchive(BaseArchive):
         os.close(tmpFd)
         return AzureUploader(self.__service, self.__container, tmpName, blobName)
 
-    def upload(self, step, buildIdFile, tgzFile):
+    def __uploadJenkins(self, step, keyFile, contentFile, suffix):
         if not self.canUploadJenkins():
             return ""
 
@@ -861,12 +861,15 @@ class AzureArchive(BaseArchive):
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
-            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {BUILDID} {SUFFIX} {RESULT}{FIXUP}
+            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {KEYFILE} {SUFFIX} {CONTENTFILE}{FIXUP}
             """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
-                       CONTAINER=quote(self.__container), BUILDID=quote(buildIdFile),
-                       RESULT=quote(tgzFile),
+                       CONTAINER=quote(self.__container), KEYFILE=quote(keyFile),
+                       CONTENTFILE=quote(contentFile),
                        FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=ARTIFACT_SUFFIX))
+                       SUFFIX=suffix))
+
+    def upload(self, step, buildIdFile, tgzFile):
+        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
 
     def download(self, step, buildIdFile, tgzFile):
         if not self.canDownloadJenkins():
@@ -885,22 +888,8 @@ class AzureArchive(BaseArchive):
                        RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        if not self.canUploadJenkins():
-            return ""
+        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
-        args = []
-        if self.__key: args.append("--key=" + self.__key)
-        if self.__sasToken: args.append("--sas-token=" + self.__sasToken)
-
-        return "\n" + textwrap.dedent("""\
-            # upload live build-id
-            cd $WORKSPACE
-            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {LIVEBUILDID} {SUFFIX} {BUILDID}{FIXUP}
-            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
-                       CONTAINER=quote(self.__container), LIVEBUILDID=quote(liveBuildId),
-                       BUILDID=quote(buildId),
-                       FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=buildIdSuffix(isWin)))
 
     @staticmethod
     def scriptDownload(args):
