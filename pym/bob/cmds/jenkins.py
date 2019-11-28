@@ -55,7 +55,7 @@ FINGERPRINT_SCRIPT_TEMPLATE = """\
 (
     trap 'rm -rf "$T"' EXIT
     T=$(mktemp -d)
-    cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | env {ENV} BOB_CWD="$T" bash -x
+    cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | {INVOKE}
 cd $BOB_CWD
 {SCRIPT}
 BOB_JENKINS_FINGERPRINT_SCRIPT
@@ -547,6 +547,31 @@ class JenkinsJob:
 
         return step.getWorkspacePath().replace('/', '_') + ".fingerprint"
 
+    def _fingerprintCommands(self, step):
+        ret = []
+        fingerprint = self._fingerprintName(step)
+        script = step._getFingerprintScript()
+        if step.isPackageStep() and not step.isRelocatable() and \
+           self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
+            reloc = "echo -n " + step.getExecPath() + "\n"
+        else:
+            reloc = ""
+
+        envWhiteList = step.getPackage().getRecipe().getRecipeSet().envWhiteList()
+        envWhiteList |= set(['PATH'])
+        invoke = ["-i"]
+        invoke.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
+        invoke.append('BOB_CWD="$T"')
+        invoke.extend(['bash', '-x'])
+
+        ret.append("\n# fingerprint " + step.getPackage().getName())
+        ret.append(FINGERPRINT_SCRIPT_TEMPLATE.format(
+            SCRIPT=script, OUTPUT=quote(fingerprint),
+            INVOKE="\n        ".join(wrapCommandArguments("env", invoke)),
+            RELOC=reloc))
+
+        return ret
+
     def dumpXML(self, orig, nodes, windows, credentials, clean, options, date, authtoken):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
@@ -687,20 +712,7 @@ class JenkinsJob:
             fingerprint = self._fingerprintName(step)
             if (fingerprint is not None) and (fingerprint not in fingerprints):
                 # ok, we really have to compute it
-                script = step._getFingerprintScript()
-                if step.isPackageStep() and not step.isRelocatable() and \
-                   self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
-                    reloc = "echo -n " + step.getExecPath() + "\n"
-                else:
-                    reloc = ""
-                envWhiteList = step.getPackage().getRecipe().getRecipeSet().envWhiteList()
-                envWhiteList |= set(['PATH'])
-                env = ["-i"]
-                env.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
-                prepareCmds.append("\n# fingerprint " + step.getPackage().getName())
-                prepareCmds.append(FINGERPRINT_SCRIPT_TEMPLATE.format(
-                    ENV=" ".join(env), SCRIPT=script, OUTPUT=quote(fingerprint),
-                    RELOC=reloc))
+                prepareCmds.extend(self._fingerprintCommands(step))
                 fingerprints.add(fingerprint)
 
             return fingerprint
