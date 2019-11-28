@@ -230,18 +230,18 @@ class BaseArchive:
         with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
             try:
                 ret, msg, kind = await loop.run_in_executor(None,
-                    BaseArchive._downloadLocalLiveBuildId, self, liveBuildId)
+                    BaseArchive._downloadLocalFile, self, liveBuildId, buildIdSuffix())
                 if not ret: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Download of build-id interrupted.")
 
-    def _downloadLocalLiveBuildId(self, liveBuildId):
+    def _downloadLocalFile(self, key, suffix):
         # restore signals to default so that Ctrl+C kills us
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openDownloadFile(liveBuildId, buildIdSuffix()) as (name, fileobj):
+            with self._openDownloadFile(key, suffix) as (name, fileobj):
                 ret = readFileOrHandle(name, fileobj)
             return (ret, None, None)
         except ArtifactNotFoundError:
@@ -251,7 +251,7 @@ class BaseArchive:
         except BuildError as e:
             raise
         except OSError as e:
-            raise BuildError("Cannot download artifact: " + str(e))
+            raise BuildError("Cannot download file: " + str(e))
 
     def _openUploadFile(self, buildId, suffix):
         raise ArtifactUploadError("not implemented")
@@ -299,25 +299,25 @@ class BaseArchive:
         loop = asyncio.get_event_loop()
         with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
             try:
-                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalLiveBuildId, self, liveBuildId, buildId)
+                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalFile, self, liveBuildId, buildIdSuffix(), buildId)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Upload of build-id interrupted.")
 
-    def _uploadLocalLiveBuildId(self, liveBuildId, buildId):
+    def _uploadLocalFile(self, key, suffix, content):
         # restore signals to default so that Ctrl+C kills us
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         try:
-            with self._openUploadFile(liveBuildId, buildIdSuffix()) as (name, fileobj):
-                writeFileOrHandle(name, fileobj, buildId)
+            with self._openUploadFile(key, suffix) as (name, fileobj):
+                writeFileOrHandle(name, fileobj, content)
         except ArtifactExistsError:
             return ("skipped (exists in archive)", SKIPPED)
         except (ArtifactUploadError, OSError) as e:
             if self.__ignoreErrors:
                 return ("error ("+str(e)+")", ERROR)
             else:
-                raise BuildError("Cannot upload build-id: " + str(e))
+                raise BuildError("Cannot upload file: " + str(e))
         return ("ok", EXECUTED)
 
 
