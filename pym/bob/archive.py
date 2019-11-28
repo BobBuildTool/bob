@@ -591,7 +591,7 @@ class SimpleHttpArchive(BaseArchive):
         elif response.status not in [200, 201, 204]:
             raise ArtifactUploadError("PUT {} {}".format(response.status, response.reason))
 
-    def upload(self, step, buildIdFile, tgzFile):
+    def __uploadJenkins(self, step, keyFile, contentFile, suffix):
         # only upload if requested
         if not self.canUploadJenkins():
             return ""
@@ -601,17 +601,21 @@ class SimpleHttpArchive(BaseArchive):
         return "\n" + textwrap.dedent("""\
             # upload artifact
             cd $WORKSPACE
-            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
+            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {KEYFILE}){GEN}"
             BOB_UPLOAD_URL={URL}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
             if ! curl --output /dev/null --silent --head --fail {INSECURE} "$BOB_UPLOAD_URL" ; then
-                BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {RESULT} "$BOB_UPLOAD_URL" || true)
+                BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {CONTENTFILE} "$BOB_UPLOAD_URL" || true)
                 if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
                     echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
                 fi
-            fi""".format(URL=quote(self.__url.geturl()), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
+            fi""".format(URL=quote(self.__url.geturl()), KEYFILE=quote(keyFile),
+                         CONTENTFILE=quote(contentFile),
                          FAIL="" if self._ignoreErrors() else "; exit 1",
-                         GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
+                         GEN=ARCHIVE_GENERATION, SUFFIX=suffix,
                          INSECURE=insecure))
+
+    def upload(self, step, buildIdFile, tgzFile):
+        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
 
     def download(self, step, buildIdFile, tgzFile):
         # only download if requested
@@ -630,26 +634,8 @@ class SimpleHttpArchive(BaseArchive):
                        INSECURE=insecure))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        # only upload if requested
-        if not self.canUploadJenkins():
-            return ""
+        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
 
-        # upload with curl if file does not exist yet on server
-        insecure = "" if self.__sslVerify else "-k"
-        return "\n" + textwrap.dedent("""\
-            # upload live build-id
-            cd $WORKSPACE
-            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {LIVEBUILDID}){GEN}"
-            BOB_UPLOAD_URL={URL}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
-            BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {BUILDID} "$BOB_UPLOAD_URL" || true)
-            if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
-                echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
-            fi
-            """.format(URL=quote(self.__url.geturl()), LIVEBUILDID=quote(liveBuildId),
-                       BUILDID=quote(buildId),
-                       FAIL="" if self._ignoreErrors() else "; exit 1",
-                       GEN=ARCHIVE_GENERATION, SUFFIX=buildIdSuffix(isWin),
-                       INSECURE=insecure))
 
 class SimpleHttpDownloader:
     def __init__(self, archiver, response):
