@@ -1168,7 +1168,7 @@ esac
         # run build if input has changed
         buildInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
             for i in buildStep.getAllDepSteps() if i.isValid() ]
-        buildFingerprint = await self._getFingerprint(buildStep)
+        buildFingerprint = await self._getFingerprint(buildStep, depth)
         if buildFingerprint: buildInputHashes.append(buildFingerprint)
         if checkoutOnly:
             stepMessage(buildStep, "BUILD", "skipped due to --checkout-only ({})".format(prettyBuildPath),
@@ -1295,7 +1295,7 @@ esac
         packageInputs.extend(packageStep.getAllDepSteps())
         packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
             for i in packageInputs if i.isValid() ]
-        packageFingerprint = await self._getFingerprint(packageStep)
+        packageFingerprint = await self._getFingerprint(packageStep, depth)
         if packageFingerprint: packageInputHashes.append(packageFingerprint)
 
         # Run package step if we have not yet downloaded the package or if
@@ -1461,7 +1461,7 @@ esac
         else:
             ret = self.__buildDistBuildIds.get(path)
             if ret is None:
-                fingerprint = await self._getFingerprint(step)
+                fingerprint = await self._getFingerprint(step, depth)
                 ret = await step.getDigestCoro(lambda x: self.__getBuildIdList(x, depth+1),
                     True, fingerprint=fingerprint)
                 self.__buildDistBuildIds[path] = ret
@@ -1540,7 +1540,7 @@ esac
         if not self.__running and not ignoreExecutionStop: raise CancelBuildException
         return ret
 
-    async def _getFingerprint(self, step):
+    async def _getFingerprint(self, step, depth):
         # Inside a sandbox the situation is clear. The variant-id and build-id
         # are already tied directly to the sandbox variant-id by getDigest().
         # This is pessimistic but easier than calculating the fingerprint
