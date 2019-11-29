@@ -1,3 +1,5 @@
+.. _configuration:
+
 Configuration
 =============
 
@@ -1406,6 +1408,33 @@ according to `Semantic Versioning`_. Therefore it is usually only needed to
 specify the major and minor version.
 
 .. _Semantic Versioning: http://semver.org/
+
+.. _configuration-config-layers:
+
+layers
+~~~~~~
+
+Type: List of strings
+
+The ``layers`` section consists of a list of layer names that are then expected
+in the ``layers`` directory relative to the ``conig.yaml`` referencing them::
+
+    layers:
+        - myapp
+        - bsp
+
+Layers that are not named in this section but that are present in the
+``layers`` directory are ignored. Layers that are named but that do not exist
+lead to a parse error. Layers can be nested, that is, a layer can itself have
+layers below it.
+
+The order of layers is important with respect to settings made by
+``default.yaml`` in the various layers. The project root has the highest
+precedence. The layers in ``config.yaml`` are named from highest to lowest
+precedence. A layer with a higher precedence can override settings from layers
+of lower precedence.
+
+See :ref:`configuration` for more information.
 
 .. _configuration-config-plugins:
 
