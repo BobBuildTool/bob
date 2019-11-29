@@ -1396,7 +1396,7 @@ esac
 
         # do the checkout if we still don't have a build-id
         if ret is None:
-            await self._cook([step], step.getPackage(), depth)
+            await self._cook([step], step.getPackage(), False, depth)
             # return directory hash
             ret = BobState().getResultHash(step.getWorkspacePath())
             predicted = False
