@@ -16,8 +16,23 @@ class ScmOverride:
         self.__match = override.get("match", {})
         self.__del = override.get("del", [])
         self.__set = override.get("set", {})
-        self.__replace = { key : (subst["pattern"], subst["replacement"])
-            for (key, subst) in override.get("replace", {}).items() }
+        self.__replaceRaw = override.get("replace", {})
+        self.__init()
+
+    def __init(self):
+        try:
+            self.__replace = { key : (re.compile(subst["pattern"]), subst["replacement"])
+                for (key, subst) in self.__replaceRaw.items() }
+        except re.error as e:
+            raise ParseError("Invalid scmOverrides replace pattern: '{}': {}"
+                .format(e.pattern, str(e)))
+
+    def __getstate__(self):
+        return (self.__match, self.__del, self.__set, self.__replaceRaw)
+
+    def __setstate__(self, s):
+        (self.__match, self.__del, self.__set, self.__replaceRaw) = s
+        self.__init()
 
     def __doesMatch(self, scm, env):
         for (key, value) in self.__match.items():
@@ -37,29 +52,19 @@ class ScmOverride:
     def __applyEnv(self, env):
         rm = [ env.substitute(d, "svmOverrides::del") for d in self.__del ]
         set = { k : env.substitute(v, "svmOverrides::set: "+k) for (k,v) in self.__set.items() }
-        try:
-            replace = {
-                k : ( re.compile(env.substitute(pat, "scmOverrides::replace::pattern: "+pat)),
-                      env.substitute(rep, "scmOverrides::replace::replacement: "+rep)
-                    )
-                for (k, (pat, rep)) in self.__replace.items()
-            }
-        except re.error as e:
-            raise ParseError("Invalid scmOverrides replace pattern: '{}': {}"
-                .format(e.pattern, str(e)))
-        return rm, set, replace
+        return rm, set
 
     def mangle(self, scm, env):
         ret = False
         if self.__doesMatch(scm, env):
-            rm, set, replace = self.__applyEnv(env)
+            rm, set = self.__applyEnv(env)
 
             ret = True
             scm = scm.copy()
             for d in rm:
                 if d in scm: del scm[d]
             scm.update(set)
-            for (key, (pat, repl)) in replace.items():
+            for (key, (pat, repl)) in self.__replace.items():
                 if key in scm:
                     scm[key] = re.sub(pat, repl, scm[key])
         return ret, scm
@@ -70,10 +75,7 @@ class ScmOverride:
         if self.__match: spec['match'] = self.__match
         if self.__del: spec['del'] = self.__del
         if self.__set: spec['set'] = self.__set
-        if self.__replace: spec['replace'] = {
-            key : { "pattern" : pat, "replacement" : rep }
-            for (key, (pat, rep)) in self.__replace.items()
-        }
+        if self.__replaceRaw: spec['replace'] = self.__replaceRaw
         return yaml.dump(spec, default_flow_style=False).rstrip()
 
 
