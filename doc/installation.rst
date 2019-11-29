@@ -35,6 +35,8 @@ e.g.:
   used. Either install via pip (``python3 -m pip install azure-storage-blob``)
   or download from `GitHub <https://github.com/Azure/azure-storage-python>`_.
 
+.. _installation-install:
+
 Install
 =======
 

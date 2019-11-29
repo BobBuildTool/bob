@@ -1,0 +1,170 @@
+Bob 0.16 Release Notes
+======================
+
+Changes made since Bob 0.15.0 include the following.
+
+Installation
+------------
+
+* Bob is now installed via ``pip3``.
+
+  Bob installation is now based on standard Python ``setuptools``. If you
+  upgrade from Bob 0.15.0 make sure to delete all files that were installed by
+  ``make install`` previously. Bob 0.15.1 also used the standard Python
+  facilities already. See :ref:`installation-install` for more details.
+
+* Bob can run directly from a git worktree checkouts now.
+
+New features
+------------
+
+Recipes
+~~~~~~~
+
+* Bob gained the support for splitting up a monolithic project into several
+  :ref:`configuration-config-layers`.
+
+  Layers allow you to structure your projects into larger entities that can be
+  reused in other projects. This modularity helps to separate different aspects
+  of bigger projects like the used toolchain, the board support package and the
+  applications integration.
+
+  See :ref:`configuration` for an overview.
+
+* URL SCMs use ``wget`` as fallback in case ``curl`` isn't available.
+
+  This fallback has some limitations, though:
+
+  - ``wget`` does not support as many protocols as ``curl``, but for the
+    commonly used HTTP(S) and FTP schemes it works.
+  - The time-stamp mechanism (``-N``) can't be used as with ``curl``, because
+    wget doesn't support it together with own outputfile names (``-O``).
+    Therefore ``wget`` cannot download updates but will only fetch the file if
+    it does not exist yet in the workspace.
+
+* Added support for bare variable names in strings.
+
+  Usually the name of the variable must be enclosed in curly braces when
+  dereferencing it, e.g. ``${FOO}``. In regular POSIX shells this is not needed
+  if the variable name consists of only letters, numbers and underscores *and*
+  if the next character is something different to terminate the variable name,
+  e.g. ``"Hello $NAME."``.  In the light of more compatibility Bob supports
+  this notion too now.
+
+User configuration (default.yaml)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added ``fileMode`` and ``directoryMode`` options to override file modes in
+  file backend.
+
+  Normally the binary artifacts are created with default permissions by the
+  file backend. It might be desirable to set some special access modes, though.
+  An example would be to grant the group write access which is normally
+  prohibited by the umask.
+
+  See :ref:`configuration-config-archive` for more information.
+
+Bob dev/build
+~~~~~~~~~~~~~
+
+* The overall progress is now shown during parallel builds.
+
+* Added the ``packages`` download option.
+
+  With ``--download=packages=RE`` a regular expression ``RE`` can be used to
+  specify which packages should be downloaded. If the package cannot be found
+  in any artifact cache then it will still be built.
+
+Bob jenkins
+~~~~~~~~~~~
+
+* Added timeout option for Jenkins ``git`` checkouts
+
+  By default Jenkins has a timeout of 10 minutes for ``git clone`` and
+  ``fetch`` operations. Depending on the server and the repository size this
+  might not be enough. By setting the new ``scm.git.timeout`` option it is
+  possible to change the timeout.
+
+Bob project
+~~~~~~~~~~~
+
+* Qt Creator generator gained support for Windows by MSYS2
+
+  The ``bob project qt-creator`` plugin will be able to create a Windows native
+  Qt Creator project by using ``MSYS2``. This requires that ``MSYS2`` must have
+  been started by ``msys2_shell.cmd`` to have the ``WD`` environment available.
+
+* Added Visual Studio 2019 generator.
+
+  This generator works currently only on MSYS2. Bob and the build is run
+  on MSYS2 while Visual Studio is running natively. The drawback is that
+  debugging of applications does not work because they would need to be
+  built with the MS compiler. Error messages are also not understood by VS
+  because the paths emitted by the compier refer to MSYS names and not to
+  native Windows paths.
+
+Changed behaviour
+-----------------
+
+Backwards compatible policies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Introduced the :ref:`policies-sandboxFingerprints` policy.
+
+  When :ref:`configuration-principle-fingerprinting` was introduced, Bob
+  initially used a shortcut and did not execute fingerprint scripts in the
+  sandbox. This saved a bit of complexity and also relieved the build logic
+  from the need to build the sandbox just to execute the fingerprint script.
+  While the old approach was not producing wrong results it was overly
+  pessimistic. It prevents sharing of any fingerprinted artifacts between
+  sandbox and non-sandbox builds even if the fingerprint is the same.
+
+  When set to the new behaviour the fingerprint scripts will be executed in the
+  sandbox too. A caching of these results by the artifact cache is also
+  implemented to reduce the need of fetching the sandbox image. Fingerprinted
+  artifacts will be shared between sandbox- and non-sandbox-builds given the
+  :ref:`configuration-recipes-fingerprintScript` yields the same result.
+
+Other behavioural changes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Fixed a bug where the URL of binary artifact servers was not properly quoted
+  when building on Jenkins.
+
+  The URL of a ``archive`` backend is not subject to string substitution. While
+  this has been possible on Jenkins builds in the past it was never supported
+  for local builds ever. On Jenkins it is now prevented, too.
+
+* Relaxed the requirement of what must be matched by regular expressions.
+
+  All options that take a regular expression did implicitly match the string
+  start on Bob 0.15 and before. This is unexpected by the user and in stark
+  contrast to tools like ``grep`` and ``perl``. Starting with Bob 0.16 a
+  regular expression can match anywhere in the string. If you really require
+  to match the line start you can do this by adding the ``^`` meta character to
+  the regex.
+
+* Raised the severity of ``A`` and ``N`` flags of ``bob status``.
+
+  The handling of the ``A`` (attic) and ``N`` (new) flags was inconsistent with
+  respect to the ``S`` (switched branch) flag. All these flags are shown by
+  default now. They are all inconsistencies with respect to the recipes. They
+  are now treated with equal severity like direct source modifications because
+  these are consequences of modifications in the recipes or manual changes of
+  the checkouts.
+
+Backwards incompatible changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* The git SCM does not fetch commits explicitly from the server.
+
+  If the recipe checks out a particular commit (``commit`` key used) then Bob
+  0.15 used to fetch this commit explicitly from the server.  But fetching
+  commits explicitly is not supported by default by git servers and will
+  typically be denied as follows:
+
+      error: Server does not allow request for unadvertised object
+
+  Instead Bob clones all branches and tags by default and relies on the
+  assumption that the required commit is reachable by any of them.
+
