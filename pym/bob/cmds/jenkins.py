@@ -54,7 +54,7 @@ JENKINS_SCRIPT_END = "BOB_JENKINS_SANDBOXED_SCRIPT"
 FINGERPRINT_SCRIPT_TEMPLATE = """\
 (
     trap 'rm -rf "$T"' EXIT
-    T=$(mktemp -d)
+    T=$(mktemp -d -p "$WORKSPACE")
     {SETUP}
     cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | {INVOKE}
 cd $BOB_CWD

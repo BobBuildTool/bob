@@ -1608,7 +1608,7 @@ esac
 
         stdout = stderr = None
         script = step._getFingerprintScript()
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), prefix=".bob-") as tmp:
             if step.getSandbox() is not None:
                 runEnv["BOB_CWD"] = "/bob/fingerprint"
                 runEnv["PATH"] = ":".join(step.getSandbox().getPaths())
