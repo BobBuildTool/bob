@@ -241,7 +241,7 @@ class BaseArchive:
             try:
                 ret, msg, kind = await loop.run_in_executor(None,
                     BaseArchive._downloadLocalFile, self, liveBuildId, buildIdSuffix())
-                if not ret: a.fail(msg, kind)
+                if ret is None: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Download of build-id interrupted.")
@@ -351,7 +351,7 @@ class BaseArchive:
             try:
                 ret, msg, kind = await loop.run_in_executor(None,
                     BaseArchive._downloadLocalFile, self, key, FINGERPRINT_SUFFIX)
-                if not ret: a.fail(msg, kind)
+                if ret is None: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Download of fingerprint interrupted.")
