@@ -26,6 +26,7 @@ import io
 import locale
 import os
 import re
+import shutil
 import signal
 import stat
 import subprocess
@@ -558,7 +559,11 @@ esac
                 makeSandboxHelper()
                 sandboxHelper = os.path.join(self.__bobRoot, "bin", "bob-namespace-sandbox")
             except ImportError:
-                sandboxHelper = "bob-namespace-sandbox"
+                # Determine absolute path here. We set $PATH when running in
+                # the sandbox so we might not find it anymore.
+                sandboxHelper = shutil.which("bob-namespace-sandbox")
+                if sandboxHelper is None:
+                    raise BuildError("Could not find bob-namespace-sandbox in $PATH! Please check your Bob installation.")
 
             self.__sandboxHelperPath = sandboxHelper
 
