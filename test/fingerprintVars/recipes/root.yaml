@@ -1,0 +1,54 @@
+root: True
+
+environment:
+    ONE: one
+    TWO: two
+    THREE: three
+
+fingerprintIf: True
+fingerprintScript: |
+    echo ${ONE:-unset}
+    echo ${TWO:-unset}
+    echo ${THREE:-unset}
+
+# Variable THREE is not consumed by the package. Should be unavailable for the
+# fingerprintScript too.
+packageVars: [ONE, TWO]
+packageScript: |
+    echo ${ONE}
+    echo ${TWO}
+
+multiPackage:
+    # The fingerprint environment variables should not be set because no one
+    # requested them via fingerprintVars.
+    allUnset1: {}
+
+    # The fingerprint environment variables should not be set because even
+    # though we use fingerprintVars the requesting fingerprintScript is
+    # disabled.
+    allUnset2:
+        fingerprintIf: False
+        fingerprintVars: [ONE, TWO]
+        fingerprintScript: "true"
+
+    # The required variable THREE is not consumed by the package and should thus
+    # not be available for the fingerprintScript either.
+    allUnset3:
+        fingerprintIf: True
+        fingerprintVars: [THREE]
+        fingerprintScript: "true"
+
+    subSet1:
+        fingerprintIf: True
+        fingerprintVars: [ONE]
+        fingerprintScript: "true"
+
+    subSet2:
+        fingerprintIf: True
+        fingerprintVars: [TWO]
+        fingerprintScript: "true"
+
+    subSet3:
+        fingerprintIf: True
+        fingerprintVars: [ONE, TWO]
+        fingerprintScript: "true"
