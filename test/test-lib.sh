@@ -77,6 +77,16 @@ expect_output()
 	return 0
 }
 
+expect_exist()
+{
+	if [[ ! -e "$1" ]] ; then
+		echo "Missing expected file: $1" >&2
+		return 1
+	fi
+
+	return 0
+}
+
 skip()
 {
 	exit 240
