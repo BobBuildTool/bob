@@ -40,7 +40,7 @@ def getVersion():
 
     if not version:
         # Last fallback. See http://semver.org/ and adjust accordingly.
-        version = "0.15.0-unknown"
+        version = "0.16.0-unknown"
 
     return version
 
