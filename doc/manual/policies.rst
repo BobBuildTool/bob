@@ -435,3 +435,34 @@ New behaviour
    artifact cache. They will have to be built again. Non-sandbox build
    artifacts are not affected.
 
+.. _policies-fingerprintVars:
+
+fingerprintVars
+~~~~~~~~~~~~~~~
+
+Introduced in: 0.16
+
+When then :ref:`configuration-recipes-fingerprintScript` mechanism was
+introduced in Bob 0.15 there was no dedicated environment variable handling
+implemented for them. The simple policy was to pass all environment variables
+of the affected package to the ``fingerprintScript``. Unfortunately this
+results in the repeated execution of identical scripts if the variables change
+between packages, even if they are not used by the ``fingerprintScript``.
+
+This policy adds the support for the new
+:ref:`configuration-recipes-fingerprintVars` key in the recipes. This key
+specifies a list of variables that the ``fingerprintScript`` uses.
+
+Old behavior
+   All variables of the fingerprinted package are passed to the
+   ``fingerprintScript``. The :ref:`configuration-recipes-fingerprintVars`
+   settings are ignored. This might lead to unnecessary executions of identical
+   ``fingerprintScript`` with different variable values.
+
+New behavior
+   Only the subset of environment variables, defined by
+   :ref:`configuration-recipes-fingerprintVars` of the fingerprinted package is
+   passed to the ``fingerprintScript``. Other environment variables are unset
+   but whitelisted variables (see :ref:`configuration-config-whitelist`) are
+   still available.
+

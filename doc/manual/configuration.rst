@@ -976,12 +976,13 @@ across otherwise incompatible machines.
 
 The fingerprint script is executed in an empty temporary directory. It does not
 have access to any dependencies of the recipe nor to the checked out sources.
-All environment variables of the package that were declared in the recipe (see
-:ref:`configuration-recipes-vars` ) are set. The usual bash options are applied
-(``nounset``, ``errexit``, ``pipefail``) too. If the script returns with a
-non-zero exit status it will fail the build. The output on stderr is ignored
-but will be displayed in the error message if the script fails. The scripts of
-inherited classes are concatenated (but only if their
+A subset of environment variables of the package (see
+:ref:`configuration-recipes-vars`) as defined by
+:ref:`configuration-recipes-fingerprintVars` is set. The usual bash options are
+applied (``nounset``, ``errexit``, ``pipefail``) too. If the script returns
+with a non-zero exit status it will fail the build. The output on stderr is
+ignored but will be displayed in the error message if the script fails. The
+scripts of inherited classes are concatenated (but only if their
 :ref:`configuration-recipes-fingerprintIf` condition did not evaluate to
 ``false``). Any fingerprint scripts that are defined by used tools (see
 :ref:`configuration-recipes-provideTools`) are concatenated too.
@@ -1049,6 +1050,25 @@ Examples::
    fingerprintIf: null                       # same as if unset
 
 If not given it defaults to ``null``.
+
+.. _configuration-recipes-fingerprintVars:
+
+fingerprintVars
+~~~~~~~~~~~~~~~
+
+Type: List of strings
+
+This declares the subset of the environment variables of the affected package
+that should be set during the execution of the ``fingerprintScript``.  Only
+variables that are selected by :ref:`configuration-recipes-vars` can be used.
+It is not an error that a variable listed here is unset. The variables will
+only be set if the corresponding ``fingerprintScript`` is enabled too.
+
+.. note::
+    Before Bob 0.16 (see :ref:`policies-fingerprintVars` policy) all
+    environment variables of the affected package were set during the execution
+    of the ``fingerprintScript``. If the policy is set to the old behaviour
+    then this key will be ignored and has no effect.
 
 inherit
 ~~~~~~~
@@ -1228,8 +1248,8 @@ normal recipe by :ref:`configuration-recipes-fingerprintScript`. A fingerprint
 script defined by a tool is implicitly added to the fingerprint scripts of all
 recipes that use the particular tool. Use it to automatically apply a
 fingerprint to all recipes whose result will depend on the host environment by
-using the tool.  The ``fingerprintIf`` attribute is handled the in the same
-way.
+using the tool.  The ``fingerprintIf`` and ``fingerprintVars`` attributes are
+handled the in the same way.
 
 If no attributes except ``path`` are present the declaration may be abbreviated
 by giving the relative path directly::
