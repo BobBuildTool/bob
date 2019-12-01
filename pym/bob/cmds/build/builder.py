@@ -806,6 +806,23 @@ esac
 
         return task
 
+    def __createFingerprintTask(self, coro, trackingKey):
+        """Create a fingerprinting task identified uniquely by ``trackingKey``.
+
+        The task will be counted in the global progress.
+        """
+        task = self.__fingerprintTasks.get(trackingKey)
+        if task is not None: return task
+
+        self.__tasksNum += 1
+        setProgress(self.__tasksDone, self.__tasksNum)
+
+        task = asyncio.get_event_loop().create_task(self.__taskWrapper(coro,
+            trackingKey, self.__fingerprintTasks, count=True))
+        self.__fingerprintTasks[trackingKey] = task
+
+        return task
+
     async def __taskWrapper(self, coro, trackingKey=None, tracker=None,
                             fence=None, step=None, count=False):
         try:
@@ -875,6 +892,7 @@ esac
             self.__restart = False
             self.__cookTasks = {}
             self.__buildIdTasks = {}
+            self.__fingerprintTasks = {}
             self.__allTasks = set()
             self.__buildErrors = []
             self.__runners = asyncio.BoundedSemaphore(self.__jobs)
@@ -1577,26 +1595,15 @@ esac
                 sandboxBuildId = await self._getBuildId(sandbox, depth+1)
                 key = hashlib.sha1(key + sandboxBuildId).digest()
 
-            # First look in cache
+            # Run fingerprint calculation in another task. The task will only
+            # be created once for each ``key``.
             fingerprint = self.__fingerprints.get(key)
-
-            # If no hit and this is built in a sandbox then the artifact cache
-            # may help...
-            if (fingerprint is None) and sandbox:
-                fingerprint = await self.__archive.downloadLocalFingerprint(sandbox, key)
-
-            # When we don't know it yet we really have to execute the script
             if fingerprint is None:
-                if sandbox:
-                    await self._cook([sandbox], sandbox.getPackage(), False, depth+1)
-                with stepAction(step, "FNGRPRNT", step.getPackage().getName(), INFO) as a:
-                    fingerprint = await self.__runFingerprintScript(step, a)
-
-            # Always cache result. Also upload if this was calculated in a sandbox.
-            if key not in self.__fingerprints:
-                self.__fingerprints[key] = fingerprint
-                if sandbox:
-                    await self.__archive.uploadLocalFingerprint(sandbox, key, fingerprint)
+                fingerprintTask = self.__createFingerprintTask(
+                    lambda: self.__calcFingerprintTask(step, sandbox, key, depth),
+                    key)
+                await self.__yieldJobWhile(asyncio.wait({fingerprintTask}), True)
+                fingerprint = fingerprintTask.result()
         else:
             fingerprint = b''
 
@@ -1607,6 +1614,33 @@ esac
                 locale.getpreferredencoding(False), 'replace')
 
         return hashlib.sha1(fingerprint).digest()
+
+    async def __calcFingerprintTask(self, step, sandbox, key, depth):
+        async with self.__runners:
+            # If this is built in a sandbox then the artifact cache may help...
+            if sandbox:
+                fingerprint = await self.__archive.downloadLocalFingerprint(sandbox, key)
+            else:
+                fingerprint = None
+
+            # When we don't know it yet we really have to execute the script.
+            # In case a sandbox is used we have to make sure it's available.
+            if fingerprint is None:
+                if sandbox:
+                    await self._cook([sandbox], sandbox.getPackage(), False, depth+1)
+                with stepAction(step, "FNGRPRNT", step.getPackage().getName(), INFO) as a:
+                    fingerprint = await self.__runFingerprintScript(step, a)
+
+                # Always upload if this was calculated in a sandbox. The task will
+                # only be run once so we don't need to worry here about duplicate
+                # uploads.
+                if sandbox:
+                    await self.__archive.uploadLocalFingerprint(sandbox, key, fingerprint)
+
+            # Cache result so that we don't ever need to spawn a task
+            self.__fingerprints[key] = fingerprint
+
+        return fingerprint
 
     async def __runFingerprintScript(self, step, logger):
         if self.__preserveEnv:
