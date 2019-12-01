@@ -436,7 +436,7 @@ class CoreItem(metaclass=ABCMeta):
 
 class AbstractTool:
     __slots__ = ("path", "libs", "netAccess", "environment",
-        "fingerprintScript", "fingerprintIf")
+        "fingerprintScript", "fingerprintIf", "fingerprintVars")
 
     def __init__(self, spec):
         if isinstance(spec, str):
@@ -446,6 +446,7 @@ class AbstractTool:
             self.environment = {}
             self.fingerprintScript = ""
             self.fingerprintIf = False
+            self.fingerprintVars = set()
         else:
             self.path = spec['path']
             self.libs = spec.get('libs', [])
@@ -453,6 +454,7 @@ class AbstractTool:
             self.environment = spec.get('environment', {})
             self.fingerprintScript = spec.get('fingerprintScript', "")
             self.fingerprintIf = spec.get("fingerprintIf")
+            self.fingerprintVars = set(spec.get("fingerprintVars", []))
 
     def prepare(self, coreStepRef, env):
         """Create concrete tool for given step."""
@@ -461,13 +463,15 @@ class AbstractTool:
         environment = { k : env.substitute(v, "provideTools::environment::"+k)
             for k, v in self.environment.items() }
         return CoreTool(coreStepRef, path, libs, self.netAccess, environment,
-                        self.fingerprintScript, self.fingerprintIf)
+                        self.fingerprintScript, self.fingerprintIf,
+                        self.fingerprintVars)
 
 class CoreTool(CoreItem):
     __slots__ = ("coreStep", "path", "libs", "netAccess", "environment",
-        "fingerprintScript", "fingerprintIf")
+        "fingerprintScript", "fingerprintIf", "fingerprintVars")
 
-    def __init__(self, coreStep, path, libs, netAccess, environment, fingerprintScript, fingerprintIf):
+    def __init__(self, coreStep, path, libs, netAccess, environment,
+                 fingerprintScript, fingerprintIf, fingerprintVars):
         self.coreStep = coreStep
         self.path = path
         self.libs = libs
@@ -475,11 +479,12 @@ class CoreTool(CoreItem):
         self.environment = environment
         self.fingerprintScript = fingerprintScript
         self.fingerprintIf = fingerprintIf
+        self.fingerprintVars = fingerprintVars
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
         return Tool(step, self.path, self.libs, self.netAccess, self.environment,
-                    self.fingerprintScript)
+                    self.fingerprintScript, self.fingerprintVars)
 
 class Tool:
     """Representation of a tool.
@@ -489,15 +494,17 @@ class Tool:
     """
 
     __slots__ = ("step", "path", "libs", "netAccess", "environment",
-        "fingerprintScript")
+        "fingerprintScript", "fingerprintVars")
 
-    def __init__(self, step, path, libs, netAccess, environment, fingerprintScript):
+    def __init__(self, step, path, libs, netAccess, environment, fingerprintScript,
+                 fingerprintVars):
         self.step = step
         self.path = path
         self.libs = libs
         self.netAccess = netAccess
         self.environment = environment
         self.fingerprintScript = fingerprintScript
+        self.fingerprintVars = fingerprintVars
 
     def __repr__(self):
         return "Tool({}, {}, {})".format(repr(self.step), self.path, self.libs)
@@ -764,6 +771,9 @@ class CoreStep(CoreItem):
                 h.update((key+val).encode('utf8'))
             h.update(struct.pack("<I", len(tool.fingerprintScript)))
             h.update(tool.fingerprintScript.encode('utf8'))
+            h.update(struct.pack("<I", len(tool.fingerprintVars)))
+            for key in sorted(tool.fingerprintVars):
+                h.update(key.encode('utf8'))
         # provideDeps
         providedDeps = self.providedDeps
         h.update(struct.pack("<I", len(providedDeps)))
@@ -1142,15 +1152,22 @@ class Step:
         if not self._coreStep.isFingerprinted():
             return ""
 
+        recipe = self.__package.getRecipe()
         mask = self._coreStep.corePackage.fingerprintMask
-        scripts = chain(
-            (t.fingerprintScript for n,t in sorted(self.getTools().items())),
-            self.__package.getRecipe().fingerprintScripts)
+        scriptsAndVars = chain(
+            ((t.fingerprintScript, t.fingerprintVars) for n,t in sorted(self.getTools().items())),
+            zip(recipe.fingerprintScriptList, recipe.fingerprintVarsList))
         ret = []
-        for s in scripts:
-            if mask & 1: ret.append(s)
+        varSet = set()
+        for s,v in scriptsAndVars:
+            if mask & 1:
+                ret.append(s)
+                varSet.update(v)
             mask >>= 1
-        return mangleFingerprints(joinScripts(ret), self.getEnv())
+        env = self.getEnv()
+        if recipe.getRecipeSet().getPolicy('fingerprintVars'):
+            env = { k : v for k,v in env.items() if k in varSet }
+        return mangleFingerprints(joinScripts(ret), env)
 
 
 class CoreCheckoutStep(CoreStep):
@@ -1935,13 +1952,16 @@ class Recipe(object):
         self.__build = incHelper.resolve(recipe.get("buildScript"), "buildScript")
         self.__package = incHelper.resolve(recipe.get("packageScript"), "packageScript")
         fingerprintScript = recipe.get("fingerprintScript")
+        fingerprintVars = set(recipe.get("fingerprintVars", []))
         fingerprintIf = recipe.get("fingerprintIf", None if fingerprintScript else False)
         if fingerprintIf != False:
-            self.__fingerprintScripts = [ fingerprintScript ]
+            self.__fingerprintScriptList = [ fingerprintScript ]
             self.__fingerprintIf = [ fingerprintIf ]
+            self.__fingerprintVarsList = [ fingerprintVars ]
         else:
-            self.__fingerprintScripts = []
+            self.__fingerprintScriptList = []
             self.__fingerprintIf = []
+            self.__fingerprintVarsList = [ ]
 
         # Consider checkout deterministic by default if no checkout script is
         # involved.
@@ -2050,7 +2070,8 @@ class Recipe(object):
                 joinScripts([cls.__package[0], self.__package[0]]),
                 joinScripts([cls.__package[1], self.__package[1]], "\n")
             )
-            self.__fingerprintScripts[0:0] = cls.__fingerprintScripts
+            self.__fingerprintScriptList[0:0] = cls.__fingerprintScriptList
+            self.__fingerprintVarsList[0:0] = cls.__fingerprintVarsList
             self.__fingerprintIf[0:0] = cls.__fingerprintIf
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
@@ -2494,8 +2515,12 @@ Every dependency must only be given once."""
         return self.__toolDepPackage
 
     @property
-    def fingerprintScripts(self):
-        return self.__fingerprintScripts
+    def fingerprintScriptList(self):
+        return self.__fingerprintScriptList
+
+    @property
+    def fingerprintVarsList(self):
+        return self.__fingerprintVarsList
 
 
 class PackageMatcher:
@@ -2633,6 +2658,7 @@ class RecipeSet:
                 schema.Optional('mergeEnvironment') : bool,
                 schema.Optional('secureSSL') : bool,
                 schema.Optional('sandboxFingerprints') : bool,
+                schema.Optional('fingerprintVars') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
@@ -2718,6 +2744,11 @@ class RecipeSet:
                 "0.16",
                 InfoOnce("sandboxFingerprints policy not set. Sandbox builds of fingerprinted packages are not shared with regular builds.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxfingerprints for more information.")
+            ),
+            'fingerprintVars' : (
+                "0.16",
+                InfoOnce("fingerprintVars policy not set. Fingerprint scripts may be run more often than needed.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#fingerprintvars for more information.")
             ),
         }
         self.__buildHooks = {}
@@ -3173,6 +3204,7 @@ class RecipeSet:
                         schema.Optional('environment') : VarDefineValidator("provideTools::environment"),
                         schema.Optional('fingerprintScript') : str,
                         schema.Optional('fingerprintIf') : schema.Or(None, str, bool),
+                        schema.Optional('fingerprintVars') : [ varNameUseSchema ],
                     })
                 )
             }),
@@ -3190,6 +3222,7 @@ class RecipeSet:
             schema.Optional('packageNetAccess') : bool,
             schema.Optional('fingerprintScript') : str,
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool),
+            schema.Optional('fingerprintVars') : [ varNameUseSchema ],
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
