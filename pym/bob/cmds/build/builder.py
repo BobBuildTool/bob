@@ -1628,7 +1628,7 @@ esac
             if fingerprint is None:
                 if sandbox:
                     await self._cook([sandbox], sandbox.getPackage(), False, depth+1)
-                with stepAction(step, "FNGRPRNT", step.getPackage().getName(), INFO) as a:
+                with stepAction(step, "FNGRPRNT", step.getPackage().getName()) as a:
                     fingerprint = await self.__runFingerprintScript(step, a)
 
                 # Always upload if this was calculated in a sandbox. The task will
