@@ -59,7 +59,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'Bob'
-copyright = '2016, TechniSat Digital GmbH'
+copyright = '2016-2019, The BobBuildTool Contributors'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -226,7 +226,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
   ('index', 'Bob.tex', 'Bob Documentation',
-   'TechniSat Digital GmbH', 'manual'),
+   'The BobBuildTool Contributors', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -286,7 +286,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
   ('index', 'Bob', 'Bob Documentation',
-   'TechniSat Digital GmbH', 'Bob', 'One line description of project.',
+   'The BobBuildTool Contributors', 'Bob', 'One line description of project.',
    'Miscellaneous'),
 ]
 
