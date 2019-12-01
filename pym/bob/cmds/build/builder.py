@@ -771,77 +771,79 @@ esac
     def getStatistic(self):
         return self.__statistic
 
-    def __createTask(self, coro, step=None, checkoutOnly=False, tracker=None, count=False):
-        """Create and return task for coroutine.
+    def __createGenericTask(self, coro):
+        """Create and return task for coroutine."""
+        return asyncio.get_event_loop().create_task(self.__taskWrapper(coro))
 
-        The optional ``step``, ``checkoutOnly`` and the ``tracker`` arguments
-        are used to prevent duplicate runs of the same coroutine. Task that
-        only differ in the ``checkoutOnly`` parameter wait for each other.
+    def __createCookTask(self, coro, step, checkoutOnly, tracker, count):
+        """Create and return task for a cook()-like coroutine.
+
+        The ``step``, ``checkoutOnly`` and the ``tracker`` arguments are used
+        to prevent duplicate runs of the same coroutine. Task that only differ
+        in the ``checkoutOnly`` parameter wait for each other.
+
+        If ``count`` is True then the task will be counted in the global
+        progress.
         """
-        tracked = (step is not None) and (tracker is not None)
+        sandbox = step.getSandbox() and step.getSandbox().getStep().getVariantId()
+        path = (step.getWorkspacePath(), sandbox, checkoutOnly)
+        task = tracker.get(path)
+        if task is not None: return task
 
-        async def wrapTask(coro, trackingKey, fence):
-            try:
-                task = asyncio.Task.current_task()
-                self.__allTasks.add(task)
-                if fence is not None:
-                    await fence
-                ret = await coro()
-                self.__allTasks.remove(task)
-                if tracked:
-                    # Only remove us from the task list if we finished successfully.
-                    # Other concurrent tasks might want to cook the same step again.
-                    # They have to get the same exception again.
-                    del tracker[trackingKey]
-                if count:
-                    self.__tasksDone += 1
-                    setProgress(self.__tasksDone, self.__tasksNum)
-                return ret
-            except BuildError as e:
-                if not self.__keepGoing:
-                    self.__running = False
-                if step:
-                    e.setStack(step.getPackage().getStack())
-                self.__buildErrors.append(e)
-                raise CancelBuildException
-            except RestartBuildException:
-                if self.__running:
-                    log("Restart build due to wrongly predicted sources.", WARNING)
-                    self.__restart = True
-                    self.__running = False
-                raise CancelBuildException
-            except CancelBuildException:
-                raise
-            except concurrent.futures.CancelledError:
-                pass
-            except Exception as e:
-                self.__buildErrors.append(e)
-                raise CancelBuildException
-
-        if tracked:
-            sandbox = step.getSandbox() and step.getSandbox().getStep().getVariantId()
-            path = (step.getWorkspacePath(), sandbox, checkoutOnly)
-            task = tracker.get(path)
-            if task is not None: return task
-
-            # Is there a concurrent task running for *not* checkoutOnly? If yes
-            # then we have to wait for it to not call the same coroutine
-            # concurrently.
-            alternatePath = (step.getWorkspacePath(), sandbox, not checkoutOnly)
-            alternateTask = tracker.get(alternatePath)
-        else:
-            path = None
-            alternateTask = None
+        # Is there a concurrent task running for *not* checkoutOnly? If yes
+        # then we have to wait for it to not call the same coroutine
+        # concurrently.
+        alternatePath = (step.getWorkspacePath(), sandbox, not checkoutOnly)
+        alternateTask = tracker.get(alternatePath)
 
         if count:
             self.__tasksNum += 1
             setProgress(self.__tasksDone, self.__tasksNum)
 
-        task = asyncio.get_event_loop().create_task(wrapTask(coro, path, alternateTask))
-        if tracked:
-            tracker[path] = task
+        task = asyncio.get_event_loop().create_task(self.__taskWrapper(coro,
+            path, tracker, alternateTask, step, count))
+        tracker[path] = task
 
         return task
+
+    async def __taskWrapper(self, coro, trackingKey=None, tracker=None,
+                            fence=None, step=None, count=False):
+        try:
+            task = asyncio.Task.current_task()
+            self.__allTasks.add(task)
+            if fence is not None:
+                await fence
+            ret = await coro()
+            self.__allTasks.remove(task)
+            if trackingKey is not None:
+                # Only remove us from the task list if we finished successfully.
+                # Other concurrent tasks might want to cook the same step again.
+                # They have to get the same exception again.
+                del tracker[trackingKey]
+            if count:
+                self.__tasksDone += 1
+                setProgress(self.__tasksDone, self.__tasksNum)
+            return ret
+        except BuildError as e:
+            if not self.__keepGoing:
+                self.__running = False
+            if step:
+                e.setStack(step.getPackage().getStack())
+            self.__buildErrors.append(e)
+            raise CancelBuildException
+        except RestartBuildException:
+            if self.__running:
+                log("Restart build due to wrongly predicted sources.", WARNING)
+                self.__restart = True
+                self.__running = False
+            raise CancelBuildException
+        except CancelBuildException:
+            raise
+        except concurrent.futures.CancelledError:
+            pass
+        except Exception as e:
+            self.__buildErrors.append(e)
+            raise CancelBuildException
 
     def cook(self, steps, checkoutOnly, depth=0):
         def cancelJobs():
@@ -854,14 +856,13 @@ esac
         async def dispatcher():
             if self.__jobs > 1:
                 packageJobs = [
-                    self.__createTask(lambda s=step: self._cookTask(s, checkoutOnly, depth), step, checkoutOnly)
+                    self.__createGenericTask(lambda s=step: self._cookTask(s, checkoutOnly, depth))
                     for step in steps ]
                 await gatherTasks(packageJobs)
             else:
                 packageJobs = []
                 for step in steps:
-                    job = self.__createTask(lambda s=step: self._cookTask(s, checkoutOnly, depth),
-                                            step, checkoutOnly)
+                    job = self.__createGenericTask(lambda s=step: self._cookTask(s, checkoutOnly, depth))
                     packageJobs.append(job)
                     await asyncio.wait({job})
                 # retrieve results as last step to --keep-going
@@ -880,7 +881,7 @@ esac
             self.__tasksDone = 0
             self.__tasksNum = 0
 
-            j = self.__createTask(dispatcher)
+            j = self.__createGenericTask(dispatcher)
             try:
                 loop.add_signal_handler(signal.SIGINT, cancelJobs)
             except NotImplementedError:
@@ -933,7 +934,8 @@ esac
         if self.__jobs > 1:
             # spawn the child tasks
             tasks = [
-                self.__createTask(lambda s=step: self._cookStep(s, checkoutOnly, depth), step, checkoutOnly, self.__cookTasks, True)
+                self.__createCookTask(lambda s=step: self._cookStep(s, checkoutOnly, depth),
+                                      step, checkoutOnly, self.__cookTasks, True)
                 for step in steps
             ]
 
@@ -942,8 +944,8 @@ esac
         else:
             tasks = []
             for step in steps:
-                task = self.__createTask(lambda s=step: self._cookStep(s, checkoutOnly, depth),
-                                         step, checkoutOnly, self.__cookTasks, True)
+                task = self.__createCookTask(lambda s=step: self._cookStep(s, checkoutOnly, depth),
+                                             step, checkoutOnly, self.__cookTasks, True)
                 tasks.append(task)
                 await self.__yieldJobWhile(asyncio.wait({task}))
             # retrieve results as last step to --keep-going
@@ -1435,15 +1437,16 @@ esac
     async def __getBuildIdList(self, steps, depth):
         if self.__jobs > 1:
             tasks = [
-                self.__createTask(lambda s=step: self.__getBuildIdTask(s, depth), step, False, self.__buildIdTasks)
+                self.__createCookTask(lambda s=step: self.__getBuildIdTask(s, depth),
+                                      step, False, self.__buildIdTasks, False)
                 for step in steps
             ]
             ret = await self.__yieldJobWhile(gatherTasks(tasks), True)
         else:
             tasks = []
             for step in steps:
-                task = self.__createTask(lambda s=step: self.__getBuildIdTask(s, depth),
-                                         step, False, self.__buildIdTasks)
+                task = self.__createCookTask(lambda s=step: self.__getBuildIdTask(s, depth),
+                                             step, False, self.__buildIdTasks, False)
                 tasks.append(task)
                 await self.__yieldJobWhile(asyncio.wait({task}), True)
             # retrieve results as last step to --keep-going
