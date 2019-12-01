@@ -51,6 +51,14 @@ Recipes
   e.g. ``"Hello $NAME."``.  In the light of more compatibility Bob supports
   this notion too now.
 
+* Added the :ref:`configuration-recipes-fingerprintVars` keyword
+
+  This keyword controls the set of environment variables that are passed to a
+  :ref:`configuration-recipes-fingerprintScript` in conjunction with the
+  :ref:`policies-fingerprintVars` policy. This is useful to prevent the
+  unneeded execution of identical fingerprint scripts. See the policy and the
+  keyword for more details.
+
 User configuration (default.yaml)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -124,6 +132,21 @@ Backwards compatible policies
   implemented to reduce the need of fetching the sandbox image. Fingerprinted
   artifacts will be shared between sandbox- and non-sandbox-builds given the
   :ref:`configuration-recipes-fingerprintScript` yields the same result.
+
+* Added the :ref:`policies-fingerprintVars` policy
+
+  When :ref:`configuration-principle-fingerprinting` was introduced there was
+  no dedicated environment variable handling implemented for them. The simple
+  policy was to pass all environment variables of the affected package to the
+  ``fingerprintScript``. Unfortunately this results in the repeated execution
+  of identical scripts if the variables change between packages, even if they
+  are not used by the ``fingerprintScript``.
+
+  The newly :ref:`configuration-recipes-fingerprintVars` keyword now allows to
+  specify the subset of variables that are used. As this defaults to an empty
+  set it would change the behaviour of of fingerprints in existing recipes.
+  This policy hence controls the evaluation of the added
+  :ref:`configuration-recipes-fingerprintVars` keyword.
 
 Other behavioural changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~
