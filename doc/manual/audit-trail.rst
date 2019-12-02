@@ -76,12 +76,13 @@ Example of a single audit record::
          "package" : "root"
       },
       "build" : {
-         "version" : "#1 SMP Debian 4.9.6-3 (2017-01-28)",
-         "date" : "2017-03-16 20:00:08.600749",
-         "nodename" : "tuxedo",
-         "release" : "4.9.0-1-amd64",
+         "date" : "2019-12-02T13:19:34.193136+00:00",
+         "machine" : "x86_64",
+         "nodename" : "kloetzke",
+         "os-release" : "PRETTY_NAME=\"Debian GNU/Linux 10 (buster)\"\nNAME=...",
+         "release" : "4.19.0-6-amd64",
          "sysname" : "Linux",
-         "machine" : "x86_64"
+         "version" : "#1 SMP Debian 4.19.67-2+deb10u2 (2019-11-11)"
       }
     }
 
@@ -259,6 +260,11 @@ found under the ``build`` key and contains the following fields:
 ``nodename``
     The host name.
 
+``os-release``
+    This optional field holds the content of ``/etc/os-release``, if existing.
+    If the file does not exist or cannot be read then this field will not be
+    present.
+
 ``release``
     The operating system release.
 
@@ -267,4 +273,11 @@ found under the ``build`` key and contains the following fields:
 
 ``version``
     The operating system version.
+
+.. attention::
+   The information of the ``machine``, ``release``, ``sysname``, ``version``
+   and possibly ``nodename`` fields show the host in case of container builds,
+   e.g. when running in a docker container. Be careful when relying on this
+   information. The ``os-release`` field, if present, is more reliable in this
+   case.
 
