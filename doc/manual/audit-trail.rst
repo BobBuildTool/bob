@@ -208,6 +208,7 @@ url
             },
             "dir" : "author.txt",
             "type" : "url",
+            "url" : "https://example.test/author.txt",
         }
 
 
