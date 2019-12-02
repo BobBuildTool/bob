@@ -28,6 +28,17 @@ Audit trail
   While it may be possible to restore the information from the recipes, Bob now
   puts the originating URL directly into the audit record.
 
+* Added ``/etc/os-release`` to build information
+
+  Basically all major distributions have adopted the systemd initiated unified
+  OS identification via ``/etc/os-release``. The content of the file is now
+  included in the "build" section of the audit trail as "os-release". This
+  information is especially valuable when you build in containers where the
+  ``uname`` information just shows on which host kernel the build is run but
+  not in which container image.
+
+See :ref:`audit-trail` for more details.
+
 Recipes
 ~~~~~~~
 
