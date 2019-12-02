@@ -207,7 +207,9 @@ Backwards incompatible changes
   commits explicitly is not supported by default by git servers and will
   typically be denied as follows:
 
-      error: Server does not allow request for unadvertised object
+  .. code-block:: none
+
+     error: Server does not allow request for unadvertised object
 
   Instead Bob clones all branches and tags by default and relies on the
   assumption that the required commit is reachable by any of them.
