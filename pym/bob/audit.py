@@ -73,7 +73,8 @@ class Artifact:
             'release'  : str,
             'version'  : str,
             'machine'  : str,
-            'date'     : str
+            'date'     : str,
+            schema.Optional('os-release') : str,
         },
         "env" : str,
         schema.Optional('metaEnv') : { schema.Optional(str) : str },
@@ -94,6 +95,20 @@ class Artifact:
         artifact = cls()
         artifact.load(data)
         return artifact
+
+    @classmethod
+    def __getOsRelease(cls):
+        try:
+            ret = cls.__osRelease
+        except AttributeError:
+            try:
+                with open("/etc/os-release") as f:
+                    ret = f.read()
+            except OSError:
+                ret = None
+            cls.__osRelease = ret
+
+        return ret
 
     def __calculate(self):
         if self.__id is not None: return
@@ -117,6 +132,9 @@ class Artifact:
             'machine'  : u.machine,
             'date'     : datetime.now(timezone.utc).isoformat(),
         }
+        osRelease = self.__getOsRelease()
+        if osRelease is not None:
+            self.__build['os-release'] = osRelease
         self.__env = ""
         self.__metaEnv = {}
         self.__scms = []
