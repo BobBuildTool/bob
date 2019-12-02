@@ -2644,7 +2644,7 @@ class RecipeSet:
         })
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
-        schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}$'),
+        schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}(rc[0-9]+)?(.dev[0-9]+)?$'),
         schema.Optional('plugins') : [str],
         schema.Optional('policies') : schema.Schema(
             {
