@@ -18,6 +18,16 @@ Installation
 New features
 ------------
 
+Audit trail
+~~~~~~~~~~~
+
+* Put original URL of URL-SCM into audit trail record.
+
+  The audit trail just recorded the hash sum and file name of URL-SCMs. The URL
+  where it was downloaded was only available through the referenced recipes.
+  While it may be possible to restore the information from the recipes, Bob now
+  puts the originating URL directly into the audit record.
+
 Recipes
 ~~~~~~~
 
