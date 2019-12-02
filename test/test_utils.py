@@ -7,8 +7,8 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
 import os, stat
 
-from bob.utils import joinScripts, removePath, emptyDirectory
-from bob.errors import BuildError
+from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion
+from bob.errors import BuildError, ParseError
 
 class TestJoinScripts(TestCase):
 
@@ -95,3 +95,27 @@ class TestEmpty(TestCase):
             self.assertRaises(BuildError, emptyDirectory, tmp)
             os.chmod(d, stat.S_IRWXU)
 
+class TestVersions(TestCase):
+    def testRegular(self):
+        self.assertTrue(compareVersion("0.1", "0.1.0") == 0)
+        self.assertTrue(compareVersion("0.2.0", "0.2") == 0)
+
+        self.assertTrue(compareVersion("0.2", "0.1.0") > 0)
+        self.assertTrue(compareVersion("0.2.1", "0.3") < 0)
+
+    def testRc(self):
+        self.assertTrue(compareVersion("0.1rc1", "0.1") < 0)
+        self.assertTrue(compareVersion("0.1.0rc1", "0.1") < 0)
+        self.assertTrue(compareVersion("0.2.0rc1", "0.2rc1") == 0)
+        self.assertTrue(compareVersion("0.2.0rc2", "0.2.0rc1") > 0)
+        self.assertTrue(compareVersion("0.4.0", "0.4rc4") > 0)
+
+    def testDev(self):
+        self.assertTrue(compareVersion("0.15", "0.15.0.dev4") < 0)
+        self.assertTrue(compareVersion("0.15.dev5", "0.15.0.dev4") > 0)
+        self.assertTrue(compareVersion("0.15.0rc1", "0.15.0rc1.dev4") < 0)
+
+    def testInvalid(self):
+        self.assertRaises(ParseError, compareVersion, "v0.15", "0.15")
+        self.assertRaises(ParseError, compareVersion, "0.15", "0.15a4")
+        self.assertRaises(ParseError, compareVersion, "0.15.devv4", "0.15")
