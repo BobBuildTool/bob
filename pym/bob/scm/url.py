@@ -183,7 +183,8 @@ fi
         return (self.__digestSha1 is not None) or (self.__digestSha256 is not None)
 
     def getAuditSpec(self):
-        return ("url", os.path.join(self.__dir, self.__fn), {})
+        return ("url", os.path.join(self.__dir, self.__fn),
+                {"url" : self.__url})
 
     def hasLiveBuildId(self):
         return self.isDeterministic()
@@ -216,19 +217,22 @@ class UrlAudit(ScmAudit):
         'digest' : {
             'algorithm' : 'sha1',
             'value' : str
-        }
+        },
+        schema.Optional('url') : str, # Added in Bob 0.16
     })
 
     def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         self.__hash = asHexStr(hashFile(os.path.join(workspace, dir)))
+        self.__url = extra.get("url")
 
     def _load(self, data):
         self.__dir = data["dir"]
         self.__hash = data["digest"]["value"]
+        self.__url = data.get("url")
 
     def dump(self):
-        return {
+        ret = {
             "type" : "url",
             "dir" : self.__dir,
             "digest" : {
@@ -236,3 +240,7 @@ class UrlAudit(ScmAudit):
                 "value" : self.__hash
             }
         }
+        if self.__url is not None:
+            ret["url"] = self.__url
+
+        return ret
