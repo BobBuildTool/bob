@@ -490,9 +490,9 @@ esac
             for scm in step.getScmList():
                 auditSpec = scm.getAuditSpec()
                 if auditSpec is not None:
-                    (typ, dir) = auditSpec
+                    (typ, dir, extra) = auditSpec
                     try:
-                        audit.addScm(typ, step.getWorkspacePath(), dir)
+                        audit.addScm(typ, step.getWorkspacePath(), dir, extra)
                     except BobError as e:
                         if executed: raise
                         stepMessage(step, "AUDIT", "WARNING: cannot audit SCM: {} ({})"

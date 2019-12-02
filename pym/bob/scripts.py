@@ -273,7 +273,8 @@ def auditEngine():
     parser.add_argument("-E", dest="metaEnv", action="append", default=[], nargs=2)
     parser.add_argument("--recipes")
     parser.add_argument("--sandbox")
-    parser.add_argument("--scm", action="append", default=[], nargs=3)
+    parser.add_argument("--scm", action="append", default=[], nargs=3) # legacy Bob <= 0.15
+    parser.add_argument("--scmEx", action="append", default=[], nargs=4)
     parser.add_argument("--tool", action="append", default=[], nargs=2)
     parser.add_argument("variantID")
     parser.add_argument("buildID")
@@ -292,7 +293,9 @@ def auditEngine():
         if args.env is not None: gen.setEnv(args.env)
         for (name, value) in args.metaEnv: gen.addMetaEnv(name, value)
         for (name, value) in args.defines: gen.addDefine(name, value)
-        for (name, workspace, dir) in args.scm: gen.addScm(name, workspace, dir)
+        for (name, workspace, dir) in args.scm: gen.addScm(name, workspace, dir, {})
+        for (name, workspace, dir, extra) in args.scmEx:
+            gen.addScm(name, workspace, dir, json.loads(extra))
         for (name, audit) in args.tool: gen.addTool(name, audit)
         try:
             if args.recipes is not None: gen.setRecipesData(json.loads(args.recipes))

@@ -351,7 +351,7 @@ class GitScm(Scm):
         return status
 
     def getAuditSpec(self):
-        return ("git", self.__dir)
+        return ("git", self.__dir, {})
 
     def hasLiveBuildId(self):
         return True
@@ -443,7 +443,7 @@ class GitAudit(ScmAudit):
         'dirty' : bool
     })
 
-    def _scanDir(self, workspace, dir):
+    def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         dir = os.path.join(workspace, dir)
         try:

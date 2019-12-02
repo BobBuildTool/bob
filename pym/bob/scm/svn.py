@@ -157,7 +157,7 @@ fi
         return status
 
     def getAuditSpec(self):
-        return ("svn", self.__dir)
+        return ("svn", self.__dir, {})
 
 
 class SvnAudit(ScmAudit):
@@ -174,7 +174,7 @@ class SvnAudit(ScmAudit):
         }
     })
 
-    def _scanDir(self, workspace, dir):
+    def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         try:
             info = ElementTree.fromstring(subprocess.check_output(

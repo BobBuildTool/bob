@@ -450,8 +450,9 @@ class JenkinsJob:
             for scm in step.getScmList():
                 auditSpec = scm.getAuditSpec()
                 if auditSpec is not None:
-                    (typ, dir) = auditSpec
-                    cmd.extend(["--scm", typ, step.getWorkspacePath(), quote(dir)])
+                    (typ, dir, extra) = auditSpec
+                    cmd.extend(["--scmEx", typ, step.getWorkspacePath(), quote(dir),
+                                quote(json.dumps(extra, sort_keys=True))])
         for (name, tool) in sorted(step.getTools().items()):
             cmd.extend(["--tool", name, JenkinsJob._auditName(tool.getStep())])
         sandbox = step.getSandbox()

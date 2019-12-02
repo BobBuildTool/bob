@@ -183,7 +183,7 @@ fi
         return (self.__digestSha1 is not None) or (self.__digestSha256 is not None)
 
     def getAuditSpec(self):
-        return ("url", os.path.join(self.__dir, self.__fn))
+        return ("url", os.path.join(self.__dir, self.__fn), {})
 
     def hasLiveBuildId(self):
         return self.isDeterministic()
@@ -219,7 +219,7 @@ class UrlAudit(ScmAudit):
         }
     })
 
-    def _scanDir(self, workspace, dir):
+    def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         self.__hash = asHexStr(hashFile(os.path.join(workspace, dir)))
 

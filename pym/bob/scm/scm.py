@@ -272,10 +272,11 @@ class Scm(metaclass=ABCMeta):
     def getAuditSpec(self):
         """Return spec for audit trail generation.
 
-        Must return a tuple of two elements. The first element is a string that
+        Must return a tuple of three elements. The first element is a string that
         is used to find the right Audit class (see bob.audit.Artifact.SCMS).
         The second element is a relative directory in the workspace that must
-        be audited.
+        be audited. The third element is a dict with additional meta information
+        that is passed to the audit scanner.
 
         If the SCM does not support audit trail generation then None shall be
         returned.
@@ -300,10 +301,10 @@ class Scm(metaclass=ABCMeta):
 
 class ScmAudit(metaclass=ABCMeta):
     @classmethod
-    def fromDir(cls, workspace, dir):
+    def fromDir(cls, workspace, dir, extra):
         """Create SCM audit record by scanning a directory"""
         scm = cls()
-        scm._scanDir(workspace, dir)
+        scm._scanDir(workspace, dir, extra)
         return scm
 
     @classmethod

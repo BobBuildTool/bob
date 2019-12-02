@@ -14,9 +14,9 @@ import schema
 
 def auditFromDir(dir):
     if os.path.isdir(os.path.join(dir, ".git")):
-        return GitAudit.fromDir(dir, ".")
+        return GitAudit.fromDir(dir, ".", {})
     elif os.path.isdir(os.path.join(dir, ".svn")):
-        return SvnAudit.fromDir(dir, ".")
+        return SvnAudit.fromDir(dir, ".", {})
     else:
         return None
 
