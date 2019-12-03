@@ -5,14 +5,71 @@ set -o pipefail
 usage()
 {
 	cat <<EOF
-usage: ${0##*/} [-h] [-u PATTERN] [-b PATTERN] [-c]
+usage: ${0##*/} [-h] [-b PATTERN] [-c] [-j JOBS] [-n] [-u PATTERN]
 
 optional arguments:
   -h              show this help message and exit
-  -u PATTERN      Only execute unit tests matching PATTERN
   -b PATTERN      Only execute black box tests matching PATTERN
   -c              Create HTML coverage report
+  -j JOBS         Run JOBS tests in parallel (requires GNU parallel)
+  -n              Do not record coverage even if python3-coverage is found.
+  -u PATTERN      Only execute unit tests matching PATTERN
 EOF
+}
+
+run_unit_test()
+{
+	local ret LOGFILE=$(mktemp)
+
+	echo -n "   ${1%%.py} ... "
+	{
+		echo "======================================================================"
+		echo "Test: $1"
+	} > "$LOGFILE"
+	if $RUN_PYTHON3 -m unittest -v $1 >>"$LOGFILE" 2>&1 ; then
+		echo "ok"
+		ret=0
+	else
+		echo "FAIL (log follows...)"
+		ret=1
+		cat -n "$LOGFILE"
+	fi
+
+	cat "$LOGFILE" >> log.txt
+	rm "$LOGFILE"
+	return $ret
+}
+
+run_blackbox_test()
+{
+	local ret LOGFILE=$(mktemp)
+
+	echo -n "   $1 ... "
+	{
+		echo "======================================================================"
+		echo "Test: $1"
+	} > "$LOGFILE"
+	(
+		set -o pipefail
+		set -ex
+		cd "$1"
+		. run.sh 2>&1 | tee log.txt
+	) >>"$LOGFILE" 2>&1
+
+	ret=$?
+	if [[ $ret -eq 240 ]] ; then
+		echo "skipped"
+		ret=0
+	elif [[ $ret -ne 0 ]] ; then
+		echo "FAIL (exit $ret, log follows...)"
+		cat -n "$LOGFILE"
+	else
+		echo "ok"
+	fi
+
+	cat "$LOGFILE" >> log.txt
+	rm "$LOGFILE"
+	return $ret
 }
 
 # move to root directory
@@ -23,6 +80,7 @@ COVERAGE=
 FAILED=0
 RUN_TEST_DIRS=( )
 GEN_HTML=0
+RUN_JOBS=
 unset RUN_UNITTEST_PAT
 unset RUN_BLACKBOX_PAT
 
@@ -36,28 +94,35 @@ fi
 if [[ -n $COVERAGE ]] ; then
     # make sure coverage is installed in the current environment
     if python3 -c "import coverage" 2>/dev/null; then
-        RUN="$COVERAGE run --source $PWD/pym  --parallel-mode"
+        RUN_PYTHON3="$COVERAGE run --source $PWD/pym  --parallel-mode"
     else
-        RUN=python3
+        RUN_PYTHON3=python3
         COVERAGE=
         echo "coverage3 is installed but not in the current environment" >&2
     fi
 else
-	RUN=python3
+	RUN_PYTHON3=python3
 fi
 
 # option processing
-while getopts ":hcb:u:" opt; do
+while getopts ":hb:cj:nu:" opt; do
 	case $opt in
 		h)
 			usage
 			exit 0
 			;;
+		b)
+			RUN_BLACKBOX_PAT="$OPTARG"
+			;;
 		c)
 			GEN_HTML=1
 			;;
-		b)
-			RUN_BLACKBOX_PAT="$OPTARG"
+		j)
+			RUN_JOBS="$OPTARG"
+			;;
+		n)
+			RUN_PYTHON3=python3
+			COVERAGE=
 			;;
 		u)
 			RUN_UNITTEST_PAT="$OPTARG"
@@ -92,55 +157,50 @@ pushd test > /dev/null
 # run unit tests
 if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 	echo "Run unit tests..."
+	RUN_TEST_NAMES=( )
 	for i in test_*.py ; do
 		if [[ "${i%%.py}" == $RUN_UNITTEST_PAT ]] ; then
-			echo -n "   ${i%%.py} ... "
-			{
-				echo "======================================================================"
-				echo "Test: $i"
-			} >> log.txt
-			if $RUN -m unittest -v $i 2>&1 | tee log-cmd.txt >> log.txt ; then
-				echo "ok"
-			else
-				echo "FAIL (log follows...)"
-				: $((FAILED++))
-				cat -n log-cmd.txt
-			fi
+			RUN_TEST_NAMES+=( "$i" )
 		fi
 	done
+
+	if type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
+		export -f run_unit_test
+		export RUN_PYTHON3
+		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_unit_test ::: "${RUN_TEST_NAMES[@]}"
+		: $((FAILED+=$?))
+	else
+		for i in "${RUN_TEST_NAMES[@]}" ; do
+			if ! run_unit_test "$i" ; then
+				: $((FAILED++))
+			fi
+		done
+	fi
 fi
 
 # run blackbox tests
 if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 	echo "Run black box tests..."
+	RUN_TEST_NAMES=( )
 	for i in * ; do
 		if [[ -d $i && -e "$i/run.sh" && "$i" == $RUN_BLACKBOX_PAT ]] ; then
 			RUN_TEST_DIRS+=( "test/$i" )
-
-			echo -n "   $i ... "
-			{
-				echo "======================================================================"
-				echo "Test: $i"
-			} >> log.txt
-			(
-				set -o pipefail
-				set -ex
-				cd "$i"
-				. run.sh 2>&1 | tee log.txt
-			) 2>&1 | tee log-cmd.txt >> log.txt
-
-			ret=$?
-			if [[ $ret -eq 240 ]] ; then
-				echo "skipped"
-			elif [[ $ret -ne 0 ]] ; then
-				echo "FAIL (exit $ret, log follows...)"
-				: $((FAILED++))
-				cat -n log-cmd.txt
-			else
-				echo "ok"
-			fi
+			RUN_TEST_NAMES+=( "$i" )
 		fi
 	done
+
+	if type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
+		export -f run_blackbox_test
+		export RUN_PYTHON3
+		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_blackbox_test ::: "${RUN_TEST_NAMES[@]}"
+		: $((FAILED+=$?))
+	else
+		for i in "${RUN_TEST_NAMES[@]}" ; do
+			if ! run_blackbox_test "$i" ; then
+				: $((FAILED++))
+			fi
+		done
+	fi
 fi
 
 popd > /dev/null
@@ -153,4 +213,7 @@ if [[ -n $COVERAGE ]]; then
 	fi
 fi
 
+if [[ $FAILED -gt 127 ]] ; then
+   FAILED=127
+fi
 exit $FAILED

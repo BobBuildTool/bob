@@ -92,12 +92,12 @@ class StoppableHttpServer (HTTPServer):
         self.transmitBuf[request] = data
 
 class JenkinsMock():
-    def start_mock_server(self, port):
-        self.mock_server = StoppableHttpServer(('localhost', port), MockServerRequestHandler)
+    def start_mock_server(self):
+        self.mock_server = StoppableHttpServer(('localhost', 0), MockServerRequestHandler)
         self.mock_server_thread = Thread(target=self.mock_server.serve_forever)
         self.mock_server_thread.start()
 
-    def stop_mock_server(self, port):
+    def stop_mock_server(self):
         self.mock_server.shutdown()
         self.mock_server_thread.join()
         self.mock_server.server_close()
@@ -107,3 +107,6 @@ class JenkinsMock():
 
     def getServerData(self):
         return self.mock_server.getJenkinsData()
+
+    def getServerPort(self):
+        return self.mock_server.server_address[1]

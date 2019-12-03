@@ -22,7 +22,7 @@ class TestJenkinsPush(TestCase):
         doJenkins(arg.split(' '), self.cwd)
 
     def tearDown(self):
-        self.jenkinsMock.stop_mock_server(8080)
+        self.jenkinsMock.stop_mock_server()
         finalize()
         os.chdir(self.oldCwd)
         removePath(self.cwd)
@@ -30,7 +30,7 @@ class TestJenkinsPush(TestCase):
     def setUp(self):
         self.oldCwd = os.getcwd()
         self.jenkinsMock = JenkinsMock()
-        self.jenkinsMock.start_mock_server(8080)
+        self.jenkinsMock.start_mock_server()
         self.jenkinsMock.getServerData()
         self.cwd = tempfile.mkdtemp()
         os.chdir(self.cwd)
@@ -59,7 +59,8 @@ packageScript: |
             print(RECIPE, file=f)
 
         # do bob jenkins add
-        self.executeBobJenkinsCmd("add myTestJenkins http://localhost:8080 -r test")
+        self.executeBobJenkinsCmd("add myTestJenkins http://localhost:{} -r test"
+                                    .format(self.jenkinsMock.getServerPort()))
         # throw away server data (but there shouldn't by any...
         assert(len(self.jenkinsMock.getServerData()) == 0)
 
@@ -144,7 +145,8 @@ buildScript: |
            print(RECIPE_APP.format(SCRIPT='test2', DEPENDS='lib-c'), file=f)
 
         # do bob jenkins add
-        self.executeBobJenkinsCmd("add myTestJenkins http://localhost:8080 -r root")
+        self.executeBobJenkinsCmd("add myTestJenkins http://localhost:{} -r root"
+                                    .format(self.jenkinsMock.getServerPort()))
 
         # throw away server data (but there shouldn't by any...
         assert(len(self.jenkinsMock.getServerData()) == 0)
