@@ -5,13 +5,13 @@ set -o pipefail
 usage()
 {
 	cat <<EOF
-usage: ${0##*/} [-h] [-u PATTERN] [-b PATTERN] [-c]
+usage: ${0##*/} [-h] [-b PATTERN] [-c] [-u PATTERN]
 
 optional arguments:
   -h              show this help message and exit
-  -u PATTERN      Only execute unit tests matching PATTERN
   -b PATTERN      Only execute black box tests matching PATTERN
   -c              Create HTML coverage report
+  -u PATTERN      Only execute unit tests matching PATTERN
 EOF
 }
 
@@ -47,17 +47,18 @@ else
 fi
 
 # option processing
-while getopts ":hcb:u:" opt; do
+while getopts ":hb:cu:" opt; do
 	case $opt in
 		h)
 			usage
 			exit 0
 			;;
+		b)
+			RUN_BLACKBOX_PAT="$OPTARG"
+			;;
 		c)
 			GEN_HTML=1
 			;;
-		b)
-			RUN_BLACKBOX_PAT="$OPTARG"
 			;;
 		u)
 			RUN_UNITTEST_PAT="$OPTARG"
