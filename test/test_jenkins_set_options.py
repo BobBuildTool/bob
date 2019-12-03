@@ -20,7 +20,7 @@ class TestJenkinsSetOptions(TestCase):
         doJenkins(arg.split(' '), self.cwd)
 
     def tearDown(self):
-        self.jenkinsMock.stop_mock_server(8080)
+        self.jenkinsMock.stop_mock_server()
         finalize()
         os.chdir(self.oldCwd)
         removePath(self.cwd)
@@ -43,7 +43,7 @@ packageScript: |
         self.oldCwd = os.getcwd()
         self.cwd = tempfile.mkdtemp()
         self.jenkinsMock = JenkinsMock()
-        self.jenkinsMock.start_mock_server(8080)
+        self.jenkinsMock.start_mock_server()
         self.jenkinsMock.getServerData()
         os.chdir(self.cwd)
         os.mkdir("recipes")
@@ -51,7 +51,8 @@ packageScript: |
             print(RECIPE, file=f)
 
         # do bob jenkins add
-        self.executeBobJenkinsCmd("add myTestJenkins http://localhost:8080 -r test")
+        self.executeBobJenkinsCmd("add myTestJenkins http://localhost:{} -r test"
+                                    .format(self.jenkinsMock.getServerPort()))
         self.executeBobJenkinsCmd("push -q myTestJenkins")
         self.jenkinsMock.getServerData()
 
@@ -111,7 +112,8 @@ packageScript: |
         with open(os.path.join("recipes", "dependency-two.yaml"), "w") as f:
             print(DEPENDENCYTWO, file=f)
 
-        self.executeBobJenkinsCmd("add myTestJenkinsComplex http://localhost:8080 -r root")
+        self.executeBobJenkinsCmd("add myTestJenkinsComplex http://localhost:{} -r root"
+                                    .format(self.jenkinsMock.getServerPort()))
 
     def testSetNode(self):
         self.executeBobJenkinsCmd("set-options -n testSlave myTestJenkins")
@@ -148,16 +150,17 @@ archive:
 
     def testSetURL(self):
         self.newJenkinsMock = JenkinsMock()
-        self.newJenkinsMock.start_mock_server(8081)
+        self.newJenkinsMock.start_mock_server()
 
-        self.executeBobJenkinsCmd("set-url myTestJenkins http://localhost:8081")
+        self.executeBobJenkinsCmd("set-url myTestJenkins http://localhost:{}"
+                                    .format(self.newJenkinsMock.getServerPort()))
         self.executeBobJenkinsCmd("push -q myTestJenkins")
 
         send = self.jenkinsMock.getServerData()
         sendNew = self.newJenkinsMock.getServerData()
         assert(len(send) == 0)
         assert(len(sendNew) != 0)
-        self.newJenkinsMock.stop_mock_server(8081)
+        self.newJenkinsMock.stop_mock_server()
 
     def testSetGitShallowClone(self):
         self.executeBobJenkinsCmd("set-options -o scm.git.shallow=42 myTestJenkins")
