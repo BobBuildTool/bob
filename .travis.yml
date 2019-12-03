@@ -8,6 +8,7 @@ addons:
     apt:
         packages:
             - cvs
+            - parallel
 
 install:
     - pip install PyYAML
