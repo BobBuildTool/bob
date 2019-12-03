@@ -36,14 +36,14 @@ fi
 if [[ -n $COVERAGE ]] ; then
     # make sure coverage is installed in the current environment
     if python3 -c "import coverage" 2>/dev/null; then
-        RUN="$COVERAGE run --source $PWD/pym  --parallel-mode"
+        RUN_PYTHON3="$COVERAGE run --source $PWD/pym  --parallel-mode"
     else
-        RUN=python3
+        RUN_PYTHON3=python3
         COVERAGE=
         echo "coverage3 is installed but not in the current environment" >&2
     fi
 else
-	RUN=python3
+	RUN_PYTHON3=python3
 fi
 
 # option processing
