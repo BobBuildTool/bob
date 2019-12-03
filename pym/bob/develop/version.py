@@ -29,9 +29,18 @@ def getVersion():
             pass
 
     if version:
-        if re.match(r"^v[0-9]+(\.[0-9]+){2}(-.*)?$", version):
-            # strip white spaces and leading 'v' from tag name
-            version = version.strip().lstrip("v")
+        m = re.match(r"^v(?P<version>[0-9]+(?:\.[0-9]+){2})(?P<rc>-rc[0-9]+)?(?P<dist>-[0-9]+-g[a-f0-9]+)?(?P<dirty>-dirty)?$", version)
+        if m is not None:
+            # Convert to PEP 440 conforming version number
+            local = []
+            version = m.group("version")
+            if m.group("rc"): version += m.group("rc")[1:]
+            if m.group("dist"):
+                dist,commit = m.group("dist")[1:].split("-")
+                version += ".dev" + dist
+                local.append(commit)
+            if m.group("dirty"): local.append("dirty")
+            if local: version += "+" + ".".join(local)
         else:
             import sys
             print("Warning: inferred version of Bob does not match schema:",
@@ -39,8 +48,8 @@ def getVersion():
             version = ""
 
     if not version:
-        # Last fallback. See http://semver.org/ and adjust accordingly.
-        version = "0.16.0-unknown"
+        # Last fallback. See PEP 440 and adjust accordingly.
+        version = "0.16+unknown"
 
     return version
 

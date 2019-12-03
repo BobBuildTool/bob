@@ -1427,7 +1427,15 @@ of the actual version number (e.g. "0.1.42"). Bob's version number is specified
 according to `Semantic Versioning`_. Therefore it is usually only needed to
 specify the major and minor version.
 
+The version string has to be compliant to Python `PEP 440`_. It is allowed to
+specify pre-release versions (e.g. ``0.16.0rc1``) and even development versions
+(e.g. ``0.15.1.dev42``). A version without pre-release suffix is considered
+more recent than a version with a pre-release suffix. The development release
+number is only relevant if the main version and the pre-release versions are
+equal.
+
 .. _Semantic Versioning: http://semver.org/
+.. _PEP 440: https://www.python.org/dev/peps/pep-0440/
 
 .. _configuration-config-layers:
 

@@ -80,6 +80,12 @@ Recipes
   unneeded execution of identical fingerprint scripts. See the policy and the
   keyword for more details.
 
+* Added support for pre-release and development version numbers in
+  :ref:`configuration-bobMinimumVersion`.
+
+  Projects can now reliably require pre-release or development versions and do
+  not have to wait until the next release of Bob is published.
+
 User configuration (default.yaml)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

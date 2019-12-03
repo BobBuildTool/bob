@@ -10,6 +10,7 @@ import collections
 import hashlib
 import logging
 import os
+import re
 import shutil
 import stat
 import struct
@@ -76,11 +77,8 @@ def updateDicRecursive(d, u):
             d[k] = u[k]
     return d
 
-# Compare versions. Not strictly according to semver but enough for us.
+# Compare PEP 440 versions. Not strictly according to spec but enough for us.
 def compareVersion(origLeft, origRight):
-    # Strip any suffix
-    left = origLeft.partition("-")[0]
-    right = origRight.partition("-")[0]
 
     def cmp(l, r):
         if (len(l) == 0) and (len(r) == 0): return 0
@@ -94,10 +92,36 @@ def compareVersion(origLeft, origRight):
             return cmp(l[1:], r[1:])
 
     try:
-        return cmp(left.split("."), right.split("."))
-    except ValueError:
+        r = re.compile(r"^(?P<version>[0-9]+(?:\.[0-9]+){0,2})(?:rc(?P<rc>[0-9]+))?(?:.dev(?P<dist>[0-9]+))?(?:\+.*)?$")
+        left = r.match(origLeft).groupdict()
+        right = r.match(origRight).groupdict()
+
+        # Compare version number. If an element is missing it is assumed to be 0.
+        ret = cmp(left["version"].split("."), right["version"].split("."))
+
+        # If both versions are equal than the higher release candidate wins. A
+        # version without release candidate is considered more higher.
+        if ret == 0:
+            lrc = 9999 if  left["rc"] is None else int( left["rc"])
+            rrc = 9999 if right["rc"] is None else int(right["rc"])
+            if lrc < rrc:
+                ret = -1
+            elif lrc > rrc:
+                ret = 1
+
+        # If we still have a tie then the smallest distance wins.
+        if ret == 0:
+            ldist = 0 if  left["dist"] is None else int( left["dist"])
+            rdist = 0 if right["dist"] is None else int(right["dist"])
+            if ldist < rdist:
+                ret = -1
+            elif ldist > rdist:
+                ret = 1
+
+    except Exception:
         raise ParseError("Cannot compare version numbers ('{}' vs. '{}'): bad format!"
                             .format(origLeft, origRight))
+    return ret
 
 def isWindows():
     """Check if we run on a windows platform.

@@ -2644,7 +2644,7 @@ class RecipeSet:
         })
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
-        schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}$'),
+        schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}(rc[0-9]+)?(.dev[0-9]+)?$'),
         schema.Optional('plugins') : [str],
         schema.Optional('policies') : schema.Schema(
             {
@@ -2741,12 +2741,12 @@ class RecipeSet:
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#securessl for more information.")
             ),
             'sandboxFingerprints' : (
-                "0.16",
+                "0.16rc1",
                 InfoOnce("sandboxFingerprints policy not set. Sandbox builds of fingerprinted packages are not shared with regular builds.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxfingerprints for more information.")
             ),
             'fingerprintVars' : (
-                "0.16",
+                "0.16rc1",
                 InfoOnce("fingerprintVars policy not set. Fingerprint scripts may be run more often than needed.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#fingerprintvars for more information.")
             ),
