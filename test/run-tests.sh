@@ -5,12 +5,13 @@ set -o pipefail
 usage()
 {
 	cat <<EOF
-usage: ${0##*/} [-h] [-b PATTERN] [-c] [-u PATTERN]
+usage: ${0##*/} [-h] [-b PATTERN] [-c] [-n] [-u PATTERN]
 
 optional arguments:
   -h              show this help message and exit
   -b PATTERN      Only execute black box tests matching PATTERN
   -c              Create HTML coverage report
+  -n              Do not record coverage even if python3-coverage is found.
   -u PATTERN      Only execute unit tests matching PATTERN
 EOF
 }
@@ -47,7 +48,7 @@ else
 fi
 
 # option processing
-while getopts ":hb:cu:" opt; do
+while getopts ":hb:cnu:" opt; do
 	case $opt in
 		h)
 			usage
@@ -59,6 +60,9 @@ while getopts ":hb:cu:" opt; do
 		c)
 			GEN_HTML=1
 			;;
+		n)
+			RUN_PYTHON3=python3
+			COVERAGE=
 			;;
 		u)
 			RUN_UNITTEST_PAT="$OPTARG"
