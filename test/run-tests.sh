@@ -16,6 +16,61 @@ optional arguments:
 EOF
 }
 
+run_unit_test()
+{
+	local ret LOGFILE=$(mktemp)
+
+	echo -n "   ${1%%.py} ... "
+	{
+		echo "======================================================================"
+		echo "Test: $1"
+	} > "$LOGFILE"
+	if $RUN_PYTHON3 -m unittest -v $1 >>"$LOGFILE" 2>&1 ; then
+		echo "ok"
+		ret=0
+	else
+		echo "FAIL (log follows...)"
+		ret=1
+		cat -n "$LOGFILE"
+	fi
+
+	cat "$LOGFILE" >> log.txt
+	rm "$LOGFILE"
+	return $ret
+}
+
+run_blackbox_test()
+{
+	local ret LOGFILE=$(mktemp)
+
+	echo -n "   $1 ... "
+	{
+		echo "======================================================================"
+		echo "Test: $1"
+	} > "$LOGFILE"
+	(
+		set -o pipefail
+		set -ex
+		cd "$1"
+		. run.sh 2>&1 | tee log.txt
+	) >>"$LOGFILE" 2>&1
+
+	ret=$?
+	if [[ $ret -eq 240 ]] ; then
+		echo "skipped"
+		ret=0
+	elif [[ $ret -ne 0 ]] ; then
+		echo "FAIL (exit $ret, log follows...)"
+		cat -n "$LOGFILE"
+	else
+		echo "ok"
+	fi
+
+	cat "$LOGFILE" >> log.txt
+	rm "$LOGFILE"
+	return $ret
+}
+
 # move to root directory
 cd "${0%/*}/.."
 . ./test/test-lib.sh
@@ -97,20 +152,16 @@ pushd test > /dev/null
 # run unit tests
 if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 	echo "Run unit tests..."
+	RUN_TEST_NAMES=( )
 	for i in test_*.py ; do
 		if [[ "${i%%.py}" == $RUN_UNITTEST_PAT ]] ; then
-			echo -n "   ${i%%.py} ... "
-			{
-				echo "======================================================================"
-				echo "Test: $i"
-			} >> log.txt
-			if $RUN -m unittest -v $i 2>&1 | tee log-cmd.txt >> log.txt ; then
-				echo "ok"
-			else
-				echo "FAIL (log follows...)"
-				: $((FAILED++))
-				cat -n log-cmd.txt
-			fi
+			RUN_TEST_NAMES+=( "$i" )
+		fi
+	done
+
+	for i in "${RUN_TEST_NAMES[@]}" ; do
+		if ! run_unit_test "$i" ; then
+			: $((FAILED++))
 		fi
 	done
 fi
@@ -118,32 +169,17 @@ fi
 # run blackbox tests
 if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 	echo "Run black box tests..."
+	RUN_TEST_NAMES=( )
 	for i in * ; do
 		if [[ -d $i && -e "$i/run.sh" && "$i" == $RUN_BLACKBOX_PAT ]] ; then
 			RUN_TEST_DIRS+=( "test/$i" )
+			RUN_TEST_NAMES+=( "$i" )
+		fi
+	done
 
-			echo -n "   $i ... "
-			{
-				echo "======================================================================"
-				echo "Test: $i"
-			} >> log.txt
-			(
-				set -o pipefail
-				set -ex
-				cd "$i"
-				. run.sh 2>&1 | tee log.txt
-			) 2>&1 | tee log-cmd.txt >> log.txt
-
-			ret=$?
-			if [[ $ret -eq 240 ]] ; then
-				echo "skipped"
-			elif [[ $ret -ne 0 ]] ; then
-				echo "FAIL (exit $ret, log follows...)"
-				: $((FAILED++))
-				cat -n log-cmd.txt
-			else
-				echo "ok"
-			fi
+	for i in "${RUN_TEST_NAMES[@]}" ; do
+		if ! run_blackbox_test "$i" ; then
+			: $((FAILED++))
 		fi
 	done
 fi
