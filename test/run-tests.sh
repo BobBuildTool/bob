@@ -5,12 +5,13 @@ set -o pipefail
 usage()
 {
 	cat <<EOF
-usage: ${0##*/} [-h] [-b PATTERN] [-c] [-n] [-u PATTERN]
+usage: ${0##*/} [-h] [-b PATTERN] [-c] [-j JOBS] [-n] [-u PATTERN]
 
 optional arguments:
   -h              show this help message and exit
   -b PATTERN      Only execute black box tests matching PATTERN
   -c              Create HTML coverage report
+  -j JOBS         Run JOBS tests in parallel (requires GNU parallel)
   -n              Do not record coverage even if python3-coverage is found.
   -u PATTERN      Only execute unit tests matching PATTERN
 EOF
@@ -79,6 +80,7 @@ COVERAGE=
 FAILED=0
 RUN_TEST_DIRS=( )
 GEN_HTML=0
+RUN_JOBS=
 unset RUN_UNITTEST_PAT
 unset RUN_BLACKBOX_PAT
 
@@ -103,7 +105,7 @@ else
 fi
 
 # option processing
-while getopts ":hb:cnu:" opt; do
+while getopts ":hb:cj:nu:" opt; do
 	case $opt in
 		h)
 			usage
@@ -114,6 +116,9 @@ while getopts ":hb:cnu:" opt; do
 			;;
 		c)
 			GEN_HTML=1
+			;;
+		j)
+			RUN_JOBS="$OPTARG"
 			;;
 		n)
 			RUN_PYTHON3=python3
@@ -159,11 +164,18 @@ if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 		fi
 	done
 
-	for i in "${RUN_TEST_NAMES[@]}" ; do
-		if ! run_unit_test "$i" ; then
-			: $((FAILED++))
-		fi
-	done
+	if type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
+		export -f run_unit_test
+		export RUN_PYTHON3
+		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_unit_test ::: "${RUN_TEST_NAMES[@]}"
+		: $((FAILED+=$?))
+	else
+		for i in "${RUN_TEST_NAMES[@]}" ; do
+			if ! run_unit_test "$i" ; then
+				: $((FAILED++))
+			fi
+		done
+	fi
 fi
 
 # run blackbox tests
@@ -177,11 +189,18 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 		fi
 	done
 
-	for i in "${RUN_TEST_NAMES[@]}" ; do
-		if ! run_blackbox_test "$i" ; then
-			: $((FAILED++))
-		fi
-	done
+	if type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
+		export -f run_blackbox_test
+		export RUN_PYTHON3
+		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_blackbox_test ::: "${RUN_TEST_NAMES[@]}"
+		: $((FAILED+=$?))
+	else
+		for i in "${RUN_TEST_NAMES[@]}" ; do
+			if ! run_blackbox_test "$i" ; then
+				: $((FAILED++))
+			fi
+		done
+	fi
 fi
 
 popd > /dev/null
@@ -194,4 +213,7 @@ if [[ -n $COVERAGE ]]; then
 	fi
 fi
 
+if [[ $FAILED -gt 127 ]] ; then
+   FAILED=127
+fi
 exit $FAILED
