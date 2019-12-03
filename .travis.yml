@@ -9,6 +9,7 @@ addons:
         packages:
             - cvs
             - parallel
+            - eatmydata
 
 install:
     - pip install PyYAML
@@ -18,7 +19,7 @@ install:
     - pip install pyparsing
 
 script:
-    - ./test/run-tests.sh
+    - eatmydata ./test/run-tests.sh
 
 after_success:
     - codecov
