@@ -806,7 +806,7 @@ esac
 
         return task
 
-    def __createFingerprintTask(self, coro, trackingKey):
+    def __createFingerprintTask(self, coro, step, trackingKey):
         """Create a fingerprinting task identified uniquely by ``trackingKey``.
 
         The task will be counted in the global progress.
@@ -818,7 +818,7 @@ esac
         setProgress(self.__tasksDone, self.__tasksNum)
 
         task = asyncio.get_event_loop().create_task(self.__taskWrapper(coro,
-            trackingKey, self.__fingerprintTasks, count=True))
+            trackingKey, self.__fingerprintTasks, step=step, count=True))
         self.__fingerprintTasks[trackingKey] = task
 
         return task
@@ -1601,7 +1601,7 @@ esac
             if fingerprint is None:
                 fingerprintTask = self.__createFingerprintTask(
                     lambda: self.__calcFingerprintTask(step, sandbox, key, depth),
-                    key)
+                    step, key)
                 await self.__yieldJobWhile(asyncio.wait({fingerprintTask}), True)
                 fingerprint = fingerprintTask.result()
         else:
