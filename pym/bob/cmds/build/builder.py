@@ -1702,7 +1702,9 @@ esac
                     pass
 
         ret = proc.returncode
-        if ret != 0:
+        if ret == -int(signal.SIGINT):
+            raise BuildError("Fingerprint script interrupted by user")
+        elif ret != 0:
             help = "Script output: {}\nScript: {}".format(
                 stderr.decode(locale.getpreferredencoding(False), 'replace').strip(),
                 script)
