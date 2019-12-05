@@ -857,7 +857,7 @@ esac
         except CancelBuildException:
             raise
         except concurrent.futures.CancelledError:
-            pass
+            raise CancelBuildException
         except Exception as e:
             self.__buildErrors.append(e)
             raise CancelBuildException
