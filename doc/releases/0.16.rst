@@ -220,3 +220,27 @@ Backwards incompatible changes
   Instead Bob clones all branches and tags by default and relies on the
   assumption that the required commit is reachable by any of them.
 
+Known issues
+------------
+
+* Incorrect Jenkins shared artifacts may be used when policies are changed.
+
+  The Jenkins logic tracks packages that are marked as
+  :ref:`configuration-recipes-shared` by their Variant-Id. But if the Build-Id
+  of such an artifact changes it is not updated at the shared location. While
+  the build result will still be correct the created artifacts will not be
+  found by other builds because they have an incorrect Build-Id. This bug can
+  be triggered if one of the following policies are changed explicitly or
+  implicitly by increasing the :ref:`configuration-bobMinimumVersion`:
+
+  * :ref:`policies-sandboxInvariant`
+  * :ref:`policies-sandboxFingerprints`
+  * :ref:`policies-fingerprintVars`
+
+  Workaround: prune shared location on all Jenkins slaves when upgrading
+  recipes that change one of the above policies. The default shared location is
+  ``${JENKINS_HOME}/bob`` but it can be configured by the ``shared.dir``
+  :ref:`extended option <bob-jenkins-extended-options>`.
+
+  See `issue #287 <https://github.com/BobBuildTool/bob/issues/287>`_.
+
