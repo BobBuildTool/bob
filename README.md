@@ -11,6 +11,16 @@ still being nice to developers in agile environments.
 [![Build Status](https://travis-ci.org/BobBuildTool/bob.svg?branch=master)](https://travis-ci.org/BobBuildTool/bob)
 [![codecov.io](https://codecov.io/github/BobBuildTool/bob/coverage.svg?branch=master)](https://codecov.io/github/BobBuildTool/bob?branch=master)
 
+Installation
+============
+
+To install the latest release just do a:
+
+    $ python3 -m pip install BobBuildTool [--user]
+
+See the [installation instructions](https://bob-build-tool.readthedocs.io/en/latest/installation.html)
+for more information and other methods.
+
 Getting started
 ===============
 
