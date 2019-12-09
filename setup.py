@@ -79,7 +79,10 @@ class BuildDocStub:
 if sys.platform != 'win32':
     cmdclass['build_sphinx'] = BuildDocStub()
     build.sub_commands.append(('build_sphinx', None))
-    setup_requires.append('sphinx')
+    setup_requires.extend([
+        'sphinx',
+        'docutils<0.16' # https://github.com/sphinx-doc/sphinx/issues/6887
+    ])
     data_files.extend([
         ('share/man/man1', [
             'doc/_build/man/bob-archive.1',
