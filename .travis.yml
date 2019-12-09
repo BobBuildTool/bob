@@ -22,6 +22,22 @@ install:
 
 script:
     - eatmydata ./test/run-tests.sh
+    - python3 setup.py bdist_wheel --plat-name manylinux1_x86_64
 
 after_success:
     - codecov
+
+deploy:
+    provider: pypi
+    user: "__token__"
+    password:
+        secure: vJ//2MsvW2JqJNzD3IxJuTSd809Frd/GOweKYwYVQhK7okE2nP9exIkPHkK8vj18QzEeazh+bO3RmzszJQ5gbvuTwkrWNEVJIPyBkhG5tTstNeCONk4S1PGwYs6ZeWKugMDVdFloattiRGDyqkNRi/Y2w+tHlsHeGiuf0kVllXsK8bMwf7IG/IlLO6pwPUu4zkiy5GMhbM3Y6vxb2bLjFkHQq4CzAYf75N8hVZUrVD6MaPkXW7/EC2EIiI4uGNLJofjiKgP1NdbRA82/jHnIZTkjtlnxZvG+p1pbYwrcChulKJjTtQWfFQHt5atF7BNl4dHY6cPha/8NCqstXAy5GIYjYPRvWufvQ9v+n6cnfbs6cUue17plVJAPN1pPauW/9S2flBJ+yVTkRIp3tyI/CV4vofDwR3+EAHlNfWCmFT/NiUF6ugzKHrtHgTOc2ybxPruuBTnSDlRz83Q8ammxUAwdv4qw1btY3zB9FWorvq/PZGxec5+QnQWG5OAV6ZBtSe8ikAN6jcofBOBd90Gh911zn9HXSbBTYEox3HogKfw7yQGHRd1ZtUrdb/yRhZ0cjVSKTBXVtCNlC6pZxATyNbUiCUPS/KUvrrRgr5S3ZAeRJJwfEAiQ3HfGmOUGD+VY73XR+NUxhi5uI2zPdy6Vl+qLT559f+hI/qHHoEb9C4k=
+    on:
+        tags: true
+    skip_existing: true
+
+    # Do not add "bdist_wheel" to "distributions" because we have to set
+    # --plat-name explicitly. Instead we build it ourself in "script" and
+    # let it ride for free in the "sdist" upload...
+    skip_cleanup: true
+    distributions: "sdist"
