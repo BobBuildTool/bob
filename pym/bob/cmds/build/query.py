@@ -1,5 +1,5 @@
 # Bob build tool
-# Copyright (C) 2016-2018  TechniSat Digital GmbH
+# Copyright (C) 2016-2019, The BobBuildTool Contributors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -9,6 +9,7 @@ from ...utils import processDefines
 from string import Formatter
 import argparse
 import os
+import sys
 
 from .builder import LocalBuilder
 from .state import DevelopDirOracle
@@ -68,6 +69,7 @@ been executed or does not exist), the line is omitted.
         def __init__(self):
             self.packageText = ''
             self.showPackage = True
+            self.failedSteps = []
         def appendText(self, what):
             self.packageText += what
         def appendStep(self, step):
@@ -76,9 +78,19 @@ been executed or does not exist), the line is omitted.
                 self.packageText += dir
             else:
                 self.showPackage = False
+                self.failedSteps.append(step)
         def print(self):
             if (self.showPackage):
                 print(self.packageText)
+            else:
+                packageName = self.failedSteps[0].getPackage().getName()
+                if len(self.failedSteps) is 1:
+                    print("Directory for {{{}}} step of package {} not present.".format(
+                        self.failedSteps[0].getLabel(), packageName), file=sys.stderr)
+                else:
+                    labelList = ', '.join([step.getLabel() for step in self.failedSteps])
+                    print("Directories for {{{}}} steps of package {} not present.".format(
+                        labelList, packageName), file=sys.stderr)
 
     if args.dev:
         # Develop names are stable. All we need to do is to replicate build's algorithm,
@@ -95,11 +107,13 @@ been executed or does not exist), the line is omitted.
     packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
     if args.dev: developPersister.prime(packages)
 
+    matched = False
     # Loop through packages
     for p in args.packages:
         # Format this package.
         # Only show the package if all of the requested directory names are present
         for package in packages.queryPackagePath(p):
+            matched = True
             state = State()
             for (text, var, spec, conversion) in Formatter().parse(args.f):
                 state.appendText(text)
@@ -118,3 +132,6 @@ been executed or does not exist), the line is omitted.
 
             # Show
             state.print()
+
+    if not matched:
+        print("Your query matched no packages. Naptime!", file=sys.stderr)
