@@ -6,7 +6,7 @@
 from .errors import BuildError, ParseError
 from binascii import hexlify
 from tempfile import NamedTemporaryFile
-import collections
+import collections.abc
 import hashlib
 import logging
 import os
@@ -69,7 +69,7 @@ def emptyDirectory(path):
 # See: http://stackoverflow.com/questions/3232943
 def updateDicRecursive(d, u):
     for k, v in u.items():
-        if isinstance(v, collections.Mapping):
+        if isinstance(v, collections.abc.Mapping):
             d[k] = updateDicRecursive(d.get(k, {}), v)
         elif isinstance(v, list):
             d[k] = d.get(k, []) + v
