@@ -814,8 +814,13 @@ class CoreStep(CoreItem):
                       else self.variantId
         return ret
 
+    @property
+    @abstractmethod
+    def fingerprintMask(self):
+        pass
+
     def isFingerprinted(self):
-        return not self.isCheckoutStep() and self.corePackage.fingerprintMask != 0
+        return self.fingerprintMask != 0
 
 
 class Step:
@@ -1153,9 +1158,10 @@ class Step:
             return ""
 
         recipe = self.__package.getRecipe()
-        mask = self._coreStep.corePackage.fingerprintMask
+        mask = self._coreStep.fingerprintMask
+        tools = self.__package.getPackageStep().getTools()
         scriptsAndVars = chain(
-            ((t.fingerprintScript, t.fingerprintVars) for n,t in sorted(self.getTools().items())),
+            ((t.fingerprintScript, t.fingerprintVars) for n,t in sorted(tools.items())),
             zip(recipe.fingerprintScriptList, recipe.fingerprintVarsList))
         ret = []
         varSet = set()
@@ -1241,6 +1247,10 @@ class CoreCheckoutStep(CoreStep):
                     + [s.asDigestScript() for s in recipe.checkoutAsserts])
         else:
             return None
+
+    @property
+    def fingerprintMask(self):
+        return 0
 
 class CheckoutStep(Step):
     def getJenkinsXml(self, credentials, options):
@@ -1342,6 +1352,19 @@ class CoreBuildStep(CoreStep):
     def getDigestScript(self):
         return self.corePackage.recipe.buildDigestScript
 
+    @property
+    def fingerprintMask(self):
+        # Remove bits of all tools that are not used in buildStep
+        ret = self.corePackage.fingerprintMask
+        i = 1
+        ourToolKeys = self.corePackage.recipe.toolDepBuild
+        packageToolKeys = self.corePackage.recipe.toolDepPackage
+        for t in sorted(packageToolKeys):
+            if t not in ourToolKeys:
+                ret &= ~i
+            i <<= 1
+        return ret
+
 class BuildStep(Step):
 
     def hasNetAccess(self):
@@ -1378,6 +1401,10 @@ class CorePackageStep(CoreStep):
 
     def getDigestScript(self):
         return self.corePackage.recipe.packageDigestScript
+
+    @property
+    def fingerprintMask(self):
+        return self.corePackage.fingerprintMask
 
 class PackageStep(Step):
 
