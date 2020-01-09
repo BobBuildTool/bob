@@ -453,7 +453,7 @@ class AbstractTool:
             self.netAccess = spec.get('netAccess', False)
             self.environment = spec.get('environment', {})
             self.fingerprintScript = spec.get('fingerprintScript', "")
-            self.fingerprintIf = spec.get("fingerprintIf")
+            self.fingerprintIf = spec.get("fingerprintIf", None if self.fingerprintScript else False)
             self.fingerprintVars = set(spec.get("fingerprintVars", []))
 
     def prepare(self, coreStepRef, env):
