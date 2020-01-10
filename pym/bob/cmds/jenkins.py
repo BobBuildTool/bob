@@ -60,7 +60,7 @@ FINGERPRINT_SCRIPT_TEMPLATE = """\
 cd $BOB_CWD
 {SCRIPT}
 BOB_JENKINS_FINGERPRINT_SCRIPT
-{RELOC}) > {OUTPUT}
+) > {OUTPUT}
 """
 
 SHARED_GENERATION = '-1'
@@ -554,11 +554,6 @@ class JenkinsJob:
         ret = []
         fingerprint = self._fingerprintName(step)
         script = step._getFingerprintScript()
-        if step.isPackageStep() and not step.isRelocatable() and \
-           self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
-            reloc = "echo -n " + step.getExecPath() + "\n"
-        else:
-            reloc = ""
 
         envWhiteList = step.getPackage().getRecipe().getRecipeSet().envWhiteList()
         envWhiteList |= set(['PATH'])
@@ -610,8 +605,7 @@ class JenkinsJob:
         ret.append(FINGERPRINT_SCRIPT_TEMPLATE.format(
             SCRIPT=script, OUTPUT=quote(fingerprint),
             SETUP="\n    ".join(setup),
-            INVOKE="\n        ".join(wrapCommandArguments("env", invoke)),
-            RELOC=reloc))
+            INVOKE="\n        ".join(wrapCommandArguments("env", invoke))))
 
         if (step.getSandbox() is not None) and self.__archive.canUploadJenkins():
             scriptKey = asHexStr(hashlib.sha1(step._getFingerprintScript().encode('utf8')).digest())
@@ -627,6 +621,14 @@ class JenkinsJob:
                               SANDBOX=sandbox)))
             ret.append(self.__archive.uploadJenkinsFingerprint(step,
                 keyFile, fingerprint))
+
+        # an optional relocation information is not uploaded with the
+        # precomputed fingerprint
+        if step.isPackageStep() and not step.isRelocatable() and \
+           self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
+            ret.append("\n# non-relocatable package")
+            ret.append("\necho -n {} >> {}".format(step.getExecPath(),
+                quote(fingerprint)))
 
         return ret
 
