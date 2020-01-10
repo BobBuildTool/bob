@@ -1,0 +1,51 @@
+root: True
+
+# In this special setup the buildScript is not fingerprinted. Make sure that
+# the fingerprint script is only run once for the package script.
+# Because we know the implementation we make sure the adjacent tools are
+# handled coorectly and that no unwanted fingerprintScripts are executed.
+
+multiPackage:
+   "":
+      depends:
+         - name: root-tools
+           use: [tools]
+
+      environment:
+         CANARY: "canary"
+
+      buildTools: [b, c]
+      buildScript: |
+         if [[ ${CANARY:+true} ]] ; then
+            echo "CANARY must not be set" >&2
+            exit 1
+         fi
+
+      packageTools: [a, b, c]
+      packageVars: [CANARY]
+      packageScript: |
+         true
+
+   tools:
+      packageScript: |
+         mkdir -p a b c
+      provideTools:
+         a:
+            path: "a"
+            fingerprintVars: [CANARY]
+            fingerprintIf: True
+            fingerprintScript: |
+               declare -p > /tmp/vars.txt
+               echo $CANARY
+         b:
+            path: "b"
+            fingerprintIf: False
+            fingerprintScript: |
+               echo "must not run" >&2
+               exit 1
+         c:
+            path: "c"
+            fingerprintIf: False
+            fingerprintScript: |
+               echo "must not run" >&2
+               exit 1
