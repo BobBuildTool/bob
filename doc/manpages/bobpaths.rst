@@ -201,6 +201,7 @@ empty string, ``0`` and ``false`` (case insensitive) are treated as false. Any
 other string is converted to true.
 
 Location paths
+~~~~~~~~~~~~~~
     Relative location paths are evaluated with respect to the context package
     of the predicate expression. Absolute location paths are evaluated
     independent of that. If the location path yields an empty set of packages
@@ -213,7 +214,10 @@ Location paths
     matched by the location path". By this primitive arbitrary graph
     reachability relations may be expressed.
 
+.. _bobpaths_string_literals:
+
 String literals
+~~~~~~~~~~~~~~~
     Strings consist of a sequence of zero or more characters enclosed in double
     quotes (``"``). Strings are subject to the same
     :ref:`string substitution <configuration-principle-subst>` as in the
@@ -238,7 +242,10 @@ String literals
         "${ENABLED}"
         "$(match,${LICENSE},GPL)"
 
+.. _bobpaths_string_function_calls:
+
 String function calls
+~~~~~~~~~~~~~~~~~~~~~
     String functions may be called directly without relying on string
     substitution.  The general syntax is the funcion name, an opening
     parenthesis, zero or more arguments separated by comma and a closing
