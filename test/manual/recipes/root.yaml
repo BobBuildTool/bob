@@ -1,0 +1,4 @@
+root: True
+packageScript: |
+   echo stdout
+   echo stderr >&2
