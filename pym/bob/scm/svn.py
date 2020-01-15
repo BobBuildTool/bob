@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import BuildError
+from ..stringparser import IfExpression
 from ..utils import joinLines
 from .scm import Scm, ScmAudit, ScmTaint, ScmStatus
 from shlex import quote
@@ -19,7 +20,7 @@ class SvnScm(Scm):
         'scm' : 'svn',
         'url' : str,
         schema.Optional('dir') : str,
-        schema.Optional('if') : str,
+        schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('revision') : schema.Or(int, str),
         schema.Optional('sslVerify') : bool,
     })

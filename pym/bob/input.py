@@ -9,7 +9,7 @@ from .fingerprints import mangleFingerprints
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
 from .state import BobState
-from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS
+from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive, hashString
 from abc import ABCMeta, abstractmethod
@@ -2203,18 +2203,13 @@ class Recipe(object):
         depDiffSandbox = diffSandbox
         depDiffTools = diffTools.copy()
         thisDeps = {}
+
         for dep in self.__deps:
             env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
                 "__tools" : tools })
 
-            if dep.condition:
-                conditionsTrue = False
-                for cond in dep.condition:
-                    if not env.evaluate(cond, "dependency "+dep.recipe): break
-                else:
-                    conditionsTrue = True
-
-                if not conditionsTrue: continue
+            if dep.condition and not all(env.evaluate(cond, "dependency "+dep.recipe)
+                                                      for cond in dep.condition): continue
 
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
@@ -2356,7 +2351,8 @@ class Recipe(object):
                 doFingerprintMaybe |= mask
             elif fingerprintIf == True:
                 doFingerprint |= mask
-            elif isinstance(fingerprintIf, str) and env.evaluate(fingerprintIf, "fingerprintIf"):
+            elif (isinstance(fingerprintIf, str) or isinstance(fingerprintIf, str)) \
+                 and env.evaluate(fingerprintIf, "fingerprintIf"):
                 doFingerprint |= mask
             mask <<= 1
         if doFingerprint:
@@ -3160,7 +3156,7 @@ class RecipeSet:
             schema.Optional('use') : useClauses,
             schema.Optional('forward') : bool,
             schema.Optional('environment') : VarDefineValidator("depends::environment"),
-            schema.Optional('if') : str
+            schema.Optional('if') : schema.Or(str, IfExpression)
         }
         dependsClause = schema.Schema([
             schema.Or(
@@ -3211,7 +3207,7 @@ class RecipeSet:
                         schema.Optional('netAccess') : bool,
                         schema.Optional('environment') : VarDefineValidator("provideTools::environment"),
                         schema.Optional('fingerprintScript') : str,
-                        schema.Optional('fingerprintIf') : schema.Or(None, str, bool),
+                        schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
                         schema.Optional('fingerprintVars') : [ varNameUseSchema ],
                     })
                 )
@@ -3229,7 +3225,7 @@ class RecipeSet:
             schema.Optional('buildNetAccess') : bool,
             schema.Optional('packageNetAccess') : bool,
             schema.Optional('fingerprintScript') : str,
-            schema.Optional('fingerprintIf') : schema.Or(None, str, bool),
+            schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
         }
         for (name, prop) in self.__properties.items():
@@ -3349,8 +3345,12 @@ class RecipeSet:
             self.__sandboxFingerprints = self.getPolicy("sandboxFingerprints")
             return self.__sandboxFingerprints
 
-
 class YamlCache:
+    def __if_expression_constructor(loader, node):
+        expr = loader.construct_scalar(node)
+        return IfExpression(expr)
+
+    yaml.SafeLoader.add_constructor(u'!expr', __if_expression_constructor)
 
     def open(self):
         try:

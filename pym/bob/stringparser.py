@@ -5,9 +5,11 @@
 
 from .errors import ParseError
 from .tty import WarnOnce
+from .utils import infixBinaryOp
 from collections.abc import MutableMapping
 from types import MappingProxyType
 import fnmatch
+import pyparsing
 import re
 
 NAME_START = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz'
@@ -196,6 +198,165 @@ class StringParser:
 
         return self.funs[cmd](words, env=self.env, **self.funArgs)
 
+class IfExpression():
+    def __init__(self, expr):
+        self.__expr = expr
+
+    def getExpression(self):
+        return self.__expr
+
+class NotOperator():
+    def __init__(self, s, loc, toks):
+        assert len(toks) == 1, toks
+        toks = toks[0]
+        assert len(toks) == 2, toks
+        assert toks[0] == '!'
+        self.op = toks[1]
+
+    def __repr__(self):
+        return "NotOperator({})".format(self.op)
+
+    def evalExpression(self, env):
+        return not self.op.evalExpression(env)
+
+class BinaryBoolOperator():
+    def __init__(self, s, loc, toks):
+        self.left = toks[0]
+        self.right = toks[2]
+        self.opStr = op = toks[1]
+        if op == '&&':
+            self.op = lambda l, r: l & r
+        elif op == '||':
+            self.op = lambda l, r: l | r
+        else:
+            assert False, op
+
+    def __repr__(self):
+        return "BinaryBoolOperator({}, {}, {})".format(self.left, self.opStr, self.right)
+
+    def evalExpression(self, env):
+        return self.op(self.left.evalExpression(env),
+                       self.right.evalExpression(env))
+
+class StringLiteral():
+    def __init__(self, s, loc, toks, doSubst):
+        assert len(toks) == 1, toks
+        self.literal = toks[0]
+        self.subst = doSubst and any((c in self.literal) for c in '\\\"\'$')
+
+    def __repr__(self):
+        if self.subst:
+            return "StringLiteral(\"{}\")".format(self.literal)
+        else:
+            return "StringLiteral('{}')".format(self.literal)
+
+    def evalExpressionToString(self, env):
+        if self.subst:
+            return env.substitute(self.literal, self.literal, False)
+        else:
+            return self.literal
+
+    def evalExpression(self, env):
+        return isTrue(self.evalExpressionToString(env))
+
+class FunctionCall():
+    def __init__(self, s, loc, toks):
+        self.name = toks[0]
+        self.args = toks[1:]
+
+    def __repr__(self):
+        return "FunctionCall({}, {})".format(self.name,
+            ", ".join(repr(a) for a in self.args))
+
+    def evalExpression(self, env):
+        extra = env.funArgs
+        args = [ a.evalExpressionToString(env) for a in self.args ]
+        if self.name not in env.funs:
+            raise ParseError("Bad syntax: " + "Unknown string function: "\
+                    + self.name)
+        fun = env.funs[self.name]
+        return isTrue(fun(args, env=env, **extra))
+
+class BinaryStrOperator():
+    def __init__(self, s, loc, toks):
+        self.left = toks[0]
+        self.right = toks[2]
+        self.opStr = op = toks[1]
+        if op == '<':
+            self.op = lambda l, r: l < r
+        elif op == '>':
+            self.op = lambda l, r: l > r
+        elif op == '<=':
+            self.op = lambda l, r: l <= r
+        elif op == '>=':
+            self.op = lambda l, r: l >= r
+        elif op == '==':
+            self.op = lambda l, r: l == r
+        elif op == '!=':
+            self.op = lambda l, r: l != r
+        else:
+            assert False, op
+
+    def __repr__(self):
+        return "BinaryStrOperator({}, {}, {})".format(self.left,
+            self.opStr, self.right)
+
+    def evalExpression(self, env):
+        return self.op(self.left.evalExpressionToString(env), self.right.evalExpressionToString(env))
+
+class IfExpressionParser:
+    __instance = None
+
+    def __init__(self):
+        # create parsing grammer
+        sQStringLiteral = pyparsing.QuotedString("'")
+        sQStringLiteral.setParseAction(
+            lambda s, loc, toks: StringLiteral(s, loc, toks, False))
+
+        dQStringLiteral = pyparsing.QuotedString('"', '\\')
+        dQStringLiteral.setParseAction(
+            lambda s, loc, toks: StringLiteral(s, loc, toks, True))
+
+        stringLiteral = sQStringLiteral | dQStringLiteral
+
+        functionCall = pyparsing.Forward()
+        functionArg = stringLiteral | functionCall
+        functionCall << pyparsing.Word(pyparsing.alphas, pyparsing.alphanums+'-') + \
+            pyparsing.Suppress('(') + \
+            pyparsing.Optional(functionArg +
+                pyparsing.ZeroOrMore(pyparsing.Suppress(',') + functionArg)) + \
+            pyparsing.Suppress(')')
+        functionCall.setParseAction(
+            lambda s, loc, toks: FunctionCall(s, loc, toks))
+
+        predExpr = pyparsing.infixNotation(
+            stringLiteral ^ functionCall ,
+            [
+                ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks)),
+                ('<',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
+                ('<=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
+                ('>',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
+                ('>=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
+                ('==', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
+                ('!=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
+                ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator)),
+                ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator))
+            ])
+
+        self.__ifgrammer = predExpr
+
+    def evalExpression(self, expression, env):
+        try:
+            ret = self.__ifgrammer.parseString(expression)
+        except pyparsing.ParseBaseException as e:
+            raise ParseError("Invalid syntax: " + str(e))
+        return ret[0].evalExpression(env)
+
+    @classmethod
+    def getInstance(cls):
+        if cls.__instance is None:
+            cls.__instance = IfExpressionParser()
+        return cls.__instance
 
 class Env(MutableMapping):
     def __init__(self, other={}):
@@ -320,6 +481,9 @@ class Env(MutableMapping):
     def evaluate(self, condition, prop):
         if condition is None:
             return True
+
+        if isinstance(condition, IfExpression):
+            return IfExpressionParser.getInstance().evalExpression(condition.getExpression(), self)
 
         s = self.substitute(condition, "condition on "+prop)
         return not isFalse(s)
