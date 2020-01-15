@@ -12,7 +12,7 @@ import yaml
 
 from bob import DEBUG
 from bob.input import RecipeSet
-from bob.errors import ParseError
+from bob.errors import ParseError, BobError
 
 DEBUG['ngd'] = True
 
@@ -958,3 +958,52 @@ class TestLayers(RecipesTmp, TestCase):
         })
         self.assertRaises(ParseError, self.generate)
 
+class TestIfExpression(RecipesTmp, TestCase):
+    """ Test if expressions """
+    def setUp(self):
+        super().setUp()
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - if: !expr |
+                    "${USE_DEPS}" == "1"
+                  depends:
+                    - bar-1
+                    - name: bar-2
+                      if: !expr |
+                        "${BAR}" == "bar2"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("bar", """\
+            multiPackage:
+                "1":
+                    buildScript: "true"
+                "2":
+                    buildScript: "true"
+            packageScript: "true"
+            """)
+
+    def testRegular(self):
+        """Test that if expressions can be parsed"""
+        self.generate()
+
+    def testNested(self):
+        """Test that nested if expressions are working"""
+        recipes = RecipeSet()
+        recipes.parse()
+
+        ps = recipes.generatePackages(lambda x,y: "unused",
+                envOverrides={"USE_DEPS" : "0", "BAR" : "bar2"})
+        self.assertRaises(BobError, ps.walkPackagePath, "root/bar-1")
+        self.assertRaises(BobError, ps.walkPackagePath, "root/bar-2")
+
+        ps = recipes.generatePackages(lambda x,y: "unused",
+                envOverrides={"USE_DEPS" : "1"})
+        ps.walkPackagePath("root/bar-1")
+        self.assertRaises(BobError, ps.walkPackagePath, "root/bar-2")
+
+        ps = recipes.generatePackages(lambda x,y: "unused",
+                envOverrides={"USE_DEPS" : "1", "BAR" : "bar2"})
+        ps.walkPackagePath("root/bar-1")
+        ps.walkPackagePath("root/bar-2")
