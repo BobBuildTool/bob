@@ -96,9 +96,9 @@ class TestDependencies(TestCase):
 
         self.assertEqual(len(res), 5)
         self.cmpEntry(res[0], "a")
-        self.cmpEntry(res[1], "b", cond="cond1")
-        self.cmpEntry(res[2], "c", cond="$(and,cond1,cond2)")
-        self.cmpEntry(res[3], "d", cond="cond1")
+        self.cmpEntry(res[1], "b", cond=["cond1"])
+        self.cmpEntry(res[2], "c", cond=["cond1","cond2"])
+        self.cmpEntry(res[3], "d", cond=["cond1"])
         self.cmpEntry(res[4], "e")
 
     def testNestedUse(self):

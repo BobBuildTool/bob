@@ -1816,7 +1816,7 @@ class Recipe(object):
                 use = dep.get("use", use)
                 newCond = dep.get("if")
                 if newCond is not None:
-                    cond = "$(and,{},{})".format(cond, newCond) if cond is not None else newCond
+                    cond = cond + [newCond] if cond is not None else [ newCond ]
                 name = dep.get("name")
                 if name:
                     if "depends" in dep:
@@ -2207,7 +2207,15 @@ class Recipe(object):
             env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
                 "__tools" : tools })
 
-            if not env.evaluate(dep.condition, "dependency "+dep.recipe): continue
+            if dep.condition:
+                conditionsTrue = False
+                for cond in dep.condition:
+                    if not env.evaluate(cond, "dependency "+dep.recipe): break
+                else:
+                    conditionsTrue = True
+
+                if not conditionsTrue: continue
+
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
                 if r.__packageName in stack:
