@@ -2744,7 +2744,10 @@ class RecipeSet:
         self.__aliases = {}
         self.__recipes = {}
         self.__classes = {}
-        self.__whiteList = set(["PATH", "TERM", "SHELL", "USER", "HOME"])
+        if sys.platform == "win32":
+            self.__whiteList = set(["APPDATA", "HOMEDRIVE", "HOMEPATH", "PATH", "PATHEXT", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
+        else:
+            self.__whiteList = set(["PATH", "TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
         self.__rootFilter = []
         self.__scmOverrides = []
