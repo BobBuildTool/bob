@@ -27,7 +27,7 @@ def asHexStr(binary):
 def joinLines(*lines):
     return "\n".join(l for l in lines if l)
 
-def joinScripts(scripts, glue="\ncd \"${BOB_CWD}\"\n"):
+def joinScripts(scripts, glue):
     scripts = [ s for s in scripts if ((s is not None) and (s != "")) ]
     if scripts != []:
         return glue.join(scripts)
