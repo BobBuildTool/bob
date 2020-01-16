@@ -163,8 +163,7 @@ Please open an issue at https://github.com/BobBuildTool/bob with the following b
 
 def bob(bobRoot = None):
     if not bobRoot:
-        bobRoot = os.path.dirname(os.path.realpath(os.path.abspath(sys.argv[0])))
-        bobRoot = os.path.join(bobRoot, "..")
+        bobRoot = os.path.realpath(os.path.abspath(sys.argv[0]))
     origSysStdOut = sys.stdout
     origSysStdErr = sys.stderr
     logging.disable(logging.ERROR)
