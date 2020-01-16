@@ -2919,7 +2919,14 @@ class RecipeSet:
         projectGenerators = manifest.get('projectGenerators', {})
         if not isinstance(projectGenerators, dict):
             raise ParseError("Plugin '"+fileName+"': 'projectGenerators' has wrong type!")
-        self.__projectGenerators.update(projectGenerators)
+        if projectGenerators:
+            if compareVersion(apiVersion, "0.16.1.dev33") < 0:
+                # cut off extra argument for old generators
+                projectGenerators = {
+                    name : lambda package, args, extra, bobRoot: generator(package, args, extra)
+                    for name, generator in projectGenerators.items()
+                }
+            self.__projectGenerators.update(projectGenerators)
 
         properties = manifest.get('properties', {})
         if not isinstance(properties, dict):

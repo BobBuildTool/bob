@@ -120,5 +120,5 @@ def doProject(argv, bobRoot):
 
     print(">>", colorize("/".join(package.getStack()), "32;1"))
     print(colorize("   PROJECT   {} ({})".format(args.package, args.projectGenerator), "32"))
-    generator(package, args.args, extra)
+    generator(package, args.args, extra, bobRoot)
 

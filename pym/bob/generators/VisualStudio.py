@@ -244,7 +244,7 @@ class Vs2019Generator(CommonIDEGenerator):
         else:
             self.uuid = randomUuid()
 
-    def generate(self, extra):
+    def generate(self, extra, bobRoot):
         super().generate()
         extra = " ".join(quote(e) for e in extra)
 
@@ -326,7 +326,7 @@ class Vs2019Generator(CommonIDEGenerator):
         return "\n".join(buildMe)
 
 
-def vs2019ProjectGenerator(package, argv, extra):
+def vs2019ProjectGenerator(package, argv, extra, bobRoot):
     generator = Vs2019Generator()
     generator.configure(package, argv)
-    generator.generate(extra)
+    generator.generate(extra, bobRoot)

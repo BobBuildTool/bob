@@ -168,7 +168,7 @@ def parseArgumentLine(line):
         lines.append(line)
     return lines
 
-def qtProjectGenerator(package, argv, extra):
+def qtProjectGenerator(package, argv, extra, bobRoot):
     parser = argparse.ArgumentParser(prog="bob project qt-project", description='Generate QTCreator Project Files')
     parser.add_argument('-u', '--update', default=False, action='store_true',
                         help="Update project files (.files, .includes, .config)")
