@@ -6,12 +6,13 @@
 from .tty import colorize
 
 class BobError(Exception):
-    def __init__(self, slogan, kind=None, stackSlogan="", help=""):
+    def __init__(self, slogan, kind=None, stackSlogan="", help="", returncode=1):
         self.kind = (kind + " error: ") if kind is not None else "Error: "
         self.slogan = slogan
         self.stackSlogan = stackSlogan
         self.stack = []
         self.help = help
+        self.returncode = returncode
 
     def __str__(self):
         ret = colorize(self.kind, "31;1") + colorize(self.slogan, "31")
@@ -29,12 +30,12 @@ class BobError(Exception):
         if not self.stack: self.stack = stack[:]
 
 class ParseError(BobError):
-    def __init__(self, slogan, help=""):
-        BobError.__init__(self, slogan, "Parse", "Processing stack", help)
+    def __init__(self, slogan, *args, **kwargs):
+        BobError.__init__(self, slogan, "Parse", "Processing stack", *args, **kwargs)
 
 class BuildError(BobError):
-    def __init__(self, slogan, help=""):
-        BobError.__init__(self, slogan, "Build", "Failed package", help)
+    def __init__(self, slogan, *args, **kwargs):
+        BobError.__init__(self, slogan, "Build", "Failed package", *args, **kwargs)
 
 
 class MultiBobError(BobError):
@@ -57,3 +58,8 @@ class MultiBobError(BobError):
 
     def setStack(self, stack):
         pass
+
+    @property
+    def returncode(self):
+        return max(1, 1, *(i.returncode for i in self.others))
+

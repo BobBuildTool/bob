@@ -124,7 +124,7 @@ def catchErrors(fun, *args, **kwargs):
         ret = 0
     except BobError as e:
         print(e, file=sys.stderr)
-        ret = 1
+        ret = e.returncode
     except KeyboardInterrupt:
         ret = 2
     except ImportError as e:
