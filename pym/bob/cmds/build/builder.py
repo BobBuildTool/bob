@@ -556,8 +556,7 @@ esac
             # bob-namespace-sandbox is in $PATH.
             try:
                 from ...develop.make import makeSandboxHelper
-                makeSandboxHelper()
-                sandboxHelper = os.path.join(self.__bobRoot, "bin", "bob-namespace-sandbox")
+                sandboxHelper = makeSandboxHelper()
             except ImportError:
                 # Determine absolute path here. We set $PATH when running in
                 # the sandbox so we might not find it anymore.
