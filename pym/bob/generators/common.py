@@ -4,10 +4,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import BuildError
-from ..utils import removePath, isWindows
+from ..utils import removePath, isWindows, summonMagic
 import argparse
 import os
 import re
+import sys
 
 __all__ = ('parseArgumentLine', 'CommonIDEGenerator')
 
@@ -53,6 +54,7 @@ class BaseScanner:
         self.__resources = set()
         self.__incPaths = set()
         self.__dependencies = set()
+        self.__runTargets = []
 
     def _addFile(self, root, fileName):
         added = True
@@ -75,6 +77,9 @@ class BaseScanner:
 
     def _addDepedency(self, dependency):
         self.__dependencies.add(dependency)
+
+    def _addRunTarget(self, target):
+        self.__runTargets.append(target)
 
     def scan(self, workspacePath):
         self.workspacePath = workspacePath
@@ -99,6 +104,10 @@ class BaseScanner:
     @property
     def dependencies(self):
         return sorted(self.__dependencies)
+
+    @property
+    def runTargets(self):
+        return self.__runTargets
 
 
 class GenericScanner(BaseScanner):
@@ -195,13 +204,34 @@ class CommonIDEGenerator:
                         break
                 else:
                     scan = BaseScanner()
-                checkouts[checkoutPath] = CheckoutInfo(scan, packageVid)
+                info = checkouts[checkoutPath] = CheckoutInfo(scan, packageVid)
             elif rootPackage:
                 # make sure that root package has at least an empty checkout to be always visible
                 checkoutPath = "<root-sentinel>"
-                checkouts[checkoutPath] = CheckoutInfo(BaseScanner(True, "/".join(package.getStack())), packageVid)
+                info = checkouts[checkoutPath] = CheckoutInfo(BaseScanner(True, "/".join(package.getStack())), packageVid)
             else:
-                checkouts[checkoutPath].packages.add(packageVid)
+                info = checkouts[checkoutPath].packages.add(packageVid)
+
+            # find all executables
+            if package.getPackageStep().isValid():
+                packageDir = package.getPackageStep().getWorkspacePath()
+                if sys.platform in ["msys", "win32"]:
+                    for root, directory, filenames in os.walk(packageDir):
+                        for filename in filenames:
+                            target = os.path.join(root, filename)
+                            if target.lower().endswith(".exe"):
+                                info.scan._addRunTarget(target)
+                else:
+                    magic = summonMagic()
+                    for root, directory, filenames in os.walk(packageDir):
+                        for filename in filenames:
+                            target = os.path.join(root, filename)
+                            try:
+                                ftype = magic.from_file(target)
+                                if 'executable' in ftype and 'x86' in ftype:
+                                    info.scan._addRunTarget(target)
+                            except OSError:
+                                pass
 
             # descend on used dependencies
             packageInfo.checkout = checkoutPath
