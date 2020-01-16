@@ -44,6 +44,21 @@ def sliceString(data, chunk):
             r = data[i:i+chunk]
     return iter(genSlice())
 
+def quotePwsh(string):
+    """Create a PowerShell string literal"""
+    return "'" + string.replace("'", "''") + "'"
+
+def escapePwsh(string):
+    """Escape a string so that no meta characters are interpreted by PowerShell"""
+    return string.replace('"', '`"').replace('$', '`$')
+
+def quoteCmdExe(string):
+    """Quote a string for cmd.exe to prevent interpretation of meta characters"""
+    if any(c in string for c in " \"()[]{}^=;!'+,`~"):
+        return '"' + string.replace('"', '""') + '"'
+    else:
+        return string
+
 def removePath(path):
     if sys.platform == "win32":
         def onerror(func, path, exc):
