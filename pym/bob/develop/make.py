@@ -46,6 +46,8 @@ def makeSandboxHelper():
         subprocess.run(["cc", "-o", "bin/bob-namespace-sandbox", "-std=c99",
             "-g"] + sources + ["-lm"], cwd=bobRoot)
 
+    return resultPath
+
 def makeManpages():
     bobRoot = getBobRoot()
     resultPath = os.path.join(bobRoot, "doc", "_build", "man")
@@ -57,3 +59,5 @@ def makeManpages():
         print("Build manpages in", resultPath, "...", file=sys.stderr)
         subprocess.run(["sphinx-build", "-b", "man", ".", "_build/man"],
             cwd=inputPath)
+
+    return resultPath
