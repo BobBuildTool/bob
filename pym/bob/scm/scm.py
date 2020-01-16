@@ -209,18 +209,23 @@ class Scm(metaclass=ABCMeta):
         self.__recipe = spec["recipe"]
         self.__overrides = overrides
 
+    def getSource(self):
+        return self.__source
+
     def getProperties(self):
         return {
-            "recipe" : self.__recipe
+            "__source" : self.__source,
+            "recipe" : self.__recipe,
         }
 
-    def asScript(self):
-        """Return bash script fragment that does the checkout.
+    @abstractmethod
+    async def invoke(self, invoker):
+        """Execute the SCM checkout with the passed invoker instance.
 
-        The base class returns just the header. The deriving class has to
-        append the acutal script.
+        Everything must be done with the passed invoker instance. It will be
+        configured for the right workspace and will do the logging, error
+        handling and so on...
         """
-        return "_BOB_SOURCES[$LINENO]=" + quote(self.__source)
 
     @abstractmethod
     def asDigestScript(self):

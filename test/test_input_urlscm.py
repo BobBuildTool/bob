@@ -5,6 +5,7 @@
 
 from pipes import quote
 from unittest import TestCase
+from unittest.mock import MagicMock
 import asyncio
 import os
 import subprocess
@@ -12,6 +13,7 @@ import tempfile
 import hashlib
 
 from bob.input import UrlScm
+from bob.invoker import Invoker
 from bob.utils import asHexStr
 
 class DummyPackage:
@@ -52,16 +54,19 @@ class TestLiveBuildId(TestCase):
     def tearDownClass(cls):
         cls.__repodir.cleanup()
 
+    def invokeScm(self, workspace, scm):
+        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+        invoker = Invoker(spec, False, True, True, True, True, False)
+        run(scm.invoke(invoker))
+
     def callCalcLiveBuildId(self, scm):
         with tempfile.TemporaryDirectory() as workspace:
-            subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
-                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            self.invokeScm(workspace, scm)
             return scm.calcLiveBuildId(workspace)
 
     def processHashEngine(self, scm, expected):
         with tempfile.TemporaryDirectory() as workspace:
-            subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
-                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            self.invokeScm(workspace, scm)
             spec = scm.getLiveBuildIdSpec(workspace)
             if spec is None:
                 self.assertEqual(None, expected)

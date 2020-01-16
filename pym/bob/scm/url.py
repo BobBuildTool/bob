@@ -3,15 +3,113 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ..errors import ParseError
+from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile
+from ..utils import asHexStr, hashFile, isWindows
 from .scm import Scm, ScmAudit
-from shlex import quote
+import asyncio
+import concurrent
+import contextlib
 import hashlib
-import os.path
+import os, os.path
 import re
 import schema
+import shutil
+import ssl
+import stat
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+WEEKDAYNAME = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+MONTHNAME = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
+    'Oct', 'Nov', 'Dec']
+
+def isYounger(update, existing):
+    if not os.path.exists(existing): return True
+    return os.stat(update).st_mtime > os.stat(existing).st_mtime
+
+def time2HTTPDate(timestamp):
+    """Return the timestamp formatted as RFC7231 Section 7.1.1.1 conformant string."""
+    year, month, day, hh, mm, ss, wd, y, z = time.gmtime(timestamp)
+    return "%s, %02d %3s %4d %02d:%02d:%02d GMT" % (WEEKDAYNAME[wd], day,
+        MONTHNAME[month-1], year, hh, mm, ss)
+
+def startsWithDrive(url):
+    if len(url) < 2: return False
+    if url[1] != ':': return False
+    return ((url[0] >= 'A') and (url[0] <= 'Z')) or ((url[0] >= 'a') and (url[0] <= 'z'))
+
+def parseUrl(url):
+    r"""Parse URL and apply Windows quirks.
+
+    On Windows we allow the user to specify the following paths as URLs. They
+    are no valid URLs but we still accept them. cURL will work on them too
+    (plus many others)...
+
+     * C:\foo.bar
+     * C:/foo.bar
+     * file:///C:/foo.bar
+     * file:///C:\foo.bar
+     * \\server\path
+     * file:///\\server\path
+
+    We explicitly do not allow relative or absolute paths. Only fully qualified
+    paths are accepted. See
+    https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file for
+    more information. The following paths are rejected:
+
+     * C:tmp.txt
+     * tmp.txt
+     * \tmp.txt
+     * /tmp.txt
+     * file:///tmp.txt
+     * file:///C:tmp.txt
+     * file:///\tmp.txt
+    """
+
+    # Only require some special processing on Windows. Unix URLs just work...
+    if not isWindows():
+        return urllib.parse.urlparse(url)
+
+    # Does it start with a drive letter like "C:…"?
+    if startsWithDrive(url):
+        # Convert slashes to backslashes and make sure it's a fully qualified
+        # path.
+        path = url.replace('/', '\\')
+        if not path[2:].startswith("\\"):
+            raise ValueError("URL must be a fully qualified path name")
+        return urllib.parse.ParseResult('file', '', path, '', '', '')
+    elif url.startswith("\\\\"):
+        # No slash conversion on UNC paths!
+        return urllib.parse.ParseResult('file', '', url, '', '', '')
+
+    # Regular parsing. Bail out if it is not a local path.
+    url = urllib.parse.urlparse(url)
+    if url.scheme == '':
+        raise ValueError("Neither a fully qualified path nor a URL scheme given")
+    if url.scheme != 'file':
+        return url
+
+    # The host part is checked in the generic code. We just take care of the
+    # path here.
+    if not url.path.startswith("/"):
+        raise ValueError("Invalid path")
+
+    path = url.path[1:]
+    if path.startswith("\\\\"):
+        pass
+    elif startsWithDrive(path) and (path[2:].startswith("\\") or path[2:].startswith("/")):
+        path = path.replace('/', '\\')
+    else:
+        raise ValueError("URL must be a fully qualified path name")
+
+    # looks legit
+    return urllib.parse.ParseResult(url.scheme, url.netloc,path, '', '', '')
+
 
 class UrlScm(Scm):
 
@@ -42,11 +140,23 @@ class UrlScm(Scm):
     ]
 
     EXTRACTORS = {
-        "tar"  : ("tar -x --no-same-owner --no-same-permissions -f", "--strip-components={}"),
-        "gzip" : ("gunzip -kf", None),
-        "xz"   : ("unxz -kf", None),
-        "7z"   : ("7z x -y", None),
-        "zip"  : ("unzip -o", None),
+        "tar"  : [
+            ("tar", ["-x", "--no-same-owner", "--no-same-permissions", "-f", "{}"], "--strip-components={}"),
+            ("python", ["-m", "tarfile", "-e", "{}"], None),
+        ],
+        "gzip" : [
+            ("gunzip", ["-kf", "{}"], None),
+        ],
+        "xz" : [
+            ("unxz", ["-kf", "{}"], None),
+        ],
+        "7z" : [
+            ("7z", ["x", "-y", "{}"], None),
+        ],
+        "zip" : [
+            ("unzip", ["-o", "{}"], None),
+            ("python", ["-m", "zipfile", "-e", "{}", "."], None),
+        ],
     }
 
     def __init__(self, spec, overrides=[], tidy=None):
@@ -65,7 +175,12 @@ class UrlScm(Scm):
         self.__dir = spec.get("dir", ".")
         self.__fn = spec.get("fileName")
         if not self.__fn:
-            self.__fn = self.__url.split("/")[-1]
+            url = self.__url
+            if isWindows():
+                # On Windows we're allowed to provide native paths with
+                # backslashes.
+                url = url.replace('\\', '/')
+            self.__fn = url.split("/")[-1]
         self.__extract = spec.get("extract", "auto")
         self.__tidy = tidy
         self.__strip = spec.get("stripComponents", 0)
@@ -86,84 +201,108 @@ class UrlScm(Scm):
         })
         return ret
 
-    def asScript(self):
-        curlOptions="-sSgLf"
-        wgetOptions="-q --no-glob"
-        if not self.__sslVerify:
-            curlOptions+="k"
-            wgetOptions+=" --no-check-certificate"
-        ret = ""
-        if self.__url[0] == '/':
-            # Local files: copy only if newer (u), target never is a directory (T)
-            tpl = """
-{HEADER}
-mkdir -p {DIR}
-cd {DIR}
-cp -uT {URL} {FILE}
-"""
-        else:
-            # do command logic inside the shell script to leave it to the backend
-            tpl = """
-{HEADER}
-mkdir -p {DIR}
-cd {DIR}
-if [ -e {FILE} ] ; then
-    if [ -x "$(command -v curl)" ] ; then
-        curl {CURL_OPTIONS} -o {FILE} -z {FILE} {URL}
-    fi
-else
-    (
-        F=$(mktemp)
-        trap 'rm -f $F' EXIT
-        set -e
-        if [ -x "$(command -v curl)" ] ; then
-            curl {CURL_OPTIONS} -o $F {URL}
-        elif [ -x "$(command -v wget)" ] ; then
-            wget {WGET_OPTIONS} -O $F {URL}
-        else
-            >&2 echo "\nERROR: Don't know how to download. Please install 'curl'!\n"
-            exit 1
-        fi
-        mv $F {FILE}
-    )
-fi
-"""
-        ret = tpl.format(HEADER=super().asScript(), DIR=quote(self.__dir), URL=quote(self.__url),
-           FILE=quote(self.__fn), CURL_OPTIONS=curlOptions, WGET_OPTIONS=wgetOptions)
+    def _download(self, destination):
+        headers = {}
+        context = None if self.__sslVerify else ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        if os.path.isfile(destination) and self.__url.startswith("http"):
+            # Try to avoid download if possible
+            headers["If-Modified-Since"] = time2HTTPDate(os.stat(destination).st_mtime)
 
-        if self.__digestSha1:
-            ret += "echo {DIGEST}\ \ {FILE} | sha1sum -c\n".format(DIGEST=self.__digestSha1, FILE=self.__fn)
-        if self.__digestSha256:
-            ret += "echo {DIGEST}\ \ {FILE} | sha256sum -c\n".format(DIGEST=self.__digestSha256, FILE=self.__fn)
+        tmpFileName = None
+        req = urllib.request.Request(url=self.__url, headers=headers)
+        try:
+            with contextlib.closing(urllib.request.urlopen(req, context=context)) as rsp:
+                with tempfile.NamedTemporaryFile(dir=os.path.dirname(destination), delete=False) as f:
+                    tmpFileName = f.name
+                    read = 0
+                    while True:
+                        buf = rsp.read(16384)
+                        if not buf:
+                            break
+                        read += len(buf)
+                        f.write(buf)
 
-        extractor = None
-        if self.__extract in ["yes", "auto", True]:
-            for (ext, tool) in UrlScm.EXTENSIONS:
-                if self.__fn.endswith(ext):
-                    extractor = UrlScm.EXTRACTORS[tool]
-                    break
-            if not extractor and self.__extract != "auto":
-                raise ParseError("Don't know how to extract '"+self.__fn+"' automatically.")
-        elif self.__extract in UrlScm.EXTRACTORS:
-            extractor = UrlScm.EXTRACTORS[tool]
-        elif self.__extract not in ["no", False]:
-            raise ParseError("Invalid extract mode: " + self.__extract)
+                if "content-length" in rsp.info():
+                    expected = int(rsp.info()["Content-Length"])
+                    if expected > read:
+                        return "Response too short: {} < {} (bytes)".format(read, expected)
 
-        if extractor:
-            if self.__strip > 0:
-                if extractor[1] is None:
-                    raise ParseError("Extractor does not support 'stripComponents'!")
-                strip = " " + extractor[1].format(self.__strip)
+                # Atomically move file to destination. Set explicit mode to
+                # retain Bob 0.15 behaviour.
+                os.chmod(tmpFileName, stat.S_IREAD|stat.S_IWRITE)
+                os.replace(tmpFileName, destination)
+                tmpFileName = None
+
+        except urllib.error.HTTPError as e:
+            if e.code != 304:
+                return "HTTP error {}: {}".format(e.code, e.reason)
+        finally:
+            if tmpFileName is not None:
+                os.remove(tmpFileName)
+
+        return None
+
+    async def invoke(self, invoker):
+        os.makedirs(invoker.joinPath(self.__dir), exist_ok=True)
+        workspaceFile = os.path.join(self.__dir, self.__fn)
+        destination = invoker.joinPath(self.__dir, self.__fn)
+
+        # Download only if necessary
+        if not self.isDeterministic() or not os.path.isfile(destination):
+            try:
+                url = parseUrl(self.__url)
+            except ValueError as e:
+                invoker.fail(str(e))
+
+            if url.scheme in ['', 'file']:
+                # Verify that host name is empty or "localhost"
+                if url.netloc not in ['', 'localhost']:
+                    invoker.fail("Bad/unsupported URL: invalid host name: " + url.netloc)
+                # Local files: copy only if newer (u), target never is a directory (T)
+                if isYounger(url.path, destination):
+                    if os.path.isdir(destination):
+                        invoker.fail("Destination", destination, "is an existing directory!")
+                    invoker.trace("<cp>", url.path, workspaceFile)
+                    shutil.copy(url.path, destination)
+            elif url.scheme in ["http", "https", "ftp"]:
+                invoker.trace("<wget>", self.__url, ">", workspaceFile)
+                loop = asyncio.get_event_loop()
+                try:
+                    err = await loop.run_in_executor(None, UrlScm._download, self, destination)
+                    if err:
+                        invoker.fail(err)
+                except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                    invoker.fail("Download interrupted!")
             else:
-                strip = ""
-            ret += """
-if [ {FILE} -nt .{FILE}.extracted ] ; then
-    {TOOL} {FILE}{STRIP}
-    touch .{FILE}.extracted
-fi
-""".format(FILE=quote(self.__fn), TOOL=extractor[0], STRIP=strip)
+                invoker.fail("Unsupported URL scheme: " + url.scheme)
 
-        return ret
+
+        # Always verify file hashes
+        if self.__digestSha1:
+            invoker.trace("<sha1sum>", workspaceFile)
+            d = hashFile(destination, hashlib.sha1).hex()
+            if d != self.__digestSha1:
+                invoker.fail("SHA1 digest did not match! expected:", self.__digestSha1, "got:", d)
+        if self.__digestSha256:
+            invoker.trace("<sha256sum>", workspaceFile)
+            d = hashFile(destination, hashlib.sha256).hex()
+            if d != self.__digestSha256:
+                invoker.fail("SHA256 digest did not match! expected:", self.__digestSha256, "got:", d)
+
+        # Run optional extractors
+        extractors = self.__getExtractors()
+        canary = invoker.joinPath(self.__dir, "." + self.__fn + ".extracted")
+        if extractors and isYounger(destination, canary):
+            for cmd in extractors:
+                if shutil.which(cmd[0]) is None: continue
+                await invoker.checkCommand(cmd, cwd=self.__dir)
+                invoker.trace("<touch>", canary)
+                with open(canary, "wb") as f:
+                    pass
+                os.utime(canary)
+                break
+            else:
+                executor.fail("No suitable extractor found!")
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this url.
@@ -208,6 +347,38 @@ fi
             return "=" + self.__digestSha1
         else:
             return None
+
+    def __getExtractors(self):
+        extractors = None
+        if self.__extract in ["yes", "auto", True]:
+            for (ext, tool) in UrlScm.EXTENSIONS:
+                if self.__fn.endswith(ext):
+                    extractors = UrlScm.EXTRACTORS[tool]
+                    break
+            if not extractors and self.__extract != "auto":
+                raise ParseError("Don't know how to extract '"+self.__fn+"' automatically.")
+        elif self.__extract in UrlScm.EXTRACTORS:
+            extractors = UrlScm.EXTRACTORS[tool]
+        elif self.__extract not in ["no", False]:
+            raise ParseError("Invalid extract mode: " + self.__extract)
+
+        if extractors is None:
+            return []
+
+        ret = []
+        for extractor in extractors:
+            if self.__strip > 0:
+                if extractor[2] is None:
+                    continue
+                strip = [extractor[2].format(self.__strip)]
+            else:
+                strip = []
+            ret.append([extractor[0]] + [a.format(self.__fn) for a in extractor[1]] + strip)
+
+        if not ret:
+            raise ParseError("Extractor does not support 'stripComponents'!")
+
+        return ret
 
 
 class UrlAudit(ScmAudit):

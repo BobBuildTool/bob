@@ -8,6 +8,8 @@ from ...archive import DummyArchive
 from ...audit import Audit
 from ...errors import BobError, BuildError, MultiBobError
 from ...input import RecipeSet
+from ...invoker import Invoker, InvocationMode
+from ...languages import StepSpec
 from ...state import BobState
 from ...stringparser import Env
 from ...tty import log, stepMessage, stepAction, stepExec, setProgress, \
@@ -118,135 +120,8 @@ class LocalBuilderStatistic:
 class LocalBuilder:
 
     RUN_TEMPLATE = """#!/bin/bash
-
-on_exit()
-{{
-     if [[ -n "$_sandbox" ]] ; then
-          if [[ $_keep_sandbox = 0 ]] ; then
-                rm -rf "$_sandbox"
-          else
-                echo "Keeping sandbox in $_sandbox" >&2
-          fi
-     fi
-}}
-
-run()
-{{
-    {SANDBOX_CMD} "$@"
-}}
-
-run_script()
-{{
-    local ret=0 trace=""
-    if [[ $_verbose -ge 3 ]] ; then trace="-x" ; fi
-
-    echo "### START: `date`"
-    run /bin/bash $trace -- ../script {ARGS}
-    ret=$?
-    echo "### END($ret): `date`"
-
-    return $ret
-}}
-
-# make permissions predictable
-umask 0022
-
-_clean={CLEAN}
-_keep_env=0
-_verbose=1
-_no_log=0
-_sandbox={SANDBOX_SETUP}
-_keep_sandbox=0
-_args=`getopt -o cinkqvE -- "$@"`
-if [ $? != 0 ] ; then echo "Args parsing failed..." >&2 ; exit 1 ; fi
-eval set -- "$_args"
-
-_args=( )
-while true ; do
-    case "$1" in
-        -c) _clean=1 ;;
-        -i) _clean=0 ;;
-        -n) _no_log=1 ;;
-        -k) _keep_sandbox=1 ;;
-        -q) : $(( _verbose-- )) ;;
-        -v) : $(( _verbose++ )) ;;
-        -E) _keep_env=1 ;;
-        --) shift ; break ;;
-        *) echo "Internal error!" ; exit 1 ;;
-    esac
-    _args+=("$1")
-    shift
-done
-
-if [[ $# -gt 1 ]] ; then
-    echo "Unexpected arguments!" >&2
-    exit 1
-fi
-
-trap on_exit EXIT
-
-case "${{1:-run}}" in
-    run)
-        if [[ $_clean = 1 ]] ; then
-            rm -rf "${{0%/*}}/workspace"
-            mkdir -p "${{0%/*}}/workspace"
-        fi
-        if [[ $_keep_env = 1 ]] ; then
-            exec "$0" "${{_args[@]}}" __run
-        else
-            exec /usr/bin/env -i {WHITELIST} "$0" "${{_args[@]}}" __run
-        fi
-        ;;
-    __run)
-        cd "${{0%/*}}/workspace"
-        if [[ $_no_log = 0 ]] ; then
-            case "$_verbose" in
-                0)
-                    run_script >> ../log.txt 2>&1
-                    ;;
-                1)
-                    set -o pipefail
-                    {{
-                        {{
-                            run_script | tee -a ../log.txt
-                        }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
-                    }} 1>&2- 2>/dev/null
-                    ;;
-                *)
-                    set -o pipefail
-                    {{
-                        {{
-                            run_script | tee -a ../log.txt
-                        }} 3>&1 1>&2- 2>&3- | tee -a ../log.txt
-                    }} 3>&1 1>&2- 2>&3-
-                    ;;
-            esac
-        else
-            case "$_verbose" in
-                0)
-                    run_script 2>&1 > /dev/null
-                    ;;
-                1)
-                    run_script > /dev/null
-                    ;;
-                *)
-                    run_script
-                    ;;
-            esac
-        fi
-        ;;
-    shell)
-        cd "${{0%/*}}/workspace"
-        rm -f ../audit.json.gz
-        if [[ $_keep_env = 1 ]] ; then
-            run /usr/bin/env {ENV} /bin/bash -s {ARGS}
-        else
-            run /usr/bin/env -i {WHITELIST} {ENV} /bin/bash --norc -s {ARGS}
-        fi
-        ;;
-    *)
-        echo "Unknown command" ; exit 1 ;;
-esac
+cd {ROOT}
+{BOB} _invoke {CLEAN} {SPEC} "$@"
 """
 
     @staticmethod
@@ -327,7 +202,6 @@ esac
         self.__keepGoing = False
         self.__fingerprints = { None : b'', "" : b'' }
         self.__workspaceLocks = {}
-        self.__sandboxHelperPath = None
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -545,224 +419,47 @@ esac
                                         "{:02}-{}".format(i, a.getPackage().getName())))
                 i += 1
 
-    def __getSandboxHelperPath(self):
-        if self.__sandboxHelperPath is None:
-            # If Bob is run from the source directly we have to make sure that
-            # the sandbox helper is up-to-date and use it from there. Otherwise
-            # we assume that Bob is properly installed and that
-            # bob-namespace-sandbox is in $PATH.
-            try:
-                from ...develop.make import makeSandboxHelper
-                sandboxHelper = makeSandboxHelper()
-            except ImportError:
-                # Determine absolute path here. We set $PATH when running in
-                # the sandbox so we might not find it anymore.
-                sandboxHelper = shutil.which("bob-namespace-sandbox")
-                if sandboxHelper is None:
-                    raise BuildError("Could not find bob-namespace-sandbox in $PATH! Please check your Bob installation.")
-
-            self.__sandboxHelperPath = sandboxHelper
-
-        return self.__sandboxHelperPath
-
-    async def _runShell(self, step, scriptName, cleanWorkspace, logger):
+    async def _runShell(self, step, scriptName, logger, cleanWorkspace=None):
         workspacePath = step.getWorkspacePath()
-        if cleanWorkspace: emptyDirectory(workspacePath)
         if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
         self.__linkDependencies(step)
 
-        # construct environment
-        stepEnv = step.getEnv().copy()
-        if step.getSandbox() is None:
-            stepEnv["PATH"] = ":".join(step.getPaths() + [os.environ["PATH"]])
-        else:
-            stepEnv["PATH"] = ":".join(step.getPaths() + step.getSandbox().getPaths())
-        stepEnv["LD_LIBRARY_PATH"] = ":".join(step.getLibraryPaths())
-        stepEnv["BOB_CWD"] = step.getExecPath()
+        # write spec
+        specFile = os.path.join(workspacePath, "..", "step.spec")
+        envFile = os.path.join(workspacePath, "..", "env")
+        logFile = os.path.join(workspacePath, "..", "log.txt")
+        spec = StepSpec.fromStep(step, envFile, self.__envWhiteList, logFile)
+        with open(specFile, "w") as f:
+            spec.toFile(f)
 
-        # filter runtime environment
-        if self.__preserveEnv:
-            runEnv = os.environ.copy()
-        else:
-            runEnv = { k:v for (k,v) in os.environ.items()
-                                     if k in self.__envWhiteList }
-
-        # sandbox
-        if step.getSandbox() is not None:
-            sandboxSetup = "\"$(mktemp -d)\""
-            sandboxMounts = [ "declare -a mounts=( )" ]
-            sandbox = [ quote(self.__getSandboxHelperPath()) ]
-            if self.__verbose >= TRACE:
-                sandbox.append('-D')
-            sandbox.extend(["-S", "\"$_sandbox\""])
-            sandbox.extend(["-W", quote(step.getExecPath())])
-            sandbox.extend(["-H", "bob"])
-            sandbox.extend(["-d", "/tmp"])
-            if not step.hasNetAccess(): sandbox.append('-n')
-            sandboxRootFs = os.path.abspath(
-                step.getSandbox().getStep().getWorkspacePath())
-            for f in os.listdir(sandboxRootFs):
-                sandboxMounts.append("mounts+=( -M {} -m /{} )".format(
-                    quote(os.path.join(sandboxRootFs, f)), quote(f)))
-            for (hostPath, sndbxPath, options) in step.getSandbox().getMounts():
-                if "nolocal" in options: continue # skip for local builds?
-                line = "-M " + hostPath
-                if "rw" in options:
-                    line += " -w " + sndbxPath
-                elif hostPath != sndbxPath:
-                    line += " -m " + sndbxPath
-                line = "mounts+=( " + line + " )"
-                if "nofail" in options:
-                    sandboxMounts.append(
-                        """if [[ -e {HOST} ]] ; then {MOUNT} ; fi"""
-                            .format(HOST=hostPath, MOUNT=line)
-                        )
-                else:
-                    sandboxMounts.append(line)
-            sandboxMounts.append("mounts+=( -M {} -w {} )".format(
-                quote(os.path.abspath(os.path.join(
-                    step.getWorkspacePath(), ".."))),
-                quote(os.path.normpath(os.path.join(
-                    step.getExecPath(), ".."))) ))
-            addDep = lambda s: (sandboxMounts.append("mounts+=( -M {} -m {} )".format(
-                    quote(os.path.abspath(s.getWorkspacePath())),
-                    quote(s.getExecPath(step)) )) if s.isValid() else None)
-            for s in step.getAllDepSteps(): addDep(s)
-            # special handling to mount all previous steps of current package
-            s = step
-            while s.isValid():
-                if len(s.getArguments()) > 0:
-                    s = s.getArguments()[0]
-                    addDep(s)
-                else:
-                    break
-            sandbox.append('"${mounts[@]}"')
-            sandbox.append("--")
-        else:
-            sandbox = []
-            sandboxMounts = []
-            sandboxSetup = ""
-
-        # write scripts
-        runFile = os.path.join("..", scriptName+".sh")
+        # write invocation wrapper
+        runFile = os.path.join("..", scriptName + ".sh")
+        runFileContent = self.RUN_TEMPLATE.format(
+                ROOT=quote(os.getcwd()),
+                BOB=quote(self.__bobRoot),
+                SPEC=quote(specFile),
+                CLEAN="-c" if cleanWorkspace else "",
+            )
         absRunFile = os.path.normpath(os.path.join(workspacePath, runFile))
         absRunFile = os.path.join(".", absRunFile)
         with open(absRunFile, "w") as f:
-            print(LocalBuilder.RUN_TEMPLATE.format(
-                    ENV=" ".join(sorted([
-                        "{}={}".format(key, quote(value))
-                        for (key, value) in stepEnv.items() ])),
-                    WHITELIST=" ".join(sorted([
-                        '${'+key+'+'+key+'="$'+key+'"}'
-                        for key in self.__envWhiteList ])),
-                    ARGS=" ".join([
-                        quote(a.getExecPath(step))
-                        for a in step.getArguments() ]),
-                    SANDBOX_CMD="\n    ".join(sandboxMounts + [" ".join(sandbox)]),
-                    SANDBOX_SETUP=sandboxSetup,
-                    CLEAN="1" if cleanWorkspace else "0",
-                ), file=f)
-        scriptFile = os.path.join(workspacePath, "..", "script")
-        with open(scriptFile, "w") as f:
-            f.write(dedent("""\
-                # Error handling
-                bob_handle_error()
-                {
-                    set +x
-                    echo "\x1b[31;1mStep failed with return status $1; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m"
-                    echo "Call stack (most recent call first)"
-                    i=0
-                    while caller $i >/dev/null ; do
-                            j=${BASH_LINENO[$i]}
-                            while [[ $j -ge 0 && -z ${_BOB_SOURCES[$j]:+true} ]] ; do
-                                    : $(( j-- ))
-                            done
-                            echo "    #$i: ${_BOB_SOURCES[$j]}, line $(( BASH_LINENO[$i] - j )), in ${FUNCNAME[$((i+1))]}"
-                            : $(( i++ ))
-                    done
-
-                    exit $1
-                }
-                declare -A _BOB_SOURCES=( [0]="Bob prolog" )
-                trap 'bob_handle_error $? >&2 ; exit 99' ERR
-                trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do /bin/rm -f "$i" ; done' EXIT
-                set -o errtrace -o nounset -o pipefail
-
-                # Special Bob array variables:
-                """))
-            print("declare -A BOB_ALL_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(a.getPackage().getName()),
-                                   quote(a.getExecPath(step)))
-                    for a in step.getAllDepSteps() ] ))), file=f)
-            print("declare -A BOB_DEP_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(a.getPackage().getName()),
-                                   quote(a.getExecPath(step)))
-                    for a in step.getArguments() if a.isValid() ] ))), file=f)
-            print("declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
-                [ "[{}]={}".format(quote(n), quote(os.path.join(t.getStep().getExecPath(step), t.getPath())))
-                    for (n,t) in step.getTools().items()] ))), file=f)
-            print("", file=f)
-            print("# Environment:", file=f)
-            for (k,v) in sorted(stepEnv.items()):
-                print("export {}={}".format(k, quote(v)), file=f)
-            print("declare -p > ../env", file=f)
-            print("", file=f)
-            print("# BEGIN BUILD SCRIPT", file=f)
-            print(step.getScript(), file=f)
-            print("# END BUILD SCRIPT", file=f)
+            print(runFileContent, file=f)
         os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
-        cmdLine = ["/bin/bash", runFile, "__run"]
-        if self.__verbose < NORMAL:
-            cmdLine.append('-q')
-        elif self.__verbose == INFO:
-            cmdLine.append('-v')
-        elif self.__verbose >= DEBUG:
-            cmdLine.append('-vv')
-        if self.__noLogFile:
-            cmdLine.append('-n')
 
-        try:
-            if self.__bufferedStdIO:
-                ret = await self.__runShellBuffered(cmdLine, step.getWorkspacePath(), runEnv, logger)
-            else:
-                ret = await self.__runShellRegular(cmdLine, step.getWorkspacePath(), runEnv)
-        except OSError as e:
-            raise BuildError("Cannot execute build script {}: {}".format(absRunFile, str(e)))
-
+        invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
+            self.__verbose >= INFO, self.__verbose >= NORMAL,
+            self.__verbose >= DEBUG, self.__bufferedStdIO)
+        ret = await invoker.executeStep(InvocationMode.CALL, cleanWorkspace)
         if ret == -int(signal.SIGINT):
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
         elif ret != 0:
+            if self.__bufferedStdIO:
+                logger.setError(invoker.getStdio().strip())
             raise BuildError("Build script {} returned with {}"
                                 .format(absRunFile, ret),
                              help="You may resume at this point with '--resume' after fixing the error.")
-
-    async def __runShellRegular(self, cmdLine, cwd, env):
-        proc = await asyncio.create_subprocess_exec(*cmdLine, cwd=cwd, env=env)
-        ret = None
-        while ret is None:
-            try:
-                ret = await proc.wait()
-            except concurrent.futures.CancelledError:
-                pass
-        return ret
-
-    async def __runShellBuffered(self, cmdLine, cwd, env, logger):
-        with tempfile.TemporaryFile() as tmp:
-            proc = await asyncio.create_subprocess_exec(*cmdLine, cwd=cwd, env=env,
-                stdin=subprocess.DEVNULL, stdout=tmp, stderr=subprocess.STDOUT)
-            ret = None
-            while ret is None:
-                try:
-                    ret = await proc.wait()
-                except concurrent.futures.CancelledError:
-                    pass
-            if ret != 0 and ret != -int(signal.SIGINT):
-                tmp.seek(0)
-                logger.setError(io.TextIOWrapper(tmp, errors='replace').read().strip())
-
-        return ret
 
     def getStatistic(self):
         return self.__statistic
@@ -1122,7 +819,7 @@ esac
 
                 with stepExec(checkoutStep, "CHECKOUT",
                               "{} {}".format(prettySrcPath, overridesString)) as a:
-                    await self._runShell(checkoutStep, "checkout", False, a)
+                    await self._runShell(checkoutStep, "checkout", a)
                 self.__statistic.checkouts += 1
                 checkoutExecuted = True
                 # reflect new checkout state
@@ -1210,7 +907,7 @@ esac
                 BobState().delInputHashes(prettyBuildPath)
                 BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
                 # build it
-                await self._runShell(buildStep, "build", self.__cleanBuild, a)
+                await self._runShell(buildStep, "build", a, self.__cleanBuild)
                 buildHash = hashWorkspace(buildStep)
             await self._generateAudit(buildStep, depth, buildHash)
             BobState().setResultHash(prettyBuildPath, buildHash)
@@ -1335,7 +1032,7 @@ esac
                 # invalidate result because folder will be cleared
                 BobState().delInputHashes(prettyPackagePath)
                 BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
-                await self._runShell(packageStep, "package", True, a)
+                await self._runShell(packageStep, "package", a)
                 packageHash = hashWorkspace(packageStep)
                 packageDigest = self.__getIncrementalVariantId(packageStep)
                 workspaceChanged = True
@@ -1639,71 +1336,17 @@ esac
         return fingerprint
 
     async def __runFingerprintScript(self, step, logger):
-        if self.__preserveEnv:
-            runEnv = os.environ.copy()
-        else:
-            runEnv = { k:v for (k,v) in os.environ.items() if k in self.__envWhiteList }
+        spec = StepSpec.fromStep(step, None, self.__envWhiteList)
+        invoker = Invoker(spec, self.__preserveEnv, True, True, True, False, True)
+        (ret, stdout, stderr) = await invoker.executeFingerprint()
 
-        stdout = stderr = None
-        script = step._getFingerprintScript()
-        with tempfile.TemporaryDirectory(dir=os.getcwd(), prefix=".bob-") as tmp:
-            if step.getSandbox() is not None:
-                runEnv["BOB_CWD"] = "/bob/fingerprint"
-                runEnv["PATH"] = ":".join(step.getSandbox().getPaths())
-
-                cmdArgs = [ self.__getSandboxHelperPath() ]
-                cmdArgs.extend(["-S", tmp])
-                cmdArgs.extend(["-d", "/bob/fingerprint"])
-                cmdArgs.extend(["-W", "/bob/fingerprint"])
-                cmdArgs.extend(["-H", "bob"])
-                cmdArgs.extend(["-d", "/tmp"])
-                cmdArgs.append('-n')
-                sandboxRootFs = os.path.abspath(
-                    step.getSandbox().getStep().getWorkspacePath())
-                for f in os.listdir(sandboxRootFs):
-                    cmdArgs.extend(["-M", os.path.join(sandboxRootFs, f), "-m", "/"+f])
-
-                substEnv = Env(runEnv)
-                for (hostPath, sndbxPath, options) in step.getSandbox().getMounts():
-                    if "nolocal" in options: continue
-                    hostPath = substEnv.substitute(hostPath, hostPath, False)
-                    if "nofail" in options:
-                        if not os.path.exists(hostPath): continue
-                    sndbxPath = substEnv.substitute(sndbxPath, sndbxPath, False)
-                    cmdArgs.extend(["-M", hostPath])
-                    if "rw" in options:
-                        cmdArgs.extend(["-w", sndbxPath])
-                    elif hostPath != sndbxPath:
-                        cmdArgs.extend(["-m", sndbxPath])
-
-                cmdArgs.append("--")
-            else:
-                runEnv["BOB_CWD"] = tmp
-                cmdArgs = []
-
-            cmdArgs.extend(["/bin/bash", "-x", "-c"])
-
-            try:
-                proc = await asyncio.create_subprocess_exec(*cmdArgs,
-                    script, cwd=tmp, env=runEnv, stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            except OSError as e:
-                raise BuildError("Cannot execute fingerprint script: {}"
-                                    .format(str(e)))
-
-            while stdout is None:
-                try:
-                    stdout,stderr = await proc.communicate()
-                except concurrent.futures.CancelledError:
-                    pass
-
-        ret = proc.returncode
         if ret == -int(signal.SIGINT):
             raise BuildError("Fingerprint script interrupted by user")
         elif ret != 0:
-            help = "Script output: {}\nScript: {}".format(
-                stderr.decode(locale.getpreferredencoding(False), 'replace').strip(),
-                script)
+            help = "Script output: " + stderr.decode(
+                locale.getpreferredencoding(False), 'replace').strip()
+            if self.__verbose >= DEBUG:
+                help += "\nScript: " + spec.fingerprintScript
             raise BuildError("Fingerprint script returned with {}".format(ret),
                 help=help)
 

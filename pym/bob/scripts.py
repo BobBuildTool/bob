@@ -94,6 +94,10 @@ def __upload(*args, **kwargs):
     doUpload(*args, **kwargs)
     return 0
 
+def __invoke(*args, **kwargs):
+    from .cmds.invoke import doInvoke
+    return doInvoke(*args, **kwargs)
+
 availableCommands = {
     "archive"       : ('hl', __archive, "Manage binary artifact archives"),
     "build"         : ('hl', __build, "Build (sub-)packages in release mode"),
@@ -113,6 +117,7 @@ availableCommands = {
 
     "_download"     : (None, __download, ""),
     "_upload"       : (None, __upload, ""),
+    "_invoke"       : (None, __invoke, ""),
 }
 
 def describeCommands():

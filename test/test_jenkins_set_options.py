@@ -121,12 +121,6 @@ packageScript: |
         send = self.jenkinsMock.getServerData()
         assert('<assignedNode>testSlave</assignedNode>' in send[0][1].decode('utf-8'))
 
-    def testSetSandBox(self):
-        self.executeBobJenkinsCmd("set-options --sandbox myTestJenkins")
-        self.executeBobJenkinsCmd("push -q myTestJenkins")
-        send = self.jenkinsMock.getServerData()
-        assert('sandbox' in send[0][1].decode('utf-8'))
-
     def testUpDownload(self):
         DEFAULT="""
 archive:

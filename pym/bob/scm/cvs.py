@@ -41,46 +41,37 @@ class CvsScm(Scm):
         })
         return ret
 
-    def asScript(self):
+    async def invoke(self, invoker):
         # If given a ":ssh:" cvsroot, translate that to CVS_RSH using ssh, and ":ext:"
         # (some versions of CVS do that internally)
         m = re.match('^:ssh:(.*)', self.__cvsroot)
         if m:
-            prefix="CVS_RSH=ssh "
+            env = {"CVS_RSH" : "ssh"}
             rootarg=":ext:" + m.group(1)
         else:
-            prefix=""
+            env = None
             rootarg=self.__cvsroot
-        revarg = "-r {rev}".format(rev=self.__rev) if self.__rev != None else "-A"
-        header = super().asScript()
+        revarg = ["-r", "{rev}".format(rev=self.__rev)] if self.__rev != None else ["-A"]
 
-        # Workaround: CVS 1.12.13 refuses to checkout with '-d .' when using remote access
-        #   cvs checkout: existing repository /home/stefan/cvsroot does not match /home/stefan/cvsroot/cxxtest
-        #   cvs checkout: ignoring module cxxtest
-        # Thus, we have to trick it with a symlink.
-        # Workaround 2: 'cvs co' does not have a '-P' option like 'cvs up' has.
-        # This option removes empty (=deleted) directories.
-        # We therefore use a 'cvs up' after the initial 'cvs co', to get the same behaviour for the initial and subsequent builds.
-        if re.match('^:ext:', rootarg) and self.__dir == '.':
-            return """
-{header}
-# Checkout or update
-if ! [ -d CVS ]; then
-   ln -s . __tmp$$
-   {prefix}cvs -qz3 -d '{rootarg}' co {revarg} -d __tmp$$ '{module}'
-   rm __tmp$$
-fi
-{prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} .
-""".format(header=header, prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module)
-        else:
-            return """
-{header}
-# Checkout or update
-if ! [ -d {dir}/CVS ]; then
-   {prefix}cvs -qz3 -d '{rootarg}' co {revarg} -d {dir} '{module}'
-fi
-{prefix}cvs -qz3 -d '{rootarg}' up -dP {revarg} {dir}
-""".format(header=header, prefix=prefix, rootarg=rootarg, revarg=revarg, module=self.__module, dir=self.__dir)
+        if not os.path.isdir(invoker.joinPath(self.__dir, "CVS")):
+            # Workaround: CVS 1.12.13 refuses to checkout with '-d .' when using remote access
+            #   cvs checkout: existing repository /home/stefan/cvsroot does not match /home/stefan/cvsroot/cxxtest
+            #   cvs checkout: ignoring module cxxtest
+            # Thus, we have to trick it with a symlink.
+            # Workaround 2: 'cvs co' does not have a '-P' option like 'cvs up' has.
+            # This option removes empty (=deleted) directories.
+            # We therefore use a 'cvs up' after the initial 'cvs co', to get the same behaviour for the initial and subsequent builds.
+            if re.match('^:ext:', rootarg) and self.__dir == '.':
+                os.symlink(".", invoker.join("__tmp$$"))
+                invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "co"] + revarg +
+                    ["-d", "__tmp$$", self.__module], env=env)
+                os.unlink(invoker.join("__tmp$$"))
+            else:
+                invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "co"] + revarg +
+                    ["-d", self.__dir, self.__module], env=env)
+
+        invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "up", "-dP"] + revarg +
+            [self.__dir], env=env)
 
     def asDigestScript(self):
         # Describe what we do: just all the parameters concatenated.

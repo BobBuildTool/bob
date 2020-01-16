@@ -150,8 +150,8 @@ else:
 
 ### directory hashing ###
 
-def hashFile(path):
-    m = hashlib.sha1()
+def hashFile(path, hasher=hashlib.sha1):
+    m = hasher()
     try:
         with open(path, 'rb', buffering=0) as f:
             buf = f.read(16384)

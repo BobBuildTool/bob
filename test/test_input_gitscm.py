@@ -5,12 +5,14 @@
 
 from pipes import quote
 from unittest import TestCase
+from unittest.mock import MagicMock
 import asyncio
 import os
 import subprocess
 import tempfile
 
 from bob.input import GitScm
+from bob.invoker import Invoker
 from bob.errors import ParseError
 from bob.utils import asHexStr
 
@@ -124,20 +126,6 @@ class TestGitScm(TestCase):
         p = s.getProperties()
         self.assertEqual(p['rev'], "0000000000000000000000000000000000000000")
 
-    def testScripts(self):
-        """Test script generation"""
-        s = createGitScm({'branch' : "foobar"})
-        self.assertIsInstance(s.asScript(), str)
-
-        s = createGitScm({'tag' : "asdf"})
-        self.assertIsInstance(s.asScript(), str)
-
-        s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
-        self.assertIsInstance(s.asScript(), str)
-
-        s = createGitScm({'remote-test' : "test/url.git"})
-        self.assertRegexpMatches(s.asScript(), ".*test.*test/url.git.*")
-
     def testDigestScripts(self):
         """Test digest script stable representation"""
         s = createGitScm()
@@ -244,12 +232,16 @@ class RealGitRepositoryTestCase(TestCase):
         s.update(spec)
         return GitScm(s)
 
+    def invokeGit(self, workspace, scm):
+        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+        invoker = Invoker(spec, False, True, True, True, True, False)
+        run(scm.invoke(invoker))
+
 
 class TestGitRemotes(RealGitRepositoryTestCase):
 
     def callAndGetRemotes(self, workspace, scm):
-        subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
-            universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+        self.invokeGit(workspace, scm)
         remotes = subprocess.check_output(["git", "remote", "-v"],
             cwd=os.path.join(workspace, scm.getProperties()['dir']),
             universal_newlines=True).split("\n")
@@ -315,14 +307,12 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
 
     def callCalcLiveBuildId(self, scm):
         with tempfile.TemporaryDirectory() as workspace:
-            subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
-                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            self.invokeGit(workspace, scm)
             return scm.calcLiveBuildId(workspace)
 
     def processHashEngine(self, scm, expected):
         with tempfile.TemporaryDirectory() as workspace:
-            subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
-                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            self.invokeGit(workspace, scm)
             spec = scm.getLiveBuildIdSpec(workspace)
             if spec.startswith('='):
                 self.assertEqual(bytes.fromhex(spec[1:]), expected)

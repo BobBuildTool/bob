@@ -5,18 +5,15 @@
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError
-from .fingerprints import mangleFingerprints
+from .languages import getLanguage, ScriptLanguage, BashLanguage
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
-from .utils import asHexStr, joinScripts, sliceString, compareVersion, binStat, updateDicRecursive, hashString
+from .utils import asHexStr, joinScripts, compareVersion, binStat, updateDicRecursive, hashString
 from abc import ABCMeta, abstractmethod
-from base64 import b64encode
 from itertools import chain
-from glob import glob
-from shlex import quote
 from os.path import expanduser
 from string import Template
 from textwrap import dedent
@@ -110,6 +107,12 @@ class DigestHasher:
     def sliceHost(digest):
         """Extract host fingerprint digest part (if any)."""
         return digest[20:]
+
+def fetchScripts(recipe, prefix, resolveBash = lambda x, y: x):
+    return {
+        ScriptLanguage.BASH : resolveBash(recipe.get(prefix + "ScriptBash",
+            recipe.get(prefix + "Script")), prefix + "Script[Bash]"),
+    }
 
 
 class PluginProperty:
@@ -352,29 +355,44 @@ class CheckoutAssert:
     SCHEMA = schema.Schema({
         'file' : str,
         'digestSHA1' : str,
-        schema.Optional('start') : int,
-        schema.Optional('end') : int,
+        schema.Optional('start') : schema.And(int, lambda n: n >= 1),
+        schema.Optional('end') : schema.And(int, lambda n: n >= 1),
     })
 
     def __init__(self, spec):
+        self.__source = spec['__source']
         self.__file = spec['file']
         self.__digestSHA1 = spec['digestSHA1']
         self.__start = spec.get('start', 1)
-        self.__end = spec.get('end', '$')
+        self.__end = spec.get('end', 0xffffffff)
 
-    def asScript(self):
-        return dedent("""\
-            COMPUTED_SHA1=$(sed -n '{START},{END}p' {FILE} | \
-                    sha1sum | cut -d ' ' -f1)
-            if [[ "$COMPUTED_SHA1" != "{SHA1SUM}" ]]; then
-                echo "Error: CheckoutAssert {FILE} checksums did not match!" 1>&2
-                echo "Specified: {SHA1SUM}" 1>&2
-                echo "Now: $COMPUTED_SHA1" 1>&2
-                exit 1
-            fi
-            """).format(START=str(self.__start),
-                    END=str(self.__end),
-                    FILE=self.__file, SHA1SUM=self.__digestSHA1)
+    def getProperties(self):
+        return {
+            '__source' : self.__source,
+            'file' : self.__file,
+            'digestSHA1' : self.__digestSHA1,
+            'start' : self.__start,
+            'end' : self.__end,
+        }
+
+    def getSource(self):
+        return self.__source
+
+    async def invoke(self, invoker):
+        h = hashlib.sha1()
+        i = 0
+        try:
+            with open(invoker.joinPath(self.__file), "rb") as f:
+                for line in f:
+                    i += 1
+                    if i < self.__start: continue
+                    if (i == self.__start) or (i <= self.__end): h.update(line)
+                    if i > self.__end: break
+            d = h.digest().hex()
+            if d != self.__digestSHA1:
+                invoker.fail(self.__file, "digest did not match! expected:", self.__digestSHA1, "got:", d)
+        except OSError as e:
+            invoker.fail(str(e))
 
     def asDigestScript(self):
         return self.__file + " " + self.__digestSHA1 + " " + str(self.__start) + " " + str(self.__end)
@@ -444,7 +462,7 @@ class AbstractTool:
             self.libs = []
             self.netAccess = False
             self.environment = {}
-            self.fingerprintScript = ""
+            self.fingerprintScript = { lang : "" for lang in ScriptLanguage }
             self.fingerprintIf = False
             self.fingerprintVars = set()
         else:
@@ -452,8 +470,8 @@ class AbstractTool:
             self.libs = spec.get('libs', [])
             self.netAccess = spec.get('netAccess', False)
             self.environment = spec.get('environment', {})
-            self.fingerprintScript = spec.get('fingerprintScript', "")
-            self.fingerprintIf = spec.get("fingerprintIf", None if self.fingerprintScript else False)
+            self.fingerprintScript = fetchScripts(spec, 'fingerprint')
+            self.fingerprintIf = spec.get("fingerprintIf")
             self.fingerprintVars = set(spec.get("fingerprintVars", []))
 
     def prepare(self, coreStepRef, env):
@@ -647,6 +665,12 @@ class CoreStep(CoreItem):
         self.providedDeps = []
         self.providedSandbox = None
 
+    def getPreRunCmds(self):
+        return []
+
+    def getJenkinsPreRunCmds(self):
+        return []
+
     @abstractmethod
     def getScript(self):
         pass
@@ -654,6 +678,12 @@ class CoreStep(CoreItem):
     @abstractmethod
     def getJenkinsScript(self):
         pass
+
+    def getPostRunCmds(self):
+        return []
+
+    def getJenkinsPostRunCmds(self):
+        return []
 
     @abstractmethod
     def getDigestScript(self):
@@ -769,8 +799,9 @@ class CoreStep(CoreItem):
             for (key, val) in sorted(tool.environment.items()):
                 h.update(struct.pack("<II", len(key), len(val)))
                 h.update((key+val).encode('utf8'))
-            h.update(struct.pack("<I", len(tool.fingerprintScript)))
-            h.update(tool.fingerprintScript.encode('utf8'))
+            for val in (tool.fingerprintScript[lang] for lang in ScriptLanguage):
+                h.update(struct.pack("<I", len(val)))
+                h.update(val.encode('utf8'))
             h.update(struct.pack("<I", len(tool.fingerprintVars)))
             for key in sorted(tool.fingerprintVars):
                 h.update(key.encode('utf8'))
@@ -861,6 +892,12 @@ class Step:
     def __ge__(self, other):
         return self._coreStep.variantId >= other._coreStep.variantId
 
+    def getPreRunCmds(self):
+        return self._coreStep.getPreRunCmds()
+
+    def getJenkinsPreRunCmds(self):
+        return self._coreStep.getJenkinsPreRunCmds()
+
     def getScript(self):
         """Return a single big script of the whole step.
 
@@ -871,6 +908,12 @@ class Step:
     def getJenkinsScript(self):
         """Return the relevant parts as shell script that have no Jenkins plugin."""
         return self._coreStep.getJenkinsScript()
+
+    def getPostRunCmds(self):
+        return self._coreStep.getPostRunCmds()
+
+    def getJenkinsPostRunCmds(self):
+        return self._coreStep.getJenkinsPostRunCmds()
 
     def getDigestScript(self):
         """Return a long term stable script.
@@ -1154,6 +1197,14 @@ class Step:
         return self._coreStep.isFingerprinted()
 
     def _getFingerprintScript(self):
+        """Generate final fingerprint script.
+
+        The used fingerprint scripts of the tools and the recipe/classes are
+        finally stitched together based on the mask that was calculated in
+        Recipt.resolveClasses(). For each possible entry there are two bits in
+        the mask: bit 0 is set if the script is taken unconditionally and bit 1
+        is set if the script is taken if not empty.
+        """
         if not self._coreStep.isFingerprinted():
             return ""
 
@@ -1161,31 +1212,32 @@ class Step:
         mask = self._coreStep.fingerprintMask
         tools = self.__package.getPackageStep().getTools()
         scriptsAndVars = chain(
-            ((("", []) if t is None else (t.fingerprintScript, t.fingerprintVars))
+            ((({}, []) if t is None else (t.fingerprintScript, t.fingerprintVars))
                 for t in (tools.get(k) for k in sorted(recipe.toolDepPackage))),
             zip(recipe.fingerprintScriptList, recipe.fingerprintVarsList))
         ret = []
         varSet = set()
         for s,v in scriptsAndVars:
-            if mask & 1:
+            s = s.get(recipe.scriptLanguage.index)
+            if (mask & 1) or ((mask & 2) and s):
                 ret.append(s)
                 varSet.update(v)
-            mask >>= 1
+            mask >>= 2
         env = self.getEnv()
         if recipe.getRecipeSet().getPolicy('fingerprintVars'):
             env = { k : v for k,v in env.items() if k in varSet }
-        return mangleFingerprints(joinScripts(ret), env)
+        return recipe.scriptLanguage.mangleFingerprints(ret, env)
 
 
 class CoreCheckoutStep(CoreStep):
     __slots__ = ( "scmList" )
 
-    def __init__(self, corePackage, checkout=None, fullEnv=Env(), digestEnv=Env(), env=Env()):
+    def __init__(self, corePackage, checkout=None, checkoutSCMs=[], fullEnv=Env(), digestEnv=Env(), env=Env()):
         if checkout:
             recipeSet = corePackage.recipe.getRecipeSet()
             overrides = recipeSet.scmOverrides()
             self.scmList = [ Scm(scm, fullEnv, overrides, recipeSet)
-                for scm in checkout[2]
+                for scm in checkoutSCMs
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
             isValid = (checkout[0] is not None) or bool(self.scmList)
 
@@ -1228,17 +1280,23 @@ class CoreCheckoutStep(CoreStep):
     def isCheckoutStep(self):
         return True
 
+    def getPreRunCmds(self):
+        return [s.getProperties() for s in self.scmList]
+
+    def getJenkinsPreRunCmds(self):
+        return [ s.getProperties() for s in self.scmList if not s.hasJenkinsPlugin() ]
+
     def getScript(self):
-        recipe = self.corePackage.recipe
-        return joinScripts([s.asScript() for s in self.scmList]
-                + [recipe.checkoutScript]
-                + [s.asScript() for s in recipe.checkoutAsserts])
+        return self.corePackage.recipe.checkoutScript
 
     def getJenkinsScript(self):
-        recipe = self.corePackage.recipe
-        return joinScripts([ s.asScript() for s in self.scmList if not s.hasJenkinsPlugin() ]
-            + [recipe.checkoutScript]
-            + [s.asScript() for s in recipe.checkoutAsserts])
+        return self.corePackage.recipe.checkoutScript
+
+    def getPostRunCmds(self):
+        return [s.getProperties() for s in self.corePackage.recipe.checkoutAsserts]
+
+    def getJenkinsPostRunCmds(self):
+        return [ s.getProperties() for s in self.corePackage.recipe.checkoutAsserts ]
 
     def getDigestScript(self):
         if self.isValid:
@@ -1357,13 +1415,13 @@ class CoreBuildStep(CoreStep):
     def fingerprintMask(self):
         # Remove bits of all tools that are not used in buildStep
         ret = self.corePackage.fingerprintMask
-        i = 1
+        i = 3
         ourToolKeys = self.corePackage.recipe.toolDepBuild
         packageToolKeys = self.corePackage.recipe.toolDepPackage
         for t in sorted(packageToolKeys):
             if t not in ourToolKeys:
                 ret &= ~i
-            i <<= 1
+            i <<= 2
         return ret
 
 class BuildStep(Step):
@@ -1449,8 +1507,8 @@ class CorePackage:
         tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathFormatter)
         return Package(self, stack, pathFormatter, inputTools, tools, inputSandbox, sandbox)
 
-    def createCoreCheckoutStep(self, checkout, fullEnv, digestEnv, env):
-        ret = self.checkoutStep = CoreCheckoutStep(self, checkout, fullEnv, digestEnv, env)
+    def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv, env):
+        ret = self.checkoutStep = CoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv, env)
         return ret
 
     def createInvalidCoreCheckoutStep(self):
@@ -1628,48 +1686,7 @@ class Package(object):
 # escaping?
 class IncludeHelper:
 
-    class Resolver:
-        def __init__(self, fileLoader, baseDir, varBase, origText):
-            self.fileLoader = fileLoader
-            self.baseDir = baseDir
-            self.varBase = varBase
-            self.prolog = []
-            self.incDigests = [ asHexStr(hashlib.sha1(origText.encode('utf8')).digest()) ]
-            self.count = 0
-
-        def __getitem__(self, item):
-            mode = item[0]
-            item = item[1:]
-            content = []
-            try:
-                paths = sorted(glob(os.path.join(self.baseDir, item)))
-                if not paths:
-                    raise ParseError("No files matched in include pattern '{}'!"
-                        .format(item))
-                for path in paths:
-                    content.append(self.fileLoader(path))
-            except OSError as e:
-                raise ParseError("Error including '"+item+"': " + str(e))
-            content = b''.join(content)
-
-            self.incDigests.append(asHexStr(hashlib.sha1(content).digest()))
-            if mode == '<':
-                var = "_{}{}".format(self.varBase, self.count)
-                self.count += 1
-                self.prolog.extend([
-                    "{VAR}=$(mktemp)".format(VAR=var),
-                    "_BOB_TMP_CLEANUP+=( ${VAR} )".format(VAR=var),
-                    "base64 -d > ${VAR} <<EOF".format(VAR=var)])
-                self.prolog.extend(sliceString(b64encode(content).decode("ascii"), 76))
-                self.prolog.append("EOF")
-                ret = "${" + var + "}"
-            else:
-                assert mode == "'"
-                ret = quote(content.decode('utf8'))
-
-            return ret
-
-    def __init__(self, fileLoader, baseDir, varBase, sourceName):
+    def __init__(self, scriptLanguage, fileLoader, baseDir, varBase, sourceName):
         self.__pattern = re.compile(r"""
             \$<(?:
                 (?P<escaped>\$)     |
@@ -1678,6 +1695,7 @@ class IncludeHelper:
                 (?P<invalid>)
             )
             """, re.VERBOSE)
+        self.__resolverClass = scriptLanguage.Resolver
         self.__baseDir = baseDir
         self.__varBase = re.sub(r'[^a-zA-Z0-9_]', '_', varBase, flags=re.DOTALL)
         self.__fileLoader = fileLoader
@@ -1685,7 +1703,8 @@ class IncludeHelper:
 
     def resolve(self, text, section):
         if isinstance(text, str):
-            resolver = IncludeHelper.Resolver(self.__fileLoader, self.__baseDir, self.__varBase, text)
+            resolver = self.__resolverClass(self.__fileLoader, self.__baseDir,
+                text, self.__sourceName, self.__varBase)
             t = Template(text)
             t.delimiter = '$<'
             t.pattern = self.__pattern
@@ -1693,8 +1712,7 @@ class IncludeHelper:
                 ret = t.substitute(resolver)
             except ValueError as e:
                 raise ParseError("Bad substiturion in {}: {}".format(section, str(e)))
-            sourceAnchor = "_BOB_SOURCES[$LINENO]=" + quote(self.__sourceName)
-            return ("\n".join(resolver.prolog + [sourceAnchor, ret]), "\n".join(resolver.incDigests))
+            return resolver.resolve(ret)
         else:
             return (None, None)
 
@@ -1714,11 +1732,11 @@ class ScmValidator:
             raise schema.SchemaMissingKeyError("Missing 'scm' key in {}".format(scm), None)
         if scm['scm'] not in self.__scmSpecs.keys():
             raise schema.SchemaWrongKeyError('Invalid SCM: {}'.format(scm['scm']), None)
-        self.__scmSpecs[scm['scm']].validate(scm)
+        return self.__scmSpecs[scm['scm']].validate(scm)
 
     def validate(self, data):
         if isinstance(data, dict):
-            self.__validateScm(data)
+            data = [self.__validateScm(data)]
         elif isinstance(data, list):
             for i in data: self.__validateScm(i)
         else:
@@ -1935,6 +1953,7 @@ class Recipe(object):
         self.__varSelf = recipe.get("environment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
         self.__metaEnv = recipe.get("metaEnvironment", {})
+        self.__checkoutDeterministic = recipe.get("checkoutDeterministic")
         self.__checkoutVars = set(recipe.get("checkoutVars", []))
         self.__checkoutVarsWeak = set(recipe.get("checkoutVarsWeak", []))
         self.__buildVars = set(recipe.get("buildVars", []))
@@ -1961,39 +1980,27 @@ class Recipe(object):
 
         sourceName = ("Recipe " if isRecipe else "Class  ") + packageName + (
             ", layer "+"/".join(layer) if layer else "")
-        incHelper = IncludeHelper(recipeSet.loadBinary, baseDir, packageName,
-                                  sourceName)
+        incHelperBash = IncludeHelper(BashLanguage, recipeSet.loadBinary,
+                                      baseDir, packageName, sourceName).resolve
 
-        (checkoutScript, checkoutDigestScript) = incHelper.resolve(recipe.get("checkoutScript"), "checkoutScript")
-        checkoutSCMs = recipe.get("checkoutSCM", [])
-        if isinstance(checkoutSCMs, dict):
-            checkoutSCMs = [checkoutSCMs]
-        elif not isinstance(checkoutSCMs, list):
-            raise ParseError("checkoutSCM must be a dict or a list")
+        self.__scriptLanguage = recipe.get("scriptLanguage")
+        self.__checkout = fetchScripts(recipe, "checkout", incHelperBash)
+        self.__checkoutSCMs = recipe.get("checkoutSCM", [])
         i = 0
-        for scm in checkoutSCMs:
+        for scm in self.__checkoutSCMs:
             scm["__source"] = sourceName
             scm["recipe"] = "{}#{}".format(sourceFile, i)
             i += 1
-        checkoutAsserts = recipe.get("checkoutAssert", [])
-        self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts)
-        self.__build = incHelper.resolve(recipe.get("buildScript"), "buildScript")
-        self.__package = incHelper.resolve(recipe.get("packageScript"), "packageScript")
-        fingerprintScript = recipe.get("fingerprintScript")
-        fingerprintVars = set(recipe.get("fingerprintVars", []))
-        fingerprintIf = recipe.get("fingerprintIf", None if fingerprintScript else False)
-        if fingerprintIf != False:
-            self.__fingerprintScriptList = [ fingerprintScript ]
-            self.__fingerprintIf = [ fingerprintIf ]
-            self.__fingerprintVarsList = [ fingerprintVars ]
-        else:
-            self.__fingerprintScriptList = []
-            self.__fingerprintIf = []
-            self.__fingerprintVarsList = [ ]
-
-        # Consider checkout deterministic by default if no checkout script is
-        # involved.
-        self.__checkoutDeterministic = recipe.get("checkoutDeterministic", checkoutScript is None)
+        self.__checkoutAsserts = recipe.get("checkoutAssert", [])
+        i = 0
+        for a in self.__checkoutAsserts:
+            a["__source"] = sourceName + ", checkoutAssert #{}".format(i)
+            i += 1
+        self.__build = fetchScripts(recipe, "build", incHelperBash)
+        self.__package = fetchScripts(recipe, "package", incHelperBash)
+        self.__fingerprintScriptList = fetchScripts(recipe, "fingerprint")
+        self.__fingerprintIf = recipe.get("fingerprintIf")
+        self.__fingerprintVarsList = set(recipe.get("fingerprintVars", []))
 
         self.__buildNetAccess = recipe.get("buildNetAccess")
         self.__packageNetAccess = recipe.get("packageNetAccess")
@@ -2025,6 +2032,7 @@ class Recipe(object):
 
         # calculate order of classes (depth first) but ignore ourself
         inherit = self.__resolveClassesOrder(self, [], set(), True)
+        inheritAll = inherit + [self]
 
         # prepare environment merge list
         mergeEnvironment = self.__recipeSet.getPolicy('mergeEnvironment')
@@ -2032,9 +2040,49 @@ class Recipe(object):
             self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
             self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
 
+        # first pass: calculate used scripting language
+        scriptLanguage = None
+        for cls in reversed(inheritAll):
+            if scriptLanguage is not None: break
+            scriptLanguage = cls.__scriptLanguage
+        if scriptLanguage is None:
+            self.__scriptLanguage = self.__recipeSet.scriptLanguage
+        else:
+            self.__scriptLanguage = scriptLanguage
+        glue = getLanguage(self.__scriptLanguage).glue
+
+        # Consider checkout deterministic by default if no checkout script is
+        # involved.
+        def coDet(r):
+            ret = r.__checkoutDeterministic
+            if ret is not None:
+                return ret
+            return r.__checkout[self.__scriptLanguage][0] is None
+        self.__checkoutDeterministic = all(coDet(i) for i in inheritAll)
+
+        # merge scripts and other lists
+        l = lambda x: x[self.__scriptLanguage]
+
+        self.__checkout = (
+            joinScripts((l(i.__checkout)[0] for i in inheritAll), glue),
+            joinScripts((l(i.__checkout)[1] for i in inheritAll), "\n")
+        )
+        self.__checkoutSCMs = list(chain.from_iterable(i.__checkoutSCMs for i in inheritAll))
+        self.__checkoutAsserts = list(chain.from_iterable(i.__checkoutAsserts for i in inheritAll))
+        self.__build = (
+            joinScripts((l(i.__build)[0] for i in inheritAll), glue),
+            joinScripts((l(i.__build)[1] for i in inheritAll), "\n")
+        )
+        self.__package = (
+            joinScripts((l(i.__package)[0] for i in inheritAll), glue),
+            joinScripts((l(i.__package)[1] for i in inheritAll), "\n")
+        )
+        self.__fingerprintScriptList = [ i.__fingerprintScriptList for i in inheritAll ]
+        self.__fingerprintVarsList = [ i.__fingerprintVarsList for i in inheritAll ]
+        self.__fingerprintIf = [ i.__fingerprintIf for i in inheritAll ]
+
         # inherit classes
-        inherit.reverse()
-        for cls in inherit:
+        for cls in reversed(inherit):
             self.__sources.extend(cls.__sources)
             self.__deps[0:0] = cls.__deps
             self.__filterEnv = mergeFilter(self.__filterEnv, cls.__filterEnv)
@@ -2073,34 +2121,8 @@ class Recipe(object):
             self.__toolDepCheckout |= cls.__toolDepCheckout
             self.__toolDepBuild |= cls.__toolDepBuild
             self.__toolDepPackage |= cls.__toolDepPackage
-            (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts) = self.__checkout
-            self.__checkoutDeterministic = self.__checkoutDeterministic and cls.__checkoutDeterministic
             if self.__buildNetAccess is None: self.__buildNetAccess = cls.__buildNetAccess
             if self.__packageNetAccess is None: self.__packageNetAccess = cls.__packageNetAccess
-            # merge scripts
-            checkoutScript = joinScripts([cls.__checkout[0], checkoutScript])
-            checkoutDigestScript = joinScripts([cls.__checkout[1], checkoutDigestScript], "\n")
-            # merge SCMs
-            scms = cls.__checkout[2][:]
-            scms.extend(checkoutSCMs)
-            checkoutSCMs = scms
-            # merge CheckoutAsserts
-            casserts = cls.__checkout[3][:]
-            casserts.extend(checkoutAsserts)
-            checkoutAsserts = casserts
-            # store result
-            self.__checkout = (checkoutScript, checkoutDigestScript, checkoutSCMs, checkoutAsserts)
-            self.__build = (
-                joinScripts([cls.__build[0], self.__build[0]]),
-                joinScripts([cls.__build[1], self.__build[1]], "\n")
-            )
-            self.__package = (
-                joinScripts([cls.__package[0], self.__package[0]]),
-                joinScripts([cls.__package[1], self.__package[1]], "\n")
-            )
-            self.__fingerprintScriptList[0:0] = cls.__fingerprintScriptList
-            self.__fingerprintVarsList[0:0] = cls.__fingerprintVarsList
-            self.__fingerprintIf[0:0] = cls.__fingerprintIf
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
 
@@ -2376,13 +2398,13 @@ class Recipe(object):
             self.__fingerprintIf)
         for fingerprintIf in fingerprintConditions:
             if fingerprintIf is None:
-                doFingerprintMaybe |= mask
+                doFingerprintMaybe |= mask << 1
             elif fingerprintIf == True:
                 doFingerprint |= mask
             elif (isinstance(fingerprintIf, str) or isinstance(fingerprintIf, IfExpression)) \
                  and env.evaluate(fingerprintIf, "fingerprintIf"):
                 doFingerprint |= mask
-            mask <<= 1
+            mask <<= 2
         if doFingerprint:
             doFingerprint |= doFingerprintMaybe
 
@@ -2393,11 +2415,12 @@ class Recipe(object):
                 directPackages, indirectPackages, states, uidGen(), doFingerprint)
 
         # optional checkout step
-        if self.__checkout != (None, None, [], []):
+        if self.__checkout != (None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
-            srcCoreStep = p.createCoreCheckoutStep(self.__checkout, env, checkoutDigestEnv, checkoutEnv)
+            srcCoreStep = p.createCoreCheckoutStep(self.__checkout,
+                self.__checkoutSCMs, env, checkoutDigestEnv, checkoutEnv)
         else:
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
@@ -2516,7 +2539,7 @@ Every dependency must only be given once."""
 
     @property
     def checkoutAsserts(self):
-        return [ CheckoutAssert(cassert) for cassert in self.__checkout[3] ]
+        return [ CheckoutAssert(cassert) for cassert in self.__checkoutAsserts ]
 
     @property
     def buildScript(self):
@@ -2553,6 +2576,10 @@ Every dependency must only be given once."""
     @property
     def fingerprintVarsList(self):
         return self.__fingerprintVarsList
+
+    @property
+    def scriptLanguage(self):
+        return getLanguage(self.__scriptLanguage)
 
 
 class PackageMatcher:
@@ -3114,6 +3141,7 @@ class RecipeSet:
                 for (name, (ver, warn)) in self.__policies.items() }
             for (name, behaviour) in config.get("policies", {}).items():
                 self.__policies[name] = (behaviour, None)
+            self.__scriptLanguage = ScriptLanguage.BASH
 
         # global user config(s)
         if not DEBUG['ngd'] and not layer:
@@ -3204,8 +3232,11 @@ class RecipeSet:
 
         classSchemaSpec = {
             schema.Optional('checkoutScript') : str,
+            schema.Optional('checkoutScriptBash') : str,
             schema.Optional('buildScript') : str,
+            schema.Optional('buildScriptBash') : str,
             schema.Optional('packageScript') : str,
+            schema.Optional('packageScriptBash') : str,
             schema.Optional('checkoutTools') : [ toolNameSchema ],
             schema.Optional('buildTools') : [ toolNameSchema ],
             schema.Optional('packageTools') : [ toolNameSchema ],
@@ -3242,7 +3273,8 @@ class RecipeSet:
                         schema.Optional('libs') : [str],
                         schema.Optional('netAccess') : bool,
                         schema.Optional('environment') : VarDefineValidator("provideTools::environment"),
-                        schema.Optional('fingerprintScript') : str,
+                        schema.Optional('fingerprintScript', default="") : str,
+                        schema.Optional('fingerprintScriptBash') : str,
                         schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
                         schema.Optional('fingerprintVars') : [ varNameUseSchema ],
                     })
@@ -3260,7 +3292,8 @@ class RecipeSet:
             schema.Optional('relocatable') : bool,
             schema.Optional('buildNetAccess') : bool,
             schema.Optional('packageNetAccess') : bool,
-            schema.Optional('fingerprintScript') : str,
+            schema.Optional('fingerprintScript', default="") : str,
+            schema.Optional('fingerprintScriptBash') : str,
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
         }
@@ -3380,6 +3413,11 @@ class RecipeSet:
         except AttributeError:
             self.__sandboxFingerprints = self.getPolicy("sandboxFingerprints")
             return self.__sandboxFingerprints
+
+    @property
+    def scriptLanguage(self):
+        return self.__scriptLanguage
+
 
 class YamlCache:
     def __if_expression_constructor(loader, node):
