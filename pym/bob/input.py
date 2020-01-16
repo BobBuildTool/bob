@@ -2726,6 +2726,7 @@ class RecipeSet:
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
         schema.Optional('layers') : [str],
+        schema.Optional('scriptLanguage', default="bash") : schema.Or("bash", "PowerShell"),
     })
 
     _ignoreCmdConfig = False
@@ -3135,17 +3136,22 @@ class RecipeSet:
         # Determine policies. The root layer determines the default settings
         # implicitly by bobMinimumVersion or explicitly via 'policies'. All
         # sub-layer policies must not contradict root layer policies
+        scriptLanguage = ScriptLanguage(config["scriptLanguage"])
+
         if layer:
             for (name, behaviour) in config.get("policies", {}).items():
                 if bool(self.__policies[name][0]) != behaviour:
                     raise ParseError("Layer '{}' requires different behaviour for policy '{}' than root project!"
                                         .format("/".join(layer), name))
+            if self.__scriptLanguage != scriptLanguage:
+                raise ParseError("Layer '{}' uses different 'scriptLanguage' than root layer!"
+                                    .format("/".join(layer), name))
         else:
             self.__policies = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
                 for (name, (ver, warn)) in self.__policies.items() }
             for (name, behaviour) in config.get("policies", {}).items():
                 self.__policies[name] = (behaviour, None)
-            self.__scriptLanguage = ScriptLanguage.BASH
+            self.__scriptLanguage = scriptLanguage
 
         # global user config(s)
         if not DEBUG['ngd'] and not layer:
@@ -3305,6 +3311,7 @@ class RecipeSet:
             schema.Optional('fingerprintScriptPwsh', default="") : str,
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
+            schema.Optional('scriptLanguage') : schema.Or("bash", "PowerShell"),
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
