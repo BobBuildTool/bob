@@ -249,7 +249,7 @@ Generators
 The main purpose of a generator is to generate project files for one or more IDEs. 
 There is a build-in generator for QtCreator project files.
 
-A generator is called with 3 Arguments:
+A generator is called with at least 3 arguments:
 
 * ``package``: the :class:`bob.input.Package` to build the project for.
 * ``argv``: Arguments not consumed by ``bob project``.
@@ -257,13 +257,23 @@ A generator is called with 3 Arguments:
   the IDE. These are the generic arguments that ``bob project`` parses for all
   generators.
 
+Starting with Bob 0.17 an additional 4th argument is passed to the generator
+function:
+
+* ``bob``: The fully qualified path name to the Bob executable that runs the
+  generator. This may be used to generate project files that work even if Bob
+  is not in $PATH.
+
+The presence of the 4th parameter is determined by the ``apiVersion`` of the
+manifest.
+
 A simple generator may look like::
 
-    def nullGenerator(package, argv, extra):
+    def nullGenerator(package, argv, extra, bob):
         return 0
 
     manifest = {
-        'apiVersion' : "0.5",
+        'apiVersion' : "0.17",
         'projectGenerators' : {
             'nullGenerator' : nullGenerator,
         }
