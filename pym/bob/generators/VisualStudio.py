@@ -4,8 +4,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .common import CommonIDEGenerator
+from ..utils import quoteCmdExe
 from pathlib import Path, PureWindowsPath
-from shlex import quote
+from shlex import quote as quoteBash
 from uuid import UUID
 from uuid import uuid4 as randomUuid
 from uuid import uuid5 as sha1NsUuid
@@ -117,6 +118,13 @@ FILTERS_TEMPLATE = """\
 </Project>
 """
 
+USER_TEMPLATE = """\
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+{GROUPS}
+</Project>
+"""
+
 #def relpath(pathFrom, pathTo):
 #    if pathTo.is_absolute():
 #        return str(pathTo)
@@ -144,6 +152,7 @@ class Project:
         self.resources = [ recipesRoot.joinpath(PureWindowsPath(i)) for i in scan.resources ]
         self.incPaths =  [ recipesRoot.joinpath(PureWindowsPath(i)) for i in scan.incPaths  ]
         self.dependencies = scan.dependencies
+        self.runTargets = [ recipesRoot.joinpath(PureWindowsPath(i)) for i in scan.runTargets ]
 
     def generateProject(self, projects, cmd):
         items = []
@@ -231,6 +240,24 @@ class Project:
         return FILTERS_TEMPLATE.format(FILTERS="\n".join(f for n,f in sorted(filters.items())),
                                        ITEMS="\n".join(items))
 
+    def generateUser(self):
+        groups = []
+        if self.runTargets:
+            # VS can handle only one target per project
+            target = self.runTargets[0]
+            g = ElementTree.Element("PropertyGroup", {"Condition" : "'$(Configuration)|$(Platform)'=='Build|Win32'"})
+            ElementTree.SubElement(g, "LocalDebuggerCommand").text = str(target)
+            ElementTree.SubElement(g, "DebuggerFlavor").text = "WindowsLocalDebugger"
+            groups.append(ElementTree.tostring(g, encoding="unicode"))
+
+            n = ElementTree.Element("PropertyGroup", {"Condition" : "'$(Configuration)|$(Platform)'=='Checkout+Build|Win32'"})
+            ElementTree.SubElement(g, "LocalDebuggerCommand").text = str(target)
+            ElementTree.SubElement(g, "DebuggerFlavor").text = "WindowsLocalDebugger"
+            groups.append(ElementTree.tostring(g, encoding="unicode"))
+            # FIXME: print warning when more than one taget exists
+
+        return USER_TEMPLATE.format(GROUPS="\n".join(groups))
+
 
 class Vs2019Generator(CommonIDEGenerator):
     def __init__(self):
@@ -246,7 +273,6 @@ class Vs2019Generator(CommonIDEGenerator):
 
     def generate(self, extra, bobRoot):
         super().generate()
-        extra = " ".join(quote(e) for e in extra)
 
         # gather root paths
         bobPwd = Path(os.getcwd())
@@ -255,7 +281,7 @@ class Vs2019Generator(CommonIDEGenerator):
                 raise BuildError("Cannot create Visual Studio project for Windows! MSYS2 must be started by msys2_shell.cmd script!")
             msysRoot = PureWindowsPath(os.getenv('WD')) / '..' / '..'
             winPwd = PureWindowsPath(os.popen('pwd -W').read().strip())
-            winDestination = PureWindowsPath(os.popen('cygpath -w {}'.format(quote(self.destination))).read().strip())
+            winDestination = PureWindowsPath(os.popen('cygpath -w {}'.format(quoteBash(self.destination))).read().strip())
             baseBuildMe = str(msysRoot / "msys2_shell.cmd") + \
                     " -msys2 -defterm -no-start -use-full-path -where " + \
                     str(winPwd)
@@ -263,8 +289,8 @@ class Vs2019Generator(CommonIDEGenerator):
             buildMeCmd = baseBuildMe + " " + buildMe
         else:
             winPwd = bobPwd
-            winDestination = Path(self.destination)
-            buildMe = os.path.join(self.destination, "buildme.cmd")
+            winDestination = Path(self.destination).resolve()
+            buildMe = os.path.join(str(winDestination), "buildme.cmd")
             buildMeCmd = buildMe
 
         projects = {
@@ -273,7 +299,7 @@ class Vs2019Generator(CommonIDEGenerator):
         }
 
         if not self.args.update:
-            self.updateFile(buildMe, self.__generateBuildme(extra))
+            self.updateFile(buildMe, self.__generateBuildme(extra, winPwd, bobRoot))
 
         solutionProjectList = []
         solutionProjectConfigs = []
@@ -284,6 +310,9 @@ class Vs2019Generator(CommonIDEGenerator):
                     encoding="utf-8", newline='\r\n')
             self.updateFile(os.path.join(p, name+".vcxproj.filters"), project.generateFilters(),
                     encoding="utf-8", newline='\r\n')
+            if not self.args.update:
+                self.updateFile(os.path.join(p, name+".vcxproj.user"), project.generateUser(),
+                        encoding="utf-8", newline='\r\n')
 
             solutionProjectList.append(SOLUTION_PROJECT_TEMPLATE.format(NAME=name, GUID=str(project.uuid).upper()))
             solutionProjectConfigs.append("\t\t{{{GUID}}}.Build|x86.ActiveCfg = Build|Win32".format(GUID=str(project.uuid).upper()))
@@ -298,15 +327,21 @@ class Vs2019Generator(CommonIDEGenerator):
                                          SOLUTION_GUID=str(self.uuid)),
                 encoding="utf-8", newline='\r\n')
 
-    def __generateBuildme(self, extra):
+    def __generateBuildme(self, extra, projectRoot, bobRoot):
         buildMe = []
         if sys.platform == 'msys':
+            extra = " ".join(quoteBash(e) for e in extra)
             buildMe.append("#!/bin/sh")
-            buildMe.append("export PATH=" + quote(os.environ["PATH"]))
+            buildMe.append("export PATH=" + quoteBash(os.environ["PATH"]))
+            buildMe.append('bob dev "$@" ' + extra)
+            quote = quoteBash
         else:
+            extra = " ".join(quoteCmdExe(e) for e in extra)
             buildMe.append("@ECHO OFF")
-        buildMe.append('bob dev "$@" ' + extra)
-        projectCmd = "bob project -n " + extra + " vs2019 " + quote("/".join(self.rootPackage.getStack())) + \
+            buildMe.append("cd " + quoteCmdExe(str(projectRoot)))
+            buildMe.append(bobRoot + ' dev %* ' + extra)
+            quote = quoteCmdExe
+        projectCmd = bobRoot + " project -n " + extra + " vs2019 " + quote("/".join(self.rootPackage.getStack())) + \
             " -u --destination " + quote(self.destination) + ' --name ' + quote(self.projectName) + \
             " --uuid " + quote(str(self.uuid))
         # only add arguments which are relevant for .files or .includes. All other files are only modified if not build with
