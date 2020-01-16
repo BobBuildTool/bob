@@ -26,9 +26,8 @@ def doHelp(availableCommands, argv, bobRoot):
 
     try:
         from ..develop.make import makeManpages
-        makeManpages()
-        manArgs = [ os.path.join(bobRoot, "doc", "_build", "man",
-            manPage+"."+manSection) ]
+        manPath = makeManpages()
+        manArgs = [ os.path.join(manPath, manPage+"."+manSection) ]
     except ImportError:
         manArgs = [manSection, manPage]
 
