@@ -5,7 +5,7 @@
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError
-from .languages import getLanguage, ScriptLanguage, BashLanguage
+from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
 from .state import BobState
@@ -108,10 +108,12 @@ class DigestHasher:
         """Extract host fingerprint digest part (if any)."""
         return digest[20:]
 
-def fetchScripts(recipe, prefix, resolveBash = lambda x, y: x):
+def fetchScripts(recipe, prefix, resolveBash = lambda x, y: x, resolvePwsh = lambda x, y: x):
     return {
         ScriptLanguage.BASH : resolveBash(recipe.get(prefix + "ScriptBash",
             recipe.get(prefix + "Script")), prefix + "Script[Bash]"),
+        ScriptLanguage.PWSH : resolvePwsh(recipe.get(prefix + "ScriptPwsh",
+            recipe.get(prefix + "Script")), prefix + "Script[Pwsh]"),
     }
 
 
@@ -1982,9 +1984,11 @@ class Recipe(object):
             ", layer "+"/".join(layer) if layer else "")
         incHelperBash = IncludeHelper(BashLanguage, recipeSet.loadBinary,
                                       baseDir, packageName, sourceName).resolve
+        incHelperPwsh = IncludeHelper(PwshLanguage, recipeSet.loadBinary,
+                                      baseDir, packageName, sourceName).resolve
 
         self.__scriptLanguage = recipe.get("scriptLanguage")
-        self.__checkout = fetchScripts(recipe, "checkout", incHelperBash)
+        self.__checkout = fetchScripts(recipe, "checkout", incHelperBash, incHelperPwsh)
         self.__checkoutSCMs = recipe.get("checkoutSCM", [])
         i = 0
         for scm in self.__checkoutSCMs:
@@ -1996,8 +2000,8 @@ class Recipe(object):
         for a in self.__checkoutAsserts:
             a["__source"] = sourceName + ", checkoutAssert #{}".format(i)
             i += 1
-        self.__build = fetchScripts(recipe, "build", incHelperBash)
-        self.__package = fetchScripts(recipe, "package", incHelperBash)
+        self.__build = fetchScripts(recipe, "build", incHelperBash, incHelperPwsh)
+        self.__package = fetchScripts(recipe, "package", incHelperBash, incHelperPwsh)
         self.__fingerprintScriptList = fetchScripts(recipe, "fingerprint")
         self.__fingerprintIf = recipe.get("fingerprintIf")
         self.__fingerprintVarsList = set(recipe.get("fingerprintVars", []))
@@ -3233,10 +3237,13 @@ class RecipeSet:
         classSchemaSpec = {
             schema.Optional('checkoutScript') : str,
             schema.Optional('checkoutScriptBash') : str,
+            schema.Optional('checkoutScriptPwsh') : str,
             schema.Optional('buildScript') : str,
             schema.Optional('buildScriptBash') : str,
+            schema.Optional('buildScriptPwsh') : str,
             schema.Optional('packageScript') : str,
             schema.Optional('packageScriptBash') : str,
+            schema.Optional('packageScriptPwsh') : str,
             schema.Optional('checkoutTools') : [ toolNameSchema ],
             schema.Optional('buildTools') : [ toolNameSchema ],
             schema.Optional('packageTools') : [ toolNameSchema ],
@@ -3275,6 +3282,7 @@ class RecipeSet:
                         schema.Optional('environment') : VarDefineValidator("provideTools::environment"),
                         schema.Optional('fingerprintScript', default="") : str,
                         schema.Optional('fingerprintScriptBash') : str,
+                        schema.Optional('fingerprintScriptPwsh', default="") : str,
                         schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
                         schema.Optional('fingerprintVars') : [ varNameUseSchema ],
                     })
@@ -3294,6 +3302,7 @@ class RecipeSet:
             schema.Optional('packageNetAccess') : bool,
             schema.Optional('fingerprintScript', default="") : str,
             schema.Optional('fingerprintScriptBash') : str,
+            schema.Optional('fingerprintScriptPwsh', default="") : str,
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
         }

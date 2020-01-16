@@ -5,7 +5,7 @@
 
 from . import BOB_INPUT_HASH
 from .errors import ParseError
-from .utils import isWindows, asHexStr
+from .utils import escapePwsh, quotePwsh, isWindows, asHexStr
 from .utils import joinScripts, sliceString
 from base64 import b64encode
 from enum import Enum
@@ -114,6 +114,7 @@ bob-hash-libraries()
 
 class ScriptLanguage(Enum):
     BASH = 'bash'
+    PWSH = 'PowerShell'
 
 
 class IncludeResolver:
@@ -364,8 +365,161 @@ class BashLanguage:
         return ["bash", "-x", "-c", spec.fingerprintScript]
 
 
+class PwshResolver(IncludeResolver):
+    def __init__(self, fileLoader, baseDir, origText, sourceName, varBase):
+        super().__init__(fileLoader, baseDir, origText, sourceName, varBase)
+        self.prolog = []
+        self.count = 0
+
+    def _includeFile(self, content):
+        var = "$_{}{}".format(self.varBase, self.count)
+        self.count += 1
+        self.prolog.extend([
+            "{VAR} = (New-TemporaryFile).FullName".format(VAR=var),
+            "$_BOB_TMP_CLEANUP += {VAR}".format(VAR=var),
+            "[Convert]::FromBase64String(@'"])
+        self.prolog.extend(sliceString(b64encode(content).decode("ascii"), 76))
+        self.prolog.append("'@) | Set-Content {VAR} -AsByteStream".format(VAR=var))
+        return var
+
+    def _includeLiteral(self, content):
+        return quotePwsh(content.decode('utf8'))
+
+    def _resolveContent(self, result):
+        return "\n".join(self.prolog + [result])
+
+
+class PwshLanguage:
+    index = ScriptLanguage.PWSH
+    glue = "\ncd $Env:BOB_CWD\n"
+    Resolver = PwshResolver
+
+    @staticmethod
+    def __formatSetup(spec):
+        pathSep = ";" if sys.platform == "win32" else ":"
+        env = { key: escapePwsh(value) for (key, value) in spec.env.items() }
+        env.update({
+            "PATH": pathSep.join(
+                [escapePwsh(os.path.abspath(p)) for p in spec.paths] +
+                (["$Env:PATH"] if not spec.hasSandbox else
+                 [escapePwsh(p) for p in spec.sandboxPaths])
+            ),
+            "LD_LIBRARY_PATH": pathSep.join(
+                escapePwsh(os.path.abspath(p)) for p in spec.libraryPaths
+            ),
+            "BOB_CWD": escapePwsh(os.path.abspath(spec.workspaceExecPath)),
+        })
+
+        ret = [
+            "# Special Bob array variables:",
+            "$BOB_ALL_PATHS=@{{ {} }}".format("; ".join(sorted(
+                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(os.path.abspath(path)))
+                    for name,path in spec.allPaths ] ))),
+            "$BOB_DEP_PATHS=@{{ {} }}".format("; ".join(sorted(
+                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(os.path.abspath(path)))
+                    for name,path in spec.depPaths ] ))),
+            "$BOB_TOOL_PATHS=@{{ {} }}".format("; ".join(sorted(
+                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(os.path.abspath(path)))
+                    for name,path in spec.toolPaths ] ))),
+            "",
+            "# Environment:",
+            "\n".join('$Env:{}="{}"'.format(k, v) for (k,v) in sorted(env.items()))
+        ]
+        return "\n".join(ret)
+
+    @staticmethod
+    def __formatScript(spec, trace):
+        envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
+        ret = [
+            PwshLanguage.__formatSetup(spec),
+            "",
+            dedent("""\
+                # Setup
+                Get-ChildItem Env: | Select-Object Name,Value | Export-Csv {ENV_FILE}
+                cd $Env:BOB_CWD
+                """.format(ENV_FILE=envFile)),
+            dedent("""\
+                # Error handling
+                $ErrorActionPreference="Stop"
+                Set-PSDebug -Strict
+                """),
+            "",
+            dedent("""\
+                try {
+                    $_BOB_TMP_CLEANUP = @()
+                """),
+            "# BEGIN BUILD SCRIPT",
+            spec.script,
+            "# END BUILD SCRIPT",
+            dedent("""\
+                } finally {
+                    foreach($f in $_BOB_TMP_CLEANUP) {
+                        Remove-Item $f -Force
+                    }
+                }"""),
+        ]
+        return "\n".join(ret)
+
+    @staticmethod
+    def setupShell(spec, tmpDir, keepEnv):
+        if spec.hasSandbox:
+            execScriptFile = "/.script.ps1"
+            realScriptFile = os.path.join(tmpDir, ".script.ps1")
+        else:
+            execScriptFile = os.path.join(tmpDir, "script.ps1")
+            realScriptFile = execScriptFile
+
+        with open(realScriptFile, "w") as f:
+            f.write(PwshLanguage.__formatSetup(spec))
+
+        interpreter = "powershell" if isWindows() else "pwsh"
+        args = [ os.path.abspath(a) for a in spec.args ]
+        return [interpreter, "-ExecutionPolicy", "Bypass", "-NoExit", "-File",
+            execScriptFile] + args
+
+    @staticmethod
+    def setupCall(spec, tmpDir, keepEnv, trace):
+        if spec.hasSandbox:
+            execScriptFile = "/.script.ps1"
+            realScriptFile = os.path.join(tmpDir, ".script.ps1")
+        else:
+            execScriptFile = os.path.join(tmpDir, "script.ps1")
+            realScriptFile = execScriptFile
+
+        with open(realScriptFile, "w") as f:
+            f.write(PwshLanguage.__formatScript(spec, trace))
+
+        interpreter = "powershell" if isWindows() else "pwsh"
+        ret = [interpreter, "-ExecutionPolicy", "Bypass", "-File", execScriptFile]
+        ret.extend(os.path.abspath(a) for a in spec.args)
+
+        return ret
+
+    @staticmethod
+    def mangleFingerprints(scriptFragments, env):
+        # join the script fragments first
+        script = joinScripts(scriptFragments, PwshLanguage.glue)
+
+        # do not add preamble for empty scripts
+        if not script: return ""
+
+        # Add snippets as they match and a default settings preamble
+        ret = [script]
+        ret.extend(['$ErrorActionPreference="Stop"', 'Set-PSDebug -Strict'])
+        for n,v in sorted(env.items()):
+            ret.append('$Env:{}="{}"'.format(k, escapePwsh(v)))
+
+        return "\n".join(reversed(ret))
+
+    @staticmethod
+    def setupFingerprint(spec, env):
+        interpreter = "powershell" if isWindows() else "pwsh"
+        return [interpreter, "-c", spec.fingerprintScript]
+
+
 LANG = {
     ScriptLanguage.BASH : BashLanguage,
+    ScriptLanguage.PWSH : PwshLanguage,
 }
 
 def getLanguage(language):
