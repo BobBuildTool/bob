@@ -143,6 +143,11 @@ def isWindows():
         return False
     return True
 
+if isWindows():
+    INVALID_CHAR_TRANS = str.maketrans(':*?<>"|', '_______')
+else:
+    INVALID_CHAR_TRANS = str.maketrans('', '')
+
 ### directory hashing ###
 
 def hashFile(path):

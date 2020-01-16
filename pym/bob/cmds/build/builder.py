@@ -14,7 +14,7 @@ from ...tty import log, stepMessage, stepAction, stepExec, setProgress, \
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from ...utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
-    isWindows
+    isWindows, INVALID_CHAR_TRANS
 from shlex import quote
 from textwrap import dedent
 import argparse
@@ -1085,7 +1085,7 @@ esac
                     if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir, (None, None))[0]):
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                         if os.path.exists(scmPath):
-                            atticName = datetime.datetime.now().isoformat()+"_"+os.path.basename(scmPath)
+                            atticName = datetime.datetime.now().isoformat().translate(INVALID_CHAR_TRANS)+"_"+os.path.basename(scmPath)
                             stepMessage(checkoutStep, "ATTIC",
                                 "{} (move to ../attic/{})".format(scmPath, atticName), WARNING)
                             atticPath = os.path.join(prettySrcPath, "..", "attic")
