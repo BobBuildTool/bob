@@ -17,66 +17,82 @@ import os
 def __archive(*args, **kwargs):
      from .cmds.archive import doArchive
      doArchive(*args, **kwargs)
+     return 0
 
 def __build(*args, **kwargs):
      from .cmds.build.build import doBuild
      doBuild(*args, **kwargs)
+     return 0
 
 def __develop(*args, **kwargs):
      from .cmds.build.build import doDevelop
      doDevelop(*args, **kwargs)
+     return 0
 
 def __clean(*args, **kwargs):
      from .cmds.build.clean import doClean
      doClean(*args, **kwargs)
+     return 0
 
 def __graph(*args, **kwargs):
     from .cmds.graph import doGraph
     doGraph(*args, **kwargs)
+    return 0
 
 def __help(*args, **kwargs):
     from .cmds.help import doHelp
     doHelp(availableCommands.keys(), *args, **kwargs)
+    return 0
 
 def __jenkins(*args, **kwargs):
      from .cmds.jenkins import doJenkins
      doJenkins(*args, **kwargs)
+     return 0
 
 def __ls(*args, **kwargs):
      from .cmds.misc import doLS
      doLS(*args, **kwargs)
+     return 0
 
 def __project(*args, **kwargs):
      from .cmds.build.project import doProject
      doProject(*args, **kwargs)
+     return 0
 
 def __status(*args, **kwars):
      from .cmds.build.status import doStatus
      doStatus(*args, **kwars)
+     return 0
 
 def __queryscm(*args, **kwargs):
      from .cmds.misc import doQuerySCM
      doQuerySCM(*args, **kwargs)
+     return 0
 
 def __querymeta(*args, **kwargs):
      from .cmds.misc import doQueryMeta
      doQueryMeta(*args, **kwargs)
+     return 0
 
 def __queryrecipe(*args, **kwargs):
      from .cmds.misc import doQueryRecipe
      doQueryRecipe(*args, **kwargs)
+     return 0
 
 def __querypath(*args, **kwargs):
      from .cmds.build.query import doQueryPath
      doQueryPath(*args, **kwargs)
+     return 0
 
 def __download(*args, **kwargs):
     from .archive import doDownload
     doDownload(*args, **kwargs)
+    return 0
 
 def __upload(*args, **kwargs):
     from .archive import doUpload
     doUpload(*args, **kwargs)
+    return 0
 
 availableCommands = {
     "archive"       : ('hl', __archive, "Manage binary artifact archives"),
@@ -212,15 +228,15 @@ def bob(bobRoot = None):
                 import cProfile, pstats
                 pr = cProfile.Profile()
                 pr.enable()
-                cmd(args.args, bobRoot)
+                ret = cmd(args.args, bobRoot)
                 pr.disable()
                 ps = pstats.Stats(pr, stream=sys.stderr).sort_stats('tottime')
                 print("Bob", BOB_VERSION, "profile:", file=sys.stderr)
                 print("Args:", sys.argv[1:], file=sys.stderr)
                 ps.print_stats()
             else:
-                cmd(args.args, bobRoot)
-            return 0
+                ret = cmd(args.args, bobRoot)
+            return ret
         else:
             print("Don't know what to do for '{}'. Use 'bob -h' for help".format(args.command), file=sys.stderr)
             return 2
