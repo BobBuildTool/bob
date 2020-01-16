@@ -2856,7 +2856,7 @@ class RecipeSet:
                 lambda x: updateDicRecursive(self.__uiConfig, x)
             ),
             "whitelist" : BuiltinSetting(
-                schema.Schema([ schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') ]),
+                schema.Schema([ schema.Regex(r'^[^=]*$') ]),
                 lambda x: self.__whiteList.update(x)
             ),
         }
