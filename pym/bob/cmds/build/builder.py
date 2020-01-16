@@ -16,7 +16,7 @@ from ...tty import log, stepMessage, stepAction, stepExec, setProgress, \
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from ...utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
-    isWindows, INVALID_CHAR_TRANS
+    isWindows, INVALID_CHAR_TRANS, quoteCmdExe
 from shlex import quote
 from textwrap import dedent
 import argparse
@@ -32,6 +32,7 @@ import shutil
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 
 # Output verbosity:
@@ -119,9 +120,14 @@ class LocalBuilderStatistic:
 
 class LocalBuilder:
 
-    RUN_TEMPLATE = """#!/bin/bash
+    RUN_TEMPLATE_POSIX = """#!/bin/bash
 cd {ROOT}
 {BOB} _invoke {CLEAN} {SPEC} "$@"
+"""
+
+    RUN_TEMPLATE_WINDOWS = """@ECHO OFF
+cd {ROOT}
+{BOB} _invoke {CLEAN} {SPEC} %*
 """
 
     @staticmethod
@@ -433,13 +439,22 @@ cd {ROOT}
             spec.toFile(f)
 
         # write invocation wrapper
-        runFile = os.path.join("..", scriptName + ".sh")
-        runFileContent = self.RUN_TEMPLATE.format(
-                ROOT=quote(os.getcwd()),
-                BOB=quote(self.__bobRoot),
-                SPEC=quote(specFile),
-                CLEAN="-c" if cleanWorkspace else "",
-            )
+        if sys.platform == "win32":
+            runFile = os.path.join("..", scriptName + ".cmd")
+            runFileContent = self.RUN_TEMPLATE_WINDOWS.format(
+                    ROOT=quoteCmdExe(os.getcwd()),
+                    BOB=quoteCmdExe(self.__bobRoot),
+                    SPEC=quoteCmdExe(specFile),
+                    CLEAN="-c" if cleanWorkspace else "",
+                )
+        else:
+            runFile = os.path.join("..", scriptName + ".sh")
+            runFileContent = self.RUN_TEMPLATE_POSIX.format(
+                    ROOT=quote(os.getcwd()),
+                    BOB=quote(self.__bobRoot),
+                    SPEC=quote(specFile),
+                    CLEAN="-c" if cleanWorkspace else "",
+                )
         absRunFile = os.path.normpath(os.path.join(workspacePath, runFile))
         absRunFile = os.path.join(".", absRunFile)
         with open(absRunFile, "w") as f:
