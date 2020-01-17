@@ -13,11 +13,15 @@ scmOverrides:
           scm: "url"
       set:
           dir: "url"
+      if: !expr |
+         !"${SCM}" || "${SCM}" == "url"
     -
       match:
           scm: "svn"
       set:
           dir: "svn"
+      if: !expr |
+         !"${SCM}" || "${SCM}" == "svn"
 
 include:
     - user

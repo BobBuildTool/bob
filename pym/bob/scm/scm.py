@@ -16,6 +16,7 @@ class ScmOverride:
         self.__match = override.get("match", {})
         self.__del = override.get("del", [])
         self.__set = override.get("set", {})
+        self.__if = override.get("if", None)
         self.__replaceRaw = override.get("replace", {})
         self.__init()
 
@@ -28,13 +29,14 @@ class ScmOverride:
                 .format(e.pattern, str(e)))
 
     def __getstate__(self):
-        return (self.__match, self.__del, self.__set, self.__replaceRaw)
+        return (self.__match, self.__del, self.__set, self.__replaceRaw, self.__if)
 
     def __setstate__(self, s):
-        (self.__match, self.__del, self.__set, self.__replaceRaw) = s
+        (self.__match, self.__del, self.__set, self.__replaceRaw, self.__if) = s
         self.__init()
 
     def __doesMatch(self, scm, env):
+        if self.__if is not None and not env.evaluate(self.__if, "scmOverride::if"): return False
         for (key, value) in self.__match.items():
             if key not in scm: return False
             value = env.substitute(value, "svmOverride::match")
