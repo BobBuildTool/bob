@@ -2712,7 +2712,7 @@ class RecipeSet:
         self.__aliases = {}
         self.__recipes = {}
         self.__classes = {}
-        self.__whiteList = set(["TERM", "SHELL", "USER", "HOME"])
+        self.__whiteList = set(["PATH", "TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
         self.__rootFilter = []
         self.__scmOverrides = []

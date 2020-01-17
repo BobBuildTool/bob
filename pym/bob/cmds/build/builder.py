@@ -310,9 +310,6 @@ esac
         self.__buildOnly = buildOnly
         self.__preserveEnv = preserveEnv
         self.__envWhiteList = set(envWhiteList)
-        # Make sure we have the host $PATH available until just before
-        # executing the final script. Will always be overridded there.
-        self.__envWhiteList.add("PATH")
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
         self.__downloadDepthForce = 0xffff
