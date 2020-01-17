@@ -2832,6 +2832,7 @@ class RecipeSet:
             ),
             "scmOverrides" : BuiltinSetting(
                 schema.Schema([{
+                    schema.Optional('if') : schema.Or(str, IfExpression),
                     schema.Optional('match') : schema.Schema({ str: str }),
                     schema.Optional('del') : [
                         "branch", "commit", "digestSHA1", "digestSHA256", "dir",

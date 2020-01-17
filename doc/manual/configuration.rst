@@ -1742,9 +1742,12 @@ are applied after string substitution. The general syntax looks like the followi
           url:
             pattern: "foo"
             replacement: "bar"
+        if: !expr |
+          "${BOB_RECIPE_NAME}" == "foo"
 
 The ``scmOverrides`` key takes a list of one or more override specifications.
-The override is first matched via patterns that are in the ``match`` section.
+You can select overrides using a ``if`` expression. If ``if`` condition evaluates to true
+the override is first matched via pattens that are in the ``match`` section.
 All entries under ``match`` must be matching for the override to apply. The
 right side of a match entry can use shell globbing patterns.
 
