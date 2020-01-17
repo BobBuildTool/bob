@@ -38,7 +38,10 @@ class ScmOverride:
         for (key, value) in self.__match.items():
             if key not in scm: return False
             value = env.substitute(value, "svmOverride::match")
-            if not fnmatch.fnmatchcase(scm[key], value): return False
+            # the type of scm['if'] could be IfExpression and it is valid to compare the if keyword to match
+            # to a SCM. The old behavior of this is to compare the values as string rather than to evaluate it
+            # and compare the result. Casting the IfExpression to a str we do not change the behavior.
+            if not fnmatch.fnmatchcase(str(scm[key]), value): return False
         return True
 
     def __hash__(self):

@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import ParseError
+from ..stringparser import IfExpression
 from ..utils import asHexStr, hashFile
 from .scm import Scm, ScmAudit
 from shlex import quote
@@ -18,7 +19,7 @@ class UrlScm(Scm):
         'scm' : 'url',
         'url' : str,
         schema.Optional('dir') : str,
-        schema.Optional('if') : str,
+        schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('digestSHA1') : str,
         schema.Optional('digestSHA256') : str,
         schema.Optional('extract') : schema.Or(bool, str),

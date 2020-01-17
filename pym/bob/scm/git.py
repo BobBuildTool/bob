@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import ParseError, BuildError
-from ..stringparser import isTrue
+from ..stringparser import isTrue, IfExpression
 from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
 from ..utils import joinLines
 from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
@@ -26,7 +26,7 @@ class GitScm(Scm):
         'scm' : 'git',
         'url' : str,
         schema.Optional('dir') : str,
-        schema.Optional('if') : str,
+        schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('branch') : str,
         schema.Optional('tag') : str,
         schema.Optional('commit') : str,

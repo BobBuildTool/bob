@@ -696,11 +696,14 @@ There are three common (string) attributes in all SCM specifications: ``scm``,
 ``dir`` and ``if``. By default the SCMs check out to the root of the workspace.
 You may specify any relative path in ``dir`` to checkout to this directory.
 
-By using ``if`` you can selectively enable or disable a particular SCM. The
-string given to the ``if``-keyword is substituted according to
-:ref:`configuration-principle-subst` and the final string is interpreted as a
-boolean value (everything except the empty string, ``0`` and ``false`` is
-considered true). The SCM will only be considered if the condition passes.
+By using ``if`` you can selectively enable or disable a particular SCM using
+either a string or a expression. In case a string is given to the ``if``-keyword
+it is substituted according to :ref:`configuration-principle-subst` and the final
+string is interpreted as a boolean value (everything except the empty string, ``0``
+and ``false`` is considered true). In case you're using the expression syntax you
+can use :ref:`bobpaths_string_literals` and :ref:`bobpaths_string_function_calls`
+to express a condition. The SCM will only be considered if the condition passes.
+
 
 Currently the following ``scm`` values are supported:
 
@@ -894,6 +897,19 @@ The following settings are supported:
 |             |                 |                                                     |
 |             |                 | Default: true                                       |
 +-------------+-----------------+-----------------------------------------------------+
+| if: !expr   | String          | The string is parsed as expression using the same   |
+|             |                 | :ref:`bobpaths_string_literals` and                 |
+|             |                 | :ref:`bobpaths_string_function_calls`               |
+|             |                 | as available for bobpaths.                          |
+|             |                 | The dependency is only considered if the expression |
+|             |                 | is considered as true.                              |
+|             |                 |                                                     |
+|             |                 | Default: true                                       |
+|             |                 | Example::                                           |
+|             |                 |                                                     |
+|             |                 |      if: !expr |                                    |
+|             |                 |            "${FOO}" == "bar" || "${BAZ}"            |
++-------------+-----------------+-----------------------------------------------------+
 
 .. _configuration-recipes-env:
 
@@ -1023,7 +1039,7 @@ supported by Bob.
 fingerprintIf
 ~~~~~~~~~~~~~
 
-Type: String | Boolean | ``null``
+Type: String | Boolean | ``null`` | IfExpression
 
 By default no fingerprinting is done unless at least one inherited class, used
 tool or the recipe explicitly enables it. This is done by either setting
@@ -1048,6 +1064,8 @@ Examples::
    fingerprintIf: True                       # unconditionally enable fingerprinting
    fingerprintIf: "$(eq,${TOOLCHAIN},host)"  # boolean experession
    fingerprintIf: null                       # same as if unset
+   fingerprintIf: !expr |                    # IfExpression
+                     "${TOOLCHAIN}" == "host"
 
 If not given it defaults to ``null``.
 
