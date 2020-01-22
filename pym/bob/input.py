@@ -2823,6 +2823,15 @@ class RecipeSet:
 
         def updateArchive(x): self.__archive = x
 
+        if sys.platform == "win32":
+            # Convert to upper case on Windows. The Python interpreter does that
+            # too and the variables are considered case insensitive by Windows.
+            def updateWhiteList(x):
+                self.__whiteList.update(i.upper() for i in x)
+        else:
+            def updateWhiteList(x):
+                self.__whiteList.update(x)
+
         self.__settings = {
             "alias" : BuiltinSetting(
                 schema.Schema({ schema.Regex(r'^[0-9A-Za-z_-]+$') : str }),
@@ -2892,7 +2901,7 @@ class RecipeSet:
             ),
             "whitelist" : BuiltinSetting(
                 schema.Schema([ schema.Regex(r'^[^=]*$') ]),
-                lambda x: self.__whiteList.update(x)
+                updateWhiteList
             ),
         }
 
