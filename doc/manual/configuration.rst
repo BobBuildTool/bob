@@ -1363,9 +1363,11 @@ section and the user builds with ``--sandbox``). In this case the variables
 defined here have a higher precedence that the ones defined in ``provideVars``.
 
 Variable substitution is possible for the mount paths and environment
-variables. The mount paths are also subject to shell variable expansion when a
-step using the sandbox *is actually executed*.  This can be useful e.g. to
-expand variables that are only available on the build server. Example::
+variables. See :ref:`configuration-principle-subst` for the available
+substations. The mount paths are also subject to an additional variable
+expansion when a step using the sandbox *is actually executed*. This can be
+useful e.g. to expand variables that are only available on the build server.
+Example::
 
     provideSandbox:
         paths: ["/bin", "/usr/bin"]
@@ -1378,7 +1380,7 @@ expand variables that are only available on the build server. Example::
             AUTOCONF_BUILD: "x86_64-linux-gnu"
 
 The example assumes that the variable ``MYREPO`` was set somewhere in the
-recipes.  On the other hand ``$HOME`` is expanded later by the shell. This is
+recipes. On the other hand ``$HOME`` is expanded later at build time. This is
 quite useful on Jenkins because the home directory there is certainly
 different from the one where Bob runs. The last entry shows two mount option
 being used. This line mounts the ssh-agent socket into the sandbox if
