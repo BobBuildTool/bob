@@ -624,23 +624,43 @@ access during build or package steps.
 checkoutAssert
 ~~~~~~~~~~~~~~
 
-Type: List of checkoutAssertions
+Type: List of checkout assertions
 
-Using checkoutAsserts you can make a build fail if a file content has
-been changed. This is especially useful to detect modifications in
-License files.
+Using ``checkoutAssert`` you can make a build fail if a file content has been
+changed. This is especially useful to detect modifications in license files and
+copyright notices in source files.
 
-The following properties are known:
+The following properties are supported:
 
-================= ==================================================================
-Property           Description
-================= ==================================================================
-file              | The file in the workspace to check.
-digestSHA1        | Digest of the file / part. Either pre calculate it using
-                  | `sha1sum` command or take the output of the first (failing) run.
-start             | Optionally. Defaults to 1.
-end               | Optionally. Defaults to last line of file.
-================= ==================================================================
++-----------------+------------------------------------------------------------------+
+| Property        | Description                                                      |
++=================+==================================================================+
+| ``file``        | The file in the workspace to check. Must be a relative path.     |
++-----------------+------------------------------------------------------------------+
+| ``digestSHA1``  + Digest of the file / part (lower case). Either pre calculate it  |
+|                 | using ``sha1sum`` command or take the output of the first        |
+|                 | (failing) run.                                                   |
++-----------------+------------------------------------------------------------------+
+| ``start``       | First line of the file that is checked. Optional integer number. |
+|                 | Defaults to 1 (first line of file).                              |
++-----------------+------------------------------------------------------------------+
+| ``end``         | Last line of file that is checked. Optional integer number.      |
+|                 | Defaults to last line of file.                                   |
++-----------------+------------------------------------------------------------------+
+
+Line numbers start at 1 and are inclusive. The ``start`` line is always taken
+into account even if the ``end`` line is equal or smaller. The line terminator
+is always ``\n`` (ASCII "LF", 0x0a) regardless of the host operating system.
+
+Example::
+
+    checkoutAssert:
+        - file: LICENSE
+          digestSHA1: "2f7285314f4c057c75dbc0e5fad403b2d0691628"
+        - file: src/namespace-sandbox/namespace-sandbox.c
+          digestSHA1: "5ee22fb054c92560ec17202dec67202563e0d145"
+          start: 3
+          end: 13
 
 .. _configuration-recipes-checkoutdeterministic:
 
