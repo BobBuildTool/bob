@@ -4,27 +4,14 @@ Installation
 Dependencies
 ============
 
-Bob is built with Python3 (>=3.5) and needs the following additional packages
-and Python modules that are not part of the standard library:
+Bob is built with Python3 (>=3.5). Some additional Python packages are
+required. They are installed automatically as dependencies.
 
-* `PyYAML`_. Either install via pip (``python3 -m pip install PyYAML``) or the package
-  that comes with your distribution (e.g. python3-yaml on Debian).
-* `schema`_. Either install via pip (``python3 -m pip install schema``) or the package
-  that comes with your distribution (e.g. python3-schema on Debian).
-* `python-magic`_. Either install via pip (``python3 -m pip install python-magic``) or the
-  package that comes with your distribution (e.g. python3-magic on Debian).
-* `pyparsing`_. Either install via pip (``python3 -m pip install pyparsing``) or the
-  package that comes with your distribution (e.g. python3-pyparsing on Debian).
-
-To build bob you need the following tools:
-
-* ``gcc``
-* `python3-sphinx`_
-
-Apart from the build dependencies additional run time dependencies could arise,
+Apart from the Python dependencies additional run time dependencies could arise,
 e.g.:
 
 * GNU ``bash`` >= 4.x
+* Microsoft PowerShell
 * GNU coreutils (``cp``, ``ln``, ``sha1sum``, ...)
 * GNU ``tar``
 * ``hexdump``
@@ -35,6 +22,9 @@ e.g.:
   used. Either install via pip (``python3 -m pip install azure-storage-blob``)
   or download from `GitHub <https://github.com/Azure/azure-storage-python>`_.
 
+The actually needed dependencies depend on the used features and the operating
+system.
+
 .. _installation-install:
 
 Install
@@ -42,6 +32,29 @@ Install
 
 There are several options how to install Bob on your system. If in doubt stick
 to the standard ``pip`` method.
+
+If you are unfamiliar with the installation of Python packages make sure to
+read `Installing Packages <https://packaging.python.org/tutorials/installing-packages/>`_
+from the Python Packaging User Guide. The instructions below assume that you
+have installed Python and that it is available on the command line.
+
+Supported Platforms
+-------------------
+
+* Linux
+* Windows 10
+
+  Make sure to add the Python interpreter to ``%PATH%``. If your recipes use
+  Bash you must additionally install `MSYS2`_ and add the path to ``bash.exe``
+  *after* the native Python interpreter. Otherwise the MSYS2 Python interpreter
+  might be invoked which does not work.
+
+* `MSYS2`_ (Windows 10)
+
+  Install and run Bob from a MSYS2 shell. Running Bob inside a `MSYS2`_
+  environment is supported but not recommended.
+
+* Other POSIX platforms should work but are not actively tested
 
 PyPI release versions
 ---------------------
@@ -81,6 +94,25 @@ required dependencies and the bash completion, though.
    *not* work for Bob. The problem is that these installtion variants are only
    really working for pure python projects. In contrast to that Bob comes with
    manpages and C helper applets that are not built by these commands.
+
+The following additional packages and Python modules that are not part of the
+standard library and need to be installed:
+
+* `PyYAML`_. Either install via pip (``python3 -m pip install PyYAML``) or the package
+  that comes with your distribution (e.g. python3-yaml on Debian).
+* `schema`_. Either install via pip (``python3 -m pip install schema``) or the package
+  that comes with your distribution (e.g. python3-schema on Debian).
+* `python-magic`_. Either install via pip (``python3 -m pip install python-magic``) or the
+  package that comes with your distribution (e.g. python3-magic on Debian).
+* `pyparsing`_. Either install via pip (``python3 -m pip install pyparsing``) or the
+  package that comes with your distribution (e.g. python3-pyparsing on Debian).
+
+To fully run Bob you need the following tools:
+
+* ``gcc``
+* `python3-sphinx`_
+
+The compiler is only required on Linux.
 
 Shell completion
 ================
@@ -123,3 +155,4 @@ to your ``/etc/sysctl.conf`` (or wherever your distro stores that).
 .. _pyparsing: http://pyparsing.wikispaces.com/
 .. _python3-sphinx: http://www.sphinx-doc.org/
 .. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
+.. _MSYS2: https://www.msys2.org/

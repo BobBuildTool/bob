@@ -145,7 +145,7 @@ Step execution
 ~~~~~~~~~~~~~~
 
 The actual work when building a package is done in the following three steps.
-They are Bash scripts that are executed with (and only with) the declared
+They are scripts that are executed with (and only with) the declared
 environment and tools.
 
 Checkout
@@ -172,6 +172,18 @@ Each step of a recipe is executed separately and always in the above order. The
 scripts' working directory is already where the result is expected. The scripts
 should make no assumption about the absolute path or the relative path to other
 steps. Only the working directory might be modified.
+
+Script languages
+~~~~~~~~~~~~~~~~
+
+Bob itself is written in the Python scripting language but actually independent
+of the scripting language that is used during step execution (see above).
+Currently Bob supports two scripting languages: bash and PowerShell. Classes
+and recipes may define their scripts in one or both scripting languages. The
+actually used language at build time is determined by the
+:ref:`configuration-recipes-scriptLanguage` key or, if nothing was specified,
+by the project :ref:`configuration-config-scriptLanguage` setting. The other
+language scripts are ignored.
 
 Environment handling
 ~~~~~~~~~~~~~~~~~~~~
@@ -308,8 +320,10 @@ following things must be provided by the sandbox image:
 * There must *not* be a ``home`` directory. Bob creates this directory on
   demand and will fail if it already exists.
 * There must *not* be a ``tmp`` directory for the same reason.
-* At least bash 4 must be installed as ``bin/bash``. Bob uses associative
-  arrays that are not available in earlier versions.
+* The interpreter of the used script language must be available (``bash`` or
+  ``pwsh``) and it must be in ``$PATH``. When using bash (the default) at
+  least version 4 must be installed. Bob uses associative arrays that are not
+  available in earlier versions.
 
 .. _configuration-principle-subst:
 
@@ -439,12 +453,12 @@ can be configured.
 Recipe and class keywords
 -------------------------
 
-{checkout,build,package}Script
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{checkout,build,package}Script[{Bash,Pwsh}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Type: String
 
-This is the bash script that is executed by Bob at the respective stage when
+This is the script that is executed by Bob at the respective stage when
 building the Packet. It is strongly recommended to write the script as a
 newline preserving block literal. See the following example (note the pipe
 symbol on the end of the first line)::
@@ -452,6 +466,18 @@ symbol on the end of the first line)::
     buildScript: |
         $1/configure
         make
+
+The suffix of the keyword determines the language of the script. Using the
+``Bash`` suffix (e.g.  ``buildScriptBash``) defines a script that is
+interpreted with ``bash``. Likewise, the ``Pwsh`` suffix (e.g.
+``buildScriptPwsh``) defines a PowerShell script. Which language is used at
+build time is determined by the :ref:`configuration-recipes-scriptLanguage` key
+or, if nothing was specified, by the project
+:ref:`configuration-config-scriptLanguage` setting. A keyword without a suffix
+(e.g.  ``buildScript``) is interpreted in whatever language is finally used at
+build time. If both the keyword with the build time language suffix and without
+a suffix are present then the keyword with the build language suffix takes
+precedence.
 
 The script is subject to file inclusion with the ``$<<path>>`` and
 ``$<'path'>`` syntax. The files are included relative to the current recipe.
@@ -480,9 +506,11 @@ are consumed by a {checkout,build,package}Tools declaration are added to the
 front of PATH. The same holds for ``$LD_LIBRARY_PATH`` with the difference of starting
 completely empty.
 
-Additionally, the following variables are populated automatically:
+Additionally, the following (environment) variables are populated
+automatically:
 
-* ``BOB_CWD``: The working directory of the current script.
+* ``BOB_CWD``: Environment variable holding the working directory of the
+  current script as absolute path.
 * ``BOB_ALL_PATHS``: An associative array that holds the paths to the results
   of all dependencies indexed by the package name. This also includes indirect
   dependencies such as consumed tools or the sandbox.
@@ -490,7 +518,15 @@ Additionally, the following variables are populated automatically:
   array comes in handy if you want to refer to a dependency by name (e.g.
   ``${BOB_DEP_PATHS[libfoo-dev]}``) instead of the position (e.g. ``$2``).
 * ``BOB_TOOL_PATHS``: An associative array that holds the execution paths to
-  consumed tools indexed by the package name. All these paths are in ``$PATH``.
+  consumed tools indexed by the package name. All these paths are in ``$PATH``
+  resp. ``%PATH%``.
+
+The associative arrays are no regular environment variables. Hence they are not
+inherited by other processes that are invoked by the executed scripts. In bash
+scripts they are associative arrays. See
+`Bash Arrays <https://www.gnu.org/savannah-checkouts/gnu/bash/manual/bash.html#Arrays>`_
+for more information. In PowerShell scripts they are defined as
+`Hash Tables <https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_hash_tables>`_.
 
 {checkout,build,package}Tools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -987,8 +1023,8 @@ is accepted as sandbox which would also be the default if left out.
 
 .. _configuration-recipes-fingerprintScript:
 
-fingerprintScript
-~~~~~~~~~~~~~~~~~
+fingerprintScript[{Bash,Pwsh}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Type: String
 
@@ -1022,6 +1058,18 @@ scripts of inherited classes are concatenated (but only if their
 :ref:`configuration-recipes-fingerprintIf` condition did not evaluate to
 ``false``). Any fingerprint scripts that are defined by used tools (see
 :ref:`configuration-recipes-provideTools`) are concatenated too.
+
+The suffix of the keyword determines the language of the script. Using the
+``Bash`` suffix (``fingerprintScriptBash``) defines a script that is
+interpreted with ``bash``.  Likewise, the ``Pwsh`` suffix
+(``fingerprintScriptPwsh``) defines a PowerShell script. Which language is used at
+build time is determined by the :ref:`configuration-recipes-scriptLanguage` key
+or, if nothing was specified, by the project
+:ref:`configuration-config-scriptLanguage` setting. The keyword without a suffix
+(``fingerprintScript``) is interpreted in whatever language is finally used at
+build time. If both the keyword with the build time language suffix and without
+a suffix are present then the keyword with the build language suffix takes
+precedence.
 
 For common fingerprint tasks the following built-in functions are provided by
 Bob:
@@ -1424,6 +1472,20 @@ Recipe attribute which defaults to False. If set to True the recipe is declared
 a root recipe and becomes a top level package. There must be at least one root
 package in a project.
 
+.. _configuration-recipes-scriptLanguage:
+
+scriptLanguage
+~~~~~~~~~~~~~~
+
+Type: Enumeration: ``bash``, ``PowerShell``.
+
+Defines the scripting language which is used to run the
+``{checkout,build,package,fingerprint}Script`` scripts when building the
+package. If nothing is specified the :ref:`configuration-config-scriptLanguage`
+setting from config.yaml is used. Depending on the chosen language Bob will
+either invoke ``bash`` or ``pwsh``/``powershell`` as script interpreter. In
+either case the command must be present in ``$PATH``/``%PATH%``.
+
 .. _configuration-recipes-shared:
 
 shared
@@ -1532,6 +1594,21 @@ Example::
         relativeIncludes: False
 
 This will explicitly request old behaviour for the `relativeIncludes` policy.
+
+.. _configuration-config-scriptLanguage:
+
+scriptLanguage
+~~~~~~~~~~~~~~
+
+Type: Enumeration: ``bash``, ``PowerShell``.
+
+Defines the scripting language which is used to run the
+``{checkout,build,package,fingerprint}Script`` scripts. Defaults to ``bash``.
+Might be overrided on a case-by-case basis in a class or recipe with
+:ref:`configuration-recipes-scriptLanguage`.  Depending on the chosen language
+Bob will either invoke ``bash`` or ``pwsh``/``powershell`` as script
+interpreter. In either case the command must be present in
+``$PATH``/``%PATH%``.
 
 .. _configuration-config-usr:
 
