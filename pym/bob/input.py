@@ -2740,7 +2740,9 @@ class RecipeSet:
         cls._colorModeConfig = mode
 
     def __init__(self):
-        self.__defaultEnv = {}
+        self.__defaultEnv = {
+            "BOB_HOST_PLATFORM" : sys.platform,
+        }
         self.__aliases = {}
         self.__recipes = {}
         self.__classes = {}
