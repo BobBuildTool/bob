@@ -7,7 +7,7 @@ from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError
 from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
 from .pathspec import PackageSet
-from .scm import CvsScm, GitScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
+from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
@@ -3278,7 +3278,8 @@ class RecipeSet:
                 'git' : GitScm.SCHEMA,
                 'svn' : SvnScm.SCHEMA,
                 'cvs' : CvsScm.SCHEMA,
-                'url' : UrlScm.SCHEMA
+                'url' : UrlScm.SCHEMA,
+                'import' : ImportScm.SCHEMA,
             }),
             schema.Optional('checkoutAssert') : [ CheckoutAssert.SCHEMA ],
             schema.Optional('depends') : dependsClause,

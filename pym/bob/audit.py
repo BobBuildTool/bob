@@ -5,7 +5,7 @@
 
 from . import BOB_INPUT_HASH
 from .errors import BuildError, ParseError
-from .scm import GitAudit, SvnAudit, UrlAudit, auditFromData
+from .scm import GitAudit, SvnAudit, UrlAudit, ImportAudit, auditFromData
 from .tty import log, WARNING
 from .utils import asHexStr, hashFile, binStat
 from datetime import datetime, timezone
@@ -59,6 +59,7 @@ class Artifact:
         'git' : GitAudit,
         'svn' : SvnAudit,
         'url' : UrlAudit,
+        'import' : ImportAudit,
     }
 
     SCHEMA = schema.Schema({

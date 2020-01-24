@@ -7,6 +7,7 @@ from ..errors import ParseError
 from .scm import Scm, ScmStatus, ScmTaint, ScmOverride
 from .cvs import CvsScm
 from .git import GitScm, GitAudit
+from .imp import ImportScm, ImportAudit
 from .svn import SvnScm, SvnAudit
 from .url import UrlScm, UrlAudit
 import os.path
@@ -24,6 +25,8 @@ def auditFromData(data):
     typ = data.get("type")
     if typ == "git":
         scm = GitAudit
+    elif typ == "import":
+        scm = ImportAudit
     elif typ == "url":
         scm = UrlAudit
     elif typ == "svn":
@@ -43,6 +46,8 @@ def getScm(spec, overrides=[], recipeSet=None):
     scm = spec["scm"]
     if scm == "git":
         return GitScm(spec, overrides, recipeSet and recipeSet.getPolicy('secureSSL'))
+    elif scm == "import":
+        return ImportScm(spec, overrides)
     elif scm == "svn":
         return SvnScm(spec, overrides)
     elif scm == "cvs":
