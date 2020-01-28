@@ -12,7 +12,7 @@ from ...invoker import Invoker, InvocationMode
 from ...languages import StepSpec
 from ...state import BobState
 from ...stringparser import Env
-from ...tty import log, stepMessage, stepAction, stepExec, setProgress, \
+from ...tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit, \
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from ...utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
@@ -466,6 +466,7 @@ cd {ROOT}
             self.__verbose >= INFO, self.__verbose >= NORMAL,
             self.__verbose >= DEBUG, self.__bufferedStdIO)
         ret = await invoker.executeStep(InvocationMode.CALL, cleanWorkspace)
+        if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")

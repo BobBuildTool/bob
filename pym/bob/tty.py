@@ -462,6 +462,16 @@ def cleanup():
     if __onTTY and sys.platform == "win32":
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value)
 
+def ttyReinit():
+    """Re-initialize the console settings.
+
+    Work around a MSYS2 odity where the executable unconditionally resets the
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING flag even if it was already set when the
+    process was started.
+    """
+    if __onTTY and sys.platform == "win32":
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value | 4)
+
 # module initialization
 
 __onTTY = (sys.stdout.isatty() and sys.stderr.isatty())
