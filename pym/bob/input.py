@@ -2379,7 +2379,7 @@ class Recipe(object):
                 doFingerprintMaybe |= mask
             elif fingerprintIf == True:
                 doFingerprint |= mask
-            elif (isinstance(fingerprintIf, str) or isinstance(fingerprintIf, str)) \
+            elif (isinstance(fingerprintIf, str) or isinstance(fingerprintIf, IfExpression)) \
                  and env.evaluate(fingerprintIf, "fingerprintIf"):
                 doFingerprint |= mask
             mask <<= 1
