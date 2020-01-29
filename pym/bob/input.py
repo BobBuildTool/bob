@@ -1161,7 +1161,8 @@ class Step:
         mask = self._coreStep.fingerprintMask
         tools = self.__package.getPackageStep().getTools()
         scriptsAndVars = chain(
-            ((t.fingerprintScript, t.fingerprintVars) for n,t in sorted(tools.items())),
+            ((("", []) if t is None else (t.fingerprintScript, t.fingerprintVars))
+                for t in (tools.get(k) for k in sorted(recipe.toolDepPackage))),
             zip(recipe.fingerprintScriptList, recipe.fingerprintVarsList))
         ret = []
         varSet = set()
@@ -2370,8 +2371,8 @@ class Recipe(object):
         doFingerprintMaybe = 0
         mask = 1
         fingerprintConditions = chain(
-            (t.fingerprintIf for t in (toolsView.get(i) for i in sorted(self.__toolDepPackage))
-                             if t is not None),
+            ((t.fingerprintIf if t is not None else False)
+                for t in (toolsView.get(i) for i in sorted(self.__toolDepPackage))),
             self.__fingerprintIf)
         for fingerprintIf in fingerprintConditions:
             if fingerprintIf is None:
