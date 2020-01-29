@@ -3129,7 +3129,7 @@ class RecipeSet:
         # finally parse recipes
         classesDir = os.path.join(rootDir, 'classes')
         for root, dirnames, filenames in os.walk(classesDir):
-            for path in fnmatch.filter(filenames, "*.yaml"):
+            for path in fnmatch.filter(filenames, "[!.]*.yaml"):
                 try:
                     [r] = Recipe.loadFromFile(self, layer, classesDir,
                         os.path.relpath(os.path.join(root, path), classesDir),
@@ -3141,7 +3141,7 @@ class RecipeSet:
 
         recipesDir = os.path.join(rootDir, 'recipes')
         for root, dirnames, filenames in os.walk(recipesDir):
-            for path in fnmatch.filter(filenames, "*.yaml"):
+            for path in fnmatch.filter(filenames, "[!.]*.yaml"):
                 try:
                     recipes = Recipe.loadFromFile(self, layer, recipesDir,
                         os.path.relpath(os.path.join(root, path), recipesDir),
