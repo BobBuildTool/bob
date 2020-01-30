@@ -3046,7 +3046,7 @@ class RecipeSet:
         if os.path.exists(path):
             return self.__cache.loadYaml(path, schema, default)
         else:
-            return default
+            return schema.validate(default)
 
     def parse(self):
         if not os.path.isdir("recipes"):
