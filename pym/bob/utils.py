@@ -337,14 +337,26 @@ class DirHasher:
 
         return digest
 
-    @staticmethod
-    def __hashLink(path):
-        m = hashlib.sha1()
-        try:
-            m.update(os.readlink(path))
-        except OSError as e:
-            logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
-        return m.digest()
+    if (sys.platform == "win32") and (sys.version_info.minor <= 7):
+        # Before Python 3.8 the os.readlink method did not accept byte encoded
+        # file names on Windows.
+        @staticmethod
+        def __hashLink(path):
+            m = hashlib.sha1()
+            try:
+                m.update(os.fsencode(os.readlink(os.fsdecode(path))))
+            except OSError as e:
+                logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
+            return m.digest()
+    else:
+        @staticmethod
+        def __hashLink(path):
+            m = hashlib.sha1()
+            try:
+                m.update(os.readlink(path))
+            except OSError as e:
+                logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
+            return m.digest()
 
     def __hashDir(self, prefix, path=b''):
         entries = []
