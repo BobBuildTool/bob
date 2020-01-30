@@ -72,6 +72,10 @@ run_blackbox_test()
 	return $ret
 }
 
+# Remove all GIT_ variables from environment. They will be set when running
+# this script from "git rebase --exec" and blow up the git related tests.
+unset "${!GIT_@}"
+
 # move to root directory
 cd "${0%/*}/.."
 . ./test/test-lib.sh
