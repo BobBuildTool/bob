@@ -111,9 +111,9 @@ class TestVersions(TestCase):
         self.assertTrue(compareVersion("0.4.0", "0.4rc4") > 0)
 
     def testDev(self):
-        self.assertTrue(compareVersion("0.15", "0.15.0.dev4") < 0)
+        self.assertTrue(compareVersion("0.15", "0.15.0.dev4") > 0)
         self.assertTrue(compareVersion("0.15.dev5", "0.15.0.dev4") > 0)
-        self.assertTrue(compareVersion("0.15.0rc1", "0.15.0rc1.dev4") < 0)
+        self.assertTrue(compareVersion("0.15.0rc1", "0.15.0rc1.dev4") > 0)
 
     def testInvalid(self):
         self.assertRaises(ParseError, compareVersion, "v0.15", "0.15")

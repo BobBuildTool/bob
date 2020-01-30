@@ -111,8 +111,8 @@ def compareVersion(origLeft, origRight):
 
         # If we still have a tie then the smallest distance wins.
         if ret == 0:
-            ldist = 0 if  left["dist"] is None else int( left["dist"])
-            rdist = 0 if right["dist"] is None else int(right["dist"])
+            ldist = 0xFFFF if  left["dist"] is None else int( left["dist"])
+            rdist = 0xFFFF if right["dist"] is None else int(right["dist"])
             if ldist < rdist:
                 ret = -1
             elif ldist > rdist:
