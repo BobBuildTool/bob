@@ -578,6 +578,14 @@ following step anyway.
 The following variables are populated internally by Bob and might be added to
 the variable list:
 
+* ``BOB_HOST_PLATFORM`` - the platform identifier where Bob is running on. The
+  following values are defined:
+
+  * ``linux``: Linux
+  * ``msys``: Windows/MSYS2
+  * ``win32``: Windows
+  * ``darwin``: Mac OS X
+
 * ``BOB_RECIPE_NAME`` - name of the recipe that defined the package
 * ``BOB_PACKAGE_NAME`` - name of the actual package. Might be different from
   the recipe name if ``multiPackage`` is used.
