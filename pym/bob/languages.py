@@ -394,6 +394,19 @@ class PwshLanguage:
     glue = "\ncd $Env:BOB_CWD\n"
     Resolver = PwshResolver
 
+    HELPERS = dedent("""\
+        function Check-Command {
+            param (
+                [scriptblock]$ScriptBlock,
+                [string]$ErrorAction = $ErrorActionPreference
+            )
+            & @ScriptBlock
+            if (($lastexitcode -ne 0) -and $ErrorAction -eq "Stop") {
+                exit $lastexitcode
+            }
+        }
+        """)
+
     @staticmethod
     def __formatSetup(spec):
         pathSep = ";" if sys.platform == "win32" else ":"
@@ -423,7 +436,10 @@ class PwshLanguage:
                     for name,path in spec.toolPaths ] ))),
             "",
             "# Environment:",
-            "\n".join('$Env:{}="{}"'.format(k, v) for (k,v) in sorted(env.items()))
+            "\n".join('$Env:{}="{}"'.format(k, v) for (k,v) in sorted(env.items())),
+            "",
+            "# Convenience helpers",
+            PwshLanguage.HELPERS,
         ]
         return "\n".join(ret)
 
@@ -508,6 +524,7 @@ class PwshLanguage:
         ret.extend(['$ErrorActionPreference="Stop"', 'Set-PSDebug -Strict'])
         for n,v in sorted(env.items()):
             ret.append('$Env:{}="{}"'.format(k, escapePwsh(v)))
+        ret.append(PwshLanguage.HELPERS)
 
         return "\n".join(reversed(ret))
 
