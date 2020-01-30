@@ -28,15 +28,15 @@ class TestGitVersion(TestCase):
             gitMock.return_value = "v1.2.3-rc10"
             self.assertEqual(getVersion(), "1.2.3rc10")
             gitMock.return_value = "v1.0.4-14-g2414721"
-            self.assertEqual(getVersion(), "1.0.4.dev14+g2414721")
+            self.assertEqual(getVersion(), "1.0.5.dev14+g2414721")
             gitMock.return_value = "v1.0.4-rc42-14-g2414721"
-            self.assertEqual(getVersion(), "1.0.4rc42.dev14+g2414721")
+            self.assertEqual(getVersion(), "1.0.4rc43.dev14+g2414721")
 
             gitMock.return_value = "v0.1.2-dirty"
             self.assertEqual(getVersion(), "0.1.2+dirty")
             gitMock.return_value = "v1.2.3-rc10-dirty"
             self.assertEqual(getVersion(), "1.2.3rc10+dirty")
             gitMock.return_value = "v1.0.4-14-g2414721-dirty"
-            self.assertEqual(getVersion(), "1.0.4.dev14+g2414721.dirty")
+            self.assertEqual(getVersion(), "1.0.5.dev14+g2414721.dirty")
             gitMock.return_value = "v1.0.4-rc42-14-g2414721-dirty"
-            self.assertEqual(getVersion(), "1.0.4rc42.dev14+g2414721.dirty")
+            self.assertEqual(getVersion(), "1.0.4rc43.dev14+g2414721.dirty")

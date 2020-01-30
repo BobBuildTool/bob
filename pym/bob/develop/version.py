@@ -32,15 +32,27 @@ def getVersion():
         m = re.match(r"^v(?P<version>[0-9]+(?:\.[0-9]+){2})(?P<rc>-rc[0-9]+)?(?P<dist>-[0-9]+-g[a-f0-9]+)?(?P<dirty>-dirty)?$", version)
         if m is not None:
             # Convert to PEP 440 conforming version number
+            version = [ int(i) for i in m.group("version").split(".") ]
             local = []
-            version = m.group("version")
-            if m.group("rc"): version += m.group("rc")[1:]
+
+            if m.group("rc"):
+                version.append("rc")
+                version.append(int(m.group("rc")[3:]))
             if m.group("dist"):
+                # Development versions guess the next cut. This is done by
+                # simply incrementing the last version number (might be patch
+                # or rc).
                 dist,commit = m.group("dist")[1:].split("-")
-                version += ".dev" + dist
+                version[-1] += 1
+                version.append(".dev" + dist)
                 local.append(commit)
-            if m.group("dirty"): local.append("dirty")
-            if local: version += "+" + ".".join(local)
+            if m.group("dirty"):
+                local.append("dirty")
+
+            version = [ str(i) for i in version ]
+            version = ".".join(version[:3]) + "".join(version[3:])
+            if local:
+                version += "+" + ".".join(local)
         else:
             import sys
             print("Warning: inferred version of Bob does not match schema:",
