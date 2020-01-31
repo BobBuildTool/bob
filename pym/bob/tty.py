@@ -234,7 +234,6 @@ class ParallelTtyUIAction(BaseTUIAction):
 class ParallelTtyUI(BaseTUI):
     def __init__(self, verbosity, maxJobs):
         super().__init__(verbosity)
-        import termios
         self.__index = 1
         self.__maxJobs = maxJobs
         self.__jobs = {}
@@ -246,11 +245,15 @@ class ParallelTtyUI(BaseTUI):
         print("\x1b[?25l")
 
         # disable echo
-        fd = sys.stdin.fileno()
-        self.__oldTcAttr = termios.tcgetattr(fd)
-        new = termios.tcgetattr(fd)
-        new[3] = new[3] & ~termios.ECHO
-        termios.tcsetattr(fd, termios.TCSADRAIN, new)
+        try:
+            import termios
+            fd = sys.stdin.fileno()
+            self.__oldTcAttr = termios.tcgetattr(fd)
+            new = termios.tcgetattr(fd)
+            new[3] = new[3] & ~termios.ECHO
+            termios.tcsetattr(fd, termios.TCSADRAIN, new)
+        except ImportError:
+            pass
 
     def __nextJob(self):
         ret = self.__index
@@ -333,8 +336,11 @@ class ParallelTtyUI(BaseTUI):
         for i in range(max(len(self.__jobs), self.__maxJobs)+1):
             print()
         print("\x1b[?25h")
-        import termios
-        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
+        try:
+            import termios
+            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
+        except ImportError:
+            pass
 
     def setProgress(self, done, num):
         self.__tasksDone = done
