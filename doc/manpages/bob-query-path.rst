@@ -49,6 +49,9 @@ Options
 ``-f FORMAT``
     Output format string
 
+``-q``
+    Be quiet in case of errors
+
 ``--no-sandbox``
     Disable sandboxing
 

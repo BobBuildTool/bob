@@ -17,6 +17,18 @@ test -z "$(run_bob query-path --release root)"
 test -z "$(run_bob query-path --release root/interm1/child)"
 test -z "$(run_bob query-path --release root/interm2/child)"
 
+# Still, must report error on stderr as long as we don't provide -q
+test -n "$(run_bob query-path --release root 2>&1 | grep 'not present')"
+test -n "$(run_bob query-path --release root/interm1/child 2>&1 | grep 'not present')"
+test -n "$(run_bob query-path --release root/interm2/child 2>&1 | grep 'not present')"
+test -z "$(run_bob query-path --release -q root 2>&1 | grep 'not present')"
+test -z "$(run_bob query-path --release -q root/interm1/child 2>&1 | grep 'not present')"
+test -z "$(run_bob query-path --release -q root/interm2/child 2>&1 | grep 'not present')"
+
+# Also, errors on non-present packages should be reported
+test -n "$(run_bob query-path --release notpresent 2>&1 | grep 'Naptime')"
+test -z "$(run_bob query-path --release -q notpresent 2>&1 | grep 'Naptime')"
+
 # Perform a full release build. Must report paths for everything.
 run_bob build root
 set -- $(run_bob query-path --release root)

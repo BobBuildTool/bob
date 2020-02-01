@@ -1,5 +1,5 @@
 # Bob build tool
-# Copyright (C) 2016-2019, The BobBuildTool Contributors
+# Copyright (C) 2016-2020, The BobBuildTool Contributors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -39,6 +39,8 @@ been executed or does not exist), the line is omitted.
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
+    parser.add_argument('-q', dest="quiet", action="store_true",
+        help="Be quiet in case of errors")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', help="Enable sandboxing")
@@ -82,7 +84,7 @@ been executed or does not exist), the line is omitted.
         def print(self):
             if (self.showPackage):
                 print(self.packageText)
-            else:
+            elif not args.quiet:
                 packageName = self.failedSteps[0].getPackage().getName()
                 if len(self.failedSteps) is 1:
                     print("Directory for {{{}}} step of package {} not present.".format(
@@ -133,5 +135,5 @@ been executed or does not exist), the line is omitted.
             # Show
             state.print()
 
-    if not matched:
+    if not matched and not args.quiet:
         print("Your query matched no packages. Naptime!", file=sys.stderr)
