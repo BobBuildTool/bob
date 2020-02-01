@@ -24,15 +24,22 @@ This command lists existing workspace directory names for packages given
 on the command line. Output is formatted with a format string that can
 contain placeholders
 
-   {name}     package name
-   {src}      checkout directory
-   {build}    build directory
-   {dist}     package directory
+    +----------+------------------+
+    |{name}    |package name      |
+    +----------+------------------+
+    |{src}     |checkout directory|
+    +----------+------------------+
+    |{build}   |build directory   |
+    +----------+------------------+
+    |{dist}    |package directory |
+    +----------+------------------+
 
 The default format is '{name}<tab>{dist}'.
 
 If a directory does not exist for a step (because that step has never
-been executed or does not exist), the line is omitted.
+been executed or does not exist) or if one or more of the given packages
+does not exist, a error message is printed unless the ``-q`` option is
+provided.
 
 Options
 -------
