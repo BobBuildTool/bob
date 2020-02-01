@@ -52,6 +52,9 @@ Options
 ``-q``
     Be quiet in case of errors
 
+``--fail``
+    Return a non-zero exit code in case of errors
+
 ``--no-sandbox``
     Disable sandboxing
 
