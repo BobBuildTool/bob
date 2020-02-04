@@ -1,5 +1,5 @@
 # Bob build tool
-# Copyright (C) 2016-2019, The BobBuildTool Contributors
+# Copyright (C) 2016-2020, The BobBuildTool Contributors
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -39,6 +39,10 @@ been executed or does not exist), the line is omitted.
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
+    parser.add_argument('-q', dest="quiet", action="store_true",
+        help="Be quiet in case of errors")
+    parser.add_argument('--fail', action="store_true",
+        help="Return a non-zero error code in case of errors")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', help="Enable sandboxing")
@@ -83,14 +87,17 @@ been executed or does not exist), the line is omitted.
             if (self.showPackage):
                 print(self.packageText)
             else:
-                packageName = self.failedSteps[0].getPackage().getName()
-                if len(self.failedSteps) is 1:
-                    print("Directory for {{{}}} step of package {} not present.".format(
-                        self.failedSteps[0].getLabel(), packageName), file=sys.stderr)
-                else:
-                    labelList = ', '.join([step.getLabel() for step in self.failedSteps])
-                    print("Directories for {{{}}} steps of package {} not present.".format(
-                        labelList, packageName), file=sys.stderr)
+                if not args.quiet:
+                    packageName = self.failedSteps[0].getPackage().getName()
+                    if len(self.failedSteps) is 1:
+                        print("Directory for {{{}}} step of package {} not present.".format(
+                            self.failedSteps[0].getLabel(), packageName), file=sys.stderr)
+                    else:
+                        labelList = ', '.join([step.getLabel() for step in self.failedSteps])
+                        print("Directories for {{{}}} steps of package {} not present.".format(
+                            labelList, packageName), file=sys.stderr)
+                if args.fail:
+                    sys.exit(1)
 
     if args.dev:
         # Develop names are stable. All we need to do is to replicate build's algorithm,
@@ -134,4 +141,7 @@ been executed or does not exist), the line is omitted.
             state.print()
 
     if not matched:
-        print("Your query matched no packages. Naptime!", file=sys.stderr)
+        if not args.quiet:
+            print("Your query matched no packages. Naptime!", file=sys.stderr)
+        if args.fail:
+            sys.exit(1)
