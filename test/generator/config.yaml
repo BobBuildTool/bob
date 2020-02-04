@@ -2,4 +2,5 @@ bobMinimumVersion: "0.4"
 
 plugins:
     - "generator"
+    - "vs"
 

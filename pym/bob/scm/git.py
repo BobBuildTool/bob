@@ -92,80 +92,57 @@ class GitScm(Scm):
             properties.update({GitScm.REMOTE_PREFIX+key : val})
         return properties
 
-    def asScript(self):
-        remotes_array = [
-            "# create an array of all remotes for this repository",
-            "declare -A BOB_GIT_REMOTES=( [origin]={URL} )".format(URL=quote(self.__url)),
-        ]
-        # add additional remotes to array
-        for name, url in self.__remotes.items():
-            remotes_array.append("BOB_GIT_REMOTES[{NAME}]={URL}"
-                                    .format(NAME=quote(name), URL=quote(url)))
+    async def invoke(self, invoker):
+        # make sure the git directory exists
+        if not os.path.isdir(invoker.joinPath(self.__dir, ".git")):
+            await invoker.checkCommand(["git", "init", self.__dir])
 
-        # Assemble generic header including the remote handling
-        header = super().asScript()
+        # setup and update remotes
+        remotes = { "origin" : self.__url }
+        remotes.update(self.__remotes)
+        existingRemotes = await invoker.checkOutputCommand(["git", "remote"], cwd=self.__dir)
+        for remote in existingRemotes.split("\n"):
+            if remote in remotes:
+                cfgUrl = remotes[remote]
+                realUrl = await invoker.checkOutputCommand(
+                    ["git", "ls-remote", "--get-url", remote], cwd=self.__dir)
+                if cfgUrl != realUrl:
+                    await invoker.checkCommand(["git", "remote", "set-url", remote, cfgUrl], cwd=self.__dir)
+                del remotes[remote]
+
+        # add remaining (new) remotes
+        for remote,url in remotes.items():
+            await invoker.checkCommand(["git", "remote", "add", remote, url], cwd=self.__dir)
+
+        # relax security if requested
         if not self.__sslVerify:
-            header += "\nexport GIT_SSL_NO_VERIFY=true"
-        header += "\n" + dedent("""\
-            if [ ! -d {DIR}/.git ] ; then
-                git init {DIR}
-            fi
-            cd {DIR}
-            (
-                {REMOTES_ARRAY}
-                # remove remotes from array that are already known to Git
-                while read -r REMOTE_NAME ; do
-                    # check for empty variable in case no remote at all is specified
-                    if [ -z "$REMOTE_NAME" ]; then
-                        continue
-                    fi
-                    # check if existing remote is configured
-                    if [ "${{BOB_GIT_REMOTES[$REMOTE_NAME]+_}}" ]; then
-                        # check if URL has changed
-                        if [ ! "${{BOB_GIT_REMOTES[$REMOTE_NAME]}}" == "$(git ls-remote --get-url $REMOTE_NAME)" ]; then
-                            git remote set-url "$REMOTE_NAME" "${{BOB_GIT_REMOTES[$REMOTE_NAME]}}"
-                        fi
-                        # it is configured, therefore no need to keep in list
-                        unset "BOB_GIT_REMOTES[$REMOTE_NAME]"
-                    fi
-                done <<< "$(git remote)"
-                # add all remaining remotes in the array to the repository
-                for REMOTE_NAME in "${{!BOB_GIT_REMOTES[@]}}" ; do
-                    git remote add "$REMOTE_NAME" "${{BOB_GIT_REMOTES[$REMOTE_NAME]}}"
-                done
-            )""").format(REMOTES_ARRAY="\n    ".join(remotes_array),
-                         DIR=quote(self.__dir))
+            await invoker.checkCommand(["git", "config", "http.sslVerify", "false"], cwd=self.__dir)
 
+        # do the checkout
         if self.__tag or self.__commit:
-            refSpec = "'+refs/heads/*:refs/remotes/origin/*' "
+            refSpec = ["+refs/heads/*:refs/remotes/origin/*"]
             if self.__tag:
-                refSpec += quote("refs/tags/{0}:refs/tags/{0}".format(self.__tag))
-            return dedent("""\
-                {HEADER}
-                # checkout only if HEAD is invalid
-                if ! git rev-parse --verify -q HEAD >/dev/null ; then
-                    git fetch origin {REFSPEC}
-                    git checkout -q {REF}
-                fi
-                """).format(HEADER=header,
-                            REF=self.__commit if self.__commit else "tags/"+quote(self.__tag),
-                            REFSPEC=refSpec)
+                refSpec.append("refs/tags/{0}:refs/tags/{0}".format(self.__tag))
+            # checkout only if HEAD is invalid
+            head = await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
+                stdout=False, cwd=self.__dir)
+            if head:
+                await invoker.checkCommand(["git", "fetch", "origin"] + refSpec, cwd=self.__dir)
+                await invoker.checkCommand(["git", "checkout", "-q",
+                    self.__commit if self.__commit else "tags/"+self.__tag], cwd=self.__dir)
         else:
-            return dedent("""\
-                {HEADER}
-                git fetch -p origin
-                if ! git rev-parse --verify -q HEAD >/dev/null ; then
-                    # checkout only if HEAD is invalid
-                    git checkout -b {BRANCH} remotes/origin/{BRANCH}
-                elif [[ $(git rev-parse --abbrev-ref HEAD) == {BRANCH} ]] ; then
-                    # pull only if on original branch
-                    git merge --ff-only refs/remotes/origin/{BRANCH}
-                else
-                    echo Warning: not updating {DIR} because branch was changed manually... >&2
-                fi
-                """).format(HEADER=header,
-                            BRANCH=quote(self.__branch),
-                            DIR=quote(self.__dir))
+            await invoker.checkCommand(["git", "fetch", "-p", "origin"], cwd=self.__dir)
+            if await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
+                           stdout=False, cwd=self.__dir):
+                # checkout only if HEAD is invalid
+                await invoker.checkCommand(["git", "checkout", "-b", self.__branch,
+                    "remotes/origin/"+self.__branch], cwd=self.__dir)
+            elif (await invoker.checkOutputCommand(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.__dir)) == self.__branch:
+                # pull only if on original branch
+                await invoker.checkCommand(["git", "merge", "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
+            else:
+                invoker.warn("Not updating", self.__dir, "because branch was changed manually...")
+
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this git module.
@@ -374,15 +351,17 @@ class GitScm(Scm):
                 try:
                     stdout, stderr = await proc.communicate()
                     rc = await proc.wait()
-                except concurrent.futures.CancelledError:
-                    proc.terminate()
-                    rc = await proc.wait()
+                finally:
+                    try:
+                        proc.terminate()
+                    except ProcessLookupError:
+                        pass
                 if rc != 0:
                     a.fail("exit {}".format(rc), WARNING)
                     return None
                 output = stdout.decode(locale.getpreferredencoding(False)).strip()
-            except (subprocess.CalledProcessError, OSError):
-                a.fail("error")
+            except (subprocess.CalledProcessError, OSError) as e:
+                a.fail("error ({})".format(e))
                 return None
 
             # have we found anything at all?

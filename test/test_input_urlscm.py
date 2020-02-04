@@ -5,6 +5,7 @@
 
 from pipes import quote
 from unittest import TestCase
+from unittest.mock import MagicMock, patch
 import asyncio
 import os
 import subprocess
@@ -12,6 +13,7 @@ import tempfile
 import hashlib
 
 from bob.input import UrlScm
+from bob.invoker import Invoker
 from bob.utils import asHexStr
 
 class DummyPackage:
@@ -52,16 +54,19 @@ class TestLiveBuildId(TestCase):
     def tearDownClass(cls):
         cls.__repodir.cleanup()
 
+    def invokeScm(self, workspace, scm):
+        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+        invoker = Invoker(spec, False, True, True, True, True, False)
+        run(scm.invoke(invoker))
+
     def callCalcLiveBuildId(self, scm):
         with tempfile.TemporaryDirectory() as workspace:
-            subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
-                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            self.invokeScm(workspace, scm)
             return scm.calcLiveBuildId(workspace)
 
     def processHashEngine(self, scm, expected):
         with tempfile.TemporaryDirectory() as workspace:
-            subprocess.check_call(['/bin/bash', '-c', scm.asScript()],
-                universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace)
+            self.invokeScm(workspace, scm)
             spec = scm.getLiveBuildIdSpec(workspace)
             if spec is None:
                 self.assertEqual(None, expected)
@@ -112,4 +117,57 @@ class TestLiveBuildId(TestCase):
         self.processHashEngine(s, bytes.fromhex(self.urlSha1))
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
         self.processHashEngine(s, bytes.fromhex(self.urlSha256))
+
+def fakeWindows():
+    return True
+
+class TestWindowsPaths(TestCase):
+    """The URL SCM supports fully qualified paths on Windows too."""
+
+    @patch('bob.scm.url.isWindows', fakeWindows)
+    def testValidDrive(self):
+        from bob.scm.url import parseUrl
+        self.assertEqual(parseUrl(r"C:\tmp.txt").path, r"C:\tmp.txt")
+        self.assertEqual(parseUrl(r"C:/tmp.txt").path, r"C:\tmp.txt")
+
+        self.assertEqual(parseUrl(r"file:///C:\tmp.txt").path, r"C:\tmp.txt")
+        self.assertEqual(parseUrl(r"file:///C:/tmp.txt").path, r"C:\tmp.txt")
+
+    @patch('bob.scm.url.isWindows', fakeWindows)
+    def testValidUNC(self):
+        from bob.scm.url import parseUrl
+        self.assertEqual(parseUrl(r"\\server\path").path, r"\\server\path")
+        self.assertEqual(parseUrl(r"file:///\\server\path").path, r"\\server\path")
+
+    @patch('bob.scm.url.isWindows', fakeWindows)
+    def testInvalid(self):
+        from bob.scm.url import parseUrl
+        with self.assertRaises(ValueError):
+            parseUrl(r"C:tmp.txt") # Drive relative
+        with self.assertRaises(ValueError):
+            parseUrl(r"tmp.txt") # current drive relative
+        with self.assertRaises(ValueError):
+            parseUrl(r"\tmp.txt") # absolute path on current drive
+        with self.assertRaises(ValueError):
+            parseUrl(r"/tmp.txt") # ditto
+        with self.assertRaises(ValueError):
+            parseUrl(r"file:///C:tmp.txt") # Drive relative
+        with self.assertRaises(ValueError):
+            parseUrl(r"file:///tmp.txt") # absolute path on current drive
+        with self.assertRaises(ValueError):
+            parseUrl(r"file:///\tmp.txt") # absolute on current drive
+
+    @patch('bob.scm.url.isWindows', fakeWindows)
+    def testFileName(self):
+        """fileName deduction on Windows must work with \\ too"""
+        s = {
+            'scm' : 'url',
+            'url' : "C:/X/Y/my-pkg.zip",
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        self.assertEqual(UrlScm(s).getProperties()["fileName"], "my-pkg.zip")
+
+        s["url"] = r"C:\X\Y\my-pkg.zip"
+        self.assertEqual(UrlScm(s).getProperties()["fileName"], "my-pkg.zip")
 

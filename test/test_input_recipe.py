@@ -5,6 +5,7 @@ import os
 
 from bob.errors import ParseError
 from bob.input import Recipe
+from bob.languages import ScriptLanguage
 from bob.stringparser import Env
 
 class TestDependencies(TestCase):
@@ -159,6 +160,7 @@ class TestRelocatable(TestCase):
         cwd = os.getcwd()
         recipeSet = MagicMock()
         recipeSet.loadBinary = MagicMock()
+        recipeSet.scriptLanguage = ScriptLanguage.BASH
         recipeSet.getPolicy = lambda x: allRelocatable if x == 'allRelocatable' else None
 
         cc = { n : Recipe(recipeSet, r, [], n+".yaml", cwd, n, n, {}, False)

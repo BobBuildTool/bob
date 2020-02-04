@@ -80,14 +80,14 @@ packageScript: |
             for branch in scm.iter('branches'):
                 assert ( 'refs/heads/test' in [ name.text for name in branch.iter('name') ])
 
-        found = 0
+        found = False
         for cmd in jobconfig.iter('command'):
-            if (('TestCheckoutScript' in cmd.text) or
-                ('TestBuildScript' in cmd.text) or
+            if (('TestCheckoutScript' in cmd.text) and
+                ('TestBuildScript' in cmd.text) and
                 ('TestPackageScript' in cmd.text)):
-                    found += 1
-        assert( found == 3 )
-        assert( '/job/test/build' == send[1][0])
+                    found = True
+        self.assertEqual(found, True)
+        self.assertEqual('/job/test/build', send[1][0])
 
         self.executeBobJenkinsCmd("prune -q myTestJenkins")
         send = self.jenkinsMock.getServerData()

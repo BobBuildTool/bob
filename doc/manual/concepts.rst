@@ -38,7 +38,7 @@ and required environment variables/tools of a recipe, Bob can track changes that
 influence the build result with a high degree of certainty.
 
 The actual processing during build time is done in the orange steps. They are
-Bash scripts that are executed with (and only with) the declared environment
+scripts that are executed with (and only with) the declared environment
 and tools. Bob assumes that the result of the steps depends only on the scripts
 themselves, their environment and tools. Additionally, Bob assumes that the
 "build" and "package" steps are deterministic in the sense that they produce
@@ -81,7 +81,7 @@ each step (checkout, build and package) is calculated as follows:
 
 where
 
-* *script* is the Bash script of the step,
+* *script* is the script of the step,
 * *tools* is the sorted list of tools that are consumed by the step,
 * *env* is the sorted list of the environment key-value-pairs and
 * *input* is the list of all results that are passed to the step (i.e. previous step, dependencies).

@@ -149,7 +149,7 @@ def addCConfig(cProjectFile, excludePackages, includeDirs, buildName, id, buildA
     cProjectFile.write('<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>\n')
     cProjectFile.write('</cconfiguration>\n')
 
-def eclipseCdtGenerator(package, argv, extra):
+def eclipseCdtGenerator(package, argv, extra, bobRoot):
     parser = argparse.ArgumentParser(prog="bob project eclipse-cdt", description='Generate Eclipse CDT Project Files')
     parser.add_argument('-u', '--update', default=False, action='store_true',
                         help="Update project files (.project)")

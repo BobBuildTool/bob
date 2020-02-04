@@ -13,22 +13,19 @@ from bob.errors import BuildError, ParseError
 class TestJoinScripts(TestCase):
 
     def testEmpty(self):
-        assert joinScripts([]) == None
+        self.assertEqual(joinScripts([], "not used"), None)
 
     def testSingle(self):
-        assert joinScripts(["asdf"]) == "asdf"
-        assert joinScripts([None]) == None
+        self.assertEqual(joinScripts(["asdf"], "not used"), "asdf")
+        self.assertEqual(joinScripts([None], "not used"), None)
 
     def testDual(self):
-        s = joinScripts(["asdf", "qwer"]).splitlines()
-        assert "asdf" in s
-        assert "qwer" in s
-        assert s.index("asdf") < s.index("qwer")
+        self.assertEqual(joinScripts(["asdf", "qwer"], "\n"), "asdf\nqwer")
 
-        assert joinScripts(["asdf", None]) == "asdf"
-        assert joinScripts([None, "asdf"]) == "asdf"
+        self.assertEqual(joinScripts(["asdf", None], "unused"), "asdf")
+        self.assertEqual(joinScripts([None, "asdf"], "unused"), "asdf")
 
-        assert joinScripts([None, None]) == None
+        self.assertEqual(joinScripts([None, None], "unused"), None)
 
 class TestRemove(TestCase):
 

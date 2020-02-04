@@ -27,7 +27,7 @@ def asHexStr(binary):
 def joinLines(*lines):
     return "\n".join(l for l in lines if l)
 
-def joinScripts(scripts, glue="\ncd \"${BOB_CWD}\"\n"):
+def joinScripts(scripts, glue):
     scripts = [ s for s in scripts if ((s is not None) and (s != "")) ]
     if scripts != []:
         return glue.join(scripts)
@@ -44,11 +44,33 @@ def sliceString(data, chunk):
             r = data[i:i+chunk]
     return iter(genSlice())
 
+def quotePwsh(string):
+    """Create a PowerShell string literal"""
+    return "'" + string.replace("'", "''") + "'"
+
+def escapePwsh(string):
+    """Escape a string so that no meta characters are interpreted by PowerShell"""
+    return string.replace('"', '`"').replace('$', '`$')
+
+def quoteCmdExe(string):
+    """Quote a string for cmd.exe to prevent interpretation of meta characters"""
+    if any(c in string for c in " \"()[]{}^=;!'+,`~"):
+        return '"' + string.replace('"', '""') + '"'
+    else:
+        return string
+
 def removePath(path):
+    if sys.platform == "win32":
+        def onerror(func, path, exc):
+            os.chmod(path, stat.S_IWRITE)
+            os.unlink(path)
+    else:
+        onerror = None
+
     try:
         if os.path.lexists(path):
             if os.path.isdir(path) and not os.path.islink(path):
-                shutil.rmtree(path)
+                shutil.rmtree(path, onerror=onerror)
             else:
                 os.unlink(path)
     except OSError as e:
@@ -136,10 +158,15 @@ def isWindows():
         return False
     return True
 
+if isWindows():
+    INVALID_CHAR_TRANS = str.maketrans(':*?<>"|', '_______')
+else:
+    INVALID_CHAR_TRANS = str.maketrans('', '')
+
 ### directory hashing ###
 
-def hashFile(path):
-    m = hashlib.sha1()
+def hashFile(path, hasher=hashlib.sha1):
+    m = hasher()
     try:
         with open(path, 'rb', buffering=0) as f:
             buf = f.read(16384)
@@ -310,14 +337,26 @@ class DirHasher:
 
         return digest
 
-    @staticmethod
-    def __hashLink(path):
-        m = hashlib.sha1()
-        try:
-            m.update(os.readlink(path))
-        except OSError as e:
-            logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
-        return m.digest()
+    if (sys.platform == "win32") and (sys.version_info.minor <= 7):
+        # Before Python 3.8 the os.readlink method did not accept byte encoded
+        # file names on Windows.
+        @staticmethod
+        def __hashLink(path):
+            m = hashlib.sha1()
+            try:
+                m.update(os.fsencode(os.readlink(os.fsdecode(path))))
+            except OSError as e:
+                logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
+            return m.digest()
+    else:
+        @staticmethod
+        def __hashLink(path):
+            m = hashlib.sha1()
+            try:
+                m.update(os.readlink(path))
+            except OSError as e:
+                logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
+            return m.digest()
 
     def __hashDir(self, prefix, path=b''):
         entries = []

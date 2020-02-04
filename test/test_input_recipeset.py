@@ -16,6 +16,9 @@ from bob.errors import ParseError, BobError
 
 DEBUG['ngd'] = True
 
+def pruneBuiltin(env):
+    return { k : v for k,v in env.items() if not k.startswith("BOB_") }
+
 class RecipesTmp:
     def setUp(self):
         self.cwd = os.getcwd()
@@ -118,7 +121,7 @@ class TestUserConfig(TestCase):
             recipeSet = RecipeSet()
             recipeSet.parse()
 
-            assert recipeSet.defaultEnv() == {}
+            self.assertEqual(pruneBuiltin(recipeSet.defaultEnv()), {})
 
     def testDefaultIncludeOverrides(self):
         """Test that included files override settings of default.yaml"""
@@ -137,7 +140,8 @@ class TestUserConfig(TestCase):
             recipeSet = RecipeSet()
             recipeSet.parse()
 
-            assert recipeSet.defaultEnv() == { "FOO":"BAZ", "BAR":"BAZ" }
+            self.assertEqual(pruneBuiltin(recipeSet.defaultEnv()),
+                { "FOO":"BAZ", "BAR":"BAZ" })
 
     def testUserConfigMissing(self):
         """Test that missing user config fails parsing"""
@@ -169,7 +173,8 @@ class TestUserConfig(TestCase):
             recipeSet.setConfigFiles(["user"])
             recipeSet.parse()
 
-            assert recipeSet.defaultEnv() == { "FOO":"USER"}
+            self.assertEqual(pruneBuiltin(recipeSet.defaultEnv()),
+                { "FOO":"USER"})
 
     def testDefaultRequire(self):
         """Test parsing default.yaml requiring another file"""
@@ -220,7 +225,7 @@ class TestUserConfig(TestCase):
                 f.write("    BAZ: higher\n")
             recipeSet = RecipeSet()
             recipeSet.parse()
-            self.assertEqual(recipeSet.defaultEnv(),
+            self.assertEqual(pruneBuiltin(recipeSet.defaultEnv()),
                 {'FOO' : 'default', 'BAR' : 'lower', 'BAZ' : 'higher' })
 
     def testDefaultRelativeIncludes(self):
@@ -255,7 +260,7 @@ class TestUserConfig(TestCase):
                 f.write("    BAZ: higher\n")
             recipeSet = RecipeSet()
             recipeSet.parse()
-            self.assertEqual(recipeSet.defaultEnv(),
+            self.assertEqual(pruneBuiltin(recipeSet.defaultEnv()),
                 {'FOO' : 'default', 'BAR' : 'lower', 'BAZ' : 'higher' })
 
 

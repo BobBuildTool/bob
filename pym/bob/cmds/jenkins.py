@@ -7,6 +7,7 @@ from .. import BOB_VERSION
 from ..archive import getArchiver
 from ..errors import ParseError, BuildError
 from ..input import RecipeSet
+from ..languages import StepSpec
 from ..state import BobState
 from ..stringparser import isTrue
 from ..tty import WarnOnce
@@ -45,7 +46,7 @@ requiredPlugins = {
     "ws-cleanup" : "Jenkins Workspace Cleanup Plugin",
 }
 
-JENKINS_SCRIPT_START = "cat >$_sandbox/.script <<'BOB_JENKINS_SANDBOXED_SCRIPT'"
+JENKINS_SCRIPT_START = "cat >$_specFile <<'BOB_JENKINS_SANDBOXED_SCRIPT'"
 JENKINS_SCRIPT_END = "BOB_JENKINS_SANDBOXED_SCRIPT"
 
 # Template for fingerprint script execution. Run the script in a dedicated
@@ -297,119 +298,22 @@ class JenkinsJob:
             cmds.append("")
 
         if d.getJenkinsScript() is not None:
-            cmds.append("mkdir -p {}".format(d.getWorkspacePath()))
-            cmds.append("_sandbox=$(mktemp -d)")
-            cmds.append("trap 'rm -rf $_sandbox' EXIT")
-            if windows:
-                cmds.append("if [ ! -z ${JENKINS_HOME} ]; then")
-                cmds.append("    export JENKINS_HOME=$(echo ${JENKINS_HOME} | sed 's/\\\\/\\//g' | sed 's/://' | sed 's/^/\\//' )")
-                cmds.append("fi")
-                cmds.append("if [ ! -z ${WORKSPACE} ]; then")
-                cmds.append("    export WORKSPACE=$(echo ${WORKSPACE} | sed 's/\\\\/\\//g' | sed 's/://' | sed 's/^/\\//')")
-                cmds.append("fi")
-            cmds.append("")
-            cmds.append(JENKINS_SCRIPT_START)
-
-            cmds.append("declare -A BOB_ALL_PATHS=(\n{}\n)".format("\n".join(sorted(
-                [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                       a.getExecPath(d))
-                    for a in d.getAllDepSteps() ] ))))
-            cmds.append("declare -A BOB_DEP_PATHS=(\n{}\n)".format("\n".join(sorted(
-                [ "    [{}]={}".format(quote(a.getPackage().getName()),
-                                       a.getExecPath(d))
-                    for a in d.getArguments() if a.isValid() ] ))))
-            cmds.append("declare -A BOB_TOOL_PATHS=(\n{}\n)".format("\n".join(sorted(
-                [ "    [{}]={}".format(quote(n), os.path.join(t.getStep().getExecPath(d), t.getPath()))
-                    for (n,t) in d.getTools().items()] ))))
-            env = { key: quote(value) for (key, value) in d.getEnv().items() }
-            env.update({
-                "PATH": ":".join(d.getPaths() + (
-                    ["$PATH"] if d.getSandbox() is None else d.getSandbox().getPaths() )
-                ),
-                "LD_LIBRARY_PATH": ":".join(d.getLibraryPaths()),
-                "BOB_CWD": d.getExecPath(),
-            })
-            for (k,v) in sorted(env.items()):
-                cmds.append("export {}={}".format(k, v))
-
-            cmds.append("set -- {}".format(" ".join(
-                [ a.getExecPath(d) for a in d.getArguments() ])))
-            cmds.append("declare -p > " +
-                ("" if d.getSandbox() is None else "/workspace/") +
-                JenkinsJob._envName(d))
-            cmds.append("")
-
-            cmds.append("set -o errtrace")
-            cmds.append("set -o nounset")
-            cmds.append("set -o pipefail")
-            cmds.append("trap 'RET=$? ; echo \"Step failed on line ${LINENO}: Exit status ${RET}; Command: ${BASH_COMMAND}\" >&2 ; exit $RET' ERR")
-            cmds.append("trap 'for i in \"${_BOB_TMP_CLEANUP[@]-}\" ; do /bin/rm -f \"$i\" ; done' EXIT")
-            cmds.append('declare -A _BOB_SOURCES=( [0]="Bob prolog" )')
-            cmds.append("cd \"${BOB_CWD}\"")
-            cmds.append("")
-            cmds.append("# BEGIN BUILD SCRIPT")
-            cmds.append(d.getJenkinsScript())
-            cmds.append("# END BUILD SCRIPT")
-            cmds.append(JENKINS_SCRIPT_END)
-            cmds.append("")
-
-            # Add PATH into the environment whitelist so that env will still
-            # find bash or bob-namespace-sandbox. PATH will always be set to
-            # the correct value in the preamble.
-            envWhiteList = d.getPackage().getRecipe().getRecipeSet().envWhiteList()
-            envWhiteList |= set(['PATH'])
-            sandbox = ["-i"]
-            sandbox.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
-            if d.getSandbox() is not None:
-                cmds.append("# invoke above script through sandbox in controlled environment")
-                cmds.append("mounts=( )")
-                cmds.append("for i in {}/* ; do".format(d.getSandbox().getStep().getWorkspacePath()))
-                cmds.append("    mounts+=( -M \"$PWD/$i\" -m \"/${i##*/}\" )")
-                cmds.append("done")
-                for (hostPath, sndbxPath, options) in d.getSandbox().getMounts():
-                    if "nojenkins" in options: continue
-                    line = "-M " + hostPath
-                    if "rw" in options:
-                        line += " -w " + sndbxPath
-                    elif hostPath != sndbxPath:
-                        line += " -m " + sndbxPath
-                    line = "mounts+=( " + line + " )"
-                    if "nofail" in options:
-                        cmds.append(
-                            """if [[ -e {HOST} ]] ; then {MOUNT} ; fi"""
-                                .format(HOST=hostPath, MOUNT=line)
-                            )
-                    else:
-                        cmds.append(line)
-                cmds.append("mounts+=( -M \"$WORKSPACE/{}\" -w {} )".format(
-                    d.getWorkspacePath(), d.getExecPath()))
-                addDep = lambda s: (cmds.append("mounts+=( -M \"$WORKSPACE/{}\" -m {} )"
-                    .format(s.getWorkspacePath(), s.getExecPath(d))) if s.isValid() else None)
-                for s in d.getAllDepSteps(): addDep(s)
-                # special handling to mount all previous steps of current package
-                s = d
-                while s.isValid():
-                    if len(s.getArguments()) > 0:
-                        s = s.getArguments()[0]
-                        addDep(s)
-                    else:
-                        break
-                sandbox.append("bob-namespace-sandbox")
-                sandbox.extend(["-S", "\"$_sandbox\""])
-                sandbox.extend(["-W", quote(d.getExecPath())])
-                sandbox.extend(["-H", "bob"])
-                sandbox.extend(["-d", "/tmp"])
-                if not d.hasNetAccess(): sandbox.append('-n')
-                sandbox.append("\"${mounts[@]}\"")
-                sandbox.extend(["-M", "$WORKSPACE", "-w", "/workspace"])
-                sandbox.append("--")
-                sandbox.extend(["/bin/bash", "-x", "--", "/.script"])
-            else:
-                cmds.append("# invoke above script in controlled environment")
-                sandbox.extend(["bash", "-x", "$_sandbox/.script"])
-            cmds.extend(wrapCommandArguments("env", sandbox))
+            cmds.append("bob _invoke {} -vv".format(self._specName(d)))
 
         return "\n".join(cmds)
+
+    def dumpStepSpec(self, d):
+        cmds = []
+        if d.isValid():
+            spec = StepSpec.fromStep(d, JenkinsJob._envName(d),
+                d.getPackage().getRecipe().getRecipeSet().envWhiteList(),
+                isJenkins=True).toString()
+
+            cmds.append("_specFile=" + quote(self._specName(d)))
+            cmds.append(JENKINS_SCRIPT_START)
+            cmds.append(spec)
+            cmds.append(JENKINS_SCRIPT_END)
+        return cmds
 
     def dumpStepBuildIdGen(self, step):
         """Return bob-hash-engine call to calculate build-id of step"""
@@ -527,6 +431,10 @@ class JenkinsJob:
     def _canaryName(d):
         return ".state/" + d.getWorkspacePath().replace('/', '_') + ".canary"
 
+    @staticmethod
+    def _specName(d):
+        return d.getWorkspacePath().replace('/', '_') + ".spec.json"
+
     def _fingerprintName(self, step):
         """Return fingerprint file name if one is required.
 
@@ -550,63 +458,14 @@ class JenkinsJob:
 
         return step.getWorkspacePath().replace('/', '_') + ".fingerprint"
 
-    def _fingerprintCommands(self, step):
-        ret = []
-        fingerprint = self._fingerprintName(step)
-        script = step._getFingerprintScript()
+    def _fingerprintCommands(self, step, fingerprint):
+        # run fingerprint
+        ret = [ "" ]
+        ret.append("# calculate fingerprint of step")
+        ret.append("bob _invoke {} fingerprint > {}".format(self._specName(step),
+            fingerprint))
 
-        envWhiteList = step.getPackage().getRecipe().getRecipeSet().envWhiteList()
-        envWhiteList |= set(['PATH'])
-        setup = []
-        invoke = ["-i"]
-        invoke.extend(sorted("${{{V}+{V}=\"${V}\"}}".format(V=i) for i in envWhiteList))
-
-        if step.getSandbox() is not None:
-            invoke.append('BOB_CWD=/bob/fingerprint')
-            script = "export PATH=" + quote(":".join(step.getSandbox().getPaths())) + \
-                "\n" + script
-
-            setup.append("# invoke fingerprint script through sandbox in controlled environment")
-            setup.append("mounts=( )")
-            setup.append("for i in {}/* ; do".format(step.getSandbox().getStep().getWorkspacePath()))
-            setup.append("    mounts+=( -M \"$PWD/$i\" -m \"/${i##*/}\" )")
-            setup.append("done")
-            for (hostPath, sndbxPath, options) in step.getSandbox().getMounts():
-                if "nojenkins" in options: continue
-                line = "-M " + hostPath
-                if "rw" in options:
-                    line += " -w " + sndbxPath
-                elif hostPath != sndbxPath:
-                    line += " -m " + sndbxPath
-                line = "mounts+=( " + line + " )"
-                if "nofail" in options:
-                    setup.append(
-                        """if [[ -e {HOST} ]] ; then {MOUNT} ; fi"""
-                            .format(HOST=hostPath, MOUNT=line)
-                        )
-                else:
-                    setup.append(line)
-
-            invoke.append("bob-namespace-sandbox")
-            invoke.extend(["-S", "\"$T\""])
-            invoke.extend(["-d", "/bob/fingerprint"])
-            invoke.extend(["-W", "/bob/fingerprint"])
-            invoke.extend(["-H", "bob"])
-            invoke.extend(["-d", "/tmp"])
-            invoke.append('-n')
-            invoke.append("\"${mounts[@]}\"")
-            invoke.append("--")
-            invoke.extend(['/bin/bash', '-x'])
-        else:
-            invoke.append('BOB_CWD="$T"')
-            invoke.extend(['bash', '-x'])
-
-        ret.append("\n# fingerprint " + step.getPackage().getName())
-        ret.append(FINGERPRINT_SCRIPT_TEMPLATE.format(
-            SCRIPT=script, OUTPUT=quote(fingerprint),
-            SETUP="\n    ".join(setup),
-            INVOKE="\n        ".join(wrapCommandArguments("env", invoke))))
-
+        # optionally upload
         if (step.getSandbox() is not None) and self.__archive.canUploadJenkins():
             scriptKey = asHexStr(hashlib.sha1(step._getFingerprintScript().encode('utf8')).digest())
             sandbox = self._buildIdName(step.getSandbox().getStep())
@@ -718,6 +577,9 @@ class JenkinsJob:
 
         sharedDir = options.get("shared.dir", "${JENKINS_HOME}/bob")
 
+        specCmds = []
+        specCmds.append(self.getShebang(windows))
+
         prepareCmds = []
         prepareCmds.append(self.getShebang(windows))
         prepareCmds.append("mkdir -p .state")
@@ -767,12 +629,13 @@ class JenkinsJob:
         prepareCmds.extend(wrapCommandArguments("pruneUnused", sorted(whiteList)))
         prepareCmds.append("set -x")
 
+        fingerprintCmds = []
         fingerprints = set()
         def ensureFingerprint(step):
             fingerprint = self._fingerprintName(step)
             if (fingerprint is not None) and (fingerprint not in fingerprints):
                 # ok, we really have to compute it
-                prepareCmds.extend(self._fingerprintCommands(step))
+                fingerprintCmds.extend(self._fingerprintCommands(step, fingerprint))
                 fingerprints.add(fingerprint)
 
             return fingerprint
@@ -924,10 +787,12 @@ class JenkinsJob:
         for d in sorted(self.__checkoutSteps.values()):
             prepareCmds.append("rm -rf {}".format(" ".join(quote(d.getWorkspacePath() + "/" + s + "@tmp") for s in d.getScmDirectories())))
 
-        # Create first "prepare" shell action. The actual command is set at the
-        # end because the prepare commands are generated throughout the
-        # generating process.
+        # Create first "prepare" and "specs" shell actions. Their actual
+        # command is set at the end because the prepare/specs commands are
+        # generated throughout the generating process.
         prepare = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
+        specs = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
+        fingerprintsShell = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
 
         # checkout steps
         checkoutSCMs = []
@@ -963,12 +828,15 @@ class JenkinsJob:
         ]
         for d in sorted(self.__checkoutSteps.values()):
             ensureFingerprint(d)
+            specCmds.extend(self.dumpStepSpec(d))
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
             buildIdCalc.extend(self.dumpStepLiveBuildIdGen(d, windows))
         for d in sorted(self.__buildSteps.values()):
+            specCmds.extend(self.dumpStepSpec(d))
             ensureFingerprint(d)
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
         for d in sorted(self.__packageSteps.values()):
+            specCmds.extend(self.dumpStepSpec(d))
             ensureFingerprint(d)
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
         checkout = xml.etree.ElementTree.SubElement(
@@ -1099,9 +967,17 @@ class JenkinsJob:
         if auth:
             auth.text = authtoken
 
-        # finally set prepare command
+        # finally set prepare commands
         xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
             prepareCmds)
+        xml.etree.ElementTree.SubElement(specs, "command").text = "\n".join(
+            specCmds)
+        if fingerprintCmds:
+            fingerprintCmds[0:0] = [ self.getShebang(windows) ]
+            xml.etree.ElementTree.SubElement(fingerprintsShell, "command").text = "\n".join(
+                fingerprintCmds)
+        else:
+            builders.remove(fingerprintsShell)
 
         return xml.etree.ElementTree.tostring(root, encoding="UTF-8")
 
@@ -1362,7 +1238,7 @@ def jenkinsNamePersister(jenkins, wrapFmt, uuid):
         else:
             assert mode == 'exec'
             if referrer.getSandbox() is None:
-                return os.path.join("$PWD", quote(persist(step, props)))
+                return persist(step, props)
             else:
                 return os.path.join("/bob", asHexStr(step.getVariantId()), "workspace")
 

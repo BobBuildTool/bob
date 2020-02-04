@@ -75,68 +75,68 @@ class TestCheckoutStep(TestCase):
 
     def testDigestStable(self):
         """Same input should yield same digest"""
-        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
-        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         assert s1.variantId == s2.variantId
 
     def testDigestScriptChange(self):
         """Script does influnce the digest"""
-        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         evilPkg = MockCorePackage(checkoutScript="evil", checkoutDigestScript="other digest")
-        s2 = CoreCheckoutStep(evilPkg, ("evil", "other digest", [], []),
+        s2 = CoreCheckoutStep(evilPkg, ("evil", "other digest", [], []), [],
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
         assert s1.variantId != s2.variantId
 
     def testDigestFullEnv(self):
         """Full env does not change digest. It is only used for SCMs."""
-        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             Env({"a" : "asdf", "q": "qwer" }), Env({ "a" : "asdf" }))
-        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             Env(), Env({ "a" : "asdf" }))
         assert s1.variantId == s2.variantId
 
     def testDigestEnv(self):
         """Env changes digest"""
-        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "asdf" }))
 
         # different value
-        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "qwer" }))
         assert s1.variantId != s2.variantId
 
         # added entry
-        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "asdf", "b" : "qwer" }))
         assert s1.variantId != s2.variantId
 
         # removed entry
-        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env())
         assert s1.variantId != s2.variantId
 
     def testDigestEnvRotation(self):
         """Rotating characters between key-value pairs must be detected"""
-        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "bc", "cd" : "e" }))
-        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "bcc", "d" : "e" }))
         assert s1.variantId != s2.variantId
 
-        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "bb", "c" : "dd", "e" : "ff" }))
-        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "bbc=dd", "e" : "ff" }))
         assert s1.variantId != s2.variantId
 
     def testDigestEmpyEnv(self):
         """Adding empty entry must be detected"""
-        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s1 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "b" }))
-        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []),
+        s2 = CoreCheckoutStep(nullPkg, ("script", "digest", [], []), [],
             digestEnv=Env({ "a" : "b", "" : "" }))
         assert s1.variantId != s2.variantId
 

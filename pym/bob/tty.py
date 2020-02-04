@@ -234,7 +234,6 @@ class ParallelTtyUIAction(BaseTUIAction):
 class ParallelTtyUI(BaseTUI):
     def __init__(self, verbosity, maxJobs):
         super().__init__(verbosity)
-        import termios
         self.__index = 1
         self.__maxJobs = maxJobs
         self.__jobs = {}
@@ -246,11 +245,15 @@ class ParallelTtyUI(BaseTUI):
         print("\x1b[?25l")
 
         # disable echo
-        fd = sys.stdin.fileno()
-        self.__oldTcAttr = termios.tcgetattr(fd)
-        new = termios.tcgetattr(fd)
-        new[3] = new[3] & ~termios.ECHO
-        termios.tcsetattr(fd, termios.TCSADRAIN, new)
+        try:
+            import termios
+            fd = sys.stdin.fileno()
+            self.__oldTcAttr = termios.tcgetattr(fd)
+            new = termios.tcgetattr(fd)
+            new[3] = new[3] & ~termios.ECHO
+            termios.tcsetattr(fd, termios.TCSADRAIN, new)
+        except ImportError:
+            pass
 
     def __nextJob(self):
         ret = self.__index
@@ -333,8 +336,11 @@ class ParallelTtyUI(BaseTUI):
         for i in range(max(len(self.__jobs), self.__maxJobs)+1):
             print()
         print("\x1b[?25h")
-        import termios
-        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
+        try:
+            import termios
+            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
+        except ImportError:
+            pass
 
     def setProgress(self, done, num):
         self.__tasksDone = done
@@ -453,12 +459,36 @@ def setTui(maxJobs):
 
 def cleanup():
     __tui.cleanup()
+    if __onTTY and sys.platform == "win32":
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value)
+
+def ttyReinit():
+    """Re-initialize the console settings.
+
+    Work around a MSYS2 odity where the executable unconditionally resets the
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING flag even if it was already set when the
+    process was started.
+    """
+    if __onTTY and sys.platform == "win32":
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value | 4)
 
 # module initialization
 
 __onTTY = (sys.stdout.isatty() and sys.stderr.isatty())
 __useColor = False
 __tui = SingleTUI(NORMAL)
+
+if __onTTY and sys.platform == "win32":
+    # Try to set ENABLE_VIRTUAL_TERMINAL_PROCESSING flag. Enables vt100 color
+    # codes on Windows 10 console. If this fails we inhibit color code usage
+    # because it will clutter the output.
+    import ctypes
+    import ctypes.wintypes
+    __origMode = ctypes.wintypes.DWORD()
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetConsoleMode(kernel32.GetStdHandle(-11), ctypes.byref(__origMode))
+    if not kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value | 4):
+        __onTTY = False
 
 def setColorMode(mode):
     global __useColor

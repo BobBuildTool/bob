@@ -10,4 +10,4 @@ sys.path.insert(0, pym_path)
 from bob.scripts import bob
 
 if __name__ == '__main__':
-    sys.exit(bob(scr_path))
+    sys.exit(bob())

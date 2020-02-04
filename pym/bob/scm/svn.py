@@ -44,28 +44,18 @@ class SvnScm(Scm):
             ret["revision"] = self.__revision
         return ret
 
-    def asScript(self):
-        options = "--non-interactive"
+    async def invoke(self, invoker):
+        options = [ "--non-interactive" ]
         if not self.__sslVerify:
-            options += " --trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other"
-        return """
-{HEADER}
-if [[ -d {SUBDIR}/.svn ]] ; then
-    if [[ {URL} != */tags/* ]] ; then
-        svn up {OPTIONS} {REVISION_ARG} {SUBDIR}
-    fi
-else
-    if ! svn co {OPTIONS} {REVISION_ARG} {URL} {SUBDIR} ; then
-        rm -rf {SUBDIR}
-        exit 1
-    fi
-fi
-""".format(
-          HEADER=super().asScript(), OPTIONS=options,
-          URL=quote(self.__url), SUBDIR=quote(self.__dir),
-          REVISION_ARG=(("-r " + quote(str(self.__revision))) if self.__revision else '')
-          )
+            options += [ "--trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other" ]
+        if self.__revision:
+            options += [ "-r", str(self.__revision) ]
 
+        if os.path.isdir(invoker.joinPath(self.__dir, ".svn")):
+            if "/tags/" not in self.__url:
+                await invoker.checkCommand(["svn", "up"] + options, cwd=self.__dir)
+        else:
+            await invoker.checkCommand(["svn", "co"] + options + [self.__url, self.__dir])
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this svn module.
