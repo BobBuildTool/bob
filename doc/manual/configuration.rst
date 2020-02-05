@@ -774,6 +774,9 @@ Currently the following ``scm`` values are supported:
 === ============================ =======================================================================================
 scm Description                  Additional attributes
 === ============================ =======================================================================================
+cvs CVS repository               | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
+                                 | ``module``: module name
+                                 | ``rev``: revision, branch, or tag name (optional)
 git `Git`_ project               | ``url``: URL of remote repository
                                  | ``branch``: Branch to check out (optional, default: master)
                                  | ``tag``: Checkout this tag (optional, overrides branch attribute)
@@ -784,9 +787,6 @@ git `Git`_ project               | ``url``: URL of remote repository
 svn `Svn`_ repository            | ``url``: URL of SVN module
                                  | ``revision``: Optional revision number (optional)
                                  | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
-cvs CVS repository               | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
-                                 | ``module``: module name
-                                 | ``rev``: revision, branch, or tag name (optional)
 url While not a real SCM it      | ``url``: File that should be downloaded
     allows to download (and      | ``digestSHA1``: Expected SHA1 digest of the file (optional)
     extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
@@ -806,64 +806,68 @@ with the notable exception of ``git`` before Bob 0.15 which was rectified by
 the introduction of the :ref:`policies-secureSSL` policy. If at all possible,
 fixing a certificate problem is preferable to using this option.
 
-The ``git`` SCM requires at least an ``url`` attribute. The URL might be any
-valid Git URL. To checkout a branch other than *master* add a ``branch``
-attribute with the branch name. To checkout a tag instead of a branch specify
-it with ``tag``. You may specify the commit id directly with a ``commit``
-attribute too.
+cvs
+   The CVS SCM requires a ``cvsroot``, which is what you would normally put in
+   your CVSROOT environment variable or pass to CVS using ``-d``. If you specify
+   a revision, branch, or tag name, Bob will check out that instead of the HEAD.
+   Unfortunately, because Bob cannot know beforehand whether the ``rev`` you gave
+   it points to a branch or tag, it must consider this SCM nondeterministic.
+   To check out using ssh, you can use the syntax ``:ssh:user@host:/path``,
+   which will be translated into an appropriate ``CVS_RSH`` assignment by Bob.
+   Alternatively, you can use a normal ``:ext:`` CVSROOT and manually pass the
+   ``CVS_RSH`` value into the recipe using ``checkoutVars``.
 
-.. note:: The default branch of the remote repository is not used. Bob will
-   always checkout "master" unless ``branch``, ``tag`` or ``commit`` is given.
+git
+   The ``git`` SCM requires at least an ``url`` attribute. The URL might be any
+   valid Git URL. To checkout a branch other than *master* add a ``branch``
+   attribute with the branch name. To checkout a tag instead of a branch specify
+   it with ``tag``. You may specify the commit id directly with a ``commit``
+   attribute too.
 
-The ``rev`` property of the ``git`` SCM unifies the specification of the
-desired branch/tag/commit into one single property. If present it will be
-evaluated first. Any other ``branch``, ``tag`` or ``commit`` property is
-evalued after it and may override a precious setting made by ``rev``. The
-branch/tag/commit precedence is still respected, though. Following the patterns
-described in git-rev-parse(1) the following formats are currently supported:
+   .. note:: The default branch of the remote repository is not used. Bob will
+      always checkout "master" unless ``branch``, ``tag`` or ``commit`` is given.
 
-* <sha1>, e.g. dae86e1950b1277e545cee180551750029cfe735.
-  The full SHA-1 object name (40-byte hexadecimal string).
-* refs/tags/<tagname>, e.g. refs/tags/v1.0.
-  The symbolic name of a tag.
-* refs/heads/<branchname>, e.g. refs/heads/master.
-  The name of a branch.
+   The ``rev`` property of the ``git`` SCM unifies the specification of the
+   desired branch/tag/commit into one single property. If present it will be
+   evaluated first. Any other ``branch``, ``tag`` or ``commit`` property is
+   evalued after it and may override a precious setting made by ``rev``. The
+   branch/tag/commit precedence is still respected, though. Following the patterns
+   described in git-rev-parse(1) the following formats are currently supported:
 
-The ``remote-*`` property allows adding extra remotes whereas the part after
-``remote-`` corresponds to the remote name and the value given corresponds to
-the remote URL. For example ``remote-my_name`` set to ``some/url.git`` will
-result in an additional remote named ``my_name`` and the URL set to
-``some/url.git``.
+   * <sha1>, e.g. dae86e1950b1277e545cee180551750029cfe735.
+     The full SHA-1 object name (40-byte hexadecimal string).
+   * refs/tags/<tagname>, e.g. refs/tags/v1.0.
+     The symbolic name of a tag.
+   * refs/heads/<branchname>, e.g. refs/heads/master.
+     The name of a branch.
 
-The Svn SCM, like git, requires the ``url`` attribute too. If you specify a
-numeric ``revision`` Bob considers the SCM as deterministic.
+   The ``remote-*`` property allows adding extra remotes whereas the part after
+   ``remote-`` corresponds to the remote name and the value given corresponds to
+   the remote URL. For example ``remote-my_name`` set to ``some/url.git`` will
+   result in an additional remote named ``my_name`` and the URL set to
+   ``some/url.git``.
 
-The CVS SCM requires a ``cvsroot``, which is what you would normally put in
-your CVSROOT environment variable or pass to CVS using ``-d``. If you specify
-a revision, branch, or tag name, Bob will check out that instead of the HEAD.
-Unfortunately, because Bob cannot know beforehand whether the ``rev`` you gave
-it points to a branch or tag, it must consider this SCM nondeterministic.
-To check out using ssh, you can use the syntax ``:ssh:user@host:/path``,
-which will be translated into an appropriate ``CVS_RSH`` assignment by Bob.
-Alternatively, you can use a normal ``:ext:`` CVSROOT and manually pass the
-``CVS_RSH`` value into the recipe using ``checkoutVars``.
+svn
+   The Svn SCM, like git, requires the ``url`` attribute too. If you specify a
+   numeric ``revision`` Bob considers the SCM as deterministic.
 
-The ``url`` SCM naturally needs an ``url`` attribute. If a SHA digest is given
-with ``digestSHA1`` and/or ``digestSHA256`` the downloaded file will be checked
-for a matching hash sum. This also makes the URL deterministic for Bob.
-Otherwise the URL will be checked in each build for updates. Based on the file
-name ending Bob will try to extract the downloaded file. You may prevent this
-by setting the ``extract`` attribute to ``no`` or ``False``. If the heuristic
-fails the extraction tool may be specified as ``tar``, ``gzip``, ``xz``, ``7z``
-or ``zip`` directly. For ``tar`` files it is possible to strip a configurable
-number of leading components from file names on extraction by the
-``stripComponents`` attribute.
+url
+   The ``url`` SCM naturally needs an ``url`` attribute. If a SHA digest is given
+   with ``digestSHA1`` and/or ``digestSHA256`` the downloaded file will be checked
+   for a matching hash sum. This also makes the URL deterministic for Bob.
+   Otherwise the URL will be checked in each build for updates. Based on the file
+   name ending Bob will try to extract the downloaded file. You may prevent this
+   by setting the ``extract`` attribute to ``no`` or ``False``. If the heuristic
+   fails the extraction tool may be specified as ``tar``, ``gzip``, ``xz``, ``7z``
+   or ``zip`` directly. For ``tar`` files it is possible to strip a configurable
+   number of leading components from file names on extraction by the
+   ``stripComponents`` attribute.
 
-.. note::
-    Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy) the whole
-    directory where the file is downloaded is claimed by the SCM. It is not
-    possible to fetch multiple files in the same directory. This is done to
-    separate possibly extracted files safely from other checkouts.
+   .. note::
+       Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy) the whole
+       directory where the file is downloaded is claimed by the SCM. It is not
+       possible to fetch multiple files in the same directory. This is done to
+       separate possibly extracted files safely from other checkouts.
 
 depends
 ~~~~~~~
