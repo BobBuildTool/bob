@@ -784,6 +784,8 @@ git    `Git`_ project               | ``url``: URL of remote repository
                                     | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
                                     | ``remote-*``: additional remote repositories (optional, see below)
                                     | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
+import Import directory from        | ``url``: Directory path relative to project root.
+       project                      | ``prune``: Delete destination directory before importing files.
 svn    `Svn`_ repository            | ``url``: URL of SVN module
                                     | ``revision``: Optional revision number (optional)
                                     | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
@@ -846,6 +848,18 @@ git
    the remote URL. For example ``remote-my_name`` set to ``some/url.git`` will
    result in an additional remote named ``my_name`` and the URL set to
    ``some/url.git``.
+
+import
+   The ``import`` SCM copies the directory specified in ``url`` to the
+   workspace. By default the destination is not overwritten unless the source
+   file was changed more recently than the exiting destination in the workspace.
+   Set ``prune`` to ``True`` to always delete the destination directory before
+   importing the files.
+
+   .. attention::
+      Do not import large source trees when working with Jenkins builds. The
+      content is included in the job configuration that will get too large
+      otherwise.
 
 svn
    The Svn SCM, like git, requires the ``url`` attribute too. If you specify a
