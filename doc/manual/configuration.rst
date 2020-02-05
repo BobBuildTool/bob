@@ -771,31 +771,31 @@ to express a condition. The SCM will only be considered if the condition passes.
 
 Currently the following ``scm`` values are supported:
 
-=== ============================ =======================================================================================
-scm Description                  Additional attributes
-=== ============================ =======================================================================================
-cvs CVS repository               | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
-                                 | ``module``: module name
-                                 | ``rev``: revision, branch, or tag name (optional)
-git `Git`_ project               | ``url``: URL of remote repository
-                                 | ``branch``: Branch to check out (optional, default: master)
-                                 | ``tag``: Checkout this tag (optional, overrides branch attribute)
-                                 | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
-                                 | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
-                                 | ``remote-*``: additional remote repositories (optional, see below)
-                                 | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
-svn `Svn`_ repository            | ``url``: URL of SVN module
-                                 | ``revision``: Optional revision number (optional)
-                                 | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
-url While not a real SCM it      | ``url``: File that should be downloaded
-    allows to download (and      | ``digestSHA1``: Expected SHA1 digest of the file (optional)
-    extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
-                                 | ``extract``: Extract directive (optional, default: auto)
-                                 | ``fileName``: Local file name (optional, default: url file name)
-                                 | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
-                                 | ``stripComponents``: Number of leading components stripped from file name
-                                                        (optional, tar files only)
-=== ============================ =======================================================================================
+====== ============================ =======================================================================================
+scm    Description                  Additional attributes
+====== ============================ =======================================================================================
+cvs    CVS repository               | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
+                                    | ``module``: module name
+                                    | ``rev``: revision, branch, or tag name (optional)
+git    `Git`_ project               | ``url``: URL of remote repository
+                                    | ``branch``: Branch to check out (optional, default: master)
+                                    | ``tag``: Checkout this tag (optional, overrides branch attribute)
+                                    | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
+                                    | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
+                                    | ``remote-*``: additional remote repositories (optional, see below)
+                                    | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
+svn    `Svn`_ repository            | ``url``: URL of SVN module
+                                    | ``revision``: Optional revision number (optional)
+                                    | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
+url    While not a real SCM it      | ``url``: File that should be downloaded
+       allows to download (and      | ``digestSHA1``: Expected SHA1 digest of the file (optional)
+       extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
+                                    | ``extract``: Extract directive (optional, default: auto)
+                                    | ``fileName``: Local file name (optional, default: url file name)
+                                    | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
+                                    | ``stripComponents``: Number of leading components stripped from file name
+                                                           (optional, tar files only)
+====== ============================ =======================================================================================
 
 .. _Git: http://git-scm.com/
 .. _Svn: http://subversion.apache.org/
