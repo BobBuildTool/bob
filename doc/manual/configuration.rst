@@ -528,6 +528,21 @@ scripts they are associative arrays. See
 for more information. In PowerShell scripts they are defined as
 `Hash Tables <https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_hash_tables>`_.
 
+For PowerShell scripts a utility function called ``Check-Command`` is
+available. It has two arguments: the first one (``ScriptBlock``) expects a
+script block that is executed. The optional second argument (``ErrorAction``)
+lets you override the error action. After the script block was executed the
+``Check-Command`` function will check the last exit status and invoke the error
+action if it is not zero. Example::
+
+    Check-Command { cmake --build . }
+
+By default it will halt the script execution. This helper is needed because
+there is no possibility to configure PowerShell to stop execution when an
+external command fails. Make sure to wrap calls to external tools with
+``Check-Command`` or check ``$lastexitcode`` yourself. Otherwise the build will
+not detect errors involving external commands!
+
 {checkout,build,package}Tools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
