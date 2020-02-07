@@ -81,7 +81,8 @@ if sys.platform != 'win32':
     build.sub_commands.append(('build_sphinx', None))
     setup_requires.extend([
         'sphinx',
-        'docutils<0.16' # https://github.com/sphinx-doc/sphinx/issues/6887
+        'docutils<0.16',    # https://github.com/sphinx-doc/sphinx/issues/6887
+        "Jinja2<3",         # Drops Python 3.5 compatibility
     ])
     data_files.extend([
         ('share/man/man1', [
