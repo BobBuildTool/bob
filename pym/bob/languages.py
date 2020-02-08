@@ -451,7 +451,18 @@ class PwshLanguage:
             "",
             dedent("""\
                 # Setup
-                Get-ChildItem Env: | Select-Object Name,Value | Export-Csv {ENV_FILE}
+                $ret = [ordered]@{{
+                    "Env" = [ordered]@{{}};
+                    "Vars" = [ordered]@{{}}
+                }}
+                foreach ($i in (Get-Variable * | Sort-Object -Property Name)) {{
+                    $ret["Vars"][$i.Name] = $i.Value
+                }}
+                foreach ($i in (Get-Item Env:* | Sort-Object -Property Name)) {{
+                    $ret["Env"][$i.Name] = $i.Value
+                }}
+                $ret["Vars"].Remove("ret")
+                ConvertTo-Json $ret -Compress -Depth 2 > {ENV_FILE}
                 cd $Env:BOB_CWD
                 """.format(ENV_FILE=envFile)),
             dedent("""\
