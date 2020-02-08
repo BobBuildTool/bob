@@ -337,6 +337,7 @@ class JenkinsJob:
             "-D", "recipe", step.getPackage().getRecipe().getName(),
             "-D", "package", "/".join(step.getPackage().getStack()),
             "-D", "step", step.getLabel(),
+            "-D", "language", step.getPackage().getRecipe().scriptLanguage.index.value,
             "-D", "jenkins-build-tag", '"$BUILD_TAG"',
             "-D", "jenkins-node", '"$NODE_NAME"',
             "-D", "jenkins-build-url", '"$BUILD_URL"'

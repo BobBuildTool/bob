@@ -345,6 +345,7 @@ cd {ROOT}
         audit.addDefine("recipe", step.getPackage().getRecipe().getName())
         audit.addDefine("package", "/".join(step.getPackage().getStack()))
         audit.addDefine("step", step.getLabel())
+        audit.addDefine("language", step.getPackage().getRecipe().scriptLanguage.index.value)
         for var, val in step.getPackage().getMetaEnv().items():
             audit.addMetaEnv(var, val)
         audit.setRecipesAudit(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
