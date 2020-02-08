@@ -70,6 +70,7 @@ Example of a single audit record::
          ]
       },
       "meta" : {
+         "language" : "bash",
          "recipe" : "root",
          "step" : "dist",
          "bob" : "0.12.1",
@@ -105,7 +106,9 @@ Basic information
 
 ``env``
     Dump of the bash environment as created by ``declare -p``. See
-    `bash declare`_.
+    `bash declare`_. For PowerShell recipes it is a JSON string that contain
+    all internal variables and environment variables as dictionaries. Use
+    the ``meta.language`` key to determine the used scripting language.
 
 ``metaEnv``
     This is a dictionary of all :ref:`configuration-recipes-metaenv` variables
@@ -221,6 +224,11 @@ under the ``meta`` key and typically hold at least the following information:
 
 ``bob``
     Bob version string.
+
+``language``
+   The scripting language that was used to create the artifact. Can be ``bash``
+   or ``PowerShell``. If missing it must be interpreted as ``bash``. Use this to
+   correctly parse the ``env`` string.
 
 ``package``
     Package path of the artifact that was built. Note that there might be
