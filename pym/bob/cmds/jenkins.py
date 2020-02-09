@@ -64,11 +64,7 @@ BOB_JENKINS_FINGERPRINT_SCRIPT
 ) > {OUTPUT}
 """
 
-SHARED_GENERATION = '-1'
-
-def variantIdToName(vid):
-    """Convert to name in shared location"""
-    return asHexStr(vid) + SHARED_GENERATION
+SHARED_GENERATION = '-2'
 
 class Wiper:
     def __init__(self):
@@ -492,6 +488,60 @@ class JenkinsJob:
 
         return ret
 
+    def __copyArtifact(self, builders, policy, project, artifact, sharedDir=None,
+                       condition=None, windows=False):
+        if condition is None:
+            cp = xml.etree.ElementTree.SubElement(
+                builders, "hudson.plugins.copyartifact.CopyArtifact", attrib={
+                    "plugin" : "copyartifact@1.32.1"
+                })
+        else:
+            guard = xml.etree.ElementTree.SubElement(
+                builders, "org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder", attrib={
+                    "plugin" : "conditional-buildstep@1.3.3",
+                })
+            shellCond = xml.etree.ElementTree.SubElement(
+                guard, "condition", attrib={
+                    "class" : "org.jenkins_ci.plugins.run_condition.contributed.ShellCondition"
+                })
+            xml.etree.ElementTree.SubElement(
+                shellCond, "command").text = textwrap.dedent("""\
+                    {SHEBANG}
+                    BOB_SHARED_BID="$(hexdump -ve '/1 "%02x"' {CONDITION}){GEN}"
+                    test ! -d {BASE_DIR}"/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}"
+                    """).format(SHEBANG=self.getShebang(windows, False),
+                        CONDITION=condition, GEN=SHARED_GENERATION,
+                        BASE_DIR=sharedDir)
+            cp = xml.etree.ElementTree.SubElement(
+                guard, "buildStep", attrib={
+                    "class" : "hudson.plugins.copyartifact.CopyArtifact",
+                    "plugin" : "copyartifact@1.32.1",
+                })
+            xml.etree.ElementTree.SubElement(
+                guard, "runner", attrib={
+                    "class" : "org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail",
+                    "plugin" : "run-condition@1.0",
+                })
+
+        xml.etree.ElementTree.SubElement(cp, "project").text = project
+        xml.etree.ElementTree.SubElement(cp, "filter").text = artifact
+        xml.etree.ElementTree.SubElement(cp, "target").text = ""
+        xml.etree.ElementTree.SubElement(cp, "excludes").text = ""
+        if policy in ["stable", "unstable"]:
+            selector = xml.etree.ElementTree.SubElement(
+                cp, "selector", attrib={
+                    "class" : "hudson.plugins.copyartifact.StatusBuildSelector"
+                })
+            if policy == "stable":
+                xml.etree.ElementTree.SubElement(selector, "stable").text = "true"
+        else:
+            xml.etree.ElementTree.SubElement(
+                cp, "selector", attrib={
+                    "class" : "hudson.plugins.copyartifact.LastCompletedBuildSelector"
+                })
+        xml.etree.ElementTree.SubElement(
+            cp, "doNotFingerprintArtifacts").text = "true"
+
     def dumpXML(self, orig, nodes, windows, credentials, clean, options, date, authtoken):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
@@ -671,105 +721,55 @@ class JenkinsJob:
             for d in deps:
                 if not d.isRelocatable() and (d.getSandbox() is None):
                     warnNonRelocatable.warn(d.getPackage().getName())
-                if d.isShared():
-                    vid = variantIdToName(d.getVariantId())
-                    guard = xml.etree.ElementTree.SubElement(
-                        builders, "org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder", attrib={
-                            "plugin" : "conditional-buildstep@1.3.3",
-                        })
-                    notCond = xml.etree.ElementTree.SubElement(
-                        guard, "condition", attrib={
-                            "class" : "org.jenkins_ci.plugins.run_condition.logic.Not",
-                            "plugin" : "run-condition@1.0",
-                        })
-                    fileCond = xml.etree.ElementTree.SubElement(
-                        notCond, "condition", attrib={
-                            "class" : "org.jenkins_ci.plugins.run_condition.core.FileExistsCondition"
-                        })
-                    xml.etree.ElementTree.SubElement(
-                        fileCond, "file").text = sharedDir+"/"+vid[0:2]+"/"+vid[2:]
-                    xml.etree.ElementTree.SubElement(
-                        fileCond, "baseDir", attrib={
-                            "class" : "org.jenkins_ci.plugins.run_condition.common.BaseDirectory$Workspace"
-                        })
-                    cp = xml.etree.ElementTree.SubElement(
-                        guard, "buildStep", attrib={
-                            "class" : "hudson.plugins.copyartifact.CopyArtifact",
-                            "plugin" : "copyartifact@1.32.1",
-                        })
-                    xml.etree.ElementTree.SubElement(
-                        guard, "runner", attrib={
-                            "class" : "org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail",
-                            "plugin" : "run-condition@1.0",
-                        })
-                else:
-                    cp = xml.etree.ElementTree.SubElement(
-                        builders, "hudson.plugins.copyartifact.CopyArtifact", attrib={
-                            "plugin" : "copyartifact@1.32.1"
-                        })
-                xml.etree.ElementTree.SubElement(
-                    cp, "project").text = self.__getJobName(d)
-                copyArtefacts = JenkinsJob._buildIdName(d)
+                # always copy build-id
+                self.__copyArtifact(builders, policy, self.__getJobName(d),
+                    JenkinsJob._buildIdName(d))
+                # Copy artifact if we rely on Jenkins directly. Do it
+                # conditionally if it is a shared artifact.
                 if options.get("artifacts.copy", "jenkins") == "jenkins":
-                    copyArtefacts += "," + JenkinsJob._tgzName(d)
-                xml.etree.ElementTree.SubElement(
-                    cp, "filter").text = copyArtefacts
-                xml.etree.ElementTree.SubElement(
-                    cp, "target").text = ""
-                xml.etree.ElementTree.SubElement(
-                    cp, "excludes").text = ""
-                if policy in ["stable", "unstable"]:
-                    selector = xml.etree.ElementTree.SubElement(
-                        cp, "selector", attrib={
-                            "class" : "hudson.plugins.copyartifact.StatusBuildSelector"
-                        })
-                    if policy == "stable":
-                        xml.etree.ElementTree.SubElement(selector, "stable").text = "true"
-                else:
-                    xml.etree.ElementTree.SubElement(
-                        cp, "selector", attrib={
-                            "class" : "hudson.plugins.copyartifact.LastCompletedBuildSelector"
-                        })
-                xml.etree.ElementTree.SubElement(
-                    cp, "doNotFingerprintArtifacts").text = "true"
-
-                if options.get("artifacts.copy", "jenkins") == "archive":
-                    if d.isShared():
-                        vid = variantIdToName(d.getVariantId())
-                        prepareCmds.append(textwrap.dedent("""
-                            if  [[ ! -d {SHARED}/{VID1}/{VID2} ]] ; then
-                                {DOWNLOAD_CMD}
-                            fi""").format(VID1=vid[0:2], VID2=vid[2:],
-                                   SHARED=sharedDir,
-                                   DOWNLOAD_CMD=self.__archive.download(d,
-                                                    JenkinsJob._buildIdName(d),
-                                                    JenkinsJob._tgzName(d))))
-                    else:
-                        prepareCmds.append(self.__archive.download(d,
+                    self.__copyArtifact(builders, policy, self.__getJobName(d),
+                        JenkinsJob._tgzName(d), sharedDir,
+                        JenkinsJob._buildIdName(d) if d.isShared() else None,
+                        windows)
+                elif options.get("artifacts.copy", "jenkins") == "archive":
+                    downloadCmd = self.__archive.download(d,
                             JenkinsJob._buildIdName(d),
-                            JenkinsJob._tgzName(d)))
+                            JenkinsJob._tgzName(d))
+                    if d.isShared():
+                        prepareCmds.append(textwrap.dedent("""\
+                            BOB_SHARED_BID="$(hexdump -ve '/1 "%02x"' {BID}){GEN}"
+                            BOB_SHARED_DIR={BASE_DIR}"/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}"
+                            if  [[ ! -d "${{BOB_SHARED_DIR}}" ]] ; then
+                                {DOWNLOAD_CMD}
+                            fi""").format(BID=JenkinsJob._buildIdName(d),
+                                GEN=SHARED_GENERATION, BASE_DIR=sharedDir,
+                                DOWNLOAD_CMD=downloadCmd))
+                    else:
+                        prepareCmds.append(downloadCmd)
 
             # extract deps
             prepareCmds.append("\n# extract deps\n# ============")
             for d in deps:
                 if d.isShared():
-                    vid = variantIdToName(d.getVariantId())
                     prepareCmds.append("")
                     prepareCmds.append(textwrap.dedent("""\
                         # {PACKAGE}
-                        if [ ! -d {SHARED}/{VID1}/{VID2} ] ; then
+                        BOB_SHARED_BID="$(hexdump -ve '/1 "%02x"' {BID}){GEN}"
+                        if [ ! -d {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}} ] ; then
                             mkdir -p {SHARED}
                             T=$(mktemp -d -p {SHARED})
                             tar xpf {TGZ} -C $T meta/audit.json.gz content/
                             cp {BUILDID} $T/meta/buildid.bin
-                            mkdir -p {SHARED}/{VID1}
-                            mv -T $T {SHARED}/{VID1}/{VID2} || rm -rf $T
+                            mkdir -p {SHARED}/${{BOB_SHARED_BID:0:2}}
+                            mv -T $T {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}} || rm -rf $T
                         fi
                         mkdir -p {WSP_DIR}
-                        ln -sfT {SHARED}/{VID1}/{VID2}/content {WSP_PATH}
-                        ln -sfT {SHARED}/{VID1}/{VID2}/meta/audit.json.gz {AUDIT}
-                        ln -sfT {SHARED}/{VID1}/{VID2}/meta/buildid.bin {BUILDID}
-                        """.format(VID1=vid[0:2], VID2=vid[2:], TGZ=JenkinsJob._tgzName(d),
+                        ln -sfT {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}/content {WSP_PATH}
+                        ln -sfT {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}/meta/audit.json.gz {AUDIT}
+                        ln -sfT {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}/meta/buildid.bin {BUILDID}
+                        """.format(BID=JenkinsJob._buildIdName(d),
+                                   GEN=SHARED_GENERATION,
+                                   TGZ=JenkinsJob._tgzName(d),
                                    WSP_DIR=os.path.dirname(d.getWorkspacePath()),
                                    WSP_PATH=d.getWorkspacePath(),
                                    SHARED=sharedDir,
@@ -923,19 +923,20 @@ class JenkinsJob:
         installCmds = []
         for d in sorted(self.__packageSteps.values()):
             if d.isShared():
-                vid = variantIdToName(d.getVariantId())
                 installCmds.append(textwrap.dedent("""\
                 # {PACKAGE}
-                if [ ! -d {SHARED}/{VID1}/{VID2} ] ; then
+                BOB_SHARED_BID="$(hexdump -ve '/1 "%02x"' {BID}){GEN}"
+                if [ ! -d {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}} ] ; then
                     mkdir -p {SHARED}
                     T=$(mktemp -d -p {SHARED})
                     tar xpf {TGZ} -C $T meta/audit.json.gz content/
                     cp {BUILDID} $T/meta/buildid.bin
-                    mkdir -p {SHARED}/{VID1}
-                    mv -T $T {SHARED}/{VID1}/{VID2} || rm -rf $T
+                    mkdir -p {SHARED}/${{BOB_SHARED_BID:0:2}}
+                    mv -T $T {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}} || rm -rf $T
                 fi
                 """.format(TGZ=JenkinsJob._tgzName(d),
-                           VID1=vid[0:2], VID2=vid[2:],
+                           BID=JenkinsJob._buildIdName(d),
+                           GEN=SHARED_GENERATION,
                            BUILDID=JenkinsJob._buildIdName(d),
                            SHARED=sharedDir,
                            PACKAGE="/".join(d.getPackage().getStack()))))
