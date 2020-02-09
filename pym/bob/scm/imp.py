@@ -109,12 +109,12 @@ class ImportScm(Scm):
         return ret
 
     async def invoke(self, invoker):
-        if not os.path.isdir(self.__url):
-            invoker.fail("Cannot import '{}': not a directory!".format(self.__url))
         dest = invoker.joinPath(self.__dir)
         os.makedirs(dest, exist_ok=True)
         if self.__prune: emptyDirectory(dest)
         if self.__data is None:
+            if not os.path.isdir(self.__url):
+                invoker.fail("Cannot import '{}': not a directory!".format(self.__url))
             copyTree(self.__url, dest, invoker)
         else:
             unpackTree(self.__data, dest)
