@@ -16,7 +16,7 @@ from ...tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReini
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from ...utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
-    isWindows, INVALID_CHAR_TRANS, quoteCmdExe
+    isWindows, INVALID_CHAR_TRANS, quoteCmdExe, getPlatformTag
 from shlex import quote
 from textwrap import dedent
 import argparse
@@ -1200,7 +1200,7 @@ cd {ROOT}
             if ret is None:
                 fingerprint = await self._getFingerprint(step, depth)
                 ret = await step.getDigestCoro(lambda x: self.__getBuildIdList(x, depth+1),
-                    True, fingerprint=fingerprint)
+                    True, fingerprint=fingerprint, platform=getPlatformTag())
                 self.__buildDistBuildIds[path] = ret
 
         return ret

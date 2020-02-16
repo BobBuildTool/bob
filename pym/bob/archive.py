@@ -43,14 +43,10 @@ import urllib.parse
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
-BUILDID_SUFFIX_WIN = ".winbuildid"
 FINGERPRINT_SUFFIX = ".fprnt"
 
 def buildIdToName(bid):
     return asHexStr(bid) + ARCHIVE_GENERATION
-
-def buildIdSuffix(isWin = isWindows()):
-    return BUILDID_SUFFIX_WIN if isWin else BUILDID_SUFFIX
 
 def readFileOrHandle(name, fileobj):
     if fileobj is not None:
@@ -237,10 +233,10 @@ class BaseArchive:
             return None
 
         loop = asyncio.get_event_loop()
-        with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
+        with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
             try:
                 ret, msg, kind = await loop.run_in_executor(None,
-                    BaseArchive._downloadLocalFile, self, liveBuildId, buildIdSuffix())
+                    BaseArchive._downloadLocalFile, self, liveBuildId, BUILDID_SUFFIX)
                 if ret is None: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
@@ -307,9 +303,9 @@ class BaseArchive:
             return
 
         loop = asyncio.get_event_loop()
-        with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, buildIdSuffix()), (INFO,TRACE)) as a:
+        with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
             try:
-                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalFile, self, liveBuildId, buildIdSuffix(), buildId)
+                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalFile, self, liveBuildId, BUILDID_SUFFIX, buildId)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Upload of build-id interrupted.")
@@ -463,7 +459,7 @@ class LocalArchive(BaseArchive):
                        GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
+        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
 
     def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
         return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
@@ -673,7 +669,7 @@ class SimpleHttpArchive(BaseArchive):
                        INSECURE=insecure))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
+        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
 
     def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
         return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
@@ -800,7 +796,7 @@ fi
            GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX)
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
+        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
 
     def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
         return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
@@ -932,7 +928,7 @@ class AzureArchive(BaseArchive):
                        RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return self.__uploadJenkins(step, liveBuildId, buildId, buildIdSuffix(isWin))
+        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
 
     def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
         return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)

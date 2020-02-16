@@ -7,7 +7,7 @@ from . import BOB_VERSION, _enableDebug, DEBUG
 from .errors import BobError
 from .state import finalize
 from .tty import colorize, Unbuffered, setColorMode, cleanup
-from .utils import asHexStr, hashPath
+from .utils import asHexStr, hashPath, getPlatformTag
 import argparse
 import logging
 import sys
@@ -363,6 +363,8 @@ def __process(l, inFile, stateDir):
     elif l.startswith("g"):
         from .scm.git import GitScm
         return bytes.fromhex(GitScm.processLiveBuildIdSpec(l[1:]))
+    elif l == "p":
+        return getPlatformTag()
     elif l:
         print("Malformed spec:", l, file=sys.stderr)
         sys.exit(1)

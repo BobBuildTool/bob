@@ -11,7 +11,7 @@ from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, auditFr
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
-from .utils import asHexStr, joinScripts, compareVersion, binStat, updateDicRecursive, hashString
+from .utils import asHexStr, joinScripts, compareVersion, binStat, updateDicRecursive, hashString, getPlatformTag
 from abc import ABCMeta, abstractmethod
 from itertools import chain
 from os.path import expanduser
@@ -961,8 +961,10 @@ class Step:
         """Get Package object that is the parent of this Step."""
         return self.__package
 
-    def getDigest(self, calculate, forceSandbox=False, hasher=DigestHasher, fingerprint=None):
+    def getDigest(self, calculate, forceSandbox=False, hasher=DigestHasher,
+                  fingerprint=None, platform=b''):
         h = hasher()
+        h.update(platform)
         if self._coreStep.isFingerprinted() and self.getSandbox() \
                 and not self.__package.getRecipe().getRecipeSet().sandboxFingerprints:
             h.fingerprint(hasher.sliceRecipes(calculate(self.getSandbox().getStep())))
@@ -1003,8 +1005,10 @@ class Step:
             h.fingerprint(hasher.sliceHost(arg))
         return h.digest()
 
-    async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher, fingerprint=None):
+    async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher,
+                            fingerprint=None, platform=b''):
         h = hasher()
+        h.update(platform)
         if self._coreStep.isFingerprinted() and self.getSandbox() \
                 and not self.__package.getRecipe().getRecipeSet().sandboxFingerprints:
             [d] = await calculate([self.getSandbox().getStep()])
@@ -1343,6 +1347,7 @@ class CheckoutStep(Step):
         if not self.hasLiveBuildId():
             return None
         h = hashlib.sha1()
+        h.update(getPlatformTag())
         h.update(self._getSandboxVariantId())
         for s in self._coreStep.scmList:
             liveBId = await s.predictLiveBuildId(self)
@@ -1356,6 +1361,7 @@ class CheckoutStep(Step):
             return None
         workspacePath = self.getWorkspacePath()
         h = hashlib.sha1()
+        h.update(getPlatformTag())
         h.update(self._getSandboxVariantId())
         for s in self._coreStep.scmList:
             liveBId = s.calcLiveBuildId(workspacePath)
@@ -1371,7 +1377,7 @@ class CheckoutStep(Step):
         if not self.hasLiveBuildId():
             return None
         workspacePath = self.getWorkspacePath()
-        lines = [ "{sha1", "=" + asHexStr(self._getSandboxVariantId()) ]
+        lines = [ "{sha1", "p", "=" + asHexStr(self._getSandboxVariantId()) ]
         for s in self._coreStep.scmList:
             liveBIdSpec = s.getLiveBuildIdSpec(workspacePath)
             if liveBIdSpec is None: return None

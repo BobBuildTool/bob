@@ -5,9 +5,10 @@
 
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import patch
 import os, stat
 
-from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion
+from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion, getPlatformTag
 from bob.errors import BuildError, ParseError
 
 class TestJoinScripts(TestCase):
@@ -116,3 +117,45 @@ class TestVersions(TestCase):
         self.assertRaises(ParseError, compareVersion, "v0.15", "0.15")
         self.assertRaises(ParseError, compareVersion, "0.15", "0.15a4")
         self.assertRaises(ParseError, compareVersion, "0.15.devv4", "0.15")
+
+
+def copyAsSymlink(target, name):
+    import shutil
+    shutil.copy(target, name)
+
+def symlinkFail(target, name):
+    raise OSError
+
+class TestPlatformTag(TestCase):
+    @patch('bob.utils.__platformTag', None)
+    @patch('bob.utils.sys.platform', 'linux')
+    def testPosix(self):
+        self.assertEqual(getPlatformTag(), b'')
+
+    @patch('bob.utils.__platformTag', None)
+    @patch('bob.utils.sys.platform', 'msys')
+    @patch('bob.utils.os.symlink', symlinkFail)
+    def testMSYSLinkFail(self):
+        self.assertEqual(getPlatformTag(), b'm')
+
+    @patch('bob.utils.__platformTag', None)
+    @patch('bob.utils.sys.platform', 'msys')
+    @patch('bob.utils.os.symlink', copyAsSymlink)
+    def testMSYSLinkCopy(self):
+        self.assertEqual(getPlatformTag(), b'm')
+
+    @patch('bob.utils.__platformTag', None)
+    @patch('bob.utils.sys.platform', 'msys')
+    def testMSYSLinkOk(self):
+        self.assertEqual(getPlatformTag(), b'ml')
+
+    @patch('bob.utils.__platformTag', None)
+    @patch('bob.utils.sys.platform', 'win32')
+    @patch('bob.utils.os.symlink', symlinkFail)
+    def testWindowsLinkFail(self):
+        self.assertEqual(getPlatformTag(), b'w')
+
+    @patch('bob.utils.__platformTag', None)
+    @patch('bob.utils.sys.platform', 'win32')
+    def testWindowsLinkOk(self):
+        self.assertEqual(getPlatformTag(), b'wl')
