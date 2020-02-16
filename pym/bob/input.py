@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
-from .errors import ParseError
+from .errors import ParseError, BobError
 from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
@@ -3066,7 +3066,12 @@ class RecipeSet:
         try:
             ret = self.__recipeScmAudit
         except AttributeError:
-            ret = self.__recipeScmAudit = auditFromDir(".")
+            try:
+                ret = auditFromDir(".")
+            except BobError as e:
+                Warn("could not determine recipes state").warn(e.slogan)
+                ret = None
+            self.__recipeScmAudit = ret
         return ret
 
     def getScmStatus(self):
