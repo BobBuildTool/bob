@@ -163,6 +163,27 @@ if isWindows():
 else:
     INVALID_CHAR_TRANS = str.maketrans('', '')
 
+
+__platformTag = None
+
+def getPlatformTag():
+    # cached on first call
+    global __platformTag
+    if __platformTag is not None:
+        return __platformTag
+
+    p = sys.platform
+    if p == 'win32':
+        ret = b'w'
+    elif p in ('msys', 'cygwin'):
+        ret = b'm'
+    else:
+        ret = b''
+
+    # cache result
+    __platformTag = ret
+    return ret
+
 ### directory hashing ###
 
 def hashFile(path, hasher=hashlib.sha1):
