@@ -5,7 +5,7 @@
 
 from .errors import BuildError, ParseError
 from binascii import hexlify
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 import collections.abc
 import hashlib
 import logging
@@ -179,6 +179,24 @@ def getPlatformTag():
         ret = b'm'
     else:
         ret = b''
+
+    # On Windows it depends on the SeCreateSymbolicLinkPrivilege capability if
+    # it is possible to create symlinks. Try to create a symlink to see if we
+    # have the privilege. Either the symlink() call fails directly or MSYS
+    # silently creates a copy (unless MSYS=winsymlinks:nativestrict is set).
+    if p in ('msys', 'cygwin', 'win32'):
+        canSymlink = False
+        try:
+            with TemporaryDirectory() as tmp:
+                with open(os.path.join(tmp, "file"), "w") as f:
+                    pass
+                canary = os.path.join(tmp, "canary")
+                os.symlink("file", canary)
+                canSymlink = os.path.islink(canary)
+        except OSError:
+            pass
+        if canSymlink:
+            ret += b'l'
 
     # cache result
     __platformTag = ret
