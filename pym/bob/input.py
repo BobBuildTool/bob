@@ -1890,7 +1890,8 @@ class Recipe(object):
                 for dep in deps )
 
     @staticmethod
-    def loadFromFile(recipeSet, layer, rootDir, fileName, properties, fileSchema, isRecipe):
+    def loadFromFile(recipeSet, layer, rootDir, fileName, properties, fileSchema,
+                     isRecipe, scriptLanguage=None):
         # MultiPackages are handled as separate recipes with an anonymous base
         # class. Directories are treated as categories separated by '::'.
         baseName = os.path.splitext( fileName )[0].split( os.sep )
@@ -1920,7 +1921,7 @@ class Recipe(object):
             else:
                 packageName = baseName + suffix
                 return [ Recipe(recipeSet, recipe, layer, fileName, baseDir, packageName,
-                                baseName, properties, isRecipe, anonBaseClass) ]
+                                baseName, properties, isRecipe, anonBaseClass, scriptLanguage) ]
 
         return list(collect(recipeSet.loadYaml(fileName, fileSchema), "", None))
 
@@ -1938,12 +1939,13 @@ class Recipe(object):
         return ret
 
     def __init__(self, recipeSet, recipe, layer, sourceFile, baseDir, packageName, baseName,
-                 properties, isRecipe=True, anonBaseClass=None):
+                 properties, isRecipe=True, anonBaseClass=None, scriptLanguage=ScriptLanguage.BASH):
         self.__recipeSet = recipeSet
         self.__sources = [ sourceFile ] if anonBaseClass is None else []
         self.__classesResolved = False
         self.__inherit = recipe.get("inherit", [])
         self.__anonBaseClass = anonBaseClass
+        self.__defaultScriptLanguage = scriptLanguage
         self.__deps = list(Recipe.Dependency.parseEntries(recipe.get("depends", [])))
         filt = recipe.get("filter", {})
         if filt: warnFilter.warn(baseName)
@@ -2056,7 +2058,7 @@ class Recipe(object):
             if scriptLanguage is not None: break
             scriptLanguage = cls.__scriptLanguage
         if scriptLanguage is None:
-            self.__scriptLanguage = self.__recipeSet.scriptLanguage
+            self.__scriptLanguage = self.__defaultScriptLanguage
         else:
             self.__scriptLanguage = scriptLanguage
         glue = getLanguage(self.__scriptLanguage).glue
@@ -3161,22 +3163,16 @@ class RecipeSet:
         # Determine policies. The root layer determines the default settings
         # implicitly by bobMinimumVersion or explicitly via 'policies'. All
         # sub-layer policies must not contradict root layer policies
-        scriptLanguage = ScriptLanguage(config["scriptLanguage"])
-
         if layer:
             for (name, behaviour) in config.get("policies", {}).items():
                 if bool(self.__policies[name][0]) != behaviour:
                     raise ParseError("Layer '{}' requires different behaviour for policy '{}' than root project!"
                                         .format("/".join(layer), name))
-            if self.__scriptLanguage != scriptLanguage:
-                raise ParseError("Layer '{}' uses different 'scriptLanguage' than root layer!"
-                                    .format("/".join(layer), name))
         else:
             self.__policies = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
                 for (name, (ver, warn)) in self.__policies.items() }
             for (name, behaviour) in config.get("policies", {}).items():
                 self.__policies[name] = (behaviour, None)
-            self.__scriptLanguage = scriptLanguage
 
         # global user config(s)
         if not DEBUG['ngd'] and not layer:
@@ -3211,13 +3207,14 @@ class RecipeSet:
                     e.pushFrame(path)
                     raise
 
+        scriptLanguage = ScriptLanguage(config["scriptLanguage"])
         recipesDir = os.path.join(rootDir, 'recipes')
         for root, dirnames, filenames in os.walk(recipesDir):
             for path in fnmatch.filter(filenames, "[!.]*.yaml"):
                 try:
                     recipes = Recipe.loadFromFile(self, layer, recipesDir,
                         os.path.relpath(os.path.join(root, path), recipesDir),
-                        self.__properties, self.__recipeSchema, True)
+                        self.__properties, self.__recipeSchema, True, scriptLanguage)
                     for r in recipes:
                         self.__addRecipe(r)
                 except ParseError as e:
@@ -3455,10 +3452,6 @@ class RecipeSet:
         except AttributeError:
             self.__sandboxFingerprints = self.getPolicy("sandboxFingerprints")
             return self.__sandboxFingerprints
-
-    @property
-    def scriptLanguage(self):
-        return self.__scriptLanguage
 
 
 class YamlCache:
