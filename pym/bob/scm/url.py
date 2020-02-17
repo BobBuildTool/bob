@@ -15,6 +15,7 @@ import os, os.path
 import re
 import schema
 import shutil
+import signal
 import ssl
 import stat
 import tempfile
@@ -202,6 +203,9 @@ class UrlScm(Scm):
         return ret
 
     def _download(self, destination):
+        # restore signals to default so that Ctrl+C kills us
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+
         headers = {}
         context = None if self.__sslVerify else ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         if os.path.isfile(destination) and self.__url.startswith("http"):
