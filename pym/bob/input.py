@@ -2863,7 +2863,7 @@ class RecipeSet:
                 lambda x: updateDicRecursive(self.__commandConfig, x) if not self._ignoreCmdConfig else None
             ),
             "environment" : BuiltinSetting(
-                schema.Schema({ schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$') : str }),
+                VarDefineValidator("environment"),
                 lambda x: self.__defaultEnv.update(x)
             ),
             "hooks" : BuiltinSetting(
