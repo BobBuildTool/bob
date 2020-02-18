@@ -1265,10 +1265,12 @@ def genJenkinsJobs(recipes, jenkins):
         if not archiveHandler.canUploadJenkins() or not archiveHandler.canDownloadJenkins():
             raise ParseError("No archive for up and download found but artifacts.copy using archive enabled!")
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
+    windows = config.get("windows", False)
     packages = recipes.generatePackages(
         jenkinsNamePersister(jenkins, nameFormatter, config.get('uuid')),
         config.get('defines', {}),
-        config.get('sandbox', False))
+        config.get('sandbox', False),
+        "msys" if windows else "linux")
     nameCalculator = JobNameCalculator(prefix)
     rootPackages = []
     for r in config["roots"]: rootPackages.extend(packages.queryPackagePath(r))
