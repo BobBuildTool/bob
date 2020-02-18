@@ -2748,9 +2748,7 @@ class RecipeSet:
         cls._colorModeConfig = mode
 
     def __init__(self):
-        self.__defaultEnv = {
-            "BOB_HOST_PLATFORM" : sys.platform,
-        }
+        self.__defaultEnv = {}
         self.__aliases = {}
         self.__recipes = {}
         self.__classes = {}
@@ -3368,7 +3366,7 @@ class RecipeSet:
             raise ParseError("Class {} requested but not found.".format(className))
         return self.__classes[className]
 
-    def __getEnvWithCacheKey(self, envOverrides, sandboxEnabled):
+    def __getEnvWithCacheKey(self, envOverrides, sandboxEnabled, platform):
         # calculate start environment
         if self.getPolicy("cleanEnvironment"):
             osEnv = Env(os.environ)
@@ -3380,6 +3378,7 @@ class RecipeSet:
             env.update(self.__defaultEnv)
         env.setFuns(self.__stringFunctions)
         env.update(envOverrides)
+        env["BOB_HOST_PLATFORM"] = platform
 
         # calculate cache key for persisted packages
         h = hashlib.sha1()
@@ -3426,8 +3425,9 @@ class RecipeSet:
 
         return result.refDeref([], {}, None, nameFormatter)
 
-    def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False):
-        (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled)
+    def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False,
+                         platform=sys.platform):
+        (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled, platform)
         return PackageSet(cacheKey, self.__aliases, self.__stringFunctions,
             lambda: self.__generatePackages(nameFormatter, env, cacheKey, sandboxEnabled))
 
