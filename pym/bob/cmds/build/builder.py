@@ -249,7 +249,10 @@ cd {ROOT}
         self.__cleanCheckout = clean
 
     def setAlwaysCheckout(self, alwaysCheckout):
-        self.__alwaysCheckout = [ re.compile(e) for e in alwaysCheckout ]
+        try:
+            self.__alwaysCheckout = [ re.compile(e) for e in alwaysCheckout ]
+        except re.error as e:
+            raise BuildError("Invalid --always-checkout regex '{}': {}".format(e.pattern, e))
 
     def setLinkDependencies(self, linkDeps):
         self.__linkDeps = linkDeps
