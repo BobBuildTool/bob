@@ -237,7 +237,7 @@ cd {ROOT}
             try:
                 self.__downloadPackages = re.compile(mode[9:])
             except re.error as e:
-                raise BuildError("Invalid download regex '{}': {}".format(e.pattern), e)
+                raise BuildError("Invalid download regex '{}': {}".format(e.pattern, e))
         else:
             assert mode == 'no'
             self.__archive.wantDownload(False)
