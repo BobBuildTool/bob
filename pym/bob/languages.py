@@ -562,7 +562,7 @@ class StepSpec:
         scriptLanguage = step.getPackage().getRecipe().scriptLanguage
         self.__data = d = {
             'envFile' : envFile,
-            'envWhiteList' : list(envWhiteList),
+            'envWhiteList' : sorted(envWhiteList),
             'logFile' : logFile,
             'isJenkins' : isJenkins,
             'vsn' : asHexStr(BOB_INPUT_HASH),
