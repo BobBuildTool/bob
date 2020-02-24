@@ -56,7 +56,13 @@ class LogWriteProtocol(asyncio.SubprocessProtocol):
         self.__stdErr = stdErr
 
     def connection_made(self, transport):
+        """Process is running and pipes have been connected"""
         self.__transport = transport
+
+    def connection_lost(self, exc):
+        """Process exited and all pipes have been disconnected"""
+        self.__exit.set_result(self.__transport.get_returncode())
+        self.__transport = None
 
     def pipe_data_received(self, fd, data):
         self.__logFile.write(data)
@@ -64,9 +70,6 @@ class LogWriteProtocol(asyncio.SubprocessProtocol):
             self.__stdOut.write(data)
         elif fd == 2:
             self.__stdErr.write(data)
-
-    def process_exited(self):
-        self.__exit.set_result(self.__transport.get_returncode())
 
 
 class InvocationMode(Enum):
