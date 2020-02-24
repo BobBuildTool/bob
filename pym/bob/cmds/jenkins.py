@@ -895,7 +895,7 @@ class JenkinsJob:
                 build, "command").text = "\n".join([
                     self.dumpStep(d, windows, affectedPackageSteps),
                     "", "# generate audit trail",
-                    "cd $WORKSPACE",
+                    "cd \"$WORKSPACE\"",
                     self.dumpStepAuditGen(d)
                 ])
 
@@ -907,10 +907,10 @@ class JenkinsJob:
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
                 self.dumpStep(d, windows, [d]),
                 "", "# generate audit trail",
-                "cd $WORKSPACE",
+                "cd \"$WORKSPACE\"",
                 self.dumpStepAuditGen(d),
                 "", "# pack result for archive and inter-job exchange",
-                "cd $WORKSPACE",
+                "cd \"$WORKSPACE\"",
                 "tar zcfv {TGZ} -H pax --pax-option=\"bob-archive-vsn=1\" --transform='s|^{AUDIT}|meta/audit.json.gz|' --transform='s|^{WSP_PATH}|content|' {AUDIT} {WSP_PATH}".format(
                     TGZ=JenkinsJob._tgzName(d),
                     AUDIT=JenkinsJob._auditName(d),
