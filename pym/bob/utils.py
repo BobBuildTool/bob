@@ -549,3 +549,52 @@ def infixBinaryOp(handler, *args, **kwargs):
         return handler(s, loc, toks, *args, **kwargs)
 
     return wrap
+
+### Asyncio event loop setup
+
+def dummy():
+    pass
+
+class EventLoopWrapper:
+    def __init__(self):
+        import asyncio
+        import multiprocessing
+        import signal
+        import concurrent.futures
+
+        if sys.platform == 'win32':
+            loop = asyncio.ProactorEventLoop()
+            asyncio.set_event_loop(loop)
+            multiprocessing.set_start_method('spawn')
+            executor = concurrent.futures.ProcessPoolExecutor()
+        else:
+            # The ProcessPoolExecutor is a barely usable for our interactive use
+            # case. On SIGINT any busy executor should stop. The only way how this
+            # does not explode is that we ignore SIGINT before spawning the process
+            # pool and re-enable SIGINT in every executor. In the main process we
+            # have to ignore BrokenProcessPool errors as we will likely hit them.
+            # To "prime" the process pool a dummy workload must be executed because
+            # the processes are spawned lazily.
+            loop = asyncio.get_event_loop()
+            origSigInt = signal.getsignal(signal.SIGINT)
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            # fork early before process gets big
+            if sys.platform == 'msys':
+                multiprocessing.set_start_method('fork')
+            else:
+                multiprocessing.set_start_method('forkserver')
+            executor = concurrent.futures.ProcessPoolExecutor()
+            executor.submit(dummy).result()
+            signal.signal(signal.SIGINT, origSigInt)
+        loop.set_default_executor(executor)
+
+        self.__loop = loop
+        self.__executor = executor
+
+    def __enter__(self):
+        return self.__loop
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.__executor.shutdown()
+        self.__loop.close()
+

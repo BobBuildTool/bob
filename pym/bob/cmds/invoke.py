@@ -6,8 +6,8 @@
 from ..errors import BuildError
 from ..invoker import Invoker, InvocationMode
 from ..languages import StepSpec
+from ..utils import EventLoopWrapper
 import argparse
-import asyncio
 import sys
 
 
@@ -44,33 +44,26 @@ def doInvoke(argv, bobRoot):
     except OSError as e:
         raise BuildError("Error reading spec: " + str(e))
 
-    # Need to select right event loop in Windows. Otherwise subprocesses are
-    # not supported.
-    if sys.platform == 'win32':
-        loop = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(loop)
-    else:
-        loop = asyncio.get_event_loop()
-
     # Let's do it...
-    if args.mode == 'shell':
-        invoker = Invoker(spec, args.preserve_env, True, True, True, False, False)
-        ret = loop.run_until_complete(invoker.executeStep(InvocationMode.SHELL,
-            args.clean, args.keep_sandbox))
-    elif args.mode == 'run':
-        invoker = Invoker(spec, args.preserve_env, args.no_logfiles,
-            verbosity >= 2, verbosity >= 1, verbosity >= 3, False)
-        ret = loop.run_until_complete(invoker.executeStep(InvocationMode.CALL,
-            args.clean, args.keep_sandbox))
-    elif args.mode == 'fingerprint':
-        invoker = Invoker(spec, args.preserve_env, True, True, True, verbosity >= 3, False)
-        (ret, stdout, stderr) = loop.run_until_complete(invoker.executeFingerprint(args.keep_sandbox))
-        if ret == 0:
-            sys.stdout.buffer.write(stdout)
+    with EventLoopWrapper() as loop:
+        if args.mode == 'shell':
+            invoker = Invoker(spec, args.preserve_env, True, True, True, False, False)
+            ret = loop.run_until_complete(invoker.executeStep(InvocationMode.SHELL,
+                args.clean, args.keep_sandbox))
+        elif args.mode == 'run':
+            invoker = Invoker(spec, args.preserve_env, args.no_logfiles,
+                verbosity >= 2, verbosity >= 1, verbosity >= 3, False)
+            ret = loop.run_until_complete(invoker.executeStep(InvocationMode.CALL,
+                args.clean, args.keep_sandbox))
+        elif args.mode == 'fingerprint':
+            invoker = Invoker(spec, args.preserve_env, True, True, True, verbosity >= 3, False)
+            (ret, stdout, stderr) = loop.run_until_complete(invoker.executeFingerprint(args.keep_sandbox))
+            if ret == 0:
+                sys.stdout.buffer.write(stdout)
+            else:
+                sys.stderr.buffer.write(stderr)
         else:
-            sys.stderr.buffer.write(stderr)
-    else:
-        assert False, "not reached"
+            assert False, "not reached"
 
     # Convert signals to error codes like bash does
     if ret < 0:
