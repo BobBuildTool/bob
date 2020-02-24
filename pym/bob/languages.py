@@ -274,7 +274,7 @@ class BashLanguage:
                 # Setup
                 declare -p > {ENV_FILE}
                 cd \"${{BOB_CWD}}\"
-                """.format(ENV_FILE=BashLanguage.__munge(envFile))),
+                """.format(ENV_FILE=quote(BashLanguage.__munge(envFile)))),
             dedent("""\
                 # Error handling
                 bob_handle_error()
@@ -464,7 +464,7 @@ class PwshLanguage:
                 $ret["Vars"].Remove("ret")
                 ConvertTo-Json $ret -Compress -Depth 2 > {ENV_FILE}
                 cd $Env:BOB_CWD
-                """.format(ENV_FILE=envFile)),
+                """.format(ENV_FILE=quotePwsh(envFile))),
             dedent("""\
                 # Error handling
                 $ErrorActionPreference="Stop"
