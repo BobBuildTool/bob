@@ -210,7 +210,8 @@ class CommonIDEGenerator:
                 checkoutPath = "<root-sentinel>"
                 info = checkouts[checkoutPath] = CheckoutInfo(BaseScanner(True, "/".join(package.getStack())), packageVid)
             else:
-                info = checkouts[checkoutPath].packages.add(packageVid)
+                info = checkouts[checkoutPath]
+                info.packages.add(packageVid)
 
             # find all executables
             if package.getPackageStep().isValid():
