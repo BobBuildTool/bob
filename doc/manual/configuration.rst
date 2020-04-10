@@ -898,6 +898,8 @@ url
        possible to fetch multiple files in the same directory. This is done to
        separate possibly extracted files safely from other checkouts.
 
+.. _configuration-recipes-depends:
+
 depends
 ~~~~~~~
 

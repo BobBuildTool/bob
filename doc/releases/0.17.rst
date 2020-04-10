@@ -1,0 +1,166 @@
+Bob 0.17 Release Notes
+======================
+
+Changes made since Bob 0.16.0 include the following.
+
+New features
+------------
+
+Windows compatibility
+~~~~~~~~~~~~~~~~~~~~~
+
+Bob can be installed on Windows with a native Python installation. Together
+with the newly added PowerShell support (see below) it is possible to use Bob
+without any Unix Tools on Windows. It is also possible to use MSYS2
+``bash.exe`` from a natively installed Bob.
+
+Recipes
+~~~~~~~
+
+* Bob gained support for multiple scripting languages.
+
+  Traditionally Bob supported only bash scripts. Starting with this version it
+  is also possible to use PowerShell in a recipe. The default language is still
+  'bash' but this may be overridden by the
+  :ref:`configuration-config-scriptLanguage` setting in ``config.yaml``. The
+  default language is used to call the right interpreter for the
+  ``checkoutScript``, ``buildScript``, ``packageScript`` or
+  ``fingerprintScript`` scripts.
+
+  For each ``*Script`` entry there is a variant for the different supported
+  languages. For example the ``buildScript`` has the ``buildScriptBash`` and
+  ``buildScriptPwsh`` siblings. They hold the scripts for the respective
+  languages. This schema extends to the other scripts too.
+
+  The selection which language is used at build time is done during execution.
+  By default bash scripts are used. The language may be configured globally in
+  ``config.yaml`` by setting :ref:`configuration-config-scriptLanguage` or on
+  in the recipe/class by the :ref:`configuration-recipes-scriptLanguage` key.
+
+* Add support for expressions in ``if`` fields.
+
+  Traditionally ``if`` fields (e.g. in :ref:`configuration-recipes-depends`)
+  are strings that can use substitutions to produce a boolean result. These
+  strings are then considered false if they were empty, "0" or "false". In any
+  other case they are considered to be true. Example::
+
+      if: "$(or,$(eq,${FOO},bar),${BAZ})"
+
+  Instead you can now write::
+
+      if: !expr |
+          "${FOO}" == "bar" || "${BAZ}"
+
+  which is much more readable and can be properly indented if the expression
+  gets complex. The new syntax is allowed at all ``if`` and ``fingerprintIf``
+  keys.
+
+* Bob gained a simple ``import`` SCM that allows importing files from the
+  project directly in to a src workspace. It copies the directory specified in
+  ``url`` to the workspace. See :ref:`configuration-recipes-scm` for more
+  details.
+
+* Relax :ref:`configuration-config-whitelist` name schema.
+
+  Real environment variables can almost have any character in them. Bob now
+  allows to white list any variable name that is supported by the OS.
+
+* Allow Windows paths for URL SCM.
+
+  On Windows it is now allowed to use fully qualified paths in the ``url`` SCM,
+  e.g. ``C:\tmp.txt``, ``file:///C:/tmp.txt`` or ``\\server\path``.
+
+* The ``BOB_HOST_PLATFORM`` variable is automatically populated.
+
+  When building on multiple platforms the recipes will have to make platform
+  specific decisions. The standard ``BOB_HOST_PLATFORM`` variable provides a
+  standard way to identify the host platform type. See
+  :ref:`configuration-recipes-vars` for more details.
+
+Bob query-path
+~~~~~~~~~~~~~~
+
+* ``query-path`` will now show a message if the query matched no packages at
+  all or if an expected directory is missing. This is printed on stderr so that
+  it does not interfere with existing scripts.
+
+* Added ``-q`` option.
+
+  Adds the possibility to silence the error messages provided by query-path on
+  missing packages and paths.
+
+* Added ``--fail`` option.
+
+  This option enables non-zero return codes in the case of missing packages
+  and/or paths.
+
+Visual Studio project generator
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Built Windows executables are recognized and can be directly executed from
+  Visual Studio. This includes debugging them but requires that the executables
+  are built with the Microsoft compiler, though. Visual Studio cannot debug
+  executables built by MSYS2 gcc.
+
+Plugins
+~~~~~~~
+
+* The bob path is now passed to generator plugins.
+
+  Starting with ``apiVersion`` 0.17 the generator plugin will get the path of
+  the Bob executable. The plugin may use it to generate project files that work
+  even if Bob is not in ``$PATH``. See :ref:`extending-generators` for more
+  details.
+
+Changed behaviour
+-----------------
+
+Other behavioural changes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* The ``bobMinimumVersion`` comparison is now fully SemVer compatible.
+  Pre-release versions are considered to precede the final release version.
+  When using pre-release versions of Bob the inferred version is based on the
+  next anticipated version, e.g. when the last tag was 0.17.0 the calculated
+  pre-release version will be 0.17.1-devXXX. This does not impact released
+  versions.
+
+Backwards incompatible changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Recipe or class YAML files that start with a dot (``.``) are ignored. Some
+  editors generate such hidden temporary files while editing recipes. It's
+  still allowed to use command line configuration files (``bob -c ...``) or
+  include files (``default.yaml``) starting with a dot.
+
+* Fixed two bugs related to fingerprinting of build steps. Under certain recipe
+  conditions it could happen that fingerprinting was not correct and even lead
+  to inconsistent behaviour between subsequent invocations. The fix might break
+  the discovery of binary artifacts that were created with older versions of
+  Bob if the project used fingerprints and had actually triggered those bugs.
+
+* Fixed another bug related to fingerprints. Jenkins builds uploaded incorrect
+  fingerprint prediction files for non-relocatable packages. This might lead to
+  unneeded checkouts for a user but the correct binary artifacts will still be
+  found.
+
+* Binary artifacts of the major platforms are always separated: POSIX systems
+  (e.g. Linux), native Windows and MSYS2 on Windows. Artifacts that are built
+  on these platforms are not shared between each other, even when building the
+  same recipes. The reason is that the file systems and how they are seen by
+  Python differ too much. It is not possible to reliably share these artifacts
+  without introducing occidental false sharing.
+
+  A similar distinction is done on Windows regarding the capability to create
+  symlinks. Some scripts and archive utilities will behave differently if it is
+  possible to create symlinks on Windows or not. This capability is not granted
+  by default but only available to administrative shells or user accounts that
+  were given the ``SeCreateSymbolicLinkPrivilege`` privilege. Builds with and
+  without the symlink capability are now treated differently because there
+  there would be false sharing if symlinks are actually used.
+
+* Environment variable names in ``default.yaml`` are now correctly validated.
+
+  Environment variables that are defined in the recipes must not begin with
+  ``BOB_`` because this namespace is reserved for future usage by Bob. This was
+  not enforced yet for variables in ``default.yaml``.
