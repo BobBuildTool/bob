@@ -31,7 +31,6 @@ import re
 import shutil
 import signal
 import stat
-import subprocess
 import sys
 import tempfile
 

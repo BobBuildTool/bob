@@ -12,7 +12,6 @@ import shutil
 import stat
 import xml.etree.ElementTree
 import shutil
-import subprocess
 from os.path import expanduser
 from os.path import join
 from bob.utils import removePath, isWindows
