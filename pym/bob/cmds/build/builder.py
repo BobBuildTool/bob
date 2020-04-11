@@ -350,7 +350,7 @@ cd {ROOT}
         audit.addDefine("language", step.getPackage().getRecipe().scriptLanguage.index.value)
         for var, val in step.getPackage().getMetaEnv().items():
             audit.addMetaEnv(var, val)
-        audit.setRecipesAudit(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
+        audit.setRecipesAudit(await step.getPackage().getRecipe().getRecipeSet().getScmAudit())
 
         # The following things make only sense if we just executed the step
         if executed:
@@ -372,7 +372,7 @@ cd {ROOT}
                 if auditSpec is not None:
                     (typ, dir, extra) = auditSpec
                     try:
-                        audit.addScm(typ, step.getWorkspacePath(), dir, extra)
+                        await audit.addScm(typ, step.getWorkspacePath(), dir, extra)
                     except BobError as e:
                         if executed: raise
                         stepMessage(step, "AUDIT", "WARNING: cannot audit SCM: {} ({})"

@@ -8,11 +8,15 @@ from ..input import RecipeSet
 from ..tty import colorize
 from ..utils import processDefines
 import argparse
+import asyncio
 import json
 import re
 import os
 import collections
 from shutil import copyfile
+
+def run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro)
 
 def findPackages(package, excludes, highlights, done, maxdepth, donePackages, level = 0):
     def isHighLigh(package):
@@ -468,7 +472,7 @@ function ticked() {
 simulation.force("link").links(links)
 </script>
 <div class='info' style="width: 100%; text-align: center;">
-  <div id='innerLeft' style="float: left"> Recipes: """ + RecipeSet().getScmStatus() + """</div>
+  <div id='innerLeft' style="float: left"> Recipes: """ + run(RecipeSet().getScmStatus()) + """</div>
   <div id='innerRight' style="float: right">Bob version: """ + BOB_VERSION +"""</div>
   <div id='innerMiddle' style="display: inline-block">Generated using <a href="https://www.d3js.org">D3JS</a></div>
 </div>

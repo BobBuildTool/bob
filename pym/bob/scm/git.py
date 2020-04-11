@@ -422,7 +422,7 @@ class GitAudit(ScmAudit):
         'dirty' : bool
     })
 
-    def _scanDir(self, workspace, dir, extra):
+    async def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         dir = os.path.join(workspace, dir)
         try:

@@ -397,7 +397,7 @@ class UrlAudit(ScmAudit):
         schema.Optional('url') : str, # Added in Bob 0.16
     })
 
-    def _scanDir(self, workspace, dir, extra):
+    async def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         self.__hash = asHexStr(hashFile(os.path.join(workspace, dir)))
         self.__url = extra.get("url")

@@ -165,7 +165,7 @@ class SvnAudit(ScmAudit):
         }
     })
 
-    def _scanDir(self, workspace, dir, extra):
+    async def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         try:
             info = ElementTree.fromstring(subprocess.check_output(
