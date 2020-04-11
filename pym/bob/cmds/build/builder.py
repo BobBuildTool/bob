@@ -342,46 +342,48 @@ cd {ROOT}
             buildId = resultHash
         else:
             buildId = await self._getBuildId(step, depth)
-        audit = Audit.create(step.getVariantId(), buildId, resultHash)
-        audit.addDefine("bob", BOB_VERSION)
-        audit.addDefine("recipe", step.getPackage().getRecipe().getName())
-        audit.addDefine("package", "/".join(step.getPackage().getStack()))
-        audit.addDefine("step", step.getLabel())
-        audit.addDefine("language", step.getPackage().getRecipe().scriptLanguage.index.value)
-        for var, val in step.getPackage().getMetaEnv().items():
-            audit.addMetaEnv(var, val)
-        audit.setRecipesAudit(await step.getPackage().getRecipe().getRecipeSet().getScmAudit())
 
-        # The following things make only sense if we just executed the step
-        if executed:
-            audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
-            for (name, tool) in sorted(step.getTools().items()):
-                audit.addTool(name,
-                    os.path.join(tool.getStep().getWorkspacePath(), "..", "audit.json.gz"))
-            sandbox = step.getSandbox()
-            if sandbox is not None:
-                audit.setSandbox(os.path.join(sandbox.getStep().getWorkspacePath(), "..", "audit.json.gz"))
-            for dep in step.getArguments():
-                if dep.isValid():
-                    audit.addArg(os.path.join(dep.getWorkspacePath(), "..", "audit.json.gz"))
+        with stepAction(step, "AUDIT", step.getWorkspacePath(), INFO):
+            audit = Audit.create(step.getVariantId(), buildId, resultHash)
+            audit.addDefine("bob", BOB_VERSION)
+            audit.addDefine("recipe", step.getPackage().getRecipe().getName())
+            audit.addDefine("package", "/".join(step.getPackage().getStack()))
+            audit.addDefine("step", step.getLabel())
+            audit.addDefine("language", step.getPackage().getRecipe().scriptLanguage.index.value)
+            for var, val in step.getPackage().getMetaEnv().items():
+                audit.addMetaEnv(var, val)
+            audit.setRecipesAudit(await step.getPackage().getRecipe().getRecipeSet().getScmAudit())
 
-        # Always check for SCMs but don't fail if we did not execute the step
-        if step.isCheckoutStep():
-            for scm in step.getScmList():
-                auditSpec = scm.getAuditSpec()
-                if auditSpec is not None:
-                    (typ, dir, extra) = auditSpec
-                    try:
-                        await audit.addScm(typ, step.getWorkspacePath(), dir, extra)
-                    except BobError as e:
-                        if executed: raise
-                        stepMessage(step, "AUDIT", "WARNING: cannot audit SCM: {} ({})"
-                                            .format(e.slogan, dir),
-                                       WARNING)
+            # The following things make only sense if we just executed the step
+            if executed:
+                audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
+                for (name, tool) in sorted(step.getTools().items()):
+                    audit.addTool(name,
+                        os.path.join(tool.getStep().getWorkspacePath(), "..", "audit.json.gz"))
+                sandbox = step.getSandbox()
+                if sandbox is not None:
+                    audit.setSandbox(os.path.join(sandbox.getStep().getWorkspacePath(), "..", "audit.json.gz"))
+                for dep in step.getArguments():
+                    if dep.isValid():
+                        audit.addArg(os.path.join(dep.getWorkspacePath(), "..", "audit.json.gz"))
 
-        auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
-        audit.save(auditPath)
-        return auditPath
+            # Always check for SCMs but don't fail if we did not execute the step
+            if step.isCheckoutStep():
+                for scm in step.getScmList():
+                    auditSpec = scm.getAuditSpec()
+                    if auditSpec is not None:
+                        (typ, dir, extra) = auditSpec
+                        try:
+                            await audit.addScm(typ, step.getWorkspacePath(), dir, extra)
+                        except BobError as e:
+                            if executed: raise
+                            stepMessage(step, "AUDIT", "WARNING: cannot audit SCM: {} ({})"
+                                                .format(e.slogan, dir),
+                                           WARNING)
+
+            auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
+            audit.save(auditPath)
+            return auditPath
 
     def __linkDependencies(self, step):
         """Create symlinks to the dependency workspaces"""
