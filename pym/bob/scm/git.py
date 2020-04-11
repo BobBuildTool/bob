@@ -6,7 +6,7 @@
 from ..errors import ParseError, BuildError
 from ..stringparser import isTrue, IfExpression
 from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
-from ..utils import joinLines
+from ..utils import check_output, joinLines
 from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
 from shlex import quote
 from textwrap import dedent, indent
@@ -426,16 +426,16 @@ class GitAudit(ScmAudit):
         self.__dir = dir
         dir = os.path.join(workspace, dir)
         try:
-            remotes = subprocess.check_output(["git", "remote", "-v"],
-                cwd=dir, universal_newlines=True).split("\n")
+            remotes = (await check_output(["git", "remote", "-v"],
+                cwd=dir, universal_newlines=True)).split("\n")
             remotes = (r[:-8].split("\t") for r in remotes if r.endswith("(fetch)"))
             self.__remotes = { remote:url for (remote,url) in remotes }
 
-            self.__commit = subprocess.check_output(["git", "rev-parse", "HEAD"],
-                cwd=dir, universal_newlines=True).strip()
-            self.__description = subprocess.check_output(
+            self.__commit = (await check_output(["git", "rev-parse", "HEAD"],
+                cwd=dir, universal_newlines=True)).strip()
+            self.__description = (await check_output(
                 ["git", "describe", "--always", "--dirty"],
-                cwd=dir, universal_newlines=True).strip()
+                cwd=dir, universal_newlines=True)).strip()
             self.__dirty = subprocess.call(["git", "diff-index", "--quiet", "HEAD", "--"],
                 cwd=dir) != 0
         except subprocess.CalledProcessError as e:
