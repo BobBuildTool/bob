@@ -762,6 +762,7 @@ cd {ROOT}
             # invalidate result if folder was created
             oldCheckoutState = {}
             BobState().resetWorkspaceState(prettySrcPath, oldCheckoutState)
+        oldCheckoutHash = BobState().getResultHash(prettySrcPath)
 
         checkoutExecuted = False
         checkoutDigest = checkoutStep.getVariantId()
@@ -853,13 +854,12 @@ cd {ROOT}
 
         # We always have to rehash the directory as the user might have
         # changed the source code manually.
-        oldCheckoutHash = BobState().getResultHash(prettySrcPath)
         checkoutHash = hashWorkspace(checkoutStep)
         BobState().setResultHash(prettySrcPath, checkoutHash)
 
         # Generate audit trail. Has to be done _after_ setResultHash()
         # because the result is needed to calculate the buildId.
-        if (checkoutHash != oldCheckoutHash) or checkoutExecuted:
+        if checkoutHash != oldCheckoutHash:
             await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
         # upload live build-id cache in case of fresh checkout
