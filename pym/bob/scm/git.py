@@ -345,22 +345,13 @@ class GitScm(Scm):
                 refs = ["refs/heads/" + self.__branch]
             cmdLine = ['git', 'ls-remote', self.__url] + refs
             try:
-                proc = await asyncio.create_subprocess_exec(*cmdLine,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=subprocess.DEVNULL)
-                try:
-                    stdout, stderr = await proc.communicate()
-                    rc = await proc.wait()
-                finally:
-                    try:
-                        proc.terminate()
-                    except ProcessLookupError:
-                        pass
-                if rc != 0:
-                    a.fail("exit {}".format(rc), WARNING)
-                    return None
-                output = stdout.decode(locale.getpreferredencoding(False)).strip()
-            except (subprocess.CalledProcessError, OSError) as e:
+                stdout = await check_output(cmdLine, stderr=subprocess.DEVNULL,
+                    universal_newlines=True)
+                output = stdout.strip()
+            except subprocess.CalledProcessError as e:
+                a.fail("exit {}".format(e.returncode), WARNING)
+                return None
+            except OSError as e:
                 a.fail("error ({})".format(e))
                 return None
 
