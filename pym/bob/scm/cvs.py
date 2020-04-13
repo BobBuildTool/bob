@@ -63,14 +63,14 @@ class CvsScm(Scm):
             # We therefore use a 'cvs up' after the initial 'cvs co', to get the same behaviour for the initial and subsequent builds.
             if re.match('^:ext:', rootarg) and self.__dir == '.':
                 os.symlink(".", invoker.join("__tmp$$"))
-                invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "co"] + revarg +
+                await invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "co"] + revarg +
                     ["-d", "__tmp$$", self.__module], env=env)
                 os.unlink(invoker.join("__tmp$$"))
             else:
-                invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "co"] + revarg +
+                await invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "co"] + revarg +
                     ["-d", self.__dir, self.__module], env=env)
 
-        invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "up", "-dP"] + revarg +
+        await invoker.checkCommand(["cvs", "-qz3", "-d", rootarg, "up", "-dP"] + revarg +
             [self.__dir], env=env)
 
     def asDigestScript(self):
