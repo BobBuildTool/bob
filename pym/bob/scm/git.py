@@ -434,10 +434,9 @@ class GitAudit(ScmAudit):
             self.__commit = (await check_output(["git", "rev-parse", "HEAD"],
                 cwd=dir, universal_newlines=True)).strip()
             self.__description = (await check_output(
-                ["git", "describe", "--always", "--dirty"],
+                ["git", "describe", "--always", "--dirty=-dirty"],
                 cwd=dir, universal_newlines=True)).strip()
-            self.__dirty = subprocess.call(["git", "diff-index", "--quiet", "HEAD", "--"],
-                cwd=dir) != 0
+            self.__dirty = self.__description.endswith("-dirty")
         except subprocess.CalledProcessError as e:
             raise BuildError("Git audit failed: " + str(e))
         except OSError as e:
