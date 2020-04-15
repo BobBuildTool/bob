@@ -19,6 +19,7 @@ install:
     - pip install schema
     - pip install python-magic
     - pip install pyparsing
+    - pip install sphinx
 
 script:
     - eatmydata ./test/run-tests.sh
