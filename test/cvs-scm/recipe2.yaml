@@ -1,0 +1,15 @@
+root: true
+
+checkoutSCM:
+  scm: cvs
+  cvsroot: ${CVSROOT}
+  module: mod
+  # added a branch tag:
+  rev: my_branch
+
+buildScript: |
+  cp "$1/file.txt" .
+
+packageScript: |
+  cp "$1/file.txt" .
+
