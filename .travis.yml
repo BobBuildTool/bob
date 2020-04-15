@@ -13,6 +13,11 @@ addons:
             - parallel
             - eatmydata
 
+# Shallow clones break the build because the right Bob version cannot be
+# inferred due to missing tags.
+git:
+    depth: false
+
 install:
     - pip install PyYAML
     - pip install codecov
