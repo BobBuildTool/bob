@@ -438,7 +438,9 @@ cd {ROOT}
         specFile = os.path.join(workspacePath, "..", "step.spec")
         envFile = os.path.join(workspacePath, "..", "env")
         logFile = os.path.join(workspacePath, "..", "log.txt")
-        spec = StepSpec.fromStep(step, envFile, self.__envWhiteList, logFile)
+        scriptHint = os.path.join(workspacePath, "..", "script")
+        spec = StepSpec.fromStep(step, envFile, self.__envWhiteList, logFile,
+            scriptHint=scriptHint)
         with open(specFile, "w") as f:
             spec.toFile(f)
 

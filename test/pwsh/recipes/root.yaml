@@ -1,0 +1,13 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+checkoutDeterministic: True
+checkoutScript: |
+    Copy-Item $<<file.txt>> file.txt
+buildScript: |
+    Copy-Item ($args[0] + "/file.txt")
+packageScript: |
+    Copy-Item ($args[0] + "/file.txt")

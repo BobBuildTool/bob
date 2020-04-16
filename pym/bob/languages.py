@@ -237,7 +237,11 @@ class BashLanguage:
             "BOB_CWD": quote(BashLanguage.__munge(os.path.abspath(spec.workspaceExecPath))),
         })
 
-        ret = []
+        ret = [
+            "# Automatically generated file!",
+            "# It's content will be overwritten every time the step is run.",
+            "",
+        ]
 
         if keepEnv:
             # Parse global config files if env should be kept
@@ -280,8 +284,8 @@ class BashLanguage:
                 bob_handle_error()
                 {
                     set +x"""),
-            'echo "\x1b[31;1mStep failed with return status $1; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m"' if colorize \
-                else 'echo "Step failed with return status $1; Command: ${BASH_COMMAND}"',
+            '    echo "\x1b[31;1mStep failed with return status $1; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m"' if colorize \
+                else '    echo "Step failed with return status $1; Command: ${BASH_COMMAND}"',
             dedent("""\
                     echo "Call stack (most recent call first)"
                     i=0
@@ -301,46 +305,43 @@ class BashLanguage:
                 trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do /bin/rm -f "$i" ; done' EXIT
                 set -o errtrace -o nounset -o pipefail
                 """),
-            "",
-            "# BEGIN BUILD SCRIPT",
+            "# Recipe script",
             spec.script,
-            "# END BUILD SCRIPT",
         ]
         return "\n".join(ret)
 
     @staticmethod
-    def setupShell(spec, tmpDir, keepEnv):
+    def __scriptFilePaths(spec, tmpDir):
         if spec.hasSandbox:
             execScriptFile = "/.script"
-            realScriptFile = os.path.join(tmpDir, ".script")
+            realScriptFile = spec.scriptHint or os.path.join(tmpDir, ".script")
         else:
-            execScriptFile = os.path.join(tmpDir, "script")
+            execScriptFile = spec.scriptHint or os.path.join(tmpDir, "script")
             realScriptFile = execScriptFile
+        return (os.path.abspath(realScriptFile), os.path.abspath(execScriptFile))
 
+    @staticmethod
+    def setupShell(spec, tmpDir, keepEnv):
+        realScriptFile, execScriptFile = BashLanguage.__scriptFilePaths(spec, tmpDir)
         with open(realScriptFile, "w") as f:
             f.write(BashLanguage.__formatSetup(spec, keepEnv))
 
-        args = [ BashLanguage.__munge(os.path.abspath(a)) for a in spec.args ]
-        return ["bash", "--rcfile", BashLanguage.__munge(execScriptFile), "-s", "--"] + args
+        args = ["bash", "--rcfile", BashLanguage.__munge(execScriptFile), "-s", "--"]
+        args.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
+        return (realScriptFile, execScriptFile, args)
 
     @staticmethod
     def setupCall(spec, tmpDir, keepEnv, trace):
-        if spec.hasSandbox:
-            execScriptFile = "/.script"
-            realScriptFile = os.path.join(tmpDir, ".script")
-        else:
-            execScriptFile = os.path.join(tmpDir, "script")
-            realScriptFile = execScriptFile
-
+        realScriptFile, execScriptFile = BashLanguage.__scriptFilePaths(spec, tmpDir)
         with open(realScriptFile, "w") as f:
             f.write(BashLanguage.__formatScript(spec))
 
-        ret = ["bash"]
-        if trace: ret.append("-x")
-        ret.extend(["--", BashLanguage.__munge(execScriptFile)])
-        ret.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
+        args = ["bash"]
+        if trace: args.append("-x")
+        args.extend(["--", BashLanguage.__munge(execScriptFile)])
+        args.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
 
-        return ret
+        return (realScriptFile, execScriptFile, args)
 
     @staticmethod
     def mangleFingerprints(scriptFragments, env):
@@ -488,39 +489,39 @@ class PwshLanguage:
         return "\n".join(ret)
 
     @staticmethod
-    def setupShell(spec, tmpDir, keepEnv):
+    def __scriptFilePaths(spec, tmpDir):
         if spec.hasSandbox:
             execScriptFile = "/.script.ps1"
-            realScriptFile = os.path.join(tmpDir, ".script.ps1")
+            realScriptFile = (spec.scriptHint or os.path.join(tmpDir, ".script")) + ".ps1"
         else:
-            execScriptFile = os.path.join(tmpDir, "script.ps1")
+            execScriptFile = (spec.scriptHint or os.path.join(tmpDir, "script")) + ".ps1"
             realScriptFile = execScriptFile
+        return (os.path.abspath(realScriptFile), os.path.abspath(execScriptFile))
 
+    @staticmethod
+    def setupShell(spec, tmpDir, keepEnv):
+        realScriptFile, execScriptFile = PwshLanguage.__scriptFilePaths(spec, tmpDir)
         with open(realScriptFile, "w") as f:
             f.write(PwshLanguage.__formatSetup(spec))
 
         interpreter = "powershell" if isWindows() else "pwsh"
-        args = [ os.path.abspath(a) for a in spec.args ]
-        return [interpreter, "-ExecutionPolicy", "Bypass", "-NoExit", "-File",
-            execScriptFile] + args
+        args = [interpreter, "-ExecutionPolicy", "Bypass", "-NoExit", "-File",
+            execScriptFile]
+        args.extend(os.path.abspath(a) for a in spec.args)
+
+        return (realScriptFile, execScriptFile, args)
 
     @staticmethod
     def setupCall(spec, tmpDir, keepEnv, trace):
-        if spec.hasSandbox:
-            execScriptFile = "/.script.ps1"
-            realScriptFile = os.path.join(tmpDir, ".script.ps1")
-        else:
-            execScriptFile = os.path.join(tmpDir, "script.ps1")
-            realScriptFile = execScriptFile
-
+        realScriptFile, execScriptFile = PwshLanguage.__scriptFilePaths(spec, tmpDir)
         with open(realScriptFile, "w") as f:
             f.write(PwshLanguage.__formatScript(spec, trace))
 
         interpreter = "powershell" if isWindows() else "pwsh"
-        ret = [interpreter, "-ExecutionPolicy", "Bypass", "-File", execScriptFile]
-        ret.extend(os.path.abspath(a) for a in spec.args)
+        args = [interpreter, "-ExecutionPolicy", "Bypass", "-File", execScriptFile]
+        args.extend(os.path.abspath(a) for a in spec.args)
 
-        return ret
+        return (realScriptFile, execScriptFile, args)
 
     @staticmethod
     def mangleFingerprints(scriptFragments, env):
@@ -557,7 +558,8 @@ def getLanguage(language):
 class StepSpec:
 
     @classmethod
-    def fromStep(cls, step, envFile, envWhiteList, logFile=None, isJenkins=False):
+    def fromStep(cls, step, envFile, envWhiteList, logFile=None, isJenkins=False,
+                 scriptHint=None):
         self = cls()
         scriptLanguage = step.getPackage().getRecipe().scriptLanguage
         self.__data = d = {
@@ -565,6 +567,7 @@ class StepSpec:
             'envWhiteList' : sorted(envWhiteList),
             'logFile' : logFile,
             'isJenkins' : isJenkins,
+            'scriptHint' : scriptHint,
             'vsn' : asHexStr(BOB_INPUT_HASH),
             'language' : scriptLanguage.index.value,
             'env' : dict(step.getEnv()),
@@ -736,3 +739,6 @@ class StepSpec:
     def toolPaths(self):
         return self.__data['toolPaths']
 
+    @property
+    def scriptHint(self):
+        return self.__data['scriptHint']
