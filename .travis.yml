@@ -5,13 +5,18 @@ python:
     - "3.7"
     - "3.8"
 
-# install additonally required packages
+# Define build environment and install additonally required packages.
+dist: xenial
 addons:
     apt:
+        sources:
+            - sourceline: "deb [arch=amd64] https://packages.microsoft.com/ubuntu/16.04/prod xenial main"
+              key_url: "https://packages.microsoft.com/keys/microsoft.asc"
         packages:
             - cvs
             - parallel
             - eatmydata
+            - powershell
 
 # Shallow clones break the build because the right Bob version cannot be
 # inferred due to missing tags.
