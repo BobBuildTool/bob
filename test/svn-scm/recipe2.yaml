@@ -1,0 +1,11 @@
+root: true
+
+checkoutSCM:
+  scm: svn
+  url: file://${SVNROOT}/branches/awesome
+
+buildScript: |
+  cp "$1/file.txt" .
+
+packageScript: |
+  cp "$1/file.txt" .
