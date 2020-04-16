@@ -306,9 +306,21 @@ class Invoker:
             elif clean and mode != InvocationMode.SHELL:
                 emptyDirectory(self.__spec.workspaceWorkspacePath)
 
+            # setup script and arguments
+            if mode == InvocationMode.SHELL:
+                realScriptFile, execScriptFile, callArgs = self.__spec.language.setupShell(
+                    self.__spec, tmpDir, self.__preserveEnv)
+            elif mode == InvocationMode.CALL:
+                realScriptFile, execScriptFile, callArgs = self.__spec.language.setupCall(
+                    self.__spec, tmpDir, self.__preserveEnv, self.__trace)
+            else:
+                assert False, "not reached"
+
             # Wrap call into sandbox if requested
             if self.__spec.hasSandbox:
                 cmdArgs = self.__getSandboxCmds(tmpDir)
+                cmdArgs.extend(["-M", os.path.abspath(realScriptFile), "-m"
+                    , execScriptFile])
 
                 # Prevent network access
                 if not self.__spec.sandboxNetAccess: cmdArgs.append('-n')
@@ -329,14 +341,11 @@ class Invoker:
                 cmdArgs.append("--")
             else:
                 cmdArgs = []
+            cmdArgs.extend(callArgs)
 
             if mode == InvocationMode.SHELL:
-                cmdArgs += self.__spec.language.setupShell(self.__spec, tmpDir,
-                    self.__preserveEnv)
                 ret = await self.callCommand(cmdArgs)
             elif mode == InvocationMode.CALL:
-                cmdArgs += self.__spec.language.setupCall(self.__spec, tmpDir,
-                    self.__preserveEnv, self.__trace)
                 for scm in self.__spec.preRunCmds:
                     scm = getScm(scm)
                     try:
