@@ -1,0 +1,13 @@
+root: true
+
+checkoutSCM:
+  scm: git
+  url: ${URL}
+  # added branch:
+  branch: awesome_feature
+
+buildScript: |
+  cp "$1/file.txt" .
+
+packageScript: |
+  cp "$1/file.txt" .
