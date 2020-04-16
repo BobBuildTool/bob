@@ -237,7 +237,11 @@ class BashLanguage:
             "BOB_CWD": quote(BashLanguage.__munge(os.path.abspath(spec.workspaceExecPath))),
         })
 
-        ret = []
+        ret = [
+            "# Automatically generated file!",
+            "# It's content will be overwritten every time the step is run.",
+            "",
+        ]
 
         if keepEnv:
             # Parse global config files if env should be kept
@@ -280,8 +284,8 @@ class BashLanguage:
                 bob_handle_error()
                 {
                     set +x"""),
-            'echo "\x1b[31;1mStep failed with return status $1; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m"' if colorize \
-                else 'echo "Step failed with return status $1; Command: ${BASH_COMMAND}"',
+            '    echo "\x1b[31;1mStep failed with return status $1; Command:\x1b[0;31m ${BASH_COMMAND}\x1b[0m"' if colorize \
+                else '    echo "Step failed with return status $1; Command: ${BASH_COMMAND}"',
             dedent("""\
                     echo "Call stack (most recent call first)"
                     i=0
@@ -301,10 +305,8 @@ class BashLanguage:
                 trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do /bin/rm -f "$i" ; done' EXIT
                 set -o errtrace -o nounset -o pipefail
                 """),
-            "",
-            "# BEGIN BUILD SCRIPT",
+            "# Recipe script",
             spec.script,
-            "# END BUILD SCRIPT",
         ]
         return "\n".join(ret)
 
