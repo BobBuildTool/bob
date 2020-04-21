@@ -224,11 +224,11 @@ class Artifact:
         self.__defines[name] = value
         self.__id = None
 
-    def addScm(self, name, workspace, dir, extra):
+    async def addScm(self, name, workspace, dir, extra):
         scm = Artifact.SCMS.get(name)
         if scm is None:
             raise BuildError("Cannot handle SCM: " + name)
-        self.__scms.append(scm.fromDir(workspace, dir, extra))
+        self.__scms.append(await scm.fromDir(workspace, dir, extra))
         self.__id = None
 
     def addTool(self, name, tool):
@@ -398,8 +398,8 @@ class Audit:
     def addDefine(self, name, value):
         self.__artifact.addDefine(name, value)
 
-    def addScm(self, name, workspace, dir, extra):
-        self.__artifact.addScm(name, workspace, dir, extra)
+    async def addScm(self, name, workspace, dir, extra):
+        await self.__artifact.addScm(name, workspace, dir, extra)
 
     def addTool(self, name, tool):
         audit = Audit.fromFile(tool)

@@ -236,9 +236,8 @@ class Invoker:
 
         if stdout == True:
             if universal_newlines:
-                enc = locale.getpreferredencoding()
-                stdoutBuf = "\n".join(l.decode(enc, 'surrogateescape')
-                    for l in stdoutStream.getvalue().splitlines())
+                stdoutStream.seek(0)
+                stdoutBuf = io.TextIOWrapper(stdoutStream).read()
             else:
                 stdoutBuf = stdoutStream.getvalue()
         else:
@@ -246,9 +245,8 @@ class Invoker:
 
         if stderr == True:
             if universal_newlines:
-                enc = locale.getpreferredencoding()
-                stderrBuf = "\n".join(l.decode(enc, 'surrogateescape')
-                    for l in stderrStream.getvalue().splitlines())
+                stderrStream.seek(0)
+                stderrBuf = io.TextIOWrapper(stderrStream).read()
             else:
                 stderrBuf = stderrStream.getvalue()
         else:

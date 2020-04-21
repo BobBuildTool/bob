@@ -163,7 +163,7 @@ class TestImportScm(TestCase):
         s = self.createImportScm()
         with tempfile.TemporaryDirectory() as workspace:
             self.invokeScm(workspace, s)
-            audit = ImportAudit.fromDir(*s.getAuditSpec())
+            audit = run(ImportAudit.fromDir(*s.getAuditSpec()))
 
             d = audit.dump()
             self.assertEqual(d["type"], "import")

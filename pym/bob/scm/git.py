@@ -6,7 +6,7 @@
 from ..errors import ParseError, BuildError
 from ..stringparser import isTrue, IfExpression
 from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
-from ..utils import joinLines
+from ..utils import check_output, joinLines
 from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
 from shlex import quote
 from textwrap import dedent, indent
@@ -345,22 +345,13 @@ class GitScm(Scm):
                 refs = ["refs/heads/" + self.__branch]
             cmdLine = ['git', 'ls-remote', self.__url] + refs
             try:
-                proc = await asyncio.create_subprocess_exec(*cmdLine,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=subprocess.DEVNULL)
-                try:
-                    stdout, stderr = await proc.communicate()
-                    rc = await proc.wait()
-                finally:
-                    try:
-                        proc.terminate()
-                    except ProcessLookupError:
-                        pass
-                if rc != 0:
-                    a.fail("exit {}".format(rc), WARNING)
-                    return None
-                output = stdout.decode(locale.getpreferredencoding(False)).strip()
-            except (subprocess.CalledProcessError, OSError) as e:
+                stdout = await check_output(cmdLine, stderr=subprocess.DEVNULL,
+                    universal_newlines=True)
+                output = stdout.strip()
+            except subprocess.CalledProcessError as e:
+                a.fail("exit {}".format(e.returncode), WARNING)
+                return None
+            except OSError as e:
                 a.fail("error ({})".format(e))
                 return None
 
@@ -422,22 +413,21 @@ class GitAudit(ScmAudit):
         'dirty' : bool
     })
 
-    def _scanDir(self, workspace, dir, extra):
+    async def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         dir = os.path.join(workspace, dir)
         try:
-            remotes = subprocess.check_output(["git", "remote", "-v"],
-                cwd=dir, universal_newlines=True).split("\n")
+            remotes = (await check_output(["git", "remote", "-v"],
+                cwd=dir, universal_newlines=True)).split("\n")
             remotes = (r[:-8].split("\t") for r in remotes if r.endswith("(fetch)"))
             self.__remotes = { remote:url for (remote,url) in remotes }
 
-            self.__commit = subprocess.check_output(["git", "rev-parse", "HEAD"],
-                cwd=dir, universal_newlines=True).strip()
-            self.__description = subprocess.check_output(
-                ["git", "describe", "--always", "--dirty"],
-                cwd=dir, universal_newlines=True).strip()
-            self.__dirty = subprocess.call(["git", "diff-index", "--quiet", "HEAD", "--"],
-                cwd=dir) != 0
+            self.__commit = (await check_output(["git", "rev-parse", "HEAD"],
+                cwd=dir, universal_newlines=True)).strip()
+            self.__description = (await check_output(
+                ["git", "describe", "--always", "--dirty=-dirty"],
+                cwd=dir, universal_newlines=True)).strip()
+            self.__dirty = self.__description.endswith("-dirty")
         except subprocess.CalledProcessError as e:
             raise BuildError("Git audit failed: " + str(e))
         except OSError as e:

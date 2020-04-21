@@ -5,7 +5,7 @@
 
 from ..errors import BuildError
 from ..stringparser import IfExpression
-from ..utils import joinLines
+from ..utils import joinLines, check_output
 from .scm import Scm, ScmAudit, ScmTaint, ScmStatus
 from shlex import quote
 from textwrap import indent
@@ -165,10 +165,10 @@ class SvnAudit(ScmAudit):
         }
     })
 
-    def _scanDir(self, workspace, dir, extra):
+    async def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
         try:
-            info = ElementTree.fromstring(subprocess.check_output(
+            info = ElementTree.fromstring(await check_output(
                 ["svn", "info", "--xml", dir],
                 cwd=workspace, universal_newlines=True))
             self.__url = info.find('entry/url').text
@@ -176,7 +176,7 @@ class SvnAudit(ScmAudit):
             self.__repoRoot = info.find('entry/repository/root').text
             self.__repoUuid = info.find('entry/repository/uuid').text
 
-            status = subprocess.check_output(["svn", "status", dir],
+            status = await check_output(["svn", "status", dir],
                 cwd=workspace, universal_newlines=True)
             self.__dirty = status != ""
         except subprocess.CalledProcessError as e:

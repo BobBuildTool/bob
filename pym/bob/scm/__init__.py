@@ -13,11 +13,11 @@ from .url import UrlScm, UrlAudit
 import os.path
 import schema
 
-def auditFromDir(dir):
+async def auditFromDir(dir):
     if os.path.isdir(os.path.join(dir, ".git")):
-        return GitAudit.fromDir(dir, ".", {})
+        return await GitAudit.fromDir(dir, ".", {})
     elif os.path.isdir(os.path.join(dir, ".svn")):
-        return SvnAudit.fromDir(dir, ".", {})
+        return await SvnAudit.fromDir(dir, ".", {})
     else:
         return None
 

@@ -311,10 +311,10 @@ class Scm(metaclass=ABCMeta):
 
 class ScmAudit(metaclass=ABCMeta):
     @classmethod
-    def fromDir(cls, workspace, dir, extra):
+    async def fromDir(cls, workspace, dir, extra):
         """Create SCM audit record by scanning a directory"""
         scm = cls()
-        scm._scanDir(workspace, dir, extra)
+        await scm._scanDir(workspace, dir, extra)
         return scm
 
     @classmethod
@@ -325,7 +325,7 @@ class ScmAudit(metaclass=ABCMeta):
         return scm
 
     @abstractmethod
-    def _scanDir(self, workspace, dir):
+    async def _scanDir(self, workspace, dir):
         """Scan directory for SCM"""
         pass
 

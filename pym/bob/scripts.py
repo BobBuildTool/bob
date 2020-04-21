@@ -7,7 +7,7 @@ from . import BOB_VERSION, _enableDebug, DEBUG
 from .errors import BobError
 from .state import finalize
 from .tty import colorize, Unbuffered, setColorMode, cleanup
-from .utils import asHexStr, hashPath, getPlatformTag
+from .utils import asHexStr, hashPath, getPlatformTag, EventLoopWrapper
 import argparse
 import logging
 import sys
@@ -301,7 +301,7 @@ def auditEngine():
     parser.add_argument("resultHash")
     args = parser.parse_args()
 
-    def cmd():
+    def cmd(loop):
         from .audit import Audit
         import json
         import os
@@ -313,7 +313,8 @@ def auditEngine():
         if args.env is not None: gen.setEnv(args.env)
         for (name, value) in args.metaEnv: gen.addMetaEnv(name, value)
         for (name, value) in args.defines: gen.addDefine(name, value)
-        for (name, workspace, dir) in args.scm: gen.addScm(name, workspace, dir, {})
+        for (name, workspace, dir) in args.scm:
+            loop.run_until_complete(gen.addScm(name, workspace, dir, {}))
         for (name, workspace, dir, extra) in args.scmEx:
             gen.addScm(name, workspace, dir, json.loads(extra))
         for (name, audit) in args.tool: gen.addTool(name, audit)
@@ -331,7 +332,8 @@ def auditEngine():
 
         return 0
 
-    return catchErrors(cmd)
+    with EventLoopWrapper() as loop:
+        return catchErrors(cmd, loop)
 
 def __process(l, inFile, stateDir):
     if l.startswith("="):

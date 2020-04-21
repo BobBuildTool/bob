@@ -598,3 +598,38 @@ class EventLoopWrapper:
         self.__executor.shutdown()
         self.__loop.close()
 
+
+async def run(args, universal_newlines=False, check=False, shell=False, **kwargs):
+    """Provide the subprocess.run() function as asyncio corouting.
+
+    This takes care of the missing 'universal_newlines' and 'check' options.
+    Everything else is passed through. Will also raise the same exceptions as
+    subprocess.run() to act as a drop-in replacement.
+    """
+    import asyncio
+    import io
+    import locale
+    import subprocess
+
+    if shell:
+        proc = await asyncio.create_subprocess_shell(args, **kwargs)
+    else:
+        proc = await asyncio.create_subprocess_exec(*args, **kwargs)
+    stdout, stderr = await proc.communicate()
+
+    if universal_newlines and (stdout is not None):
+        stdout = io.TextIOWrapper(io.BytesIO(stdout)).read()
+    if universal_newlines and (stderr is not None):
+        stderr = io.TextIOWrapper(io.BytesIO(stderr)).read()
+
+    if check and (proc.returncode != 0):
+        raise subprocess.CalledProcessError(proc.returncode, args,
+            stdout, stderr)
+
+    return subprocess.CompletedProcess(args, proc.returncode, stdout,
+        stderr)
+
+async def check_output(args, **kwargs):
+    """The subprocess.check_output() call as coroutine."""
+    import subprocess
+    return (await run(args, check=True, stdout=subprocess.PIPE, **kwargs)).stdout

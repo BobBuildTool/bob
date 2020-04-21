@@ -3068,20 +3068,20 @@ class RecipeSet:
     def scmOverrides(self):
         return self.__scmOverrides
 
-    def getScmAudit(self):
+    async def getScmAudit(self):
         try:
             ret = self.__recipeScmAudit
         except AttributeError:
             try:
-                ret = auditFromDir(".")
+                ret = await auditFromDir(".")
             except BobError as e:
                 Warn("could not determine recipes state").warn(e.slogan)
                 ret = None
             self.__recipeScmAudit = ret
         return ret
 
-    def getScmStatus(self):
-        audit = self.getScmAudit()
+    async def getScmStatus(self):
+        audit = await self.getScmAudit()
         if audit is None:
             return "unknown"
         else:

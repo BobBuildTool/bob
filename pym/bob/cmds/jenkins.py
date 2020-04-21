@@ -15,6 +15,7 @@ from ..utils import asHexStr, processDefines
 from shlex import quote
 import argparse
 import ast
+import asyncio
 import base64
 import datetime
 import getpass
@@ -65,6 +66,9 @@ BOB_JENKINS_FINGERPRINT_SCRIPT
 """
 
 SHARED_GENERATION = '-2'
+
+def run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro)
 
 class Wiper:
     def __init__(self):
@@ -193,7 +197,7 @@ class JenkinsJob:
         description.extend([
             "<h2>Recipe</h2>",
             "<p>Name: " + self.__recipe.getName()
-                + "<br/>Source: " + self.__recipe.getRecipeSet().getScmStatus()
+                + "<br/>Source: " + run(self.__recipe.getRecipeSet().getScmStatus())
                 + "<br/>Configured: " + date
                 + "<br/>Bob version: " + BOB_VERSION + "</p>",
             "<h2>Packages</h2>", "<ul>"
@@ -340,7 +344,7 @@ class JenkinsJob:
         ]
         for (var, val) in sorted(step.getPackage().getMetaEnv().items()):
             cmd.extend(["-E", var, quote(val)])
-        recipesAudit = step.getPackage().getRecipe().getRecipeSet().getScmAudit()
+        recipesAudit = run(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
         if recipesAudit is not None:
             cmd.extend(["--recipes",
                 quote(json.dumps(recipesAudit.dump(), sort_keys=True))])
