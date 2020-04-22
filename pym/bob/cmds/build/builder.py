@@ -861,7 +861,7 @@ cd {ROOT}
 
         # Generate audit trail. Has to be done _after_ setResultHash()
         # because the result is needed to calculate the buildId.
-        if checkoutHash != oldCheckoutHash:
+        if checkoutHash != oldCheckoutHash or self.__force:
             await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
         # upload live build-id cache in case of fresh checkout
