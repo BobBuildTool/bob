@@ -17,6 +17,9 @@ fi
 
 export PYTHONPATH="${BOB_ROOT}/pym"
 
+set -o errtrace
+trap 'err=$?; echo "ERROR: Command ${BASH_COMMAND} failed with code $err" >&2; exit $err' ERR
+
 cleanup()
 {
 	rm -rf work dev .bob-*
