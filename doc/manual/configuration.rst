@@ -1957,6 +1957,7 @@ The following table lists possible arguments and their type:
 Key             Command line switch    Type
 =============== ====================== ===============================================
 always_checkout ``--always-checkout``  List of strings (regular expression patterns)
+audit           ``--[no]-audit``       Boolean
 build_mode      ``-b`` | ``-B`` |      String (``normal``, ``build-only`` or
                 ``--normal``           ``checkout-only``)
 clean           ``--clean`` |          Boolean
