@@ -1,0 +1,14 @@
+root: True
+depends:
+  - dep
+
+checkoutDeterministic: True
+checkoutScript: |
+  echo foo > root.txt
+
+buildScript: |
+  cp $1/root.txt .
+  cp $2/foo.txt .
+
+packageScript: |
+  cp $1/* .
