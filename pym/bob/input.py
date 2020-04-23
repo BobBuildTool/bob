@@ -2705,6 +2705,7 @@ class RecipeSet:
             schema.Optional('clean_checkout') : bool,
             schema.Optional('always_checkout') : [str],
             schema.Optional('jobs') : int,
+            schema.Optional('audit') : bool,
         })
 
     GRAPH_SCHEMA = schema.Schema(

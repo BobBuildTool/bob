@@ -20,7 +20,8 @@ concurrent uploads the artifact must appear atomically for unrelated readers.
 """
 
 from .errors import BuildError
-from .tty import stepAction, SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR
+from .tty import stepAction, stepMessage, \
+    SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
 from .utils import asHexStr, removePath, isWindows
 from shlex import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
@@ -264,6 +265,10 @@ class BaseArchive:
 
     async def uploadPackage(self, step, buildId, audit, content):
         if not self.canUploadLocal():
+            return
+        if not audit:
+            stepMessage(step, "UPLOAD", "skipped (no audit trail)", SKIPPED,
+                IMPORTANT)
             return
 
         loop = asyncio.get_event_loop()
