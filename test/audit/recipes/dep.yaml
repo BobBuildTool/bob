@@ -1,0 +1,9 @@
+checkoutDeterministic: True
+checkoutScript: |
+  echo foo > foo.txt
+
+buildScript: |
+  cp $1/foo.txt .
+
+packageScript: |
+  cp $1/foo.txt .

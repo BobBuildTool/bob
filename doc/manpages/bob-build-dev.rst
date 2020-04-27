@@ -17,6 +17,11 @@ Options
     the actual compilation of these packages. See the ``--download`` option
     to control what is built and what is downloaded.
 
+``--audit``
+    Generate an audit trail when building.
+
+    This is the default unless the user changed it in ``default.yaml``.
+
 ``--clean``
     Do clean builds by clearing the build directory before executing the build
     commands. It will *not* clean all build results (e.g. like ``make clean``)
@@ -95,6 +100,17 @@ Options
 
 ``--upload``
     Upload to binary archive
+
+``-A, --no-audit``
+    Do not generate an audit trail.
+
+    The generation of the audit trail is usually barely noticeable. But if a
+    large number of repositories is checked out it can add a significant
+    overhead nonetheless. This option suppresses the generation of the audit
+    trail.
+
+    Note that it is not possible to upload such built artifacts to a binary
+    archive because vital information is missing.
 
 ``-B, --checkout-only``
     Don't build, just check out sources

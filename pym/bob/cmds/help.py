@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ..errors import BobError
 import argparse
 import os.path
 import subprocess
@@ -30,6 +31,8 @@ def doHelp(availableCommands, argv, bobRoot):
         manArgs = [ os.path.join(manPath, manPage+"."+manSection) ]
     except ImportError:
         manArgs = [manSection, manPage]
+    except OSError as e:
+        raise BobError("Cannot build manpage: " + str(e))
 
     try:
         ret = subprocess.call(["man"] + manArgs)

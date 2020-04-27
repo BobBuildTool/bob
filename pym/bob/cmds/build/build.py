@@ -52,6 +52,14 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Build provided dependencies")
     parser.add_argument('--without-provided', dest='build_provided', default=None, action='store_false',
         help="Build without provided dependencies")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-A', '--no-audit', dest='audit', default=None,
+        action='store_false',
+        help="Don't generate audit trail for build results")
+    group.add_argument('--audit', dest='audit', action='store_true',
+        help="Generate audit trail (default)")
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-b', '--build-only', dest='build_mode', default=None,
         action='store_const', const='build-only',
@@ -62,6 +70,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     group.add_argument('--normal', dest='build_mode',
         action='store_const', const='normal',
         help="Checkout, build and package")
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--clean', action='store_true', default=None,
         help="Do clean builds (clear build directory)")
@@ -135,6 +144,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 'link_deps' : True,
                 'jobs' : 1,
                 'keep_going' : False,
+                'audit' : True,
             }
 
         for a in vars(args):
@@ -175,6 +185,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setLinkDependencies(args.link_deps)
         builder.setJobs(args.jobs)
         builder.setKeepGoing(args.keep_going)
+        builder.setAudit(args.audit)
         if args.resume: builder.loadBuildState()
 
         backlog = []

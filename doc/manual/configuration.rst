@@ -1953,23 +1953,28 @@ Set default build arguments here. See :ref:`manpage-dev` or
 
 The following table lists possible arguments and their type:
 
-=============== ===================================================================
-Key             Type
-=============== ===================================================================
-destination     String
-force           Boolean
-no_deps         Boolean
-build_mode      "normal", "build-only" or "checkout-only"
-clean           Boolean
-verbosity       Integer
-no_logfiles     Boolean
-upload          Boolean
-download        "yes", "no", "deps", "forced" or "forced-deps"
-sandbox         Boolean
-clean_checkout  Boolean
-link_deps       Boolean
-always_checkout List of strings (regular expression patterns)
-=============== ===================================================================
+=============== ====================== ===============================================
+Key             Command line switch    Type
+=============== ====================== ===============================================
+always_checkout ``--always-checkout``  List of strings (regular expression patterns)
+audit           ``--[no]-audit``       Boolean
+build_mode      ``-b`` | ``-B`` |      String (``normal``, ``build-only`` or
+                ``--normal``           ``checkout-only``)
+clean           ``--clean`` |          Boolean
+                ``--incremental``
+clean_checkout  ``--clean-checkout``   Boolean
+destination     ``--destination``      String (Path)
+download        ``--download``         String (``yes``, ``no``, ``deps``, ``forced``,
+                                       ``forced-deps``, ``forced-fallback`` or
+                                       ``packages=<packages>``)
+force           ``-f``                 Boolean
+link_deps       ``--[no-]link-deps``   Boolean
+no_deps         ``-n``                 Boolean
+no_logfiles     ``--no-logfiles``      Boolean
+sandbox         ``--[no-]sandbox``     Boolean
+upload          ``--upload``           Boolean
+verbosity       ``-q | -v``            Integer (-2[quiet] .. 3[verbose], default 0)
+=============== ====================== ===============================================
 
 graph
 ^^^^^

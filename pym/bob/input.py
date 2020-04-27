@@ -2700,11 +2700,14 @@ class RecipeSet:
             schema.Optional('no_logfiles') : bool,
             schema.Optional('link_deps') : bool,
             schema.Optional('upload') : bool,
-            schema.Optional('download') : schema.Or("yes", "no", "deps", "forced", "forced-deps"),
+            schema.Optional('download') : schema.Or("yes", "no", "deps",
+                "forced", "forced-deps", "forced-fallback",
+                schema.Regex(r"^packages=.*$")),
             schema.Optional('sandbox') : bool,
             schema.Optional('clean_checkout') : bool,
             schema.Optional('always_checkout') : [str],
             schema.Optional('jobs') : int,
+            schema.Optional('audit') : bool,
         })
 
     GRAPH_SCHEMA = schema.Schema(

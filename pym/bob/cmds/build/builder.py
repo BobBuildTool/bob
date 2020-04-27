@@ -205,6 +205,7 @@ cd {ROOT}
         self.__jobs = 1
         self.__bufferedStdIO = False
         self.__keepGoing = False
+        self.__audit = True
         self.__fingerprints = { None : b'', "" : b'' }
         self.__workspaceLocks = {}
 
@@ -264,6 +265,9 @@ cd {ROOT}
 
     def setKeepGoing(self, keepGoing):
         self.__keepGoing = keepGoing
+
+    def setAudit(self, audit):
+        self.__audit = audit
 
     def saveBuildState(self):
         state = {}
@@ -338,12 +342,20 @@ cd {ROOT}
         return ret
 
     async def _generateAudit(self, step, depth, resultHash, executed=True):
+        auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
+        if os.path.exists(auditPath): removePath(auditPath)
+        if not self.__audit:
+            return None
+
         if step.isCheckoutStep():
             buildId = resultHash
         else:
             buildId = await self._getBuildId(step, depth)
 
-        with stepAction(step, "AUDIT", step.getWorkspacePath(), INFO):
+        def auditOf(s):
+            return os.path.join(s.getWorkspacePath(), "..", "audit.json.gz")
+
+        with stepAction(step, "AUDIT", step.getWorkspacePath(), INFO) as a:
             audit = Audit.create(step.getVariantId(), buildId, resultHash)
             audit.addDefine("bob", BOB_VERSION)
             audit.addDefine("recipe", step.getPackage().getRecipe().getName())
@@ -356,16 +368,18 @@ cd {ROOT}
 
             # The following things make only sense if we just executed the step
             if executed:
-                audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
-                for (name, tool) in sorted(step.getTools().items()):
-                    audit.addTool(name,
-                        os.path.join(tool.getStep().getWorkspacePath(), "..", "audit.json.gz"))
-                sandbox = step.getSandbox()
-                if sandbox is not None:
-                    audit.setSandbox(os.path.join(sandbox.getStep().getWorkspacePath(), "..", "audit.json.gz"))
-                for dep in step.getArguments():
-                    if dep.isValid():
-                        audit.addArg(os.path.join(dep.getWorkspacePath(), "..", "audit.json.gz"))
+                try:
+                    audit.setEnv(os.path.join(step.getWorkspacePath(), "..", "env"))
+                    for (name, tool) in sorted(step.getTools().items()):
+                        audit.addTool(name, auditOf(tool.getStep()))
+                    sandbox = step.getSandbox()
+                    if sandbox is not None:
+                        audit.setSandbox(auditOf(sandbox.getStep()))
+                    for dep in step.getArguments():
+                        if dep.isValid(): audit.addArg(auditOf(dep))
+                except BobError as e:
+                    a.fail(e.slogan, WARNING)
+                    return None
 
             # Always check for SCMs but don't fail if we did not execute the step
             if step.isCheckoutStep():
@@ -381,7 +395,6 @@ cd {ROOT}
                                                 .format(e.slogan, dir),
                                            WARNING)
 
-            auditPath = os.path.join(step.getWorkspacePath(), "..", "audit.json.gz")
             audit.save(auditPath)
             return auditPath
 
@@ -861,7 +874,7 @@ cd {ROOT}
 
         # Generate audit trail. Has to be done _after_ setResultHash()
         # because the result is needed to calculate the buildId.
-        if checkoutHash != oldCheckoutHash:
+        if checkoutHash != oldCheckoutHash or self.__force:
             await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
         # upload live build-id cache in case of fresh checkout
