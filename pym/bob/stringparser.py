@@ -202,13 +202,39 @@ class StringParser:
         return self.funs[cmd](words, env=self.env, **self.funArgs)
 
 class IfExpression():
-    def __init__(self, expr):
-        self.__expr = expr
+    __slots__ = ('__expr')
 
-    def getExpression(self):
-        return self.__expr
+    def __init__(self, expr):
+        self.__expr = IfExpressionParser.getInstance().parseExpression(expr)
+
+    def __eq__(self, other):
+        return self.__expr == other.__expr
+
+    def __lt__(self, other): return NotImplemented
+    def __le__(self, other): return NotImplemented
+    def __gt__(self, other): return NotImplemented
+    def __ge__(self, other): return NotImplemented
+
+    def __str__(self):
+        return str(self.__expr)
+
+    def evalExpression(self, env):
+        return self.__expr.evalExpression(env)
+
+OPS = {
+    '&&' : lambda l, r: l & r,
+    '||' : lambda l, r: l | r,
+    '<'  : lambda l, r: l < r,
+    '>'  : lambda l, r: l > r,
+    '<=' : lambda l, r: l <= r,
+    '>=' : lambda l, r: l >= r,
+    '==' : lambda l, r: l == r,
+    '!=' : lambda l, r: l != r,
+}
 
 class NotOperator():
+    __slots__ = ('op')
+
     def __init__(self, s, loc, toks):
         assert len(toks) == 1, toks
         toks = toks[0]
@@ -216,42 +242,48 @@ class NotOperator():
         assert toks[0] == '!'
         self.op = toks[1]
 
-    def __repr__(self):
-        return "NotOperator({})".format(self.op)
+    def __eq__(self, other):
+        return isinstance(other, NotOperator) and self.op == other.op
+
+    def __str__(self):
+        return "!({})".format(self.op)
 
     def evalExpression(self, env):
         return not self.op.evalExpression(env)
 
 class BinaryBoolOperator():
+    __slots__ = ('op', 'left', 'right')
+
     def __init__(self, s, loc, toks):
         self.left = toks[0]
         self.right = toks[2]
-        self.opStr = op = toks[1]
-        if op == '&&':
-            self.op = lambda l, r: l & r
-        elif op == '||':
-            self.op = lambda l, r: l | r
-        else:
-            assert False, op
+        self.op = toks[1]
 
-    def __repr__(self):
-        return "BinaryBoolOperator({}, {}, {})".format(self.left, self.opStr, self.right)
+    def __eq__(self, other):
+        return isinstance(other, BinaryBoolOperator) and \
+            self.op == other.op and \
+            self.left == other.left and self.right == other.right
+
+    def __str__(self):
+        return "({}) {} ({})".format(self.left, self.op, self.right)
 
     def evalExpression(self, env):
-        return self.op(self.left.evalExpression(env),
-                       self.right.evalExpression(env))
+        return OPS[self.op](self.left.evalExpression(env),
+                            self.right.evalExpression(env))
 
 class StringLiteral():
+    __slots__ = ('literal', 'subst')
+
     def __init__(self, s, loc, toks, doSubst):
         assert len(toks) == 1, toks
         self.literal = toks[0]
         self.subst = doSubst and any((c in self.literal) for c in '\\\"\'$')
 
-    def __repr__(self):
-        if self.subst:
-            return "StringLiteral(\"{}\")".format(self.literal)
-        else:
-            return "StringLiteral('{}')".format(self.literal)
+    def __eq__(self, other):
+        return isinstance(other, StringLiteral) and self.literal == other.literal
+
+    def __str__(self):
+        return '"' + self.literal + '"'
 
     def evalExpressionToString(self, env):
         if self.subst:
@@ -263,13 +295,19 @@ class StringLiteral():
         return isTrue(self.evalExpressionToString(env))
 
 class FunctionCall():
+    __slots__ = ('name', 'args')
+
     def __init__(self, s, loc, toks):
         self.name = toks[0]
         self.args = toks[1:]
 
-    def __repr__(self):
-        return "FunctionCall({}, {})".format(self.name,
-            ", ".join(repr(a) for a in self.args))
+    def __eq__(self, other):
+        return isinstance(other, FunctionCall) and \
+            self.name == other.name and self.args == other.args
+
+    def __str__(self):
+        return "{}({})".format(self.name,
+            ", ".join(str(a) for a in self.args))
 
     def evalExpression(self, env):
         extra = env.funArgs
@@ -281,31 +319,24 @@ class FunctionCall():
         return isTrue(fun(args, env=env, **extra))
 
 class BinaryStrOperator():
+    __slots__ = ('op', 'opStr', 'left', 'right')
+
     def __init__(self, s, loc, toks):
         self.left = toks[0]
         self.right = toks[2]
-        self.opStr = op = toks[1]
-        if op == '<':
-            self.op = lambda l, r: l < r
-        elif op == '>':
-            self.op = lambda l, r: l > r
-        elif op == '<=':
-            self.op = lambda l, r: l <= r
-        elif op == '>=':
-            self.op = lambda l, r: l >= r
-        elif op == '==':
-            self.op = lambda l, r: l == r
-        elif op == '!=':
-            self.op = lambda l, r: l != r
-        else:
-            assert False, op
+        self.op = toks[1]
 
-    def __repr__(self):
-        return "BinaryStrOperator({}, {}, {})".format(self.left,
-            self.opStr, self.right)
+    def __eq__(self, other):
+        return isinstance(other, BinaryStrOperator) and \
+            self.op == other.op and \
+            self.left == other.left and self.right == other.right
+
+    def __str__(self):
+        return "({}) {} ({})".format(self.left, self.op, self.right)
 
     def evalExpression(self, env):
-        return self.op(self.left.evalExpressionToString(env), self.right.evalExpressionToString(env))
+        return OPS[self.op](self.left.evalExpressionToString(env),
+                            self.right.evalExpressionToString(env))
 
 class IfExpressionParser:
     __instance = None
@@ -348,12 +379,12 @@ class IfExpressionParser:
 
         self.__ifgrammer = predExpr
 
-    def evalExpression(self, expression, env):
+    def parseExpression(self, expression):
         try:
             ret = self.__ifgrammer.parseString(expression, True)
         except pyparsing.ParseBaseException as e:
             raise ParseError("Invalid syntax: " + str(e))
-        return ret[0].evalExpression(env)
+        return ret[0]
 
     @classmethod
     def getInstance(cls):
@@ -486,7 +517,7 @@ class Env(MutableMapping):
             return True
 
         if isinstance(condition, IfExpression):
-            return IfExpressionParser.getInstance().evalExpression(condition.getExpression(), self)
+            return condition.evalExpression(self)
 
         s = self.substitute(condition, "condition on "+prop)
         return not isFalse(s)

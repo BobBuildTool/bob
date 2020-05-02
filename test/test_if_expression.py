@@ -6,7 +6,7 @@
 from unittest import TestCase
 from unittest.mock import MagicMock
 
-from bob.stringparser import DEFAULT_STRING_FUNS, Env, IfExpressionParser
+from bob.stringparser import DEFAULT_STRING_FUNS, Env, IfExpression
 from bob.errors import BobError
 
 class TestIfExpressionParser(TestCase):
@@ -18,54 +18,51 @@ class TestIfExpressionParser(TestCase):
         self.__env.setFuns(DEFAULT_STRING_FUNS.copy())
         self.__env.setFunArgs({"sandbox" : False, "__tools" : tools})
 
-        self.__parser = IfExpressionParser()
+    def evalExpr(self, expr):
+        return IfExpression(expr).evalExpression(self.__env)
 
-    def tearDown(self):
-        self.__parser = None
-
-    def parse(self, expr):
-        return self.__parser.evalExpression(expr, self.__env)
 
     def testEqual(self):
-        self.assertRaises(BobError, self.parse, "x ==")
-        self.assertTrue(self.parse('"${FOO}" == "foo"'))
-        self.assertTrue(self.parse('"a" == "a"'))
-        self.assertFalse(self.parse('"a" == "b"'))
+        self.assertRaises(BobError, self.evalExpr, 'x ==')
+        self.assertTrue(self.evalExpr('"${FOO}" == "foo"'))
+        self.assertTrue(self.evalExpr('"a" == "a"'))
+        self.assertFalse(self.evalExpr('"a" == "b"'))
 
     def testNotEqual(self):
-        self.assertRaises(BobError, self.parse, "x !=")
-        self.assertFalse(self.parse('"a" != "a"'))
-        self.assertTrue(self.parse('"a" != "b"'))
+        self.assertRaises(BobError, self.evalExpr, "x !=")
+        self.assertFalse(self.evalExpr('"a" != "a"'))
+        self.assertTrue(self.evalExpr('"a" != "b"'))
 
     def testNot(self):
-        self.assertRaises(BobError, self.parse, "!")
-        self.assertFalse(self.parse('!"true"'))
-        self.assertFalse(self.parse("!'TRUE'"))
-        self.assertFalse(self.parse("!'1'"))
-        self.assertFalse(self.parse("!'foobar'"))
-        self.assertTrue(self.parse("!''"))
-        self.assertTrue(self.parse("!'0'"))
-        self.assertTrue(self.parse("!'false'"))
-        self.assertTrue(self.parse("!'FaLsE'"))
+        self.assertRaises(BobError, self.evalExpr, "!")
+        self.assertFalse(self.evalExpr('!"true"'))
+        self.assertFalse(self.evalExpr("!'TRUE'"))
+        self.assertFalse(self.evalExpr("!'1'"))
+        self.assertFalse(self.evalExpr("!'foobar'"))
+        self.assertTrue(self.evalExpr("!''"))
+        self.assertTrue(self.evalExpr("!'0'"))
+        self.assertTrue(self.evalExpr("!'false'"))
+        self.assertTrue(self.evalExpr("!'FaLsE'"))
 
     def testOr(self):
-        self.assertTrue( self.parse('"true" || "false"'))
-        self.assertTrue( self.parse('"false" || "true"'))
-        self.assertFalse(self.parse('"false" || "false"'))
-        self.assertTrue( self.parse('"1" || "2" || "3" || "4"'))
-        self.assertFalse(self.parse('"0" || "0"|| "0" || "0"'))
-        self.assertFalse(self.parse('"0" || "" || "false"'))
+        self.assertTrue( self.evalExpr('"true" || "false"'))
+        self.assertTrue( self.evalExpr('"false" || "true"'))
+        self.assertFalse(self.evalExpr('"false" || "false"'))
+        self.assertTrue( self.evalExpr('"1" || "2" || "3" || "4"'))
+        self.assertFalse(self.evalExpr('"0" || "0"|| "0" || "0"'))
+        self.assertFalse(self.evalExpr('"0" || "" || "false"'))
 
     def testAnd(self):
-        self.assertTrue( self.parse('"true" && "true"'))
-        self.assertFalse(self.parse('"true" && "false"'))
-        self.assertFalse(self.parse('"false" && "true"'))
-        self.assertTrue( self.parse('"true" && "true" && "true"'))
-        self.assertTrue( self.parse('"true" && "1" && "abq"'))
-        self.assertFalse(self.parse('"true" && ""'))
+        self.assertTrue( self.evalExpr('"true" && "true"'))
+        self.assertFalse(self.evalExpr('"true" && "false"'))
+        self.assertFalse(self.evalExpr('"false" && "true"'))
+        self.assertTrue( self.evalExpr('"true" && "true" && "true"'))
+        self.assertTrue( self.evalExpr('"true" && "1" && "abq"'))
+        self.assertFalse(self.evalExpr('"true" && ""'))
 
     def testFuns(self):
-        self.assertFalse(self.parse('is-sandbox-enabled()'))
-        self.assertTrue(self.parse('is-tool-defined("a")'))
-        self.assertFalse(self.parse('is-tool-defined("c")'))
-        self.assertFalse(self.parse('match( "string", "pattern")'))
+        self.assertFalse(self.evalExpr('is-sandbox-enabled()'))
+        self.assertTrue(self.evalExpr('is-tool-defined("a")'))
+        self.assertFalse(self.evalExpr('is-tool-defined("c")'))
+        self.assertFalse(self.evalExpr('match( "string", "pattern")'))
+        self.assertRaises(BobError, self.evalExpr, "!does-not-exist()")
