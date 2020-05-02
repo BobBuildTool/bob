@@ -76,3 +76,28 @@ class TestIfExpressionParser(TestCase):
         self.assertFalse(self.evalExpr('is-tool-defined("c")'))
         self.assertFalse(self.evalExpr('match( "string", "pattern")'))
         self.assertRaises(BobError, self.evalExpr, "!does-not-exist()")
+
+    def testCompare(self):
+        """Equality comparison should work on the actual expression"""
+
+        self.assertEqual(IfExpression('"true"'), IfExpression('"true"'))
+        self.assertNotEqual(IfExpression('"true"'), IfExpression('"false"'))
+
+        self.assertEqual(IfExpression('! "true"'), IfExpression('! "true"'))
+        self.assertNotEqual(IfExpression('! "true"'), IfExpression('! "false"'))
+        self.assertNotEqual(IfExpression('! "true"'), IfExpression('"true"'))
+
+        self.assertEqual(IfExpression('"true" && "true"'), IfExpression('"true" && "true"'))
+        self.assertNotEqual(IfExpression('"true" && "true"'), IfExpression('"true" && "false"'))
+        self.assertNotEqual(IfExpression('"true" && "true"'), IfExpression('"true" == "true"'))
+
+        self.assertEqual(IfExpression('"a" < "b"'), IfExpression('"a" < "b"'))
+        self.assertNotEqual(IfExpression('"a" < "b"'), IfExpression('"a" <= "b"'))
+
+        self.assertEqual(IfExpression('is-tool-defined("a")'), IfExpression('is-tool-defined("a")'))
+        self.assertNotEqual(IfExpression('is-tool-defined("a")'), IfExpression('is-tool-defined("b")'))
+        self.assertNotEqual(IfExpression('is-tool-defined("a")'), IfExpression('match("a", "b")'))
+
+        self.assertEqual(
+            str(IfExpression('call("a", call("b", "c")) && !foo() || ("zz" < bar())')),
+            '((call("a", call("b", "c"))) && (!(foo()))) || (("zz") < (bar()))')
