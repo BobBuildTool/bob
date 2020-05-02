@@ -33,7 +33,7 @@ class TestIfExpressionParser(TestCase):
         self.assertFalse(self.evalExpr("'FaLsE'"))
 
     def testEqual(self):
-        self.assertRaises(BobError, self.evalExpr, 'x ==')
+        self.assertRaises(BobError, self.evalExpr, '"x" ==')
         self.assertTrue(self.evalExpr('"${FOO}" == "foo"'))
         self.assertTrue(self.evalExpr('"a" == "a"'))
         self.assertFalse(self.evalExpr('"a" == "b"'))
