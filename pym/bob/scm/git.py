@@ -33,6 +33,8 @@ class GitScm(Scm):
         schema.Optional('rev') : str,
         schema.Optional(schema.Regex('^remote-.*')) : str,
         schema.Optional('sslVerify') : bool,
+        schema.Optional('singleBranch') : bool,
+        schema.Optional('shallow') : schema.Or(int, str)
     })
     REMOTE_PREFIX = "remote-"
 
@@ -72,6 +74,8 @@ class GitScm(Scm):
                     raise ParseError("Invalid remote name: " + stripped_key)
                 self.__remotes.update({stripped_key : val})
         self.__sslVerify = spec.get('sslVerify', secureSSL)
+        self.__singleBranch = spec.get('singleBranch')
+        self.__shallow = spec.get('shallow')
 
     def getProperties(self):
         properties = super().getProperties()
@@ -87,6 +91,8 @@ class GitScm(Scm):
                     ("refs/heads/" + self.__branch))
             ),
             'sslVerify' : self.__sslVerify,
+            'singleBranch' : self.__singleBranch,
+            'shallow' : self.__shallow,
         })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
@@ -96,6 +102,13 @@ class GitScm(Scm):
         # make sure the git directory exists
         if not os.path.isdir(invoker.joinPath(self.__dir, ".git")):
             await invoker.checkCommand(["git", "init", self.__dir])
+
+        # Shallow implies singleBranch
+        if self.__singleBranch is None:
+            singleBranch = self.__shallow is not None
+        else:
+            singleBranch = self.__singleBranch
+        singleBranch = singleBranch and (self.__branch is not None)
 
         # setup and update remotes
         remotes = { "origin" : self.__url }
@@ -112,37 +125,60 @@ class GitScm(Scm):
 
         # add remaining (new) remotes
         for remote,url in remotes.items():
-            await invoker.checkCommand(["git", "remote", "add", remote, url], cwd=self.__dir)
+            addCmd = ["git", "remote", "add", remote, url]
+            if singleBranch: addCmd += ["-t", self.__branch]
+            await invoker.checkCommand(addCmd, cwd=self.__dir)
 
         # relax security if requested
         if not self.__sslVerify:
             await invoker.checkCommand(["git", "config", "http.sslVerify", "false"], cwd=self.__dir)
 
+        # Calculate refspec that is used internally. For the user a regular
+        # refspec is kept in the git config.
+
+        # Base fetch command with shallow support
+        fetchCmd = ["git", "fetch", "-p"]
+        if isinstance(self.__shallow, int):
+            fetchCmd.append("--depth={}".format(self.__shallow))
+        elif isinstance(self.__shallow, str):
+            fetchCmd.append("--shallow-since={}".format(self.__shallow))
+        fetchCmd.append("origin")
+
+        # Calculate appropriate refspec (all/singleBranch/tag)
+        if singleBranch:
+            fetchCmd += ["+refs/heads/{0}:refs/remotes/origin/{0}".format(self.__branch)]
+        else:
+            fetchCmd += ["+refs/heads/*:refs/remotes/origin/*"]
+        if self.__tag:
+            fetchCmd.append("refs/tags/{0}:refs/tags/{0}".format(self.__tag))
+
         # do the checkout
         if self.__tag or self.__commit:
-            refSpec = ["+refs/heads/*:refs/remotes/origin/*"]
-            if self.__tag:
-                refSpec.append("refs/tags/{0}:refs/tags/{0}".format(self.__tag))
-            # checkout only if HEAD is invalid
-            head = await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
-                stdout=False, cwd=self.__dir)
-            if head:
-                await invoker.checkCommand(["git", "fetch", "origin"] + refSpec, cwd=self.__dir)
-                await invoker.checkCommand(["git", "checkout", "-q",
-                    self.__commit if self.__commit else "tags/"+self.__tag], cwd=self.__dir)
+            await self.__checkoutTag(invoker, fetchCmd)
         else:
-            await invoker.checkCommand(["git", "fetch", "-p", "origin"], cwd=self.__dir)
-            if await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
-                           stdout=False, cwd=self.__dir):
-                # checkout only if HEAD is invalid
-                await invoker.checkCommand(["git", "checkout", "-b", self.__branch,
-                    "remotes/origin/"+self.__branch], cwd=self.__dir)
-            elif (await invoker.checkOutputCommand(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.__dir)) == self.__branch:
-                # pull only if on original branch
-                await invoker.checkCommand(["git", "merge", "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
-            else:
-                invoker.warn("Not updating", self.__dir, "because branch was changed manually...")
+            await self.__checkoutBranch(invoker, fetchCmd)
 
+    async def __checkoutTag(self, invoker, fetchCmd):
+        # checkout only if HEAD is invalid
+        head = await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
+            stdout=False, cwd=self.__dir)
+        if head:
+            await invoker.checkCommand(fetchCmd, cwd=self.__dir)
+            await invoker.checkCommand(["git", "checkout", "-q",
+                self.__commit if self.__commit else "tags/"+self.__tag], cwd=self.__dir)
+
+    async def __checkoutBranch(self, invoker, fetchCmd):
+        await invoker.checkCommand(fetchCmd, cwd=self.__dir)
+        if await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
+                       stdout=False, cwd=self.__dir):
+            # checkout only if HEAD is invalid
+            await invoker.checkCommand(["git", "checkout", "-b", self.__branch,
+                "remotes/origin/"+self.__branch], cwd=self.__dir)
+        elif (await invoker.checkOutputCommand(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.__dir)) == self.__branch:
+            # pull only if on original branch
+            await invoker.checkCommand(["git", "merge", "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
+        else:
+            invoker.warn("Not updating", self.__dir, "because branch was changed manually...")
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this git module.
