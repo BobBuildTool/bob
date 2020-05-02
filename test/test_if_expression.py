@@ -21,6 +21,16 @@ class TestIfExpressionParser(TestCase):
     def evalExpr(self, expr):
         return IfExpression(expr).evalExpression(self.__env)
 
+    def testLiteral(self):
+        self.assertRaises(BobError, self.evalExpr, "x")
+        self.assertTrue(self.evalExpr('"true"'))
+        self.assertTrue(self.evalExpr("'TRUE'"))
+        self.assertTrue(self.evalExpr("'1'"))
+        self.assertTrue(self.evalExpr("'foobar'"))
+        self.assertFalse(self.evalExpr("''"))
+        self.assertFalse(self.evalExpr("'0'"))
+        self.assertFalse(self.evalExpr("'false'"))
+        self.assertFalse(self.evalExpr("'FaLsE'"))
 
     def testEqual(self):
         self.assertRaises(BobError, self.evalExpr, 'x ==')
