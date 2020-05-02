@@ -12,6 +12,9 @@ import fnmatch
 import pyparsing
 import re
 
+# need to enable this for nested expression parsing performance
+pyparsing.ParserElement.enablePackrat()
+
 NAME_START = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz'
 NAME_CHARS = NAME_START + '0123456789'
 
