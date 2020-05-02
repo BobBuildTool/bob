@@ -350,7 +350,7 @@ class IfExpressionParser:
 
     def evalExpression(self, expression, env):
         try:
-            ret = self.__ifgrammer.parseString(expression)
+            ret = self.__ifgrammer.parseString(expression, True)
         except pyparsing.ParseBaseException as e:
             raise ParseError("Invalid syntax: " + str(e))
         return ret[0].evalExpression(env)
