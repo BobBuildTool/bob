@@ -395,3 +395,100 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
         self.processHashEngine(s, self.commit_lightweight)
         s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
         self.processHashEngine(s, self.commit_foobar)
+
+
+class TestShallow(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.__repodir = tempfile.TemporaryDirectory()
+        cls.repodir = cls.__repodir.name
+
+        cmds = """\
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+
+            for i in $(seq 3) ; do
+                echo "#$i" > test.txt
+                git add test.txt
+                GIT_AUTHOR_DATE="2020-01-0${i}T01:02:03" GIT_COMMITTER_DATE="2020-01-0${i}T01:02:03" git commit -m "commit $i"
+            done
+
+            git checkout -b feature
+
+            for i in $(seq 4 6) ; do
+                echo "#$i" > test.txt
+                git add test.txt
+                git commit -m "commit $i"
+            done
+        """
+        subprocess.check_call(cmds, shell=True, cwd=cls.repodir)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.__repodir.cleanup()
+
+    def createGitScm(self, spec = {}):
+        s = {
+            'scm' : "git",
+            'url' : "file://" + os.path.abspath(self.repodir),
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        s.update(spec)
+        return GitScm(s)
+
+    def invokeGit(self, workspace, scm):
+        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+        invoker = Invoker(spec, False, True, True, True, True, False)
+        run(scm.invoke(invoker))
+
+        log = subprocess.check_output(["git", "log", "--oneline"],
+            cwd=workspace, universal_newlines=True).strip().split("\n")
+
+        branches = subprocess.check_output(["git", "branch", "-r"],
+            cwd=workspace, universal_newlines=True).strip().split("\n")
+        branches = set(b.strip() for b in branches)
+
+        return (len(log), branches)
+
+
+    def testShallowNum(self):
+        """Verify that shallow clones the right number of commits.
+
+        Also verify that it implies singleBranch as expected.
+        """
+        scm = self.createGitScm({ 'shallow' : 1 })
+        with tempfile.TemporaryDirectory() as workspace:
+            commits, branches = self.invokeGit(workspace, scm)
+            self.assertEqual(commits, 1)
+            self.assertEqual(branches, set(['origin/master']))
+
+    def testShallowDate(self):
+        """Verify that shallow clones the right number of commits.
+
+        Also verify that it implies singleBranch as expected.
+        """
+        scm = self.createGitScm({ 'shallow' : "2020-01-02T00:00:00" })
+        with tempfile.TemporaryDirectory() as workspace:
+            commits, branches = self.invokeGit(workspace, scm)
+            # Expect two commits 2020-01-03, 2020-01-02
+            self.assertEqual(commits, 2)
+            self.assertEqual(branches, set(['origin/master']))
+
+    def testShallowNumAllBranches(self):
+        """Verify that all branches can be fetched on shallow clones if requested"""
+        scm = self.createGitScm({ 'shallow' : 1, 'singleBranch' : False })
+        with tempfile.TemporaryDirectory() as workspace:
+            commits, branches = self.invokeGit(workspace, scm)
+            self.assertEqual(commits, 1)
+            self.assertEqual(branches, set(['origin/master', 'origin/feature']))
+
+    def testSingleBranch(self):
+        """Check that singleBranch attribute works independently"""
+        scm = self.createGitScm({ 'singleBranch' : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            commits, branches = self.invokeGit(workspace, scm)
+            self.assertEqual(branches, set(['origin/master']))
+

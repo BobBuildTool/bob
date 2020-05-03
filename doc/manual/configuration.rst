@@ -799,6 +799,8 @@ git    `Git`_ project               | ``url``: URL of remote repository
                                     | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
                                     | ``remote-*``: additional remote repositories (optional, see below)
                                     | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
+                                    | ``shallow``: Number of commits or cutoff date that should be fetched (optional)
+                                    | ``singleBranch``: Fetch only single branch instead of all (optional)
 import Import directory from        | ``url``: Directory path relative to project root.
        project                      | ``prune``: Delete destination directory before importing files.
 svn    `Svn`_ repository            | ``url``: URL of SVN module
@@ -863,6 +865,21 @@ git
    the remote URL. For example ``remote-my_name`` set to ``some/url.git`` will
    result in an additional remote named ``my_name`` and the URL set to
    ``some/url.git``.
+
+   To reduce the amount of data that is fetched from the remote repository the
+   optional ``shallow`` attribute can be set. If it is an integer then only
+   this number of commits are fetched from the tip of the remote branches
+   (``--depth`` clone parameter). It can also be a string that should be a date
+   understood by git (passed as ``--shallow-since=`` to git). Either option
+   will imply ``singleBranch`` to be true. This further restricts the fetching
+   of remote branches to the configured branch only. Set ``singleBranch``
+   either to ``False`` to explicitly fetch all remote branches or to ``True``
+   to fetch only the current branch, regardless of the ``shallow`` setting.
+
+   .. tip:: You can set the ``shallow`` and ``singleBranch`` properties with
+      :ref:`configuration-config-scmOverrides` too.  This can be used to
+      improve the build times of existing projects or to fetch the whole
+      history if ``shallow`` is used in the recipes.
 
 import
    The ``import`` SCM copies the directory specified in ``url`` to the

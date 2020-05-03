@@ -39,11 +39,12 @@ class ScmOverride:
         if self.__if is not None and not env.evaluate(self.__if, "scmOverride::if"): return False
         for (key, value) in self.__match.items():
             if key not in scm: return False
-            value = env.substitute(value, "svmOverride::match")
-            # the type of scm['if'] could be IfExpression and it is valid to compare the if keyword to match
-            # to a SCM. The old behavior of this is to compare the values as string rather than to evaluate it
-            # and compare the result. Casting the IfExpression to a str we do not change the behavior.
-            if not fnmatch.fnmatchcase(str(scm[key]), value): return False
+            if type(scm[key]) != type(value): return False
+            if isinstance(value, str):
+                value = env.substitute(value, "svmOverride::match")
+                if not fnmatch.fnmatchcase(scm[key], value): return False
+            else:
+                if scm[key] != value: return False
         return True
 
     def __hash__(self):
@@ -56,7 +57,10 @@ class ScmOverride:
 
     def __applyEnv(self, env):
         rm = [ env.substitute(d, "svmOverrides::del") for d in self.__del ]
-        set = { k : env.substitute(v, "svmOverrides::set: "+k) for (k,v) in self.__set.items() }
+        set = {
+            k : env.substitute(v, "svmOverrides::set: "+k) if isinstance(v, str) else v
+            for (k,v) in self.__set.items()
+        }
         return rm, set
 
     def mangle(self, scm, env):

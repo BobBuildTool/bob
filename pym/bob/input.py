@@ -350,6 +350,14 @@ def Scm(spec, env, overrides, recipeSet):
         if matched:
             matchedOverrides.append(override)
 
+    # check schema again if any SCM override matched
+    if matchedOverrides:
+        try:
+            recipeSet.SCM_SCHEMA.validate({ k:v for k,v in spec.items()
+                if k != '__source' and k != 'recipe' })
+        except schema.SchemaError as e:
+            raise ParseError("Error validating SCM after applying scmOverrides: {}".format(str(e)))
+
     # create scm instance
     return getScm(spec, matchedOverrides, recipeSet)
 
@@ -2740,6 +2748,14 @@ class RecipeSet:
         schema.Optional('scriptLanguage', default="bash") : schema.Or("bash", "PowerShell"),
     })
 
+    SCM_SCHEMA = ScmValidator({
+        'git' : GitScm.SCHEMA,
+        'svn' : SvnScm.SCHEMA,
+        'cvs' : CvsScm.SCHEMA,
+        'url' : UrlScm.SCHEMA,
+        'import' : ImportScm.SCHEMA,
+    })
+
     _ignoreCmdConfig = False
     @classmethod
     def ignoreCommandCfg(cls):
@@ -2889,12 +2905,9 @@ class RecipeSet:
             "scmOverrides" : BuiltinSetting(
                 schema.Schema([{
                     schema.Optional('if') : schema.Or(str, IfExpression),
-                    schema.Optional('match') : schema.Schema({ str: str }),
-                    schema.Optional('del') : [
-                        "branch", "commit", "digestSHA1", "digestSHA256", "dir",
-                        "extract", "fileName", "if", "rev", "revision", "tag"
-                    ],
-                    schema.Optional('set') : schema.Schema({ str : str }),
+                    schema.Optional('match') : schema.Schema({ str: object }),
+                    schema.Optional('del') : str,
+                    schema.Optional('set') : object,
                     schema.Optional('replace') : schema.Schema({
                         str : schema.Schema({
                             'pattern' : str,
@@ -3283,13 +3296,7 @@ class RecipeSet:
             schema.Optional('buildVarsWeak') : [ varNameUseSchema ],
             schema.Optional('packageVarsWeak') : [ varNameUseSchema ],
             schema.Optional('checkoutDeterministic') : bool,
-            schema.Optional('checkoutSCM') : ScmValidator({
-                'git' : GitScm.SCHEMA,
-                'svn' : SvnScm.SCHEMA,
-                'cvs' : CvsScm.SCHEMA,
-                'url' : UrlScm.SCHEMA,
-                'import' : ImportScm.SCHEMA,
-            }),
+            schema.Optional('checkoutSCM') : self.SCM_SCHEMA,
             schema.Optional('checkoutAssert') : [ CheckoutAssert.SCHEMA ],
             schema.Optional('depends') : dependsClause,
             schema.Optional('environment') : VarDefineValidator("environment"),
