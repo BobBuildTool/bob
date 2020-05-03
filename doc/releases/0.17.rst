@@ -77,6 +77,38 @@ Recipes
   standard way to identify the host platform type. See
   :ref:`configuration-recipes-vars` for more details.
 
+* The git SCM now supports shallow clones.
+
+  By setting the ``shallow`` attribute on a git SCM the number of commits that
+  are fetched from the tip of the remote branch(es) is limited. This can
+  improve initial clone times considerably. Likewise a ``singleBranch``
+  attribute was added too which is implicitly enabled if ``shallow`` is used. Because
+  it is a regular SCM property the user can override it as needed from ``default.yaml``
+  via :ref:`configuration-config-scmOverrides`::
+
+      scmOverrides:
+          - match:
+                scm: git
+            set:
+                shallow: 1
+
+  See :ref:`configuration-recipes-scm` for more details.
+
+Bob build / bob dev
+~~~~~~~~~~~~~~~~~~~
+
+* Gained an option to build without audit trail.
+
+  The generation of the audit trail is usually barely noticeable. But if a
+  large number of repositories is checked out it can add a significant overhead
+  nonetheless. This release adds a ``-A`` / ``--without-audit`` option so that
+  the user can skip the generation of an audit trail to save this time.
+
+  Without an audit trail it is not possible anymore to upload an artifact
+  because vital information is missing. Consequently the generation of an audit
+  trail is skipped if the audit trail of a dependency is missing or if it
+  cannot be read. Otherwise the information would be incomplete.
+
 Bob query-path
 ~~~~~~~~~~~~~~
 
@@ -164,3 +196,17 @@ Backwards incompatible changes
   Environment variables that are defined in the recipes must not begin with
   ``BOB_`` because this namespace is reserved for future usage by Bob. This was
   not enforced yet for variables in ``default.yaml``.
+
+Performance improvements
+------------------------
+
+* Audit trail generation is not blocking execution of other parallel jobs
+  anymore. Previously Bob was not scheduling new jobs while an audit trail was
+  generated.
+
+* The audit trail of a checkout step is now only updated if something has
+  changed in the workspace. If no updates were found and the checkout workspace
+  did not change the old audit trail record is still considered valid. This
+  saves significant time for large checkouts because no SCM status need to be
+  scanned.
+
