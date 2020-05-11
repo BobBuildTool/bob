@@ -9,5 +9,5 @@ sys.path.insert(0, pym_path)
 
 from bob.scripts import hashEngine
 
-sys.argv[0] = os.path.basename(sys.argv[0])
-sys.exit(hashEngine())
+if __name__ == '__main__':
+    sys.exit(hashEngine())
