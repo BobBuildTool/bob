@@ -33,7 +33,8 @@ sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-sys.path.insert(0, os.path.abspath('../pym'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)),
+    '..', 'pym'))
 
 # -- General configuration ------------------------------------------------
 
@@ -64,19 +65,14 @@ copyright = '2016-2020, The BobBuildTool Contributors'
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
-try:
-    # Use the setuptools_scm version by default
-    from bob.version import version as bobVersion
-except ImportError:
-    # Fall back to integrated heuristics
-    from bob import BOB_VERSION
-    bobVersion = BOB_VERSION
+from bob import BOB_VERSION
+bobVersion = BOB_VERSION
 
-    # Strip "-dirty" if building on Read the Docs. They change conf.py and thus
-    # always taint the repository.
-    if os.environ.get('READTHEDOCS') == 'True':
-        if bobVersion.endswith('.dirty'):
-            bobVersion = bobVersion[:-6]
+# Strip "-dirty" if building on Read the Docs. They change conf.py and thus
+# always taint the repository.
+if os.environ.get('READTHEDOCS') == 'True':
+    if bobVersion.endswith('.dirty'):
+        bobVersion = bobVersion[:-6]
 
 # The short X.Y version.
 version = bobVersion
