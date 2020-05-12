@@ -316,7 +316,8 @@ def auditEngine():
         for (name, workspace, dir) in args.scm:
             loop.run_until_complete(gen.addScm(name, workspace, dir, {}))
         for (name, workspace, dir, extra) in args.scmEx:
-            gen.addScm(name, workspace, dir, json.loads(extra))
+            loop.run_until_complete(gen.addScm(name, workspace, dir,
+                json.loads(extra)))
         for (name, audit) in args.tool: gen.addTool(name, audit)
         try:
             if args.recipes is not None: gen.setRecipesData(json.loads(args.recipes))
