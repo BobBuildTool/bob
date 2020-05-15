@@ -914,6 +914,9 @@ class CoreStep(CoreItem):
     def isFingerprinted(self):
         return self.fingerprintMask != 0
 
+    @property
+    def jobServer(self):
+        return self.corePackage.recipe.jobServer
 
 class Step:
     """Represents the smallest unit of execution of a package.
@@ -1250,6 +1253,11 @@ class Step:
     def isRelocatable(self):
         """Returns True if the step is relocatable."""
         return False
+
+    def jobServer(self):
+        """Returns True if the jobserver should be used to schedule
+        builds for this step."""
+        return self._coreStep.jobServer()
 
     def _getProvidedDeps(self):
         p = self.__package
@@ -1602,6 +1610,10 @@ class CorePackage:
     def getName(self):
         """Name of the package"""
         return self.recipe.getPackageName()
+
+    @property
+    def jobServer(self):
+        return self.recipe.jobServer()
 
 class Package(object):
     """Representation of a package that was created from a recipe.
@@ -2047,6 +2059,7 @@ class Recipe(object):
         self.__toolDepPackage |= self.__toolDepBuild
         self.__shared = recipe.get("shared")
         self.__relocatable = recipe.get("relocatable")
+        self.__jobServer = recipe.get("jobServer")
         self.__properties = {
             n : p(n in recipe, recipe.get(n))
             for (n, p) in properties.items()
@@ -2169,6 +2182,7 @@ class Recipe(object):
             if self.__root is None: self.__root = cls.__root
             if self.__shared is None: self.__shared = cls.__shared
             if self.__relocatable is None: self.__relocatable = cls.__relocatable
+            if self.__jobServer is None: self.__jobServer = cls.__jobServer
             tmp = cls.__provideTools.copy()
             tmp.update(self.__provideTools)
             self.__provideTools = tmp
@@ -2224,6 +2238,9 @@ class Recipe(object):
             self.__relocatable = self.__recipeSet.getPolicy('allRelocatable') \
                 or not self.__provideTools
 
+        if self.__jobServer is None:
+            self.__jobServer = False
+
         # check provided dependencies
         availDeps = [ d.recipe for d in self.__deps ]
         providedDeps = set()
@@ -2269,6 +2286,11 @@ class Recipe(object):
 
     def isShared(self):
         return self.__shared
+
+    def jobServer(self):
+        """Returns True if the jobserver should be used to schedule
+        builds for this recipe."""
+        return self.__jobServer
 
     def prepare(self, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
                 inputTools=Env(), stack=[]):
@@ -3416,6 +3438,7 @@ class RecipeSet:
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
             schema.Optional('scriptLanguage') : schema.Or("bash", "PowerShell"),
+            schema.Optional('jobServer') : bool,
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
