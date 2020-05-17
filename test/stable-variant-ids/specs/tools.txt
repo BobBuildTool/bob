@@ -35,16 +35,25 @@ root-tools/lib-a/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-a/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-a/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool1 dist d12d07b3f21af04d681be28fdd0a7e4fd6ae22b2
   digestScript: 1e88b888d7e4b2eb60d72236f8f025f144ed362c
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool1 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool1 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool1 dist d12d07b3f21af04d681be28fdd0a7e4fd6ae22b2
   digestScript: 1e88b888d7e4b2eb60d72236f8f025f144ed362c
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool1 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool1 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-b dist d233ef09c1ab2d47b6f195c3d32dde1a740374ab
   digestScript: a849444484353357c9fafe1bc7f4d9bfe0d80614
   tools:
@@ -62,11 +71,17 @@ root-tools/lib-b/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-b/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-b/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool2 dist aca45611d748aa59ee047874f05406e726338309
   digestScript: 0af6da5d4bd908414b1fc2708ac57f2c3b9b5720
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-c dist ef9b30b9ad1b68886202f5190353abe7cc56b1f4
   digestScript: 1d469e8d00a44fe9e1e19b32cebdc95f0eacc602
   tools:
@@ -86,16 +101,25 @@ root-tools/lib-c/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-c/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-c/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool3 dist eb5616a62ce663bc2864b5a1cc0668fab07ee8bc
   digestScript: 4e446787bb6ecf81e23692369ba0d592c817b54b
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool3 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool3 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool3 dist eb5616a62ce663bc2864b5a1cc0668fab07ee8bc
   digestScript: 4e446787bb6ecf81e23692369ba0d592c817b54b
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool3 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool3 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-d dist 68fc967d580ffcf6474ddfd408b9152b59e6cd83
   digestScript: 73f3e2c71cd769785c00046fef85e6051f94a5cf
   tools:
@@ -115,16 +139,25 @@ root-tools/lib-d/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-d/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-d/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool4 dist 602999aafdc7c527dbcb73cd6b331463231c3c33
   digestScript: a46ce207990f71df688d5c75205d2372381c7024
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool4 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool4 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool4 dist 602999aafdc7c527dbcb73cd6b331463231c3c33
   digestScript: a46ce207990f71df688d5c75205d2372381c7024
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool4 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool4 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-e dist b4ad8a005ca7011109d04c4ed3e3c2f62b7a80e6
   digestScript: 41a1167c7514ba6a44c9d72d0567d315e7fff66d
   tools:
@@ -143,16 +176,25 @@ root-tools/lib-e/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-e/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-e/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool4 dist 602999aafdc7c527dbcb73cd6b331463231c3c33
   digestScript: a46ce207990f71df688d5c75205d2372381c7024
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool4 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool4 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool5 dist c995b1a90b92916f33cba293c9a56c4909d5eca9
   digestScript: 718c3ff5c9afd3a846e7bb20ad207663ab0bf3b6
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/tool5 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/tool5 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-f dist 70be83970bfa73ea67e50f88a3a9745e614e7325
   digestScript: d56e6d6d92f2952f06e97753bf5d41f979c4c0ab
   args:
@@ -168,6 +210,9 @@ root-tools/lib-f/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-f/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-f/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-g dist ab657770625569737a5a847e8fed80b5a86bb5e2
   digestScript: 2e9c87ef5953674816219183c0ac712c4d3206c0
   args:
@@ -183,6 +228,9 @@ root-tools/lib-g/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-g/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-g/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-h dist b893133fa4fd142ac24d804c2e83139c93975435
   digestScript: 6d14100cc838fb6e3c3685d8b4a48c7a859692a2
   args:
@@ -198,8 +246,14 @@ root-tools/lib-h/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-h/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-h/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-a/lib2 dist 4201679bda4aab0d12d0ad4440849260634013a5
   digestScript: 6bc695bf91c5e7b4259dbb189781665444a2e7b4
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-tools/lib-a/lib2 build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-tools/lib-a/lib2 src 8696cf0f4655636cc93c566c1be2dad311da646c

@@ -3,3 +3,6 @@ root-include dist fb565cbb8d2ea1010dfebef0ff23e32fc57de915
   args:
     8696cf0f4655636cc93c566c1be2dad311da646c
 root-include build 8696cf0f4655636cc93c566c1be2dad311da646c
+  args:
+    8696cf0f4655636cc93c566c1be2dad311da646c
+root-include src 8696cf0f4655636cc93c566c1be2dad311da646c
