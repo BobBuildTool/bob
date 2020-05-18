@@ -789,6 +789,13 @@ class CoreStep(CoreItem):
     def getResultId(self):
         h = hashlib.sha1()
         h.update(self.variantId)
+        # Include invalid dependencies. They are needed for traversing dummy
+        # packages without a buildScript in path queries. Valid dependencies
+        # are already included in the variantId.
+        args = [ arg for arg in (a.refGetDestination() for a in self.args) if not arg.isValid ]
+        h.update(struct.pack("<I", len(args)))
+        for arg in args:
+            h.update(arg.getResultId())
         # providedEnv
         h.update(struct.pack("<I", len(self.providedEnv)))
         for (key, val) in sorted(self.providedEnv.items()):
@@ -1535,8 +1542,8 @@ class CorePackage:
         ret = self.buildStep = CoreBuildStep(self, script, digestEnv, env, args)
         return ret
 
-    def createInvalidCoreBuildStep(self):
-        ret = self.buildStep = CoreBuildStep(self)
+    def createInvalidCoreBuildStep(self, args):
+        ret = self.buildStep = CoreBuildStep(self, args=args)
         return ret
 
     def createCorePackageStep(self, script, digestEnv, env, args):
@@ -2452,7 +2459,7 @@ class Recipe(object):
             buildCoreStep = p.createCoreBuildStep(self.__build, buildDigestEnv, buildEnv,
                 [CoreRef(srcCoreStep)] + results)
         else:
-            buildCoreStep = p.createInvalidCoreBuildStep()
+            buildCoreStep = p.createInvalidCoreBuildStep([CoreRef(srcCoreStep)] + results)
 
         # mandatory package step
         packageDigestEnv = env.prune(self.__packageVars)
