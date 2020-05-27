@@ -19,6 +19,7 @@ it must not be overwritten. The backend should make sure that even on
 concurrent uploads the artifact must appear atomically for unrelated readers.
 """
 
+from . import BOB_VERSION
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
@@ -572,7 +573,8 @@ class SimpleHttpArchive(BaseArchive):
     def __openDownloadFile(self, buildId, suffix):
         connection = self._getConnection()
         url = self._makeUrl(buildId, suffix)
-        connection.request("GET", url)
+        connection.request("GET", url,
+                headers={ 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) })
         response = connection.getresponse()
         if response.status == 200:
             return SimpleHttpDownloader(self, response)
@@ -596,7 +598,8 @@ class SimpleHttpArchive(BaseArchive):
         url = self._makeUrl(buildId, suffix)
 
         # check if already there
-        connection.request("HEAD", url)
+        connection.request("HEAD", url,
+                headers={ 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) })
         response = connection.getresponse()
         response.read()
         if response.status == 200:
@@ -622,7 +625,7 @@ class SimpleHttpArchive(BaseArchive):
         tmp.seek(0)
         connection = self._getConnection()
         connection.request("PUT", url, tmp, headers={ 'Content-Length' : length,
-            'If-None-Match' : '*' })
+            'If-None-Match' : '*', 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) })
         response = connection.getresponse()
         response.read()
         if response.status == 412:
