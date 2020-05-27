@@ -231,7 +231,7 @@ class DirHasher:
 
     class FileIndex:
         SIGNATURE        = b'BOB1'
-        CACHE_ENTRY_FMT  = '=QQLqLQ20sH'
+        CACHE_ENTRY_FMT  = '=QQLQLQ20sH'
         CACHE_ENTRY_SIZE = struct.calcsize(CACHE_ENTRY_FMT)
 
         class Stat:
