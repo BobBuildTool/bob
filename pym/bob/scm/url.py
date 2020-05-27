@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
 from ..utils import asHexStr, hashFile, isWindows
@@ -207,6 +208,7 @@ class UrlScm(Scm):
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         headers = {}
+        headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
         context = None if self.__sslVerify else ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         if os.path.isfile(destination) and self.__url.startswith("http"):
             # Try to avoid download if possible
