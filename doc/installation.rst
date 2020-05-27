@@ -43,18 +43,10 @@ Supported Platforms
 
 * Linux
 * Windows 10
-
-  Make sure to add the Python interpreter to ``%PATH%``. If your recipes use
-  Bash you must additionally install `MSYS2`_ and add the path to ``bash.exe``
-  *after* the native Python interpreter. Otherwise the MSYS2 Python interpreter
-  might be invoked which does not work.
-
 * `MSYS2`_ (Windows 10)
-
-  Install and run Bob from a MSYS2 shell. Running Bob inside a `MSYS2`_
-  environment is supported but not recommended.
-
 * Other POSIX platforms should work but are not actively tested
+
+See below for platform specific installation notes.
 
 PyPI release versions
 ---------------------
@@ -114,8 +106,11 @@ To fully run Bob you need the following tools:
 
 The compiler is only required on Linux.
 
+Linux/POSIX platform notes
+==========================
+
 Shell completion
-================
+----------------
 
 Bob comes with a bash completion script. If you installed Bob the completion
 should already be available (given that ``$(DESTDIR)/share/bash-completion/completions``
@@ -132,7 +127,7 @@ following steps::
    zsh$ source contrib/bash-completion/bob
 
 Sandbox capabilities
-====================
+--------------------
 
 You might have to tweak your kernel settings in order to use the sandbox
 feature. Bob uses Linux's `user namespaces`_ to run the build in a clean
@@ -148,6 +143,40 @@ not permitted" error when building. Add the line ::
 
 to your ``/etc/sysctl.conf`` (or wherever your distro stores that).
 
+Windows platform notes
+======================
+
+Bob can be used in two flavours on Windows: as native application or in a
+`MSYS2`_ POSIX environment. Unless your recipes need Unix tools the native
+installation is recommended.
+
+Native usage
+------------
+
+Python comes with
+`extensive documentation <https://docs.python.org/3/using/windows.html>`_
+about how to install it on Windows. Only the full installer has been tested but
+the other methods should probably work as well.
+
+Make sure to add the Python interpreter to ``%PATH%``. If your recipes use Bash
+you must additionally install `MSYS2`_ and add the path to ``bash.exe`` *after*
+the native Python interpreter. Otherwise the MSYS2 Python interpreter might be
+invoked which does not work.
+
+.. note::
+
+   Windows path lengths have historically been limited to 260 characters.
+   Starting with Windows 10 the administrator can activate the "Enable Win32
+   long paths" group policy or you may set the
+   ``HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem@LongPathsEnabled``
+   registry key to ``1``. Either option is sufficient to remove the path length
+   limitation.
+
+MSYS2
+-----
+
+Follow the standard MSYS2 installation. Then install ``python3`` and
+``python-pip`` and use one of the install methods above.
 
 .. _PyYAML: http://pyyaml.org/
 .. _schema: https://pypi.org/project/schema/
