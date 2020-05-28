@@ -111,7 +111,7 @@ class TestHashDir(TestCase):
 
         s = MagicMock()
         s.st_mode=33188
-        s.st_ino=-5345198597064824875
+        s.st_ino=15345198597064824875
         s.st_dev=65027
         s.st_nlink=1
         s.st_uid=1000
