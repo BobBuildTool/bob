@@ -70,15 +70,21 @@ def packTree(src):
     if not os.path.isdir(src):
         raise BuildError("Cannot import '{}': not a directory!".format(src))
 
-    f = io.BytesIO()
-    with tarfile.open(fileobj=f, mode="w:xz") as tar:
-        tar.add(src, arcname=".")
+    try:
+        f = io.BytesIO()
+        with tarfile.open(fileobj=f, mode="w:xz") as tar:
+            tar.add(src, arcname=".")
+    except OSError as e:
+        raise BuildError("Error gathering files: {}".format(str(e)))
     return base64.b85encode(f.getvalue()).decode('ascii')
 
 def unpackTree(data, dest):
-    f = io.BytesIO(base64.b85decode(data))
-    with tarfile.open(fileobj=f, mode="r:xz") as tar:
-        tar.extractall(dest)
+    try:
+        f = io.BytesIO(base64.b85decode(data))
+        with tarfile.open(fileobj=f, mode="r:xz") as tar:
+            tar.extractall(dest)
+    except OSError as e:
+        raise BuildError("Error unpacking files: {}".format(str(e)))
 
 class ImportScm(Scm):
 
