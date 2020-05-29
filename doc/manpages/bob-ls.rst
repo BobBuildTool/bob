@@ -45,9 +45,9 @@ argument.
 
 Listing the dependencies of the selected package(s) is not always desired. To
 see the selected packages of a complex query directly add ``-d``. This will
-print the path of all packages that were selected by the query. This cannot be
-used in conjunction with the ``-p`` option and ignores further ``-a``, ``-o``
-and ``-r`` options.
+print the path of all *unique* packages that were selected by the query. This
+cannot be used in conjunction with the ``-p`` option and ignores further ``-a``,
+``-o`` and ``-r`` options.
 
 Options
 -------
