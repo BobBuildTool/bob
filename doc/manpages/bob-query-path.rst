@@ -15,7 +15,7 @@ Synopsis
 
     bob query-path [-h] [-f FORMAT] [-D DEFINES] [-c CONFIGFILE]
                    [--sandbox | --no-sandbox] [--develop | --release]
-                   PACKAGE [PACKAGE ...]
+                   [-q] [--fail] PACKAGE [PACKAGE ...]
 
 Description
 -----------
