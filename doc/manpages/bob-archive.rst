@@ -29,9 +29,9 @@ Available sub-commands:
 Description
 -----------
 
-The bob archive command can be used to manage binary artifact archives. The
-command must be executed in the root of the archive and needs write access to
-create an index cache.
+The bob archive command can be used to manage local binary artifact archives.
+The command must be executed in the root of the archive and needs write access
+to create an index cache.
 
 Artifacts are managed by the information included in their
 :ref:`Audit Trail <audit-trail>`. See the Audit Trail documentation about the
@@ -95,3 +95,9 @@ scan
     drive it could be advantageous to scan the archive with a cron job over
     night.
 
+Notes
+-----
+
+``bob archive`` only works for local binary artifact archives. If you're using a
+remote archive, you need shell access and a working Bob installation on the
+machine providing your archive in order to be able to use ``bob archive``.
