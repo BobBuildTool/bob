@@ -45,5 +45,13 @@ popd
 run_bob archive scan -v
 run_bob archive clean -v 'metaEnv.TYPE == "alpha"'
 
+# Test for --fail option
+expect_fail run_bob archive scan --fail -v
+expect_fail run_bob archive clean --fail -v 'metaEnv.TYPE == "alpha"'
+pushd $archiveDir
+run_bob archive scan --fail -v
+run_bob archive clean --fail -v 'metaEnv.TYPE == "alpha"'
+popd
+
 # Copy coverage data from archive directory (if any).
 cp $archiveDir/.coverage* . 2>/dev/null || true

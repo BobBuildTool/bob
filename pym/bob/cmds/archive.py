@@ -98,6 +98,7 @@ class ArchiveScanner:
                 print("Your archive seems to be empty. "
                       "Are you running 'bob archive' from within the correct directory?",
                       file=sys.stderr)
+            return found
 
     def __scan(self, fileName, verbose):
         try:
@@ -294,11 +295,14 @@ def doArchiveScan(argv):
     parser = argparse.ArgumentParser(prog="bob archive scan")
     parser.add_argument("-v", "--verbose", action='store_true',
         help="Verbose operation")
+    parser.add_argument("-f", "--fail", action='store_true',
+        help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
     scanner = ArchiveScanner()
     with scanner:
-        scanner.scan(args.verbose)
+        if not scanner.scan(args.verbose) and args.fail:
+            sys.exit(1)
 
 
 # meta.package == "root" && build.date > "2017-06-19"
@@ -331,6 +335,8 @@ def doArchiveClean(argv):
         help="Skip scanning for new artifacts")
     parser.add_argument("-v", "--verbose", action='store_true',
         help="Verbose operation")
+    parser.add_argument("-f", "--fail", action='store_true',
+        help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
     try:
@@ -342,7 +348,8 @@ def doArchiveClean(argv):
     retained = set()
     with scanner:
         if not args.noscan:
-            scanner.scan(args.verbose)
+            if not scanner.scan(args.verbose) and args.fail:
+                sys.exit(1)
         for bid in scanner.getBuildIds():
             if bid in retained: continue
             if retainExpr.evalBool(scanner.getVars(bid)):
