@@ -41,5 +41,9 @@ touch 64/ad/aabbcc-too-short.tgz
 run_bob archive scan
 popd
 
+# Test that -v doesn't catch fire
+run_bob archive scan -v
+run_bob archive clean -v 'metaEnv.TYPE == "alpha"'
+
 # Copy coverage data from archive directory (if any).
 cp $archiveDir/.coverage* . 2>/dev/null || true

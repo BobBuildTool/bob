@@ -14,6 +14,7 @@ import pickle
 import pyparsing
 import re
 import sqlite3
+import sys
 import tarfile
 
 # need to enable this for nested expression parsing performance
@@ -77,6 +78,7 @@ class ArchiveScanner:
 
     def scan(self, verbose):
         try:
+            found = False
             self.__db.execute("BEGIN")
             for l1 in os.listdir("."):
                 if not self.__dirSchema.fullmatch(l1): continue
@@ -86,11 +88,16 @@ class ArchiveScanner:
                     for l3 in os.listdir(l2):
                         m = self.__archiveSchema.fullmatch(l3)
                         if not m: continue
+                        found = True
                         self.__scan(os.path.join(l2, l3), verbose)
         except OSError as e:
             raise BobError("Error scanning archive: " + str(e))
         finally:
             self.__db.execute("END")
+            if verbose and not found:
+                print("Your archive seems to be empty. "
+                      "Are you running 'bob archive' from within the correct directory?",
+                      file=sys.stderr)
 
     def __scan(self, fileName, verbose):
         try:
