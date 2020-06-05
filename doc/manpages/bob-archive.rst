@@ -23,8 +23,8 @@ Available sub-commands:
 
 ::
 
-    bob archive clean [-h] [--dry-run] [-n] [-v] expression
-    bob archive scan [-h] [-v]
+    bob archive clean [-h] [--dry-run] [-n] [-v] [-f] expression
+    bob archive scan [-h] [-v] [-f]
 
 Description
 -----------
@@ -51,6 +51,9 @@ Options
 
 ``-v``
     Be a bit more chatty on what is done.
+
+``-f``
+    Return a non-zero exit code in case of errors
 
 Commands
 --------
