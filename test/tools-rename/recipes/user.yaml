@@ -1,0 +1,36 @@
+multiPackage:
+    tool+1:
+        packageTools: [tool]
+    tool+2:
+        packageTools: [tool]
+    tool+3:
+        packageTools: [tool]
+    tool+4:
+        packageTools: [tool]
+    tool+5:
+        packageTools: [tool]
+    a+1:
+        packageTools: [tool-a]
+    a+2:
+        packageTools: [tool-a]
+    a+3:
+        packageTools: [tool-a]
+    b+1:
+        packageTools: [tool-b]
+    b+2:
+        packageTools: [tool-b]
+    b+3:
+        packageTools: [tool-b]
+    c+1:
+        packageTools: [tool-c]
+    c+2:
+        packageTools: [tool-c]
+    c+3:
+        packageTools: [tool-c]
+
+packageVars: [BOB_PACKAGE_NAME, TOOL]
+packageScript: |
+    (
+        echo -n "$BOB_PACKAGE_NAME, ${TOOL:-unknown}, "
+        tool.sh 2>/dev/null || echo unknown
+    ) > result.txt

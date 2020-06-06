@@ -409,6 +409,27 @@ class CheckoutAssert:
 
 
 class CoreRef:
+    """Reference from one CoreStep/CorePackage to another one.
+
+    The destination must always be deeper or at the same level in the graph.
+    The names that are added to the path stack are given in stackAdd. Because
+    identical "core" sub-graphs can be visible to the user under different
+    "real" paths we only store the difference between source and destination
+    to reconstruct the real values on reference resolution.
+
+    The real difficulty with these references is the handling of the ambient
+    tools and the sandbox. Each package has a set of tools and a sandbox
+    defined as their input. While iterating of the dependencies new tools or a
+    new sandbox can be picked up, creating a "diff" to the input tools/sandbox
+    of the package. When later re-creating the real Package/Step classes these
+    diffs must be applied on refDeref() so that the reference destination gets
+    the correct ambient tools/sandbox again.
+
+    diffTools: A dict. If the value of a tool is "None" the tool is deleted. A
+    string will copy the tool from an existing "inputTools". Otherwise the
+    value is expected to the another CoreRef that needs to be dereferenced too.
+    """
+
     __slots__ = ('__destination', '__stackAdd', '__diffTools', '__diffSandbox')
 
     def __init__(self, destination, stackAdd=[], diffTools={}, diffSandbox=...):
@@ -430,6 +451,8 @@ class CoreRef:
             for (name, tool) in self.__diffTools.items():
                 if tool is None:
                     del tools[name]
+                elif isinstance(tool, str):
+                    tools[name] = inputTools[tool]
                 else:
                     coreTool = cache.get(tool)
                     if coreTool is None:
@@ -1860,7 +1883,7 @@ class Recipe(object):
     """
 
     class Dependency(object):
-        def __init__(self, recipe, env, fwd, use, cond):
+        def __init__(self, recipe, env, fwd, use, cond, tools):
             self.recipe = recipe
             self.envOverride = env
             self.provideGlobal = fwd
@@ -1871,16 +1894,21 @@ class Recipe(object):
             self.useDeps = "deps" in self.use
             self.useSandbox = "sandbox" in self.use
             self.condition = cond
+            self.toolOverride = tools
 
         @staticmethod
-        def __parseEntry(dep, env, fwd, use, cond):
+        def __parseEntry(dep, env, fwd, use, cond, tools):
             if isinstance(dep, str):
-                return [ Recipe.Dependency(dep, env, fwd, use, cond) ]
+                return [ Recipe.Dependency(dep, env, fwd, use, cond, tools) ]
             else:
                 envOverride = dep.get("environment")
                 if envOverride:
                     env = env.copy()
                     env.update(envOverride)
+                toolOverride = dep.get("tools")
+                if toolOverride:
+                    tools = tools.copy()
+                    tools.update(toolOverride)
                 fwd = dep.get("forward", fwd)
                 use = dep.get("use", use)
                 newCond = dep.get("if")
@@ -1890,18 +1918,18 @@ class Recipe(object):
                 if name:
                     if "depends" in dep:
                         raise ParseError("A dependency must not use 'name' and 'depends' at the same time!")
-                    return [ Recipe.Dependency(name, env, fwd, use, cond) ]
+                    return [ Recipe.Dependency(name, env, fwd, use, cond, tools) ]
                 dependencies = dep.get("depends")
                 if dependencies is None:
                     raise ParseError("Either 'name' or 'depends' required for dependencies!")
-                return Recipe.Dependency.parseEntries(dependencies, env, fwd, use, cond)
+                return Recipe.Dependency.parseEntries(dependencies, env, fwd, use, cond, tools)
 
         @staticmethod
-        def parseEntries(deps, env={}, fwd=False, use=["result", "deps"], cond=None):
+        def parseEntries(deps, env={}, fwd=False, use=["result", "deps"], cond=None, tools={}):
             """Returns an iterator yielding all dependencies as flat list"""
             # return flattened list of dependencies
             return chain.from_iterable(
-                Recipe.Dependency.__parseEntry(dep, env, fwd, use, cond)
+                Recipe.Dependency.__parseEntry(dep, env, fwd, use, cond, tools)
                 for dep in deps )
 
     @staticmethod
@@ -2288,18 +2316,33 @@ class Recipe(object):
             if dep.condition and not all(env.evaluate(cond, "dependency "+dep.recipe)
                                                       for cond in dep.condition): continue
 
+            if dep.toolOverride:
+                try:
+                    thisDepTools = depTools.derive({
+                        k : depTools[v] for k,v in dep.toolOverride.items() })
+                except KeyError as e:
+                    raise ParseError("Cannot remap unkown tool '{}' for dependency '{}'!"
+                        .format(e.args[0], dep.recipe))
+                thisDepDiffTools = depDiffTools.copy()
+                thisDepDiffTools.update({
+                    k : depDiffTools.get(v, v)
+                    for k, v in dep.toolOverride.items() })
+            else:
+                thisDepTools = depTools
+                thisDepDiffTools = depDiffTools
+
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
                 if r.__packageName in stack:
                     raise ParseError("Recipes are cyclic (1st package in cylce)")
                 depStack = stack + [r.__packageName]
                 p, s = r.prepare(depEnv.derive(dep.envOverride),
-                                 sandboxEnabled, depStates, depSandbox, depTools,
-                                 depStack)
+                                 sandboxEnabled, depStates, depSandbox,
+                                 thisDepTools, depStack)
                 subTreePackages.add(p.getName())
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
-                depRef = CoreRef(depCoreStep, [p.getName()], depDiffTools, depDiffSandbox)
+                depRef = CoreRef(depCoreStep, [p.getName()], thisDepDiffTools, depDiffSandbox)
             except ParseError as e:
                 e.pushFrame(r.getPackageName())
                 raise e
@@ -3273,7 +3316,8 @@ class RecipeSet:
             schema.Optional('use') : useClauses,
             schema.Optional('forward') : bool,
             schema.Optional('environment') : VarDefineValidator("depends::environment"),
-            schema.Optional('if') : schema.Or(str, IfExpression)
+            schema.Optional('if') : schema.Or(str, IfExpression),
+            schema.Optional('tools') : { toolNameSchema : toolNameSchema },
         }
         dependsClause = schema.Schema([
             schema.Or(

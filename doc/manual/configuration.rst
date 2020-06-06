@@ -1026,6 +1026,20 @@ The following settings are supported:
 |             |                 |      if: !expr |                                    |
 |             |                 |            "${FOO}" == "bar" || "${BAZ}"            |
 +-------------+-----------------+-----------------------------------------------------+
+| tools       | Dictionary      | Remap an existing tool to another name, possibly    |
+|             | (String ->      | replacing the other tool. This is useful to change  |
+|             | String)         | tools for a single dependency, e.g. using the host  |
+|             |                 | toolchain for the dependency instead of the current |
+|             |                 | cross compiling toolchain. Example::                |
+|             |                 |                                                     |
+|             |                 |     tools:                                          |
+|             |                 |         target-toolchain: host-toolchain            |
+|             |                 |                                                     |
+|             |                 | This will replace ``target-toolchain`` for the      |
+|             |                 | dependency with the current ``host-toolchain``.     |
+|             |                 | At the dependency both names will refer to the same |
+|             |                 | tool.                                               |
++-------------+-----------------+-----------------------------------------------------+
 
 .. _configuration-recipes-env:
 
