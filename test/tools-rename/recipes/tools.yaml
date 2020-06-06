@@ -1,0 +1,40 @@
+multiPackage:
+    a:
+        packageScript: |
+            printf "#!/bin/sh\necho a" > tool.sh
+            chmod +x tool.sh
+        provideTools:
+            tool:
+                path: "."
+                environment:
+                    TOOL: "a"
+            tool-a:
+                path: "."
+                environment:
+                    TOOL: "a"
+    b:
+        packageScript: |
+            printf "#!/bin/sh\necho b" > tool.sh
+            chmod +x tool.sh
+        provideTools:
+            tool:
+                path: "."
+                environment:
+                    TOOL: "b"
+            tool-b:
+                path: "."
+                environment:
+                    TOOL: "b"
+    c:
+        packageScript: |
+            printf "#!/bin/sh\necho c" > tool.sh
+            chmod +x tool.sh
+        provideTools:
+            tool:
+                path: "."
+                environment:
+                    TOOL: "c"
+            tool-c:
+                path: "."
+                environment:
+                    TOOL: "c"

@@ -1,0 +1,34 @@
+user-tool+1, unknown, unknown
+user-tool+2, a, a
+user-tool+3, b, b
+user-a+1, a, a
+user-b+1, b, b
+user-c+1, unknown, unknown
+user-tool+4, a, a
+user-b+2, b, b
+user-a+2, b, b
+user-b+3, a, a
+sub-1: user-tool+1, b, b
+sub-1: user-a+1, a, a
+sub-1: user-b+1, b, b
+sub-1: user-c+1, unknown, unknown
+sub-1: user-tool+2, a, a
+sub-1: user-c+2, a, a
+sub-1: user-tool+3, c, c
+sub-1: user-tool+4, b, b
+sub-1: user-a+2, b, b
+sub-1: user-b+2, c, c
+sub-1: user-c+3, a, a
+sub-2: user-tool+1, b, b
+sub-2: user-a+1, b, b
+sub-2: user-b+1, a, a
+sub-2: user-c+1, unknown, unknown
+sub-2: user-tool+2, b, b
+sub-2: user-c+2, b, b
+sub-2: user-tool+3, c, c
+sub-2: user-tool+4, a, a
+sub-2: user-a+2, a, a
+sub-2: user-b+2, c, c
+sub-2: user-c+3, b, b
+user-c+2, b, b
+user-tool+5, b, b

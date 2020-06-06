@@ -1,0 +1,57 @@
+root: True
+depends:
+    - user-tool+1 # "unknown"
+
+    - name: tools-a
+      use: [tools]
+      forward: True
+
+    - user-tool+2 # "a"
+
+    - name: tools-b
+      use: [tools]
+      forward: True
+
+    - user-tool+3 # "b"
+    - user-a+1 # "a"
+    - user-b+1 # "b"
+    - user-c+1 # "unknown"
+
+    - name: user-tool+4 # "a"
+      tools:
+        tool: tool-a
+    - name: user-b+2 # "b"
+      tools:
+        tool: tool-a
+
+    - name: user-a+2 # "b"
+      tools:
+        tool-a: tool-b
+        tool-b: tool-a
+    - name: user-b+3 # "a"
+      tools:
+        tool-a: tool-b
+        tool-b: tool-a
+
+    - sub-1
+    - name: sub-2
+      tools:
+        tool-a: tool-b
+        tool-b: tool-a
+
+    - name: user-c+2 # "b"
+      tools:
+        tool-c: tool-b
+
+    - name: user-tool+5 # "b"
+      tools:
+        tool: tool
+
+buildScript: |
+    rm -f result.txt
+    for i in "${@:2}" ; do
+        cat "$i/result.txt" >> result.txt
+    done
+
+packageScript: |
+    cp "$1/result.txt" .

@@ -1,0 +1,57 @@
+depends:
+    - user-tool+1 # b
+    - user-a+1 # a / b
+    - user-b+1 # b / a
+    - user-c+1 # unknown / unknown
+
+    - name: user-tool+2 # a / b
+      tools:
+        tool: tool-a
+
+    - name: user-c+2 # a / b
+      tools:
+        tool-c: tool-a
+
+    - name: tools-c
+      use: [tools]
+      forward: True
+
+    - user-tool+3 # c / c
+    - name: user-tool+4 # b / a
+      tools:
+        tool: tool-b
+
+    - tools:
+        tool-c: tool-a
+        tool-a: tool-b
+        tool-b: tool-c
+      depends:
+        - user-a+2 # b / a
+        - user-b+2 # c / c
+        - user-c+3 # a / b
+
+buildVars: [BOB_PACKAGE_NAME]
+buildScript: |
+    rm -f result.txt
+    for i in "${@:2}" ; do
+        echo -n "$BOB_PACKAGE_NAME: " >> result.txt
+        cat "$i/result.txt" >> result.txt
+    done
+
+packageScript: |
+    cp "$1/result.txt" .
+
+multiPackage:
+    # Expects that
+    #   tool == tool-b
+    #   tool-a exists and yields "a"
+    #   tool-b exists and yields "b"
+    #   tool-c does not exist
+    "1": {}
+
+    # Expects that
+    #   tool == tool-b
+    #   tool-a exists and yields "b"
+    #   tool-b exists and yields "a"
+    #   tool-c does not exist
+    "2": {}
