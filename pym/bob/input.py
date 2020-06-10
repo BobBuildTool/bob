@@ -2956,7 +2956,7 @@ class RecipeSet:
                 schema.Schema([{
                     schema.Optional('if') : schema.Or(str, IfExpression),
                     schema.Optional('match') : schema.Schema({ str: object }),
-                    schema.Optional('del') : str,
+                    schema.Optional('del') : [str],
                     schema.Optional('set') : object,
                     schema.Optional('replace') : schema.Schema({
                         str : schema.Schema({
