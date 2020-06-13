@@ -796,6 +796,17 @@ class CoreStep(CoreItem):
         h.update(struct.pack("<I", len(args)))
         for arg in args:
             h.update(arg.getResultId())
+        # Include used sandbox in case sandboxInvariant policy is active.
+        # Prevents merging of identical packages that are defined under
+        # different sandboxes.
+        sandbox = self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
+            self.getSandbox()
+        if sandbox:
+            h.update(sandbox.coreStep.variantId)
+            h.update(struct.pack("<I", len(sandbox.paths)))
+            for p in sandbox.paths:
+                h.update(struct.pack("<I", len(p)))
+                h.update(p.encode('utf8'))
         # providedEnv
         h.update(struct.pack("<I", len(self.providedEnv)))
         for (key, val) in sorted(self.providedEnv.items()):
