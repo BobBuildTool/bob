@@ -208,8 +208,9 @@ class BaseArchive:
                 raise BuildError("Download of package interrupted.")
 
     def _downloadPackage(self, buildId, suffix, audit, content):
-        # restore signals to default so that Ctrl+C kills us
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        # Set default signal handler so that KeyboardInterrupt is raised.
+        # Needed to gracefully handle ctrl+c.
+        signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
             with self._openDownloadFile(buildId, suffix) as (name, fileobj):
@@ -229,6 +230,10 @@ class BaseArchive:
             raise BuildError("Cannot download artifact: " + str(e))
         except tarfile.TarError as e:
             raise BuildError("Error extracting binary artifact: " + str(e))
+        finally:
+            # Restore signals to default so that Ctrl+C kills process. Needed
+            # to prevent ugly backtraces when user presses ctrl+c.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     async def downloadLocalLiveBuildId(self, step, liveBuildId):
         if not self.canDownloadLocal():
@@ -245,8 +250,9 @@ class BaseArchive:
                 raise BuildError("Download of build-id interrupted.")
 
     def _downloadLocalFile(self, key, suffix):
-        # restore signals to default so that Ctrl+C kills us
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        # Set default signal handler so that KeyboardInterrupt is raised.
+        # Needed to gracefully handle ctrl+c.
+        signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
             with self._openDownloadFile(key, suffix) as (name, fileobj):
@@ -260,6 +266,10 @@ class BaseArchive:
             raise
         except OSError as e:
             raise BuildError("Cannot download file: " + str(e))
+        finally:
+            # Restore signals to default so that Ctrl+C kills process. Needed
+            # to prevent ugly backtraces when user presses ctrl+c.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     def _openUploadFile(self, buildId, suffix):
         raise ArtifactUploadError("not implemented")
@@ -284,8 +294,9 @@ class BaseArchive:
                 raise BuildError("Upload of package interrupted.")
 
     def _uploadPackage(self, buildId, suffix, audit, content):
-        # restore signals to default so that Ctrl+C kills us
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        # Set default signal handler so that KeyboardInterrupt is raised.
+        # Needed to gracefully handle ctrl+c.
+        signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
             with self._openUploadFile(buildId, suffix) as (name, fileobj):
@@ -302,6 +313,10 @@ class BaseArchive:
                 return ("error ("+str(e)+")", ERROR)
             else:
                 raise BuildError("Cannot upload artifact: " + str(e))
+        finally:
+            # Restore signals to default so that Ctrl+C kills process. Needed
+            # to prevent ugly backtraces when user presses ctrl+c.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
         return ("ok", EXECUTED)
 
     async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
@@ -317,8 +332,9 @@ class BaseArchive:
                 raise BuildError("Upload of build-id interrupted.")
 
     def _uploadLocalFile(self, key, suffix, content):
-        # restore signals to default so that Ctrl+C kills us
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        # Set default signal handler so that KeyboardInterrupt is raised.
+        # Needed to gracefully handle ctrl+c.
+        signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
             with self._openUploadFile(key, suffix) as (name, fileobj):
@@ -330,6 +346,10 @@ class BaseArchive:
                 return ("error ("+str(e)+")", ERROR)
             else:
                 raise BuildError("Cannot upload file: " + str(e))
+        finally:
+            # Restore signals to default so that Ctrl+C kills process. Needed
+            # to prevent ugly backtraces when user presses ctrl+c.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
         return ("ok", EXECUTED)
 
     async def uploadLocalFingerprint(self, step, key, fingerprint):

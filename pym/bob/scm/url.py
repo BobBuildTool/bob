@@ -204,9 +204,6 @@ class UrlScm(Scm):
         return ret
 
     def _download(self, destination):
-        # restore signals to default so that Ctrl+C kills us
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
-
         headers = {}
         headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
         context = None if self.__sslVerify else ssl.SSLContext(ssl.PROTOCOL_SSLv23)
@@ -217,6 +214,10 @@ class UrlScm(Scm):
         tmpFileName = None
         req = urllib.request.Request(url=self.__url, headers=headers)
         try:
+            # Set default signal handler so that KeyboardInterrupt is raised.
+            # Needed to gracefully handle ctrl+c.
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+
             with contextlib.closing(urllib.request.urlopen(req, context=context)) as rsp:
                 with tempfile.NamedTemporaryFile(dir=os.path.dirname(destination), delete=False) as f:
                     tmpFileName = f.name
@@ -245,6 +246,9 @@ class UrlScm(Scm):
         finally:
             if tmpFileName is not None:
                 os.remove(tmpFileName)
+            # Restore signals to default so that Ctrl+C kills process. Needed
+            # to prevent ugly backtraces when user presses ctrl+c.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
 
         return None
 
