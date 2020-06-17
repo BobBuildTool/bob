@@ -12,7 +12,6 @@ from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, compareVersion, binStat, updateDicRecursive, hashString, getPlatformTag
-from abc import ABCMeta, abstractmethod
 from itertools import chain
 from os.path import expanduser
 from string import Template
@@ -362,6 +361,8 @@ def Scm(spec, env, overrides, recipeSet):
     return getScm(spec, matchedOverrides, recipeSet)
 
 class CheckoutAssert:
+    __slots__ = ('__source', '__file', '__digestSHA1', '__start', '__end')
+
     SCHEMA = schema.Schema({
         'file' : str,
         'digestSHA1' : str,
@@ -472,7 +473,8 @@ class CoreRef:
 
         return self.__destination.refDeref(stack + self.__stackAdd, tools, sandbox, pathFormatter)
 
-class CoreItem(metaclass=ABCMeta):
+class CoreItem:
+    __slots__ = []
 
     def refGetDestination(self):
         return self
@@ -480,9 +482,8 @@ class CoreItem(metaclass=ABCMeta):
     def refGetStack(self):
         return []
 
-    @abstractmethod
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
-        pass
+        raise NotImplementedError
 
 
 class AbstractTool:
@@ -745,13 +746,11 @@ class CoreStep(CoreItem):
     def getJenkinsPreRunCmds(self):
         return []
 
-    @abstractmethod
     def getScript(self):
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
     def getJenkinsScript(self):
-        pass
+        raise NotImplementedError
 
     def getPostRunCmds(self):
         return []
@@ -759,18 +758,15 @@ class CoreStep(CoreItem):
     def getJenkinsPostRunCmds(self):
         return []
 
-    @abstractmethod
     def getDigestScript(self):
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
     def getLabel(self):
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
     def _getToolKeys(self):
         """Return relevant tool names for this CoreStep."""
-        pass
+        raise NotImplementedError
 
     def isDeterministic(self):
         return self.deterministic
@@ -912,9 +908,8 @@ class CoreStep(CoreItem):
         return ret
 
     @property
-    @abstractmethod
     def fingerprintMask(self):
-        pass
+        raise NotImplementedError
 
     def isFingerprinted(self):
         return self.fingerprintMask != 0
@@ -1454,6 +1449,7 @@ class CheckoutStep(Step):
 
 
 class CoreBuildStep(CoreStep):
+    __slots__ = []
 
     def __init__(self, corePackage, script=(None, None), digestEnv=Env(), env=Env(), args=[]):
         isValid = script[0] is not None
@@ -1504,6 +1500,7 @@ class BuildStep(Step):
 
 
 class CorePackageStep(CoreStep):
+    __slots__ = []
 
     def __init__(self, corePackage, script=(None, None), digestEnv=Env(), env=Env(), args=[]):
         isValid = script[0] is not None
