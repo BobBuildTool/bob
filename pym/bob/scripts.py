@@ -183,7 +183,7 @@ def bob(bobRoot = None):
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         parser.add_argument('-C', '--directory', dest='directory', action='append', help="Change to DIRECTORY before doing anything", metavar="DIRECTORY")
         parser.add_argument('--version', dest='version', action='store_true', help="Show version")
-        parser.add_argument('--debug',   dest='debug', help="Enable debug modes (shl,pkgck,ngd)")
+        parser.add_argument('--debug',   dest='debug', help="Enable debug modes (pkgck,ngd)")
         parser.add_argument('-i', dest='ignore_commandCfg', default=False, action='store_true',
                 help="Use bob's default argument settings and do not use commands section of the userconfig.")
         parser.add_argument('--color', dest='color_mode',

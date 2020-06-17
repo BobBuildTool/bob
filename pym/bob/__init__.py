@@ -31,7 +31,6 @@ DEBUG = {
     'ngd' :  False,     # no-global-defaults
     'pkgck' : False,    # package-calculation-checks
     'prof' : False,     # profiling
-    'shl' : False,      # shell-trap
 }
 
 # interactive debug shell
@@ -60,6 +59,6 @@ def _enableDebug(enabled):
             print("Invalid debug flag:", e, file=sys.stderr)
             sys.exit(2)
 
-    if DEBUG['shl']:
+    if sys.platform != "win32":
         import signal
         signal.signal(signal.SIGUSR1, __debugTap)
