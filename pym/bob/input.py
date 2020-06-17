@@ -496,7 +496,7 @@ class AbstractTool:
 
 class CoreTool(CoreItem):
     __slots__ = ("coreStep", "path", "libs", "netAccess", "environment",
-        "fingerprintScript", "fingerprintIf", "fingerprintVars")
+        "fingerprintScript", "fingerprintIf", "fingerprintVars", "resultId")
 
     def __init__(self, coreStep, path, libs, netAccess, environment,
                  fingerprintScript, fingerprintIf, fingerprintVars):
@@ -508,6 +508,29 @@ class CoreTool(CoreItem):
         self.fingerprintScript = fingerprintScript
         self.fingerprintIf = fingerprintIf
         self.fingerprintVars = fingerprintVars
+
+        # Calculate a "resultId" so that only identical tools match
+        h = hashlib.sha1()
+        h.update(coreStep.variantId)
+        h.update(struct.pack("<II", len(path), len(libs)))
+        h.update(path.encode("utf8"))
+        for l in libs:
+            h.update(struct.pack("<I", len(l)))
+            h.update(l.encode('utf8'))
+        h.update(struct.pack("<?I", netAccess, len(environment)))
+        for (key, val) in sorted(environment.items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
+        for val in (fingerprintScript[lang] for lang in ScriptLanguage):
+            h.update(struct.pack("<I", len(val)))
+            h.update(val.encode('utf8'))
+        h.update(struct.pack("<I", len(fingerprintVars)))
+        for key in sorted(fingerprintVars):
+            h.update(key.encode('utf8'))
+        fingerprintIfStr = str(fingerprintIf)
+        h.update(struct.pack("<I", len(fingerprintIfStr)))
+        h.update(fingerprintIfStr.encode('utf8'))
+        self.resultId = h.digest()
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -580,7 +603,8 @@ class Tool:
 
 
 class CoreSandbox(CoreItem):
-    __slots__ = ("coreStep", "enabled", "paths", "mounts", "environment")
+    __slots__ = ("coreStep", "enabled", "paths", "mounts", "environment",
+        "resultId")
 
     def __init__(self, coreStep, env, enabled, spec):
         recipeSet = coreStep.corePackage.recipe.getRecipeSet()
@@ -600,6 +624,23 @@ class CoreSandbox(CoreItem):
             k : env.substitute(v, "providedSandbox::environment")
             for (k, v) in spec.get('environment', {})
         }
+
+        # Calculate a "resultId" so that only identical sandboxes match
+        h = hashlib.sha1()
+        h.update(self.coreStep.variantId)
+        h.update(struct.pack("<I", len(self.paths)))
+        for p in self.paths:
+            h.update(struct.pack("<I", len(p)))
+            h.update(p.encode('utf8'))
+        h.update(struct.pack("<I", len(self.mounts)))
+        for (mntFrom, mntTo, mntOpts) in self.mounts:
+            h.update(struct.pack("<III", len(mntFrom), len(mntTo), len(mntOpts)))
+            h.update((mntFrom+mntTo+"".join(mntOpts)).encode('utf8'))
+        h.update(struct.pack("<I", len(self.environment)))
+        for (key, val) in sorted(self.environment.items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
+        self.resultId = h.digest()
 
     def __eq__(self, other):
         return isinstance(other, CoreSandbox) and \
@@ -816,23 +857,9 @@ class CoreStep(CoreItem):
         providedTools = self.providedTools
         h.update(struct.pack("<I", len(providedTools)))
         for (name, tool) in sorted(providedTools.items()):
-            h.update(tool.coreStep.variantId)
-            h.update(struct.pack("<III", len(name), len(tool.path), len(tool.libs)))
+            h.update(struct.pack("<I", len(name)))
             h.update(name.encode("utf8"))
-            h.update(tool.path.encode("utf8"))
-            for l in tool.libs:
-                h.update(struct.pack("<I", len(l)))
-                h.update(l.encode('utf8'))
-            h.update(struct.pack("<?I", tool.netAccess, len(tool.environment)))
-            for (key, val) in sorted(tool.environment.items()):
-                h.update(struct.pack("<II", len(key), len(val)))
-                h.update((key+val).encode('utf8'))
-            for val in (tool.fingerprintScript[lang] for lang in ScriptLanguage):
-                h.update(struct.pack("<I", len(val)))
-                h.update(val.encode('utf8'))
-            h.update(struct.pack("<I", len(tool.fingerprintVars)))
-            for key in sorted(tool.fingerprintVars):
-                h.update(key.encode('utf8'))
+            h.update(tool.resultId)
         # provideDeps
         providedDeps = self.providedDeps
         h.update(struct.pack("<I", len(providedDeps)))
@@ -841,19 +868,7 @@ class CoreStep(CoreItem):
         # sandbox
         providedSandbox = self.providedSandbox
         if providedSandbox:
-            h.update(providedSandbox.coreStep.variantId)
-            h.update(struct.pack("<I", len(providedSandbox.paths)))
-            for p in providedSandbox.paths:
-                h.update(struct.pack("<I", len(p)))
-                h.update(p.encode('utf8'))
-            h.update(struct.pack("<I", len(providedSandbox.mounts)))
-            for (mntFrom, mntTo, mntOpts) in providedSandbox.mounts:
-                h.update(struct.pack("<III", len(mntFrom), len(mntTo), len(mntOpts)))
-                h.update((mntFrom+mntTo+"".join(mntOpts)).encode('utf8'))
-            h.update(struct.pack("<I", len(providedSandbox.environment)))
-            for (key, val) in sorted(providedSandbox.environment.items()):
-                h.update(struct.pack("<II", len(key), len(val)))
-                h.update((key+val).encode('utf8'))
+            h.update(providedSandbox.resultId)
         else:
             h.update(b'\x00' * 20)
 
@@ -2626,10 +2641,10 @@ class PackageMatcher:
         envData = env.inspect()
         self.env = { name : envData.get(name) for name in env.touchedKeys() }
         toolsData = tools.inspect()
-        self.tools = { name : (tool.coreStep.variantId if tool is not None else None)
+        self.tools = { name : (tool.resultId if tool is not None else None)
             for (name, tool) in ( (n, toolsData.get(n)) for n in tools.touchedKeys() ) }
         self.states = { n : s.copy() for (n,s) in states.items() }
-        self.sandbox = sandbox.coreStep.variantId if sandbox is not None else None
+        self.sandbox = sandbox.resultId if sandbox is not None else None
         self.subTreePackages = subTreePackages
 
     def matches(self, inputEnv, inputTools, inputStates, inputSandbox):
@@ -2637,10 +2652,9 @@ class PackageMatcher:
             if env != inputEnv.get(name): return False
         for (name, tool) in self.tools.items():
             match = inputTools.get(name)
-            match = match.coreStep.variantId if match is not None else None
+            match = match.resultId if match is not None else None
             if tool != match: return False
-        match = inputSandbox.coreStep.variantId \
-            if inputSandbox is not None else None
+        match = inputSandbox.resultId if inputSandbox is not None else None
         if self.sandbox != match: return False
         if self.states != inputStates: return False
         return True
