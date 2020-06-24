@@ -2385,7 +2385,7 @@ class Recipe(object):
                 warnDepends.show("{} -> {}".format(self.__packageName, dep.recipe))
 
             # Remember dependency diffs before changing them
-            origDepDiffTools = depDiffTools
+            origDepDiffTools = thisDepDiffTools
             origDepDiffSandbox = depDiffSandbox
 
             # pick up various results of package
