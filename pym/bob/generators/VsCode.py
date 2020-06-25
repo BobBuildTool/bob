@@ -187,8 +187,6 @@ def vscodeProjectGenerator(package, argv, extra, bobRoot):
             help="Package filter. A regex for excluding packages in QTCreator.")
     parser.add_argument('--include', default=[], action='append', dest="include",
             help="Include package filter. A regex for including only the specified packages in QTCreator.")
-    parser.add_argument('--kit',
-        help="Kit to use for this project")
     parser.add_argument('-S', dest="start_includes", default=[], action='append',
         help="Additional include directories, will be placed at the beginning of the include list.")
     parser.add_argument('-C', dest="config_defs", default=[], action='append',
@@ -220,12 +218,6 @@ def vscodeProjectGenerator(package, argv, extra, bobRoot):
 
         if args.filter:
            additionalFiles = re.compile(args.filter)
-
-        # use default kit "Desktop" if no kit is given
-        if args.kit is None:
-            _kit = re.compile(r".*Desktop.*")
-        else:
-            _kit = re.compile(r""+args.kit)
     except re.error as e:
         raise ParseError("Invalid regular expression '{}': {}".format(e.pattern), e)
 
@@ -314,68 +306,27 @@ def vscodeProjectGenerator(package, argv, extra, bobRoot):
     sList.append("    \"C_Cpp.default.includePath\": [")
     for e in hList:
         sList.append("      \"{}\",".format(e))
-    sList.append("}")
-
+    sList.append("    ],")
 
     # compose content of .config file (preprocessor defines)
     for i in args.config_defs:
         for e in parseArgumentLine(i):
              cList.append(e)
 
-    id = None
-    name = None
-    kits = []
-    try:
-        if isWindows():
-            profiles = xml.etree.ElementTree.parse(os.path.join(os.getenv('APPDATA'), "QtProject/qtcreator/profiles.xml")).getroot()
-        else:
-            profiles = xml.etree.ElementTree.parse(os.path.join(expanduser('~'), ".config/QtProject/qtcreator/profiles.xml")).getroot()
-        for profile in profiles:
-            for valuemap in profile:
-                id = None
-                name = None
-                for value in valuemap.findall('value'):
-                    if (value.attrib.get('key') == 'PE.Profile.Id'):
-                        id = str(value.text)
-                    if (value.attrib.get('key') == 'PE.Profile.Name'):
-                        name = str(value.text)
-                    if (id is not None) and (name is not None) and (_kit.search(name)):
-                        kits.append([name, id])
-                        break
-    except FileNotFoundError:
-        # if kits are generared using sdk tool they are stored somewhere else... (/usr/share...)
-        pass
-
-    if (len(kits) == 0):
-        if (args.kit is None):
-            raise BuildError("No kit found!",
-                help = "Run again with '--kit' and specify a kit or generate a Desktop kit, which is used by default.")
-        kitName = args.kit
-        kitId = args.kit
-    else:
-        if (len(kits) > 1):
-            print(colorize("Warning: {} kits found. Using '{}'.".format(len(kits), str(kits[0][0])), "33"))
-        kitName = kits[0][0]
-        kitId = kits[0][1]
+    sList.append("    \"C_Cpp.default.defines\": [")
+    for e in cList:
+        sList.append("      \"{}\",".format(e))
+    sList.append("    ],")
+    sList.append("  }")
+    sList.append("}")
 
     buildMeFile = os.path.join(destination, "buildme")
-
-    # Generate the includes file. Create a temporary file first and compare it with the old one.
-    # only use the new one if different to prevent reindexing after each build.
-    includesFile = os.path.join(destination, projectName + ".includes")
-    generateFile(sIncList + sorted(hList, key=lambda file: (os.path.dirname(file))), includesFile + ".new")
-    compareAndRenameFileIfNotEqual(includesFile, includesFile + ".new")
 
     # Generate files file
     filesFile = os.path.join(destination, projectName  + ".code-workspace")
     #sList.append(buildMeFile)
     generateFile(sList, filesFile + ".new")
     compareAndRenameFileIfNotEqual(filesFile, filesFile + ".new")
-
-    # Generate a .config file
-    configFile = os.path.join(destination, projectName  + ".config")
-    generateFile(cList, configFile + ".new")
-    compareAndRenameFileIfNotEqual(configFile, configFile + ".new")
 
     if not args.update:
         # Generate Buildme.sh
@@ -405,9 +356,6 @@ def vscodeProjectGenerator(package, argv, extra, bobRoot):
         generateFile(buildMe, buildMeFile)
         os.chmod(buildMeFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
             stat.S_IROTH | stat.S_IWOTH)
-        # Generate creator file
-        creatorFile = os.path.join(destination, projectName  + ".creator")
-        generateFile([], creatorFile)
         # Generate the creator.shared file using a template and modify some settings
         sharedFile = os.path.join(destination, projectName  + ".creator.shared")
 
@@ -499,9 +447,6 @@ def vscodeProjectGenerator(package, argv, extra, bobRoot):
             sharedFile.write(' <data>\n')
             sharedFile.write('  <variable>ProjectExplorer.Project.Target.0</variable>\n')
             sharedFile.write('  <valuemap type="QVariantMap">\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">' + kitName + '</value>\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">' + kitName + '</value>\n')
-            sharedFile.write('   <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">' + kitId + '</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveBuildConfiguration">0</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveDeployConfiguration">0</value>\n')
             sharedFile.write('   <value type="int" key="ProjectExplorer.Target.ActiveRunConfiguration">0</value>\n')
