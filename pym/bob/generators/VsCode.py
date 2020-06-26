@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Generator for QT-creator project files
+# Generator for VS Code project files
 
 import argparse
 import sys
@@ -94,20 +94,21 @@ def addBuildSteps(outFile, buildMeFile, buildConfigs):
     outFile.write("{\n")
     outFile.write("  \"version\": \"2.0.0\",\n")
     outFile.write("  \"options\":{\n")
-    outFile.write("    \"shell\":{\n")
-    outFile.write("      \"executable\": \"{}\",\n".format(os.path.normpath(os.path.join(os.getenv('WD').replace('\\', '/'), '..', '..', 'msys2_shell.cmd'))))
-    outFile.write("      \"args\": [\n")
-    outFile.write("        \"-msys2\",\n")
-    outFile.write("        \"-defterm\",\n")
-    outFile.write("        \"-no-start\",\n")
-    outFile.write("        \"-use-full-path\",\n")
-    outFile.write("        \"-here\",\n")
-    outFile.write("        \"-c\",\n")
-    outFile.write("      ]\n")
-    outFile.write("    },\n")
-    outFile.write("    \"env\": {\n")
-    outFile.write("      \"PATH\": \"{}\",\n".format(os.getenv('PATH')))
-    outFile.write("    },\n")
+    if isWindows():
+        outFile.write("    \"shell\":{\n")
+        outFile.write("      \"executable\": \"{}\",\n".format(os.path.normpath(os.path.join(os.getenv('WD').replace('\\', '/'), '..', '..', 'msys2_shell.cmd'))))
+        outFile.write("      \"args\": [\n")
+        outFile.write("        \"-msys2\",\n")
+        outFile.write("        \"-defterm\",\n")
+        outFile.write("        \"-no-start\",\n")
+        outFile.write("        \"-use-full-path\",\n")
+        outFile.write("        \"-here\",\n")
+        outFile.write("        \"-c\",\n")
+        outFile.write("      ]\n")
+        outFile.write("    },\n")
+        outFile.write("    \"env\": {\n")
+        outFile.write("      \"PATH\": \"{}\",\n".format(os.getenv('PATH')))
+        outFile.write("    },\n")
     outFile.write("    \"cwd\": \"{}\",\n".format(cwd()))
     outFile.write("  },\n")
     outFile.write("  \"tasks\": [\n")
@@ -151,9 +152,9 @@ def parseArgumentLine(line):
     return lines
 
 def vscodeProjectGenerator(package, argv, extra, bobRoot):
-    parser = argparse.ArgumentParser(prog="bob project qt-project", description='Generate QTCreator Project Files')
+    parser = argparse.ArgumentParser(prog="bob project vscode", description='Generate VS Code Project Files')
     parser.add_argument('-u', '--update', default=False, action='store_true',
-                        help="Update project files (.files, .includes, .config)")
+                        help="Update workspace file (.code-workspace)")
     parser.add_argument('--buildCfg', action='append', default=[], type=lambda a: a.split("::"),
          help="Adds a new buildconfiguration. Format: <Name>::<flags>")
     parser.add_argument('--overwrite', action='store_true',
