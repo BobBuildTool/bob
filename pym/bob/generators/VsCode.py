@@ -226,14 +226,6 @@ def vscodeProjectGenerator(package, argv, extra, bobRoot):
     #  -> project dir
     #     -> symlinks
 
-    # create a 'flat' source tree
-    symlinkDir = os.path.join(destination, projectName)
-    if not args.update:
-        if not isWindows():
-            if os.path.exists(symlinkDir):
-                shutil.rmtree(symlinkDir)
-            os.makedirs(symlinkDir)
-
     # lists for storing all found sources files / include directories / defines
     sList = []
     hList = []
@@ -251,10 +243,7 @@ def vscodeProjectGenerator(package, argv, extra, bobRoot):
     for name,path in OrderedDict(sorted(dirs, key=lambda t: t[1])).items():
         if isWindows():
             name = name.replace('::', '__')
-            newPath = os.path.join(cwd(), path)
-        else:
-            newPath = os.path.join(symlinkDir, name)
-            if not args.update: os.symlink(os.path.join(cwd(), path), newPath)
+        newPath = os.path.join(cwd(), path)
 
         sList.append("    {")
         sList.append("      \"name\": \"{}\",".format(name))
