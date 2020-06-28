@@ -125,12 +125,13 @@ class Invoker:
             self.__stdoutStream = Unbuffered(sys.stdout.buffer) if showStdOut else DEVNULL
             self.__stderrStream = Unbuffered(sys.stderr.buffer) if showStdErr else DEVNULL
 
-    def __openLog(self):
+    def __openLog(self, header=None):
         # Create log file
         if self.__logFileName:
             self.__logFile = open(self.__logFileName, "ab", buffering=0)
-            self.__logFile.write("### START: {}\n"
-                .format(datetime.datetime.now().ctime())
+            self.__logFile.write("### START: {}{}\n"
+                .format(datetime.datetime.now().ctime(),
+                        (" (" + header + ")") if header else "")
                 .encode(locale.getpreferredencoding()))
         else:
             self.__logFile = DEVNULL
@@ -398,7 +399,7 @@ class Invoker:
         ret = -1
         stdout = stderr = b''
         try:
-            self.__openLog()
+            self.__openLog("fingerprint")
 
             # The fingerprint is always exectuted in a temporary directory
             tmpDir = tempfile.mkdtemp(dir=os.getcwd(), prefix=".bob-")
