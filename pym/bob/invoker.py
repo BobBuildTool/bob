@@ -390,6 +390,50 @@ class Invoker:
 
         return ret
 
+    async def executeLocalSCMs(self):
+        # make permissions predictable
+        os.umask(0o022)
+
+        ret = 1
+        try:
+            self.__openLog("only local SCMs")
+
+            # execute only local SCMs
+            for scm in self.__spec.preRunCmds:
+                scm = getScm(scm)
+                if not scm.isLocal(): continue
+                try:
+                    await scm.invoke(self)
+                except CmdFailedError as e:
+                    self.error(scm.getSource(), "failed")
+                    self.error(e.what)
+                    raise
+                except Exception:
+                    self.error(scm.getSource(), "failed")
+                    raise
+
+            # still run all checkout asserts afterwards
+            for a in self.__spec.postRunCmds:
+                a = CheckoutAssert(a)
+                try:
+                    await a.invoke(self)
+                except Exception:
+                    self.error(a.getSource(), "failed")
+                    raise
+
+            # everything went well
+            ret = 0
+
+        except OSError as e:
+            self.error("Something went wrong:", str(e))
+            ret = 1
+        except InvocationError as e:
+            ret = e.returncode
+        finally:
+            self.__closeLog(ret)
+
+        return ret
+
     async def executeFingerprint(self, keepSandbox=False):
         # make permissions predictable
         os.umask(0o022)

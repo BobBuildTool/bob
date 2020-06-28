@@ -497,6 +497,25 @@ cd {ROOT}
                                 .format(absRunFile, ret),
                              help="You may resume at this point with '--resume' after fixing the error.")
 
+    async def _runLocalSCMs(self, step, logger):
+        workspacePath = step.getWorkspacePath()
+        logFile = os.path.join(workspacePath, "..", "log.txt")
+        spec = StepSpec.fromStep(step, logFile=logFile)
+        invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
+            self.__verbose >= INFO, self.__verbose >= NORMAL,
+            self.__verbose >= DEBUG, self.__bufferedStdIO)
+        ret = await invoker.executeLocalSCMs()
+        if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
+        if ret == -int(signal.SIGINT):
+            raise BuildError("User aborted while updating local SCMs",
+                             help = "Run again with '--resume' to skip already built packages.")
+        elif ret != 0:
+            if self.__bufferedStdIO:
+                logger.setError(invoker.getStdio().strip())
+            raise BuildError("Update of local SCMs failed with exit code {}"
+                                .format(ret),
+                             help="You may resume at this point with '--resume' after fixing the error.")
+
     def getStatistic(self):
         return self.__statistic
 
@@ -787,6 +806,10 @@ cd {ROOT}
             if not compareDirectoryState(checkoutState, oldCheckoutState):
                 stepMessage(checkoutStep, "CHECKOUT", "WARNING: recipe changed but skipped due to --build-only ({})"
                     .format(prettySrcPath), WARNING)
+            elif any((s.isLocal() and not s.isDeterministic()) for s in checkoutStep.getScmList()):
+                with stepExec(checkoutStep, "UPDATE",
+                              "{} {}".format(prettySrcPath, overridesString)) as a:
+                    await self._runLocalSCMs(checkoutStep, a)
             else:
                 stepMessage(checkoutStep, "CHECKOUT", "skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString),
                     SKIPPED, IMPORTANT)
