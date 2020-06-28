@@ -325,8 +325,9 @@ class Invoker:
                 if not self.__spec.sandboxNetAccess: cmdArgs.append('-n')
 
                 # Create empty env file. Otheriwse bind mount fails.
-                with open(self.__spec.envFile, "wb"): pass
-                cmdArgs.extend(["-M", os.path.abspath(self.__spec.envFile), "-w", "/bob/env"])
+                if self.__spec.envFile:
+                    with open(self.__spec.envFile, "wb"): pass
+                    cmdArgs.extend(["-M", os.path.abspath(self.__spec.envFile), "-w", "/bob/env"])
 
                 # Mount workspace writable and all dependencies read-only
                 cmdArgs.extend(["-M", os.path.abspath(self.__spec.workspaceWorkspacePath),

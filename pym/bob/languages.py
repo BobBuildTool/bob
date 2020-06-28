@@ -270,15 +270,16 @@ class BashLanguage:
     @staticmethod
     def __formatScript(spec):
         colorize = not spec.isJenkins
-        envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
+        if spec.envFile:
+            envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
+        else:
+            envFile = None
         ret = [
             BashLanguage.__formatSetup(spec, False),
             "",
-            dedent("""\
-                # Setup
-                declare -p > {ENV_FILE}
-                cd \"${{BOB_CWD}}\"
-                """.format(ENV_FILE=quote(BashLanguage.__munge(envFile)))),
+            "# Setup",
+            "declare -p > {}".format(quote(BashLanguage.__munge(envFile))) if envFile else "",
+            "cd \"${BOB_CWD}\"",
             dedent("""\
                 # Error handling
                 bob_handle_error()
@@ -446,12 +447,15 @@ class PwshLanguage:
 
     @staticmethod
     def __formatScript(spec, trace):
-        envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
+        if spec.envFile:
+            envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
+        else:
+            envFile = None
         ret = [
             PwshLanguage.__formatSetup(spec),
             "",
+            "# Setup",
             dedent("""\
-                # Setup
                 $ret = [ordered]@{{
                     "Env" = [ordered]@{{}};
                     "Vars" = [ordered]@{{}}
@@ -464,9 +468,9 @@ class PwshLanguage:
                 }}
                 $ret["Vars"].Remove("ret")
                 ConvertTo-Json $ret -Compress -Depth 2 > {ENV_FILE}
-                cd $Env:BOB_CWD
-                """.format(ENV_FILE=quotePwsh(envFile))),
+                """.format(ENV_FILE=quotePwsh(envFile))) if envFile else "",
             dedent("""\
+                cd $Env:BOB_CWD
                 # Error handling
                 $ErrorActionPreference="Stop"
                 Set-PSDebug -Strict
@@ -558,7 +562,7 @@ def getLanguage(language):
 class StepSpec:
 
     @classmethod
-    def fromStep(cls, step, envFile, envWhiteList, logFile=None, isJenkins=False,
+    def fromStep(cls, step, envFile=None, envWhiteList=[], logFile=None, isJenkins=False,
                  scriptHint=None):
         self = cls()
         scriptLanguage = step.getPackage().getRecipe().scriptLanguage
