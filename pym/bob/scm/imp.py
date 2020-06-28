@@ -103,8 +103,8 @@ class ImportScm(Scm):
         self.__prune = spec.get("prune", False)
         self.__data = spec.get("__data")
 
-    def getProperties(self):
-        ret = super().getProperties()
+    def getProperties(self, isJenkins):
+        ret = super().getProperties(isJenkins)
         ret.update({
             'scm' : 'import',
             'url' : self.__url,

@@ -188,8 +188,8 @@ class UrlScm(Scm):
         self.__strip = spec.get("stripComponents", 0)
         self.__sslVerify = spec.get('sslVerify', True)
 
-    def getProperties(self):
-        ret = super().getProperties()
+    def getProperties(self, isJenkins):
+        ret = super().getProperties(isJenkins)
         ret.update({
             'scm' : 'url',
             'url' : self.__url,

@@ -40,7 +40,7 @@ class TestGitScm(TestCase):
     def testDefault(self):
         """The default branch must be master"""
         s = createGitScm()
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['branch'], "master")
         self.assertEqual(p['dir'], ".")
         self.assertEqual(p['rev'], "refs/heads/master")
@@ -48,32 +48,32 @@ class TestGitScm(TestCase):
     def testRev(self):
         """Check variants of rev property"""
         s = createGitScm({ 'rev' : "0123456789abcdef0123456789abcdef01234567" })
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "0123456789abcdef0123456789abcdef01234567")
         self.assertEqual(p['commit'], "0123456789abcdef0123456789abcdef01234567")
 
         s = createGitScm({'rev' : "refs/tags/v1.2.3"})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "refs/tags/v1.2.3")
         self.assertEqual(p['tag'], "v1.2.3")
 
         s = createGitScm({'rev' : "refs/heads/develop"})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "refs/heads/develop")
         self.assertEqual(p['branch'], "develop")
 
     def testRevInverseMap(self):
         """Test that rev property reflects all possible specs"""
         s = createGitScm({'branch' : "foobar"})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "refs/heads/foobar")
 
         s = createGitScm({'tag' : "asdf"})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "refs/tags/asdf")
 
         s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "0123456789abcdef0123456789abcdef01234567")
 
     def testRevLeastPriority(self):
@@ -81,49 +81,49 @@ class TestGitScm(TestCase):
         # commit
         s = createGitScm({ 'rev' : "0123456789abcdef0123456789abcdef01234567",
                            'branch' : 'bar' })
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "0123456789abcdef0123456789abcdef01234567")
 
         s = createGitScm({ 'rev' : "0123456789abcdef0123456789abcdef01234567",
                            'tag' : 'foo' })
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "0123456789abcdef0123456789abcdef01234567")
 
         s = createGitScm({ 'rev' : "0123456789abcdef0123456789abcdef01234567",
                            'commit' : '0000000000000000000000000000000000000000' })
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "0000000000000000000000000000000000000000")
 
         # tag
         s = createGitScm({'rev' : "refs/tags/v1.2.3",
                           'branch' : 'bar'})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "refs/tags/v1.2.3")
 
         s = createGitScm({'rev' : "refs/tags/v1.2.3",
                           'tag' : 'asdf'})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "refs/tags/asdf")
 
         s = createGitScm({ 'rev' : "refs/tags/v1.2.3",
                            'commit' : '0000000000000000000000000000000000000000' })
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "0000000000000000000000000000000000000000")
 
         # branch
         s = createGitScm({'rev' : "refs/heads/develop",
                           'branch' : 'bar'})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "refs/heads/bar")
 
         s = createGitScm({'rev' : "refs/heads/develop",
                           'tag' : 'asdf'})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "refs/tags/asdf")
 
         s = createGitScm({'rev' : "refs/heads/develop",
                           'commit' : '0000000000000000000000000000000000000000' })
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p['rev'], "0000000000000000000000000000000000000000")
 
     def testDigestScripts(self):
@@ -170,8 +170,8 @@ class TestGitScm(TestCase):
     def testRemotesSetAndGet(self):
         """Test setting and getting remotes as they are stored in a different format internally"""
         s1 = createGitScm({'remote-test_user' : "test/url", 'remote-other_user' : "other/url"})
-        self.assertEqual(s1.getProperties()['remote-test_user'], "test/url")
-        self.assertEqual(s1.getProperties()['remote-other_user'], "other/url")
+        self.assertEqual(s1.getProperties(False)['remote-test_user'], "test/url")
+        self.assertEqual(s1.getProperties(False)['remote-other_user'], "other/url")
 
     def testRemotesSetOrigin(self):
         """A remote calle origin should result in an error, because this is the default remote name"""
@@ -243,7 +243,7 @@ class TestGitRemotes(RealGitRepositoryTestCase):
     def callAndGetRemotes(self, workspace, scm):
         self.invokeGit(workspace, scm)
         remotes = subprocess.check_output(["git", "remote", "-v"],
-            cwd=os.path.join(workspace, scm.getProperties()['dir']),
+            cwd=os.path.join(workspace, scm.getProperties(False)['dir']),
             universal_newlines=True).split("\n")
         remotes = (r[:-8].split("\t") for r in remotes if r.endswith("(fetch)"))
         return { remote:url for (remote,url) in remotes }

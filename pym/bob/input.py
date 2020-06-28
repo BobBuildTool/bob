@@ -1346,10 +1346,10 @@ class CoreCheckoutStep(CoreStep):
         return True
 
     def getPreRunCmds(self):
-        return [s.getProperties() for s in self.scmList]
+        return [s.getProperties(False) for s in self.scmList]
 
     def getJenkinsPreRunCmds(self):
-        return [ s.getProperties() for s in self.scmList if not s.hasJenkinsPlugin() ]
+        return [ s.getProperties(True) for s in self.scmList if not s.hasJenkinsPlugin() ]
 
     def getScript(self):
         return self.corePackage.recipe.checkoutScript
@@ -1387,7 +1387,7 @@ class CheckoutStep(Step):
     def getScmDirectories(self):
         dirs = {}
         for s in self._coreStep.scmList:
-            dirs[s.getDirectory()] = (hashString(s.asDigestScript()), s.getProperties())
+            dirs[s.getDirectory()] = (hashString(s.asDigestScript()), s.getProperties(False))
         return dirs
 
     def hasLiveBuildId(self):

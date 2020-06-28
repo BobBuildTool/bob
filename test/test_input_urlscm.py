@@ -166,8 +166,8 @@ class TestWindowsPaths(TestCase):
             'recipe' : "foo.yaml#0",
             '__source' : "Recipe foo",
         }
-        self.assertEqual(UrlScm(s).getProperties()["fileName"], "my-pkg.zip")
+        self.assertEqual(UrlScm(s).getProperties(False)["fileName"], "my-pkg.zip")
 
         s["url"] = r"C:\X\Y\my-pkg.zip"
-        self.assertEqual(UrlScm(s).getProperties()["fileName"], "my-pkg.zip")
+        self.assertEqual(UrlScm(s).getProperties(False)["fileName"], "my-pkg.zip")
 

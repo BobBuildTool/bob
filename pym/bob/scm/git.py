@@ -77,8 +77,8 @@ class GitScm(Scm):
         self.__singleBranch = spec.get('singleBranch')
         self.__shallow = spec.get('shallow')
 
-    def getProperties(self):
-        properties = super().getProperties()
+    def getProperties(self, isJenkins):
+        properties = super().getProperties(isJenkins)
         properties.update({
             'scm' : 'git',
             'url' : self.__url,

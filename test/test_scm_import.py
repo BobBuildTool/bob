@@ -68,7 +68,7 @@ class TestImportScm(TestCase):
     def testProperties(self):
         """Query some static proerties of SCM"""
         s = self.createImportScm({"dir" : "subdir"})
-        p = s.getProperties()
+        p = s.getProperties(False)
         self.assertEqual(p["scm"], "import")
         self.assertEqual(p["url"], self.url)
 
@@ -96,7 +96,7 @@ class TestImportScm(TestCase):
 
     def testCopyViaProperties(self):
         """Test Jenkins-like 'checkout' via properties"""
-        s = ImportScm(self.createImportScm().getProperties())
+        s = ImportScm(self.createImportScm().getProperties(True))
         with tempfile.TemporaryDirectory() as workspace:
             self.invokeScm(workspace, s)
             self.assertEqual(self.digest, hashDirectory(workspace))
@@ -146,7 +146,7 @@ class TestImportScm(TestCase):
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, s)
             with self.assertRaises(BuildError):
-                self.invokeScm(workspace, ImportScm(s.getProperties()))
+                self.invokeScm(workspace, ImportScm(s.getProperties(True)))
 
     def testPrune(self):
         """Test that pruning destination works if requested"""

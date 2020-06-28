@@ -216,7 +216,7 @@ class Scm(metaclass=ABCMeta):
     def getSource(self):
         return self.__source
 
-    def getProperties(self):
+    def getProperties(self, isJenkins):
         return {
             "__source" : self.__source,
             "recipe" : self.__recipe,
