@@ -1,0 +1,6 @@
+root: True
+checkoutSCM:
+    scm: import
+    url: src
+buildScript: cp -a "$1/"* .
+packageScript: cp -a "$1/"* .
