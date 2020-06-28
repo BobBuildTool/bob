@@ -135,6 +135,9 @@ class ImportScm(Scm):
     def isDeterministic(self):
         return False
 
+    def isLocal(self):
+        return True
+
     def hasLiveBuildId(self):
         return True
 

@@ -264,6 +264,13 @@ class Scm(metaclass=ABCMeta):
         """Return whether the SCM is deterministic."""
         return False
 
+    def isLocal(self):
+        """Return true if the SCM does not use any remote repository.
+
+        Such SCMs are treated special because there is no notion of
+        checkout/checkin."""
+        return False
+
     def status(self, workspacePath):
         """Get SCM work-space status.
 
