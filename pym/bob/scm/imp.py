@@ -110,8 +110,9 @@ class ImportScm(Scm):
             'url' : self.__url,
             'dir' : self.__dir,
             'prune' : self.__prune,
-            '__data' : packTree(self.__url),
         })
+        if isJenkins:
+            ret['__data'] = packTree(self.__url)
         return ret
 
     async def invoke(self, invoker):
