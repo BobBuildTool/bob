@@ -168,15 +168,14 @@ class Invoker:
 
     async def __runCommand(self, args, cwd, stdout=None, stderr=None,
                            check=False, env=None, universal_newlines=True,
-                           **kwargs):
+                           specEnv=True, **kwargs):
         cmd = " ".join(quote(a) for a in args)
         self.trace(cmd)
-        if env is None:
-            env = self.__env
-        else:
-            _env = self.__env.copy()
-            _env.update(env)
-            env = _env
+
+        _env = self.__env.copy()
+        if specEnv: _env.update(self.__spec.env)
+        if env is not None: _env.update(env)
+        env = _env
 
         if stdout == True:
             # If stdout should be captured we use a dedicated buffer. This
@@ -345,7 +344,7 @@ class Invoker:
             cmdArgs.extend(callArgs)
 
             if mode == InvocationMode.SHELL:
-                ret = await self.callCommand(cmdArgs)
+                ret = await self.callCommand(cmdArgs, specEnv=False)
             elif mode == InvocationMode.CALL:
                 for scm in self.__spec.preRunCmds:
                     scm = getScm(scm)
@@ -358,7 +357,7 @@ class Invoker:
                     except Exception:
                         self.error(scm.getSource(), "failed")
                         raise
-                await self.checkCommand(cmdArgs)
+                await self.checkCommand(cmdArgs, specEnv=False)
                 for a in self.__spec.postRunCmds:
                     a = CheckoutAssert(a)
                     try:
@@ -470,7 +469,8 @@ class Invoker:
 
             cmdArgs += self.__spec.language.setupFingerprint(self.__spec, env)
             proc = await self.__runCommand(cmdArgs, tmpDir, env=env,
-                universal_newlines=False, stdout=True, stderr=True)
+                universal_newlines=False, stdout=True, stderr=True,
+                specEnv=False)
             ret = proc.returncode
             stdout = proc.stdout
             stderr = proc.stderr
