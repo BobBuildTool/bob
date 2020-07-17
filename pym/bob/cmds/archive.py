@@ -379,7 +379,8 @@ def doArchiveClean(argv):
     expr.setParseAction(lambda s, loc, toks: RetainExpression(s, loc, toks))
 
     parser = argparse.ArgumentParser(prog="bob archive clean")
-    parser.add_argument('expression', help="Expression of artifacts that shall be kept")
+    parser.add_argument('expression', nargs='+',
+        help="Expression of artifacts that shall be kept")
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="Don't delete, just print what would be deleted")
     parser.add_argument('-n', dest='noscan', action='store_true',
@@ -391,7 +392,7 @@ def doArchiveClean(argv):
     args = parser.parse_args(argv)
 
     try:
-        retainExpr = expr.parseString(args.expression, True)[0]
+        retainExpressions = [ expr.parseString(e, True)[0] for e in args.expression ]
     except pyparsing.ParseBaseException as e:
         raise BobError("Invalid retention expression: " + str(e))
 
@@ -403,10 +404,14 @@ def doArchiveClean(argv):
 
         # First pass: determine all directly retained artifacts
         for bid in scanner.getBuildIds():
-            retainExpr.evaluate(bid, scanner.getVars(bid))
+            data = scanner.getVars(bid)
+            for expr in retainExpressions:
+                expr.evaluate(bid, data)
 
         # Second pass: determine all transitively retained artifacts
-        retained = retainExpr.getRetained()
+        retained = set()
+        for expr in retainExpressions:
+            retained.update(expr.getRetained())
         todo = set()
         for bid in retained:
             todo.update(scanner.getReferencedBuildIds(bid))
