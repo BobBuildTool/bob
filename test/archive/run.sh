@@ -53,5 +53,34 @@ run_bob archive scan --fail -v
 run_bob archive clean --fail -v 'metaEnv.TYPE == "alpha"'
 popd
 
+# Test the "LIMIT" feature. Build a number or artifacts and keep only a portion
+# of them. By default the artifacts are sorted by build date and the most
+# recent is kept. Verify that the correct subset was retained.
+rm -rf "$archiveDir/"*
+run_bob build --download no --upload -q 'many-*'
+pushd $archiveDir
+run_bob archive clean --fail -v 'meta.recipe == "many" LIMIT 3'
+popd
+test $(find $archiveDir -name '*.tgz' | wc -l) -eq 3
+run_bob build --download forced --force many-07 many-06 many-05
+
+# Do the same again with ascending sorting and a different ordering key.  The
+# tricky part is that metaEnv.FUZZ is not set in all packages and such packages
+# must not be counted.
+rm -rf "$archiveDir/"*
+run_bob build --download no --force --upload -q 'many-*'
+pushd $archiveDir
+run_bob archive clean --fail -v 'meta.recipe == "many" LIMIT 2 OrDeR By metaEnv.FUZZ ASC'
+popd
+test $(find $archiveDir -name '*.tgz' | wc -l) -eq 2
+run_bob build --download forced --force many-01 many-03
+
+# Must fail if LIMIT is zero, invalid or negative
+pushd $archiveDir
+expect_fail run_bob archive clean 'meta.recipe == "many" LIMIT 0'
+expect_fail run_bob archive clean 'meta.recipe == "many" LIMIT -3'
+expect_fail run_bob archive clean 'meta.recipe == "many" LIMIT foobar'
+popd
+
 # Copy coverage data from archive directory (if any).
 cp $archiveDir/.coverage* . 2>/dev/null || true

@@ -1,0 +1,22 @@
+root: True
+
+packageVars: [BOB_PACKAGE_NAME]
+packageScript: |
+    echo $BOB_PACKAGE_NAME > result.txt
+
+multiPackage:
+    "01":
+        metaEnvironment:
+            FUZZ: "a"
+    "02": {}
+    "03":
+        metaEnvironment:
+            FUZZ: "b"
+    "04": {}
+    "05":
+        metaEnvironment:
+            FUZZ: "c"
+    "06": {}
+    "07":
+        metaEnvironment:
+            FUZZ: "d"
