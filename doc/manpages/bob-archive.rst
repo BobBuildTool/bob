@@ -23,7 +23,8 @@ Available sub-commands:
 
 ::
 
-    bob archive clean [-h] [--dry-run] [-n] [-v] [-f] expression
+    bob archive clean [-h] [--dry-run] [-n] [-v] [-f]
+                      expression [expression ...]
     bob archive scan [-h] [-v] [-f]
 
 Description
@@ -61,10 +62,10 @@ Commands
 clean
     Remove unneeded artifacts from the archive.
 
-    The command takes a single argument as the retention expression. Any
-    artifact that is matched by the expression or referenced by such other
-    artifact is kept. If an artifact is neither matched by the given expression
-    nor referenced by a retained artifact it is deleted.
+    The command takes one or more retention expressions. Any artifact that is
+    matched by at least one of the expressions or referenced transitively by a
+    matched artifact is kept. If an artifact is neither matched by any
+    expression nor referenced by a retained artifact it is deleted.
 
     The expression language has the following general syntax:
 
@@ -103,6 +104,14 @@ clean
     The following example retains only the last three builds from a recipe::
 
         bob archive clean 'meta.recipe == "root" LIMIT 3'
+
+    Both examples above can be combined, e.g. to keep all builds of the last
+    week while making sure that at least the last build is kept, even if that
+    build is older. ::
+
+        bob archive clean "meta.package == \"platform/app\" && \
+                           build.date >= \"$(date -u -Idate -d-7days)\"" \
+                          'meta.package == \"platform/app\" LIMIT 1'
 
 scan
     Scan for added artifacts.
