@@ -290,6 +290,47 @@ class VarReference(Base):
             self.barf("invalid field reference")
         return data
 
+class RetainExpression(Base):
+    def __init__(self, s, loc, toks):
+        super().__init__(s, loc)
+        self.expr = toks[0]
+        self.limit = None if len(toks) < 2 else int(toks[1])
+        if self.limit is not None and self.limit <= 0:
+            self.barf("LIMIT takes a number greater or equal to one!")
+        self.sortBy = VarReference(None, None, ["build.date"]) \
+            if len(toks) < 3 else toks[2]
+        if len(toks) >= 4 and (toks[3] == "ASC"):
+            def cmpItem(existing, new):
+                if new is None: return False
+                return existing is None or existing >= new
+        else:
+            def cmpItem(existing, new):
+                if new is None: return False
+                return existing is None or existing <= new
+        self.cmpItem = cmpItem
+        self.retained = set()
+        self.queue = []
+
+    def evaluate(self, bid, data):
+        if bid in self.retained: return
+        if not self.expr.evalBool(data): return
+        self.retained.add(bid)
+
+        # limit results based on self.sortBy ordered according to self.cmpItem
+        if self.limit is None: return
+        new = self.sortBy.evalString(data)
+        i = 0
+        while i < len(self.queue):
+            if self.cmpItem(self.queue[i][1], new): break
+            i += 1
+        self.queue.insert(i, (bid, new))
+        while len(self.queue) > self.limit:
+            victim,_ = self.queue.pop()
+            self.retained.remove(victim)
+
+    def getRetained(self):
+        return self.retained
+
 
 def doArchiveScan(argv):
     parser = argparse.ArgumentParser(prog="bob archive scan")
@@ -305,7 +346,7 @@ def doArchiveScan(argv):
             sys.exit(1)
 
 
-# meta.package == "root" && build.date > "2017-06-19"
+# meta.package == "root" && build.date > "2017-06-19" LIMIT 5 ORDER BY build.date ASC
 def doArchiveClean(argv):
     varReference = pyparsing.Word(pyparsing.alphanums+'.')
     varReference.setParseAction(lambda s, loc, toks: VarReference(s, loc, toks))
@@ -313,7 +354,7 @@ def doArchiveClean(argv):
     stringLiteral = pyparsing.QuotedString('"', '\\')
     stringLiteral.setParseAction(lambda s, loc, toks: StringLiteral(s, loc, toks))
 
-    expr = pyparsing.infixNotation(
+    selectExpr = pyparsing.infixNotation(
         stringLiteral | varReference,
         [
             ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotPredicate(s, loc, toks)),
@@ -326,6 +367,16 @@ def doArchiveClean(argv):
             ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(AndPredicate)),
             ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(OrPredicate))
         ])
+
+    expr = selectExpr + pyparsing.Optional(
+        pyparsing.CaselessKeyword("LIMIT").suppress() -
+            pyparsing.Word(pyparsing.nums) +
+        pyparsing.Optional(pyparsing.CaselessKeyword("ORDER").suppress() -
+                           pyparsing.CaselessKeyword("BY").suppress() -
+                           varReference +
+        pyparsing.Optional(pyparsing.CaselessKeyword("ASC") |
+                           pyparsing.CaselessKeyword("DESC"))))
+    expr.setParseAction(lambda s, loc, toks: RetainExpression(s, loc, toks))
 
     parser = argparse.ArgumentParser(prog="bob archive clean")
     parser.add_argument('expression', help="Expression of artifacts that shall be kept")
@@ -345,22 +396,27 @@ def doArchiveClean(argv):
         raise BobError("Invalid retention expression: " + str(e))
 
     scanner = ArchiveScanner()
-    retained = set()
     with scanner:
         if not args.noscan:
             if not scanner.scan(args.verbose) and args.fail:
                 sys.exit(1)
-        for bid in scanner.getBuildIds():
-            if bid in retained: continue
-            if retainExpr.evalBool(scanner.getVars(bid)):
-                retained.add(bid)
-                todo = set(scanner.getReferencedBuildIds(bid))
-                while todo:
-                    n = todo.pop()
-                    if n in retained: continue
-                    retained.add(n)
-                    todo.update(scanner.getReferencedBuildIds(n))
 
+        # First pass: determine all directly retained artifacts
+        for bid in scanner.getBuildIds():
+            retainExpr.evaluate(bid, scanner.getVars(bid))
+
+        # Second pass: determine all transitively retained artifacts
+        retained = retainExpr.getRetained()
+        todo = set()
+        for bid in retained:
+            todo.update(scanner.getReferencedBuildIds(bid))
+        while todo:
+            n = todo.pop()
+            if n in retained: continue
+            retained.add(n)
+            todo.update(scanner.getReferencedBuildIds(n))
+
+        # Third pass: remove everything that is *not* retained
         for bid in scanner.getBuildIds():
             if bid in retained: continue
             victim = asHexStr(bid)
