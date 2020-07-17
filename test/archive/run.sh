@@ -21,6 +21,12 @@ FINGERPRINT=Alice run_bob build --force --download=no --upload root-alpha root-b
 pushd $archiveDir
 run_bob archive scan
 
+# first try to keep everything by using multiple expressions
+oldNum=$(find -name '*.tgz' | wc -l)
+run_bob archive clean -v 'metaEnv.TYPE == "alpha"' 'meta.package == "root-bravo"'
+newNum=$(find -name '*.tgz' | wc -l)
+test $oldNum -eq $newNum
+
 # selectively keep one half
 run_bob archive clean --dry-run 'metaEnv.TYPE == "alpha"'
 run_bob archive clean -v 'metaEnv.TYPE == "alpha"'
