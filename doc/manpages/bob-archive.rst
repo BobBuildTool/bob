@@ -66,7 +66,11 @@ clean
     artifact is kept. If an artifact is neither matched by the given expression
     nor referenced by a retained artifact it is deleted.
 
-    The expression language supports the following constructs:
+    The expression language has the following general syntax:
+
+         *Predicate* [``LIMIT`` *Limit* [``ORDER BY`` *Field* [``ASC`` | ``DESC``]]]
+
+    The *Predicate* supports the following constructs:
 
     * Strings are written with double quotes, e.g. ``"foo"``. To embed
       double quotes in the string itself escape them with ``\``.
@@ -80,6 +84,14 @@ clean
       respectively ``||`` (or). There is also a ``!`` (not) logical operator.
     * Parenthesis can be used to override precedence.
 
+    The optional *Limit* field must be an integer number greater than zero. It
+    limits the number of artifacts that are retained by *Predicate*. If no
+    *Limit* is specified all matching artifacts are retained. By default the
+    artifacts are sorted by the ``build.date`` field in descending order so
+    that only the most recent *Limit* artifacts are retained.  If *Field* is
+    not populated the artifact is always put at the end of the list. Specify
+    ``ASC`` to sort the artifacts in ascending order by *Field*.
+
     A typical usage of the ``clean`` command is to remove old artifacts from a
     continuous build artifact archive. Suppose the root package that is built
     is called ``platform/app`` and we want to retain only artifacts that are
@@ -87,6 +99,10 @@ clean
 
         bob archive clean "meta.package == \"platform/app\" && \
                            build.date >= \"$(date -u -Idate -d-7days)\""
+
+    The following example retains only the last three builds from a recipe::
+
+        bob archive clean 'meta.recipe == "root" LIMIT 3'
 
 scan
     Scan for added artifacts.
