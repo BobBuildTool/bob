@@ -11,20 +11,21 @@ from bob.scripts import availableCommands
 for cmd, (hl, func, help) in sorted(availableCommands.items()):
     print(cmd)")
 
+echo "$cmds"
 for c in $cmds; do
 	case "$c" in
 		archive | jenkins | help | _*)
 			;;
-        clean)
+		clean)
 			run_bob $c -DBAR=1 -c testconfig
 			;;
 		project)
 			run_bob project -DBAR=1 -c testconfig qt-creator root --kit=none
 			;;
-        graph)
+		graph)
 			run_bob $c -DBAR=1 -c testconfig -t dot root
-			run_bob $c -DBAR=1 -c testconfig -t d3 root
-            ;;
+			run_bob $c -DBAR=1 -c testconfig -t d3 -o d3.showScm=true root
+			;;
 		*)
 			run_bob $c -DBAR=1 -c testconfig root
 			;;

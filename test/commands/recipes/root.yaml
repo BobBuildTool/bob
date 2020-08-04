@@ -1,5 +1,10 @@
 root: True
 
+checkoutSCM:
+    scm: url
+    url: "/dev/null"
+    fileName: "test.txt"
+
 buildVars: [FOO, BAR]
 buildScript: |
     if [[ $FOO != 1 ]]; then
