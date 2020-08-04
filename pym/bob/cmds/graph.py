@@ -68,7 +68,7 @@ def makeD3Graph(packages, p, filename, options, excludes, highlights, maxdepth):
         if options.get('d3.showScm', False) and package.getCheckoutStep().isValid():
             scmidx = 0
             for s in package.getCheckoutStep().getScmList():
-                p = s.getProperties()
+                p = s.getProperties(False)
                 hover['scm'+str(scmidx)] = p.get('scm')
                 hover['url'+str(scmidx)] = p.get('url')
                 scmidx = scmidx + 1

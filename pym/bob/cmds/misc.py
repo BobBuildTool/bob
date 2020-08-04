@@ -226,7 +226,7 @@ are used:
         key = (package.getRecipe().getName(), package.getCheckoutStep().getVariantId())
         if key not in done:
             for scm in package.getCheckoutStep().getScmList():
-                p = { k:v for (k,v) in scm.getProperties().items() if v is not None }
+                p = { k:v for (k,v) in scm.getProperties(False).items() if v is not None }
                 p['package'] = "/".join(package.getStack())
                 fmt = formats.get(p['scm'], "{scm} {dir}")
                 print(fmt.format_map(Default(args.default, p)))
