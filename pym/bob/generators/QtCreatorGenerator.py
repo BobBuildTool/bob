@@ -93,7 +93,7 @@ def addBuildConfig(outFile, num, name, buildArgs, buildMeFile):
     outFile.write(' <valuemap type="QVariantMap" key="ProjectExplorer.BuildStepList.Step.0">\n')
     outFile.write('  <value type="bool" key="ProjectExplorer.BuildStep.Enabled">true</value>\n')
     if isWindows():
-        outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Arguments">-msys2 -defterm -no-start -use-full-path -here -c "PATH=' + os.getenv('PATH') + ' sh ' + buildMeFile + ' -v ' + buildArgs + '"</value>\n')
+        outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Arguments">-msys2 -defterm -no-start -use-full-path -here -c "PATH=\'' + os.getenv('PATH') + '\' sh ' + buildMeFile + ' -v ' + buildArgs + '"</value>\n')
         if os.getenv('WD') is None:
             raise BuildError("Cannot create QtCreator project for Windows! MSYS2 must be started by msys2_shell.cmd script!")
         outFile.write('  <value type="QString" key="ProjectExplorer.ProcessStep.Command">' + os.path.normpath(os.path.join(os.getenv('WD').replace('\\', '/'), '..', '..', 'msys2_shell.cmd')) + '</value>\n')
