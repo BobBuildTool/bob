@@ -2845,7 +2845,11 @@ class RecipeSet:
         self.__recipes = {}
         self.__classes = {}
         if isWindows():
-            self.__whiteList = set(["APPDATA", "HOMEDRIVE", "HOMEPATH", "PATH", "PATHEXT", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
+            self.__whiteList = set(["ALLUSERSPROFILE", "APPDATA",
+                "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "COMSPEC",
+                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
+                "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
+                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
         else:
             self.__whiteList = set(["PATH", "TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
