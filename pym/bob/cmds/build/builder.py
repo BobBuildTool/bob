@@ -104,6 +104,79 @@ class RestartBuildException(Exception):
 class CancelBuildException(Exception):
     pass
 
+class ExternalJobServer:
+    def __init__(self, makeFds):
+        self.__makeFds = makeFds
+
+    def getMakeFd(self):
+        return self.__makeFds
+
+class InternalJobServer:
+    def __init__(self, jobs):
+        self.__rfd, self.__wfd = os.pipe()
+        os.write(self.__wfd, bytes(jobs))
+
+    def getMakeFd(self):
+        return [ self.__rfd, self.__wfd ]
+
+class JobServerSemaphore:
+    def __init__(self, fds, recursive):
+        self.__sem = asyncio.Semaphore(0)
+        self.__waitersCnt = 0
+        self.__fds = fds
+        os.set_blocking (self.__fds[0], False);
+        self.__tokens = []
+        self.__recursive = recursive
+        self.__acquired = 0
+
+    @staticmethod
+    def jobavailableCallback(self):
+        try:
+            while self.__waitersCnt:
+                self.__tokens.append(os.read(self.__fds[0], 1))
+                self.__waitersCnt -= 1
+                self.__sem.release()
+        except BlockingIOError:
+            pass
+        finally:
+            if self.__waitersCnt == 0:
+                asyncio.get_event_loop().remove_reader(self.__fds[0])
+
+    async def acquire(self):
+        if self.__recursive and self.__acquired == 0:
+            self.__acquired += 1
+            return
+        try:
+            self.__tokens.append(os.read(self.__fds[0], 1))
+        except BlockingIOError:
+            if self.__waitersCnt == 0:
+                asyncio.get_event_loop().add_reader(self.__fds[0],
+                    JobServerSemaphore.jobavailableCallback, self)
+            self.__waitersCnt += 1
+            await self.__sem.acquire()
+            pass
+        self.__acquired += 1
+
+    async def __aenter__(self):
+        await self.acquire()
+        return None
+
+    def release(self):
+        if self.__acquired == 0:
+            raise ValueError ("BoundedSemaphore released too many times")
+        if self.__waitersCnt != 0:
+           self.__waitersCnt -= 1;
+           self.__sem.release()
+           if self.__waitersCnt == 0:
+               asyncio.get_event_loop().remove_reader(self.__fds[0])
+        else:
+            if not self.__recursive or self.__acquired > 1:
+                os.write(self.__fds[1], self.__tokens.pop())
+        self.__acquired -= 1
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.release()
+
 class LocalBuilderStatistic:
     def __init__(self):
         self.__activeOverrides = set()
@@ -190,6 +263,7 @@ cd {ROOT}
         self.__buildOnly = buildOnly
         self.__preserveEnv = preserveEnv
         self.__envWhiteList = set(envWhiteList)
+        self.__jobServer = None
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
         self.__downloadDepthForce = 0xffff
@@ -203,6 +277,7 @@ cd {ROOT}
         self.__alwaysCheckout = []
         self.__linkDeps = True
         self.__jobs = 1
+        self.__makeFds = None
         self.__bufferedStdIO = False
         self.__keepGoing = False
         self.__audit = True
@@ -259,6 +334,9 @@ cd {ROOT}
 
     def setJobs(self, jobs):
         self.__jobs = max(jobs, 1)
+
+    def setMakeFds(self, makeFds):
+        self.__makeFds = makeFds
 
     def enableBufferedIO(self):
         self.__bufferedStdIO = True
@@ -485,6 +563,8 @@ cd {ROOT}
         invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
             self.__verbose >= INFO, self.__verbose >= NORMAL,
             self.__verbose >= DEBUG, self.__bufferedStdIO)
+        if step.jobServer() and self.__jobServer:
+            invoker.setMakeParameters(self.__jobServer.getMakeFd(), self.__jobs)
         ret = await invoker.executeStep(InvocationMode.CALL, cleanWorkspace)
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):
@@ -643,7 +723,15 @@ cd {ROOT}
             self.__fingerprintTasks = {}
             self.__allTasks = set()
             self.__buildErrors = []
-            self.__runners = asyncio.BoundedSemaphore(self.__jobs)
+            if sys.platform == "win32" or self.__jobs == 1:
+                self.__runners = asyncio.BoundedSemaphore(self.__jobs)
+            else:
+                if self.__makeFds:
+                    self.__jobServer = ExternalJobServer(self.__makeFds)
+                    self.__runners = JobServerSemaphore(self.__jobServer.getMakeFd(), True)
+                else:
+                    self.__jobServer = InternalJobServer(self.__jobs)
+                    self.__runners = JobServerSemaphore(self.__jobServer.getMakeFd(), False)
             self.__tasksDone = 0
             self.__tasksNum = 0
 

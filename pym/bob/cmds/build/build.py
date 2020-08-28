@@ -10,8 +10,10 @@ from ...tty import setVerbosity, setTui
 from ...utils import copyTree, processDefines, EventLoopWrapper
 import argparse
 import datetime
+import re
 import os
 import subprocess
+import stat
 import sys
 import time
 
@@ -130,6 +132,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         else:
             cfg = recipes.getCommandConfig().get('build', {})
 
+        noJobs = args.jobs == None
         defaults = {
                 'destination' : '',
                 'force' : False,
@@ -155,6 +158,24 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             args.jobs = os.cpu_count()
         elif args.jobs <= 0:
             parser.error("--jobs argument must be greater than zero!")
+
+        # parse MAKEFLAGS environment variable to setup number of jobs
+        # when called from make
+        makeFlags = os.environ.get('MAKEFLAGS')
+        makeFds = None
+        if makeFlags is not None:
+            jobs = re.search(r'-j([0-9]*)', makeFlags)
+            fds = re.search(r'--jobserver-auth=([0-9]*),([0-9]*)', makeFlags)
+            if jobs and fds and jobs.group(1) and fds.group(1) and fds.group(2):
+                if noJobs:
+                    args.jobs = int(jobs.group(1))
+                    makeFds = [int(fds.group(1)), int(fds.group(2))]
+                    try:
+                        if not all(stat.S_ISFIFO(os.stat(f).st_mode) for f in makeFds): makeFds = None
+                    except OSError:
+                        makeFds = None
+                else:
+                    print("warning: -j" + str(args.jobs) + " forced: resetting jobserver mode.");
 
         envWhiteList = recipes.envWhiteList()
         envWhiteList |= set(args.white_list)
@@ -184,6 +205,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
         builder.setLinkDependencies(args.link_deps)
         builder.setJobs(args.jobs)
+        builder.setMakeFds(makeFds)
         builder.setKeepGoing(args.keep_going)
         builder.setAudit(args.audit)
         if args.resume: builder.loadBuildState()

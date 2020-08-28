@@ -1248,7 +1248,19 @@ All attributes of the class are merged with the attributes of the current
 recipe. If the order is important the attributes of the class are put in front
 of the respective attributes of the recipe. For example the scripts of the
 inherited class of all steps are inserted in front of the scripts of the
-current recipe. 
+current recipe.
+
+jobServer
+~~~~~~~~~
+
+Type: Boolean
+
+Pass MAKEFLAGS Environment variable to the executed script with ``-j`` and
+``--jobserver-auth`` set. This enables submakes or other tools to use Bobs
+internal jobserver or even the jobserver of make calling bob. Bob also participating
+and not starting any new step as long as no ticket is available.
+
+Not available on Windows.
 
 .. _configuration-recipes-metaenv:
 

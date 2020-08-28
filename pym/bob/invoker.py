@@ -17,6 +17,7 @@ import datetime
 import io
 import locale
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -89,6 +90,8 @@ class Invoker:
                                          if k in spec.envWhiteList }
         self.__logFileName = None if noLogFiles else spec.logFile
         self.__logFile = DEVNULL
+        self.__makeFds = []
+        self.__makeJobs = None
         self.__trace = trace
         self.__sandboxHelperPath = None
         self.__stdioBuffer = io.BytesIO() if redirect else None
@@ -224,7 +227,7 @@ class Invoker:
                 *args,
                 stdin=self.__stdin, stdout=stdoutRedir, stderr=stderrRedir,
                 env=env, cwd=cwd,
-                **kwargs)
+                **kwargs, pass_fds=self.__makeFds)
         except OSError as e:
             self.fail(str(e), returncode=127)
 
@@ -304,6 +307,16 @@ class Invoker:
                 os.makedirs(self.__spec.workspaceWorkspacePath, exist_ok=True)
             elif clean and mode != InvocationMode.SHELL:
                 emptyDirectory(self.__spec.workspaceWorkspacePath)
+
+            if len(self.__makeFds) == 2:
+                makeFlags = self.__spec.env.get("MAKEFLAGS")
+                if makeFlags is not None:
+                    makeFlags = re.sub(r'-j\s*[0-9]*', '', makeFlags)
+                    makeFlags = re.sub(r'--jobserver-auth=[0-9]*,[0-9]*', '', makeFlags)
+                else:
+                    makeFlags = ""
+                self.__spec.env["MAKEFLAGS"] = (makeFlags + " -j" + str(self.__makeJobs)
+                    + " --jobserver-auth=" + ",".join([str(fd) for fd in self.__makeFds]))
 
             # setup script and arguments
             if mode == InvocationMode.SHELL:
@@ -537,3 +550,6 @@ class Invoker:
         return self.__stdioBuffer.getvalue().decode(
             locale.getpreferredencoding(), 'surrogateescape')
 
+    def setMakeParameters(self, fds, jobs):
+        self.__makeFds = fds
+        self.__makeJobs = jobs
