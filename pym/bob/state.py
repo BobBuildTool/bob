@@ -152,6 +152,7 @@ class _BobState():
             try:
                 self.__buildIdCache = sqlite3.connect(".bob-buildids.sqlite3", isolation_level=None).cursor()
                 self.__buildIdCache.execute("CREATE TABLE IF NOT EXISTS buildids(key PRIMARY KEY, value)")
+                self.__buildIdCache.execute("CREATE TABLE IF NOT EXISTS fingerprints(key PRIMARY KEY, value)")
                 self.__buildIdCache.execute("BEGIN")
             except sqlite3.Error as e:
                 self.__buildIdCache = None
@@ -385,6 +386,22 @@ class _BobState():
             self.__buildIdCache.execute("DELETE FROM buildids WHERE key=?", (key,))
         except sqlite3.Error as e:
             raise ParseError("Cannot access buildid cache: " + str(e))
+
+    def getFingerprint(self, key):
+        self.__openBIdCache()
+        try:
+            self.__buildIdCache.execute("SELECT value FROM fingerprints WHERE key=?", (key,))
+            ret = self.__buildIdCache.fetchone()
+            return ret and ret[0]
+        except sqlite3.Error as e:
+            raise ParseError("Cannot access fingerprint cache: " + str(e))
+
+    def setFingerprint(self, key, val):
+        self.__openBIdCache()
+        try:
+            self.__buildIdCache.execute("INSERT OR REPLACE INTO fingerprints VALUES (?, ?)", (key, val))
+        except sqlite3.Error as e:
+            raise ParseError("Cannot access fingerprint cache: " + str(e))
 
 def BobState():
     if _BobState.instance is None:

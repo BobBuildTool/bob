@@ -1439,6 +1439,8 @@ cd {ROOT}
             # be created once for each ``key``.
             fingerprint = self.__fingerprints.get(key)
             if fingerprint is None:
+                fingerprint = BobState().getFingerprint(key)
+            if fingerprint is None:
                 fingerprintTask = self.__createFingerprintTask(
                     lambda: self.__calcFingerprintTask(step, sandbox, key, depth),
                     step, key)
@@ -1479,6 +1481,11 @@ cd {ROOT}
 
             # Cache result so that we don't ever need to spawn a task
             self.__fingerprints[key] = fingerprint
+
+            # Persistently cache fingerprint if built in a sandbox. It's
+            # reasonable to assume that the result is reproducible.
+            if sandbox:
+                BobState().setFingerprint(key, fingerprint)
 
         return fingerprint
 
