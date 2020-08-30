@@ -7,6 +7,10 @@ depends:
 fingerprintIf: True
 fingerprintScript: |
     echo bob
+    if [[ ${FAIL_FINGERPRINT_IF_SET:+true} ]] ; then
+        echo "Fail as requested!" >&2
+        exit 1
+    fi
 
 checkoutDeterministic: True
 checkoutScript: |

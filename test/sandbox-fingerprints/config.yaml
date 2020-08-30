@@ -1,3 +1,1 @@
-bobMinimumVersion: "0.15"
-policies:
-    sandboxFingerprints: True
+bobMinimumVersion: "0.17"
