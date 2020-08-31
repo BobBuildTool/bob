@@ -2727,6 +2727,24 @@ class PackageMatcher:
         inputTools.touch(self.tools.keys())
 
 
+class HttpUrlValidator:
+    def validate(self, data):
+        if not isinstance(data, str):
+            raise schema.SchemaError(None, "Url field must be a string!")
+
+        import urllib.parse
+        import urllib.error
+        try:
+            u = urllib.parse.urlparse(data)
+            if u.username is not None and u.password is None:
+                raise schema.SchemaError(None, "Url with username but without password not supported!")
+            if u.scheme not in ('http', 'https'):
+                raise schema.SchemaError(None, "Unsupported URL schema: " + u.scheme)
+        except urllib.error.URLError as e:
+            raise schema.SchemaError(None, "Unparsable URL: " + str(e))
+
+        return data
+
 class ArchiveValidator:
     def __init__(self):
         self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http', 'shell', 'azure')},
@@ -2741,7 +2759,7 @@ class ArchiveValidator:
         fileArchive[schema.Optional("fileMode")] = int
         fileArchive[schema.Optional("directoryMode")] = int
         httpArchive = baseArchive.copy()
-        httpArchive["url"] = str
+        httpArchive["url"] = HttpUrlValidator()
         httpArchive[schema.Optional("sslVerify")] = bool
         shellArchive = baseArchive.copy()
         shellArchive.update({
