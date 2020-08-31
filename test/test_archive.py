@@ -8,6 +8,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 import asyncio
+import base64
 import http.server
 import os, os.path
 import socketserver
@@ -15,6 +16,7 @@ import stat
 import subprocess
 import tarfile
 import threading
+import urllib.parse
 
 from bob.archive import DummyArchive, SimpleHttpArchive, getArchiver
 from bob.errors import BuildError
@@ -493,11 +495,20 @@ class TestDummyArchive(TestCase):
         run(DummyArchive().uploadLocalLiveBuildId(DummyStep(), b'\x00'*20, b'\x00'*20))
 
 
-def createHttpHandler(repoPath):
+def createHttpHandler(repoPath, username=None, password=None):
 
     class Handler(http.server.BaseHTTPRequestHandler):
 
         def getCommon(self):
+            if username is not None:
+                challenge = 'Basic ' + base64.b64encode(
+                    (username+":"+password).encode("utf-8")).decode("ascii")
+                if self.headers.get('Authorization') != challenge:
+                    self.send_error(401, "Unauthorized")
+                    self.send_header("WWW-Authenticate", 'Basic realm="default"')
+                    self.end_headers()
+                    return None
+
             path = repoPath + self.path
             try:
                 f = open(path, "rb")
@@ -578,6 +589,50 @@ class TestHttpArchive(BaseTester, TestCase):
         """Test download on non-existent server"""
 
         spec = { 'url' : "https://127.1.2.3:7257" }
+        archive = SimpleHttpArchive(spec, None)
+        archive.wantDownload(True)
+        archive.wantUpload(True)
+
+        # Local
+        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
+        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
+
+        # Jenkins
+        with TemporaryDirectory() as workspace:
+            with open(os.path.join(workspace, "test.buildid"), "wb") as f:
+                f.write(b'\x00'*20)
+            script = archive.download(DummyStep(), "test.buildid", "result.tgz")
+            callJenkinsScript(script, workspace)
+
+class TestHttpBasicAuthArchive(BaseTester, TestCase):
+
+    USERNAME = "bob"
+    PASSWORD = "jd64&dm"
+
+    def setUp(self):
+        super().setUp()
+        self.httpd = socketserver.ThreadingTCPServer(("localhost", 0),
+            createHttpHandler(self.repo.name, self.USERNAME, self.PASSWORD))
+        self.ip, self.port = self.httpd.server_address
+        self.server = threading.Thread(target=self.httpd.serve_forever)
+        self.server.daemon = True
+        self.server.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        super().tearDown()
+
+    def _setArchiveSpec(self, spec, password = None):
+        spec['backend'] = "http"
+        spec["url"] = "http://{}:{}@{}:{}".format(urllib.parse.quote(self.USERNAME),
+            urllib.parse.quote(password or self.PASSWORD), self.ip, self.port)
+
+    def testUnauthorized(self):
+        """Test download on non-existent server"""
+
+        spec = { }
+        self._setArchiveSpec(spec, "wrong_password")
         archive = SimpleHttpArchive(spec, None)
         archive.wantDownload(True)
         archive.wantUpload(True)
