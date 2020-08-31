@@ -28,6 +28,7 @@ from shlex import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 import argparse
 import asyncio
+import base64
 import concurrent.futures
 import concurrent.futures.process
 import gzip
@@ -583,6 +584,16 @@ class SimpleHttpArchive(BaseArchive):
             self.__connection.close()
             self.__connection = None
 
+    def _getHeaders(self):
+        headers = { 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) }
+        if self.__url.username is not None:
+            username = urllib.parse.unquote(self.__url.username)
+            passwd = urllib.parse.unquote(self.__url.password)
+            userPass = username + ":" + passwd
+            headers['Authorization'] = 'Basic ' + base64.b64encode(
+                userPass.encode("utf-8")).decode("ascii")
+        return headers
+
     def _openDownloadFile(self, buildId, suffix):
         (ok, result) = self.__retry(lambda: self.__openDownloadFile(buildId, suffix))
         if ok:
@@ -593,8 +604,7 @@ class SimpleHttpArchive(BaseArchive):
     def __openDownloadFile(self, buildId, suffix):
         connection = self._getConnection()
         url = self._makeUrl(buildId, suffix)
-        connection.request("GET", url,
-                headers={ 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) })
+        connection.request("GET", url, headers=self._getHeaders())
         response = connection.getresponse()
         if response.status == 200:
             return SimpleHttpDownloader(self, response)
@@ -618,8 +628,7 @@ class SimpleHttpArchive(BaseArchive):
         url = self._makeUrl(buildId, suffix)
 
         # check if already there
-        connection.request("HEAD", url,
-                headers={ 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) })
+        connection.request("HEAD", url, headers=self._getHeaders())
         response = connection.getresponse()
         response.read()
         if response.status == 200:
@@ -643,9 +652,10 @@ class SimpleHttpArchive(BaseArchive):
         tmp.seek(0, os.SEEK_END)
         length = str(tmp.tell())
         tmp.seek(0)
+        headers = self._getHeaders()
+        headers.update({ 'Content-Length' : length, 'If-None-Match' : '*' })
         connection = self._getConnection()
-        connection.request("PUT", url, tmp, headers={ 'Content-Length' : length,
-            'If-None-Match' : '*', 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) })
+        connection.request("PUT", url, tmp, headers=headers)
         response = connection.getresponse()
         response.read()
         if response.status == 412:
