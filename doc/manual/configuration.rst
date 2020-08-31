@@ -1872,6 +1872,18 @@ Example::
       backend: http
       url: "http://localhost:8001/upload"
 
+HTTP basic authentication is supported. The user name and password must be put
+in the URL. Be careful to escape special characters of the password with proper
+percent encoding::
+
+   archive:
+      backend: http
+      url: "https://user:passw%40rd@server.test/artifacts"
+
+.. warning::
+   The password will be part of the Jenkins job configuration. Anybody who can
+   read the jobs ``config.xml`` will be able to retrieve the password!
+
 It is also possible to use separate methods for upload and download::
 
     archive:
