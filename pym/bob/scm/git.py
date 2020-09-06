@@ -264,7 +264,7 @@ class GitScm(Scm):
                     timeout = int(timeout)
                     if timeout < 0: raise ValueError()
                 except ValueError:
-                    raise BuildError("Invalid 'git.timeout' option: " + str(shallow))
+                    raise BuildError("Invalid 'git.timeout' option: " + str(timeout))
                 if timeout > 0:
                     ElementTree.SubElement(co, "timeout").text = str(timeout)
 
