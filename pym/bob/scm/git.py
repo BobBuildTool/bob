@@ -6,7 +6,7 @@
 from ..errors import ParseError, BuildError
 from ..stringparser import isTrue, IfExpression
 from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
-from ..utils import check_output, joinLines
+from ..utils import check_output, joinLines, run
 from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
 from shlex import quote
 from textwrap import dedent, indent
@@ -19,6 +19,9 @@ import os, os.path
 import re
 import schema
 import subprocess
+
+def normPath(p):
+    return os.path.normcase(os.path.normpath(p))
 
 class GitScm(Scm):
 
@@ -34,7 +37,10 @@ class GitScm(Scm):
         schema.Optional(schema.Regex('^remote-.*')) : str,
         schema.Optional('sslVerify') : bool,
         schema.Optional('singleBranch') : bool,
-        schema.Optional('shallow') : schema.Or(int, str)
+        schema.Optional('shallow') : schema.Or(int, str),
+        schema.Optional('submodules') : bool,
+        schema.Optional('recurseSubmodules') : bool,
+        schema.Optional('shallowSubmodules') : bool,
     })
     REMOTE_PREFIX = "remote-"
 
@@ -76,6 +82,9 @@ class GitScm(Scm):
         self.__sslVerify = spec.get('sslVerify', secureSSL)
         self.__singleBranch = spec.get('singleBranch')
         self.__shallow = spec.get('shallow')
+        self.__submodules = spec.get('submodules', False)
+        self.__recurseSubmodules = spec.get('recurseSubmodules', False)
+        self.__shallowSubmodules = spec.get('shallowSubmodules', True)
 
     def getProperties(self, isJenkins):
         properties = super().getProperties(isJenkins)
@@ -93,6 +102,9 @@ class GitScm(Scm):
             'sslVerify' : self.__sslVerify,
             'singleBranch' : self.__singleBranch,
             'shallow' : self.__shallow,
+            'submodules' : self.__submodules,
+            'recurseSubmodules' : self.__recurseSubmodules,
+            'shallowSubmodules' : self.__shallowSubmodules,
         })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
@@ -137,7 +149,7 @@ class GitScm(Scm):
         # refspec is kept in the git config.
 
         # Base fetch command with shallow support
-        fetchCmd = ["git", "fetch", "-p"]
+        fetchCmd = ["git", "-c", "submodule.recurse=0", "fetch", "-p"]
         if isinstance(self.__shallow, int):
             fetchCmd.append("--depth={}".format(self.__shallow))
         elif isinstance(self.__shallow, str):
@@ -164,21 +176,141 @@ class GitScm(Scm):
             stdout=False, cwd=self.__dir)
         if head:
             await invoker.checkCommand(fetchCmd, cwd=self.__dir)
-            await invoker.checkCommand(["git", "checkout", "-q",
+            await invoker.checkCommand(["git", "checkout", "-q", "--no-recurse-submodules",
                 self.__commit if self.__commit else "tags/"+self.__tag], cwd=self.__dir)
+            await self.__checkoutSubmodules(invoker)
 
     async def __checkoutBranch(self, invoker, fetchCmd):
         await invoker.checkCommand(fetchCmd, cwd=self.__dir)
         if await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
                        stdout=False, cwd=self.__dir):
             # checkout only if HEAD is invalid
-            await invoker.checkCommand(["git", "checkout", "-b", self.__branch,
+            await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules", "-b", self.__branch,
                 "remotes/origin/"+self.__branch], cwd=self.__dir)
+            await self.__checkoutSubmodules(invoker)
         elif (await invoker.checkOutputCommand(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.__dir)) == self.__branch:
             # pull only if on original branch
-            await invoker.checkCommand(["git", "merge", "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
+            preUpdate = await self.__updateSubmodulesPre(invoker)
+            await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "merge", "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
+            await self.__updateSubmodulesPost(invoker, preUpdate)
         else:
             invoker.warn("Not updating", self.__dir, "because branch was changed manually...")
+
+    async def __checkoutSubmodules(self, invoker):
+        if not self.__submodules: return
+
+        args = ["git", "submodule", "update", "--init"]
+        if self.__shallowSubmodules:
+            args += ["--depth", "1"]
+        if self.__recurseSubmodules:
+            args += ["--recursive"]
+        await invoker.checkCommand(args, cwd=self.__dir)
+
+    async def __updateSubmodulesPre(self, invoker, base = "."):
+        """Query the status of the currently checked out submodules.
+
+        Returns a map with the paths of all checked out submodules as keys.
+        The value will be True if the submodule looks untouched by the user and
+        is deemed to be updateable. If the value is False the submodule is
+        different from the expected vanilla checkout state. The list may only
+        be a sub-set of all known submodules.
+        """
+
+        if not self.__submodules:
+            return {}
+
+        # List all active and checked out submodules. This way we know the
+        # state of all submodules and compare them later to the expected state.
+        args = [ "git", "-C", base, "submodule", "-q", "foreach",
+                 "printf '%s\\t%s\\n' \"$sm_path\" \"$(git rev-parse HEAD)\""]
+        checkedOut = await invoker.checkOutputCommand(args, cwd=self.__dir)
+        checkedOut = {
+            path : commit for path, commit
+                in ( line.split("\t") for line in checkedOut.split("\n") if line )
+        }
+        if not checkedOut: return {}
+
+        # List commits from git tree of all paths for checked out submodules.
+        # This is what should be checked out.
+        args = [ "git", "-C", base, "ls-tree", "-z", "HEAD"] + sorted(checkedOut.keys())
+        allPaths = await invoker.checkOutputCommand(args, cwd=self.__dir)
+        allPaths = {
+            normPath(path) : attribs.split(' ')[2]
+                for attribs, path
+                in ( p.split('\t') for p in allPaths.split('\0') if p )
+                if attribs.split(' ')[1] == "commit"
+        }
+
+        # Calculate which paths are in the right state. They must match the
+        # commit and must be in detached HEAD state.
+        ret = {}
+        for path, commit in checkedOut.items():
+            path = normPath(path)
+            if allPaths.get(path) != commit:
+                ret[path] = False
+                continue
+
+            code = await invoker.callCommand(["git", "symbolic-ref", "-q", "HEAD"],
+                cwd=os.path.join(self.__dir, base, path))
+            if code == 0:
+                ret[path] = False
+                continue
+
+            ret[path] = True
+
+        return ret
+
+    async def __updateSubmodulesPost(self, invoker, oldState, base = "."):
+        """Update all submodules that are safe.
+
+        Will update all submodules that are either new or have not been touched
+        by the user. This will be done recursively if that is enabled.
+        """
+        if not self.__submodules:
+            return {}
+        if not os.path.exists(invoker.joinPath(self.__dir, base, ".gitmodules")):
+            return {}
+
+        # Sync remote URLs into our config in case they were changed
+        args = ["git", "-C", base, "submodule", "sync"]
+        await invoker.checkCommand(args, cwd=self.__dir)
+
+        # List all paths as per .gitmodules. This gives us the list of all
+        # known submodules.
+        args = [ "git", "-C", base, "config", "-f", ".gitmodules", "-z", "--get-regexp",
+                 "path" ]
+        allPaths = await invoker.checkOutputCommand(args, cwd=self.__dir)
+        allPaths = [ p.split("\n")[1] for p in allPaths.split("\0") if p ]
+
+        # Update only new or unmodified paths
+        updatePaths = [ p for p in allPaths if oldState.get(normPath(p), True) ]
+        for p in sorted(set(allPaths) - set(updatePaths)):
+            invoker.warn("Not updating submodule", os.path.join(self.__dir, base, p), "because its HEAD has been switched...")
+        if not updatePaths:
+            return
+
+        # If we recurse into sub-submodules get their potential state up-front
+        if self.__recurseSubmodules:
+            # Explicit loop because of Python 3.5: "'await' expressions in
+            # comprehensions are not supported".
+            subMods = {}
+            for p in updatePaths:
+                subMods[p] = await self.__updateSubmodulesPre(invoker,
+                    os.path.join(base, p))
+
+        # Do the update of safe submodules
+        args = ["git", "-C", base, "submodule", "update", "--init"]
+        if self.__shallowSubmodules:
+            args += ["--depth", "1"]
+        args.append("--")
+        args += updatePaths
+        await invoker.checkCommand(args, cwd=self.__dir)
+
+        # Update sub-submodules if requested
+        if self.__recurseSubmodules:
+            for p in updatePaths:
+                await self.__updateSubmodulesPost(invoker, subMods[p],
+                                                  os.path.join(base, p))
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this git module.
@@ -186,11 +318,18 @@ class GitScm(Scm):
         The format is "url rev-spec dir" where rev-spec depends on the given reference.
         """
         if self.__commit:
-            return self.__commit + " " + self.__dir
+            ret = self.__commit + " " + self.__dir
         elif self.__tag:
-            return self.__url + " refs/tags/" + self.__tag + " " + self.__dir
+            ret = self.__url + " refs/tags/" + self.__tag + " " + self.__dir
         else:
-            return self.__url + " refs/heads/" + self.__branch + " " + self.__dir
+            ret = self.__url + " refs/heads/" + self.__branch + " " + self.__dir
+
+        if self.__submodules:
+            ret += " submodules"
+            if self.__recurseSubmodules:
+                ret += " recursive"
+
+        return ret
 
     def asJenkins(self, workPath, credentials, options):
         scm = ElementTree.Element("scm", attrib={
@@ -268,6 +407,17 @@ class GitScm(Scm):
                 if timeout > 0:
                     ElementTree.SubElement(co, "timeout").text = str(timeout)
 
+        if self.__submodules:
+            sub = ElementTree.SubElement(extensions,
+                    "hudson.plugins.git.extensions.impl.SubmoduleOption")
+            if self.__recurseSubmodules:
+                ElementTree.SubElement(sub, "recursiveSubmodules").text = "true"
+            if self.__shallowSubmodules:
+                ElementTree.SubElement(sub, "shallow").text = "true"
+                ElementTree.SubElement(sub, "depth").text = "1"
+            if timeout is not None:
+                ElementTree.SubElement(sub, "timeout").text = str(timeout)
+
         if isTrue(options.get("scm.ignore-hooks", "0")):
             ElementTree.SubElement(extensions,
                 "hudson.plugins.git.extensions.impl.IgnoreNotifyCommit")
@@ -341,7 +491,7 @@ class GitScm(Scm):
                     onCorrectBranch = True
 
             # Check for modifications wrt. checked out commit
-            output = self.callGit(workspacePath, 'status', '--porcelain')
+            output = self.callGit(workspacePath, 'status', '--porcelain', '--ignore-submodules=all')
             if output:
                 status.add(ScmTaint.modified, joinLines("> modified:",
                     indent(output, '   ')))
@@ -361,13 +511,90 @@ class GitScm(Scm):
                 status.add(ScmTaint.unpushed_local,
                     joinLines("> unpushed local commits:", indent(output, '   ')))
 
+            # Dive into submodules
+            self.__statusSubmodule(workspacePath, status, self.__submodules)
+
         except BuildError as e:
             status.add(ScmTaint.error, e.slogan)
 
         return status
 
+    def __statusSubmodule(self, workspacePath, status, shouldExist, base = "."):
+        """Get the status of submodules and possibly sub-submodules.
+
+        The regular "git status" command is not sufficient for our case. In
+        case the submodule is not initialized "git status" will completely
+        ignore it. Using "git submodule status" would help but it's output is
+        not ment to be parsed by tools.
+
+        So we first get the list of all possible submodules with their tracked
+        commit. Then the actual commit is compared and any further
+        modifications and unpuched commits are checked.
+        """
+        if not os.path.exists(os.path.join(workspacePath, base, ".gitmodules")):
+            return
+
+        # List all paths as per .gitmodules. This gives us the list of all
+        # known submodules.
+        allPaths = self.callGit(workspacePath, "-C", base, "config", "-f",
+            ".gitmodules", "-z", "--get-regexp", "path")
+        allPaths = [ p.split("\n")[1] for p in allPaths.split("\0") if p ]
+        if not allPaths:
+            return
+
+        # Fetch the respecive commits as per git ls-tree
+        allPaths = self.callGit(workspacePath,  "-C", base, "ls-tree", "-z",
+            "HEAD", *allPaths)
+        allPaths = {
+            path : attribs.split(' ')[2]
+                for attribs, path
+                in ( p.split('\t') for p in allPaths.split('\0') if p )
+                if attribs.split(' ')[1] == "commit"
+        }
+
+        # Check each submodule for their commit, modifications and unpushed
+        # stuff. Unconditionally recurse to even see if something is there even
+        # tough it shouldn't.
+        for path, commit in sorted(allPaths.items()):
+            subPath = os.path.join(base, path)
+            if not os.path.exists(os.path.join(workspacePath, subPath, ".git")):
+                if shouldExist:
+                    status.add(ScmTaint.modified, "> submodule not checked out: " + subPath)
+                continue
+            elif not shouldExist:
+                status.add(ScmTaint.modified, "> submodule checked out: " + subPath)
+
+            realCommit = self.callGit(workspacePath, "-C", subPath, "rev-parse", "HEAD")
+            if commit != realCommit:
+                status.add(ScmTaint.switched,
+                    "> submodule '{}' switched commit: configured: '{}', actual: '{}'"
+                        .format(subPath, commit, realCommit))
+
+            output = self.callGit(workspacePath, "-C", subPath, 'status',
+                '--porcelain', '--ignore-submodules=all')
+            if output:
+                status.add(ScmTaint.modified, joinLines(
+                    "> submodule '{}' modified:".format(subPath),
+                    indent(output, '   ')))
+
+            output = self.callGit(workspacePath, "-C", subPath, 'log',
+                '--oneline', '--decorate', '--all', '--not', '--remotes')
+            if output:
+                status.add(ScmTaint.unpushed_local, joinLines(
+                    "> submodule '{}' unpushed local commits:".format(subPath),
+                    indent(output, '   ')))
+
+            self.__statusSubmodule(workspacePath, status,
+                self.__recurseSubmodules, subPath)
+
+
     def getAuditSpec(self):
-        return ("git", self.__dir, {})
+        extra = {}
+        if self.__submodules:
+            extra['submodules'] = True
+            if self.__recurseSubmodules:
+                extra['recurseSubmodules'] = True
+        return ("git", self.__dir, extra)
 
     def hasLiveBuildId(self):
         return True
@@ -449,11 +676,15 @@ class GitAudit(ScmAudit):
         'remotes' : { schema.Optional(str) : str },
         'commit' : str,
         'description' : str,
-        'dirty' : bool
+        'dirty' : bool,
+        schema.Optional('submodules') : bool,
+        schema.Optional('recurseSubmodules') : bool,
     })
 
     async def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
+        self.__submodules = extra.get('submodules', False)
+        self.__recurseSubmodules = extra.get('recurseSubmodules', False)
         dir = os.path.join(workspace, dir)
         try:
             remotes = (await check_output(["git", "remote", "-v"],
@@ -466,11 +697,64 @@ class GitAudit(ScmAudit):
             self.__description = (await check_output(
                 ["git", "describe", "--always", "--dirty=-dirty"],
                 cwd=dir, universal_newlines=True)).strip()
-            self.__dirty = self.__description.endswith("-dirty")
+            subDirty = await self.__scanSubmodules(dir, self.__submodules)
+            self.__dirty = subDirty or self.__description.endswith("-dirty")
         except subprocess.CalledProcessError as e:
             raise BuildError("Git audit failed: " + str(e))
         except OSError as e:
             raise BuildError("Error calling git: " + str(e))
+
+    async def __scanSubmodules(self, dir, shouldExist, base = "."):
+        if not os.path.exists(os.path.join(dir, base, ".gitmodules")):
+            return False
+
+        # List all paths as per .gitmodules. This gives us the list of all
+        # known submodules.
+        allPaths = await check_output(["git", "-C", base, "config", "-f",
+            ".gitmodules", "-z", "--get-regexp", "path"], cwd=dir,
+            universal_newlines=True)
+        allPaths = [ p.split("\n")[1] for p in allPaths.split("\0") if p ]
+        if not allPaths:
+            return False
+
+        # Fetch the respecive commits as per git ls-tree
+        allPaths = await check_output(["git", "-C", base, "ls-tree", "-z",
+            "HEAD"] + allPaths, cwd=dir, universal_newlines=True)
+        allPaths = {
+            path : attribs.split(' ')[2]
+                for attribs, path
+                in ( p.split('\t') for p in allPaths.split('\0') if p )
+                if attribs.split(' ')[1] == "commit"
+        }
+
+        # Check each submodule for their commit and modifications.
+        # Unconditionally recurse to even see if something is there even tough
+        # it shouldn't. Bail out on first modification.
+        for path, commit in sorted(allPaths.items()):
+            subPath = os.path.join(base, path)
+            if not os.path.exists(os.path.join(dir, subPath, ".git")):
+                if shouldExist:
+                    return True # submodule is missing
+                else:
+                    continue
+            elif not shouldExist:
+                # submodule checked out even though it shouldn't
+                return True
+
+            realCommit = (await check_output(["git", "-C", subPath, "rev-parse", "HEAD"],
+                cwd=dir, universal_newlines=True)).strip()
+            if commit != realCommit:
+                return True # different commit checked out
+
+            proc = await run(["git", "-C", subPath, "diff-index", "--quiet",
+                "HEAD", "--"], cwd=dir)
+            if proc.returncode != 0:
+                return True # dirty
+
+            if await self.__scanSubmodules(dir, self.__recurseSubmodules, subPath):
+                return True # sub-submodule modified
+
+        return False
 
     def _load(self, data):
         self.__dir = data["dir"]
@@ -478,9 +762,11 @@ class GitAudit(ScmAudit):
         self.__commit = data["commit"]
         self.__description = data["description"]
         self.__dirty = data["dirty"]
+        self.__submodules = data.get("submodules", False)
+        self.__recurseSubmodules = data.get("recurseSubmodules", False)
 
     def dump(self):
-        return {
+        ret = {
             "type" : "git",
             "dir" : self.__dir,
             "remotes" : self.__remotes,
@@ -488,6 +774,11 @@ class GitAudit(ScmAudit):
             "description" : self.__description,
             "dirty" : self.__dirty,
         }
+        if self.__submodules:
+            ret["submodules"] = True
+            if self.__recurseSubmodules:
+                ret["recurseSubmodules"] = True
+        return ret
 
     def getStatusLine(self):
         return self.__description
