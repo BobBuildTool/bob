@@ -238,7 +238,10 @@ class GitScm(Scm):
         ElementTree.SubElement(extensions,
             "hudson.plugins.git.extensions.impl.PruneStaleBranch")
         # set git clone options
-        shallow = options.get("scm.git.shallow")
+        if isinstance(self.__shallow, int):
+            shallow = str(self.__shallow)
+        else:
+            shallow = options.get("scm.git.shallow")
         timeout = options.get("scm.git.timeout")
         if shallow is not None or timeout is not None:
             co = ElementTree.SubElement(extensions,
