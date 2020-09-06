@@ -4,13 +4,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from unittest import TestCase
+from unittest.mock import MagicMock
 
+import asyncio
 import os
 import subprocess
 import tempfile
 
-from bob.scm import GitScm, ScmTaint
+from bob.invoker import Invoker
+from bob.scm import GitScm, ScmTaint, GitAudit
 from bob.utils import removePath
+
+def run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro)
 
 class TestGitScmStatus(TestCase):
     repodir = ""
@@ -143,3 +149,230 @@ class TestGitScmStatus(TestCase):
         self.callGit('git checkout tags/v1.1', cwd=self.repodir_local)
         s = self.statusGitScm({ 'tag' : 'v1.1' })
         self.assertEqual(s.flags, set())
+
+
+class TestSubmodulesStatus(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.__repodir = tempfile.TemporaryDirectory()
+        cls.repodir = cls.__repodir.name
+
+        cmds = """\
+            mkdir -p main sub subsub
+
+            # make sub-submodule
+            cd subsub
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo subsub > test.txt
+            git add test.txt
+            git commit -m import
+            cd ..
+
+            # setup first submodule
+            cd sub
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo sub > test.txt
+            git add test.txt
+            mkdir -p some/deep
+            git submodule add --name whatever ../subsub some/deep/path
+            git commit -m import
+            cd ..
+
+            # setup main module
+            cd main
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo main > test.txt
+            git add test.txt
+            git submodule add ../sub
+            git commit -m import
+            cd ..
+        """
+        subprocess.check_call(cmds, shell=True, cwd=cls.repodir)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.__repodir.cleanup()
+
+    def setUp(self):
+        self.__workspaceDir = tempfile.TemporaryDirectory()
+        self.workspace = self.__workspaceDir.name
+
+    def tearDown(self):
+        self.__workspaceDir.cleanup()
+
+    def createGitScm(self, spec = {}):
+        s = {
+            'scm' : "git",
+            'url' : "file://" + os.path.abspath(self.repodir) + "/main",
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+            'submodules' : True,
+        }
+        s.update(spec)
+        return GitScm(s)
+
+    def invokeGit(self, scm):
+        spec = MagicMock(workspaceWorkspacePath=self.workspace, envWhiteList=set())
+        invoker = Invoker(spec, False, True, True, True, True, False)
+        run(scm.invoke(invoker))
+
+    def statusGitScm(self, scm):
+        status = scm.status(self.workspace)
+        _git, dir, extra = scm.getAuditSpec()
+        audit = run(GitAudit.fromDir(self.workspace, dir, extra)).dump()
+        return status, audit
+
+    def testUnmodifiedRegular(self):
+        scm = self.createGitScm()
+        self.invokeGit(scm)
+        status, audit = self.statusGitScm(scm)
+
+        self.assertEqual(status.flags, set())
+        self.assertTrue(status.clean)
+        self.assertFalse(audit["dirty"])
+
+    def testUnmodifiedRecursive(self):
+        scm = self.createGitScm({'recurseSubmodules':True})
+        self.invokeGit(scm)
+        status, audit = self.statusGitScm(scm)
+
+        self.assertEqual(status.flags, set())
+        self.assertTrue(status.clean)
+        self.assertFalse(audit["dirty"])
+
+    def testModifiedSubmodule(self):
+        scm = self.createGitScm({'recurseSubmodules':True})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub
+            echo modified > test.txt
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testModifiedSubSubModule(self):
+        scm = self.createGitScm({'recurseSubmodules':True})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub/some/deep/path
+            echo modified > test.txt
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testSwitchedSubmodule(self):
+        scm = self.createGitScm({'recurseSubmodules':True})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub
+            echo modified > test.txt
+            git add test.txt
+            git commit -m modified
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.switched, ScmTaint.unpushed_local})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testSwitchedSubSubModule(self):
+        """Modify submodule and add commit to sub-submodule"""
+
+        scm = self.createGitScm({'recurseSubmodules':True})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub
+            echo modified > test.txt
+            cd some/deep/path
+            echo modified > test.txt
+            git add test.txt
+            git commit -m modified
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified, ScmTaint.switched, ScmTaint.unpushed_local})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testMissingSubmodule(self):
+        scm = self.createGitScm()
+        self.invokeGit(scm)
+
+        cmd = """\
+            git submodule deinit -f sub
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testMissingSubSubModule(self):
+        scm = self.createGitScm({'recurseSubmodules':True})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub
+            git submodule deinit -f some/deep/path
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testUnexpectedSubmodule(self):
+        """Detect populated submodules when they should not exist"""
+
+        scm = self.createGitScm({'submodules':False})
+        self.invokeGit(scm)
+
+        cmd = """\
+            git submodule update --init
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testUnexpectedSubSubModule(self):
+        """Detect populated sub-submodules when they should not exist"""
+
+        scm = self.createGitScm()
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub
+            git submodule update --init
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
