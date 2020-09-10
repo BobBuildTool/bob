@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from pipes import quote
-from unittest import TestCase
+from unittest import TestCase, skip
 from unittest.mock import MagicMock
 import asyncio
 import os
@@ -140,6 +140,15 @@ class TestGitScm(TestCase):
         s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
         self.assertEqual(s.asDigestScript(), "0123456789abcdef0123456789abcdef01234567 .")
 
+        s = createGitScm({'recursiveSubmodules' : True})
+        self.assertEqual(s.asDigestScript(), "MyURL refs/heads/master .")
+
+        s = createGitScm({'submodules' : True})
+        self.assertEqual(s.asDigestScript(), "MyURL refs/heads/master . submodules")
+
+        s = createGitScm({'submodules' : True, 'recurseSubmodules' : True})
+        self.assertEqual(s.asDigestScript(), "MyURL refs/heads/master . submodules recursive")
+
     def testJenkinsXML(self):
         """Test Jenins XML generation"""
         # TODO: validate XML
@@ -150,6 +159,12 @@ class TestGitScm(TestCase):
         s = createGitScm({'tag' : "asdf"})
         s.asJenkins("workspace/sub/dir", "uuid", {})
         s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
+        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s = createGitScm({'shallow' : 1})
+        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s = createGitScm({'submodules' : True})
+        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s = createGitScm({'submodules' : True, 'recurseSubmodules' : True})
         s.asJenkins("workspace/sub/dir", "uuid", {})
 
     def testMisc(self):
@@ -492,3 +507,325 @@ class TestShallow(TestCase):
             commits, branches = self.invokeGit(workspace, scm)
             self.assertEqual(branches, set(['origin/master']))
 
+class TestSubmodules(TestCase):
+
+    def setUp(self):
+        self.__repodir = tempfile.TemporaryDirectory()
+        self.repodir = self.__repodir.name
+
+        cmds = """\
+            mkdir -p main sub1 subsub1 sub2
+
+            # make sub-submodule
+            cd subsub1
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo subsub > subsub.txt
+            git add subsub.txt
+            git commit -m import
+            cd ..
+
+            # setup first submodule
+            cd sub1
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo 1 > test.txt
+            git add test.txt
+            mkdir -p some/deep
+            git submodule add --name whatever ../subsub1 some/deep/path
+            git commit -m "commit 1"
+            echo 2 > test.txt
+            git commit -a -m "commit 2"
+            cd ..
+
+            # setup main module and add first submodule
+            cd main
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo 1 > test.txt
+            git add test.txt
+            git submodule add ../sub1
+            git commit -m "commit 1"
+            git tag -a -m 'Tag 1' tag1
+            cd ..
+        """
+        subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+
+    def tearDown(self):
+        self.__repodir.cleanup()
+
+    def createGitScm(self, spec = {}):
+        s = {
+            'scm' : "git",
+            'url' : "file://" + os.path.abspath(self.repodir) + "/main",
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        s.update(spec)
+        return GitScm(s)
+
+    def invokeGit(self, workspace, scm):
+        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+        invoker = Invoker(spec, False, True, True, True, True, False)
+        run(scm.invoke(invoker))
+
+    def updateSub1(self):
+        # update sub- and main-module
+        cmds = """\
+            cd sub1
+            echo 2 > test2.txt
+            git add test2.txt
+            git commit -m "commit 2"
+            cd ..
+
+            cd main/sub1
+            git pull
+            cd ..
+            git add sub1
+            git commit -m "commit 2"
+            cd ..
+        """
+        subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+
+    def updateSub1Sub(self):
+        # update sub-sub-, sub- and main-module
+        cmds = """\
+            cd subsub1
+            echo canary > canary.txt
+            git add canary.txt
+            git commit -m canary
+            cd ..
+
+            cd sub1/some/deep/path
+            git pull
+            cd ../../..
+            git add some/deep/path
+            git commit -m update
+            cd ..
+
+            cd main/sub1
+            git pull
+            cd ..
+            git add sub1
+            git commit -m update
+            cd ..
+        """
+        subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+
+    def testSubmoduleIgnoreDefault(self):
+        """Test that submodules are ignored by default"""
+        scm = self.createGitScm()
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+
+    def testSubmoduleClone(self):
+        """Test cloning of submodules
+
+        Make sure sub-submodules are not cloned by default.
+        """
+
+        scm = self.createGitScm({ 'submodules' : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+
+        scm = self.createGitScm({ 'submodules' : True, 'tag' : 'tag1' })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+
+    def testSubmoduleUpdate(self):
+        """Test update of submodule
+
+        A regular update should fetch updated submodules too."""
+
+        scm = self.createGitScm({ 'submodules' : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
+
+            self.updateSub1()
+
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
+
+    def testSubmoduleUpdateSwitched(self):
+        """Test update of switched submodule
+
+        If the submodule was switched to a branch it must not be updated."""
+
+        scm = self.createGitScm({ 'submodules' : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
+
+            subprocess.check_call("git -C sub1 checkout master", shell=True, cwd=workspace)
+            self.updateSub1()
+
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
+
+    def testSubmoduleUpdateCommitted(self):
+        """Test update of submodule that is on other commit
+
+        If the submodule commit does not match the parent tree it must not be
+        updated.
+        """
+
+        scm = self.createGitScm({ 'submodules' : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
+
+            cmds = """\
+                cd sub1
+                echo canary > canary.txt
+                git add canary.txt
+                git commit -m canary
+            """
+            subprocess.check_call(cmds, shell=True, cwd=workspace)
+            self.updateSub1()
+
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/canary.txt")))
+
+    def testSubmoduleAdded(self):
+        """Test addition of submodules on update"""
+
+        scm = self.createGitScm({ 'submodules' : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub2/test.txt")))
+
+            # update sub- and main module
+            cmds = """\
+                cd sub2
+                git init .
+                git config user.email "bob@bob.bob"
+                git config user.name test
+                echo 2 > test.txt
+                git add test.txt
+                git commit -m "commit"
+                cd ..
+
+                cd main
+                git submodule add ../sub2
+                git commit -m "commit 2"
+                cd ..
+            """
+            subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub2/test.txt")))
+
+    @skip("Seems unsupported by git. Leaves an unversioned directory.")
+    def testSubmoduleRemove(self):
+        """Test removal of submodules on update"""
+
+        scm = self.createGitScm({ 'submodules' : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+
+            # update sub- and main module
+            cmds = """\
+                cd main
+                git rm sub1
+                git commit -m "commit 2"
+                cd ..
+            """
+            subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+
+            self.invokeGit(workspace, scm)
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+
+    def testSubmoduleCloneRecursive(self):
+        """Test recursive cloning of submodules"""
+
+        scm = self.createGitScm({ 'submodules' : True, "recurseSubmodules" : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+
+        scm = self.createGitScm({ 'tag' : 'tag1', 'submodules' : True,
+                                   "recurseSubmodules" : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+
+    def testSubSubmoduleUpdate(self):
+        """Test update of sub-submodule
+
+        A regular update should fetch updated sub-submodules too."""
+
+        scm = self.createGitScm({ 'submodules' : True, "recurseSubmodules" : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/canary.txt")))
+
+            self.updateSub1Sub()
+
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/canary.txt")))
+
+    def testSubSubmoduleUpdateSwitched(self):
+        """Test update of switched sub-submodule
+
+        Like a submodule a sub-submodule that was switched to a branch must not
+        be updated.
+        """
+
+        scm = self.createGitScm({ 'submodules' : True, "recurseSubmodules" : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/canary.txt")))
+
+            subprocess.check_call("git -C sub1/some/deep/path checkout master", shell=True, cwd=workspace)
+            self.updateSub1Sub()
+
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/canary.txt")))
+
+    def testSubmodulesShallow(self):
+        """Test that submodules are cloned shallowly by default"""
+        scm = self.createGitScm({ 'submodules' : True })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            log = subprocess.check_output(["git", "-C", "sub1", "log", "--oneline"],
+                cwd=workspace, universal_newlines=True).splitlines()
+            self.assertEqual(len(log), 1)
+
+    def testSubmodulesFullHistory(self):
+        """Test that submodules can be cloned with full history"""
+        scm = self.createGitScm({ 'submodules' : True, 'shallowSubmodules' : False })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            log = subprocess.check_output(["git", "-C", "sub1", "log", "--oneline"],
+                cwd=workspace, universal_newlines=True).splitlines()
+            self.assertTrue(len(log) > 1)

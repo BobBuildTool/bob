@@ -801,6 +801,9 @@ git    `Git`_ project               | ``url``: URL of remote repository
                                     | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
                                     | ``shallow``: Number of commits or cutoff date that should be fetched (optional)
                                     | ``singleBranch``: Fetch only single branch instead of all (optional)
+                                    | ``submodules``: Whether to clone submodules. (optional)
+                                    | ``recurseSubmodules``: Recusively clone submodules (optional, defaults to false)
+                                    | ``shallowSubmodules``: Clone submodules shallowly (optional, defaults to true)
 import Import directory from        | ``url``: Directory path relative to project root.
        project                      | ``prune``: Delete destination directory before importing files.
 svn    `Svn`_ repository            | ``url``: URL of SVN module
@@ -880,6 +883,26 @@ git
       :ref:`configuration-config-scmOverrides` too.  This can be used to
       improve the build times of existing projects or to fetch the whole
       history if ``shallow`` is used in the recipes.
+
+   By default submodules will not be cloned. Set the ``submodules`` property to
+   true to populate them automatically. To recursively clone submodules of
+   submodules too, set the ``recurseSubmodules`` property to ``True``::
+
+      checkoutSCM:
+          - scm: git
+            url: foo@bar.test
+            submodules: True           # clone all direct submodules
+          - scm: git
+            url: something@else.test
+            submodules: True           # clone submodules
+            recurseSubmodules: True    # recursively for sub-submodules too
+
+   The submodules will be cloned shallowly by default. To clone submodules with
+   the whole history set ``shallowSubmodules`` to ``False``. Only submodules
+   that are in detached HEAD state and are on the commit as recorded in the git
+   tree will be automatically updated if the main module branch is updated.
+   Otherwise a warning will be shown and the submodule won't be updated,
+   including possible sub-submodules.
 
 import
    The ``import`` SCM copies the directory specified in ``url`` to the
