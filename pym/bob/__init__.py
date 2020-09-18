@@ -59,6 +59,6 @@ def _enableDebug(enabled):
             print("Invalid debug flag:", e, file=sys.stderr)
             sys.exit(2)
 
-    if sys.platform != "win32":
-        import signal
-        signal.signal(signal.SIGUSR1, __debugTap)
+if sys.platform != "win32":
+    import signal
+    signal.signal(signal.SIGUSR1, __debugTap)
