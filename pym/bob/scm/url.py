@@ -368,7 +368,7 @@ class UrlScm(Scm):
             if not extractors and self.__extract != "auto":
                 raise ParseError("Don't know how to extract '"+self.__fn+"' automatically.")
         elif self.__extract in UrlScm.EXTRACTORS:
-            extractors = UrlScm.EXTRACTORS[tool]
+            extractors = UrlScm.EXTRACTORS[self.__extract]
         elif self.__extract not in ["no", False]:
             raise ParseError("Invalid extract mode: " + self.__extract)
 
