@@ -707,7 +707,6 @@ static void SpawnCommand(char *const *argv, double timeout_secs) {
   CHECK_CALL(global_child_pid = fork());
   if (global_child_pid == 0) {
     // In child.
-    CHECK_CALL(setsid());
     ClearSignalMask();
 
     // Force umask to include read and execute for everyone, to make
