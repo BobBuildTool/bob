@@ -66,28 +66,4 @@ void RedirectStdout(const char *stdout_path);
 // Redirect stderr to the file stdout_path (but not if stderr_path is "-").
 void RedirectStderr(const char *stderr_path);
 
-// Make sure the process group "pgrp" and all its subprocesses are killed.
-// If "gracefully" is true, sends SIGTERM first and after a timeout of
-// "graceful_kill_delay" seconds, sends SIGKILL.
-// If not, send SIGKILL immediately.
-void KillEverything(int pgrp, bool gracefully, double graceful_kill_delay);
-
-// Set up a signal handler for a signal.
-void HandleSignal(int sig, void (*handler)(int));
-
-// Revert signal handler for a signal to the default.
-void UnHandle(int sig);
-
-// Use an empty signal mask for the process and set all signal handlers to their
-// default.
-void ClearSignalMask();
-
-// Receive SIGALRM after the given timeout. No-op if the timeout is
-// non-positive.
-void SetTimeout(double timeout_secs);
-
-// Wait for "pid" to exit and return its exit code.
-// "name" is used for the error message only.
-int WaitChild(pid_t pid, const char *name);
-
 #endif  // PROCESS_TOOLS_H__

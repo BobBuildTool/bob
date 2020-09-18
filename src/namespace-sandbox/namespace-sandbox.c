@@ -45,9 +45,6 @@
   } while (0)
 
 static bool global_debug = false;
-static double global_kill_delay;
-static int global_child_pid;
-static volatile sig_atomic_t global_signal;
 
 // The uid and gid of the user and group 'nobody'.
 static const int kNobodyUid = 65534;
@@ -55,9 +52,6 @@ static const int kNobodyGid = 65534;
 
 // Options parsing result.
 struct Options {
-  double timeout_secs;     // How long to wait before killing the child (-T)
-  double kill_delay_secs;  // How long to wait before sending SIGKILL in case of
-                           // timeout (-t)
   const char *stdout_path;   // Where to redirect stdout (-l)
   const char *stderr_path;   // Where to redirect stderr (-L)
   char *const *args;         // Command to run (--)
@@ -131,10 +125,6 @@ static void Usage(int argc, char *const *argv, const char *fmt, ...) {
       "\n"
       "Optional arguments:\n"
       "  -W <working-dir>  working directory\n"
-      "  -T <timeout>  timeout after which the child process will be "
-      "terminated with SIGTERM\n"
-      "  -t <timeout>  in case timeout occurs, how long to wait before killing "
-      "the child with SIGKILL\n"
       "  -d <dir>  create an empty directory in the sandbox\n"
       "  -M/-m <source/target>  system directory to mount inside the sandbox\n"
       "    Multiple directories can be specified and each of them will be "
@@ -254,7 +244,7 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
   extern int optind, optopt;
   int c;
 
-  while ((c = getopt(argc, argv, ":CDd:l:L:m:M:nrt:T:S:W:w:H:")) != -1) {
+  while ((c = getopt(argc, argv, ":CDd:l:L:m:M:nrS:W:w:H:")) != -1) {
     switch (c) {
       case 'C':
         // Shortcut for the "does this system support sandboxing" check.
@@ -282,20 +272,6 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
           Usage(argc, argv,
                 "Multiple working directories (-W) specified, expected at most "
                 "one.");
-        }
-        break;
-      case 't':
-        if (sscanf(optarg, "%lf", &opt->kill_delay_secs) != 1 ||
-            opt->kill_delay_secs < 0) {
-          Usage(argc, argv, "Invalid kill delay (-t) value: %lf",
-                opt->kill_delay_secs);
-        }
-        break;
-      case 'T':
-        if (sscanf(optarg, "%lf", &opt->timeout_secs) != 1 ||
-            opt->timeout_secs < 0) {
-          Usage(argc, argv, "Invalid timeout (-T) value: %lf",
-                opt->timeout_secs);
         }
         break;
       case 'd':
@@ -677,72 +653,19 @@ static void ChangeRoot(struct Options *opt) {
   }
 }
 
-// Called when timeout or signal occurs.
-void OnSignal(int sig) {
-  global_signal = sig;
-
-  // Nothing to do if we received a signal before spawning the child.
-  if (global_child_pid == -1) {
-    return;
-  }
-
-  if (sig == SIGALRM) {
-    // SIGALRM represents a timeout, so we should give the process a bit of
-    // time to die gracefully if it needs it.
-    KillEverything(global_child_pid, true, global_kill_delay);
-  } else {
-    // Signals should kill the process quickly, as it's typically blocking
-    // the return of the prompt after a user hits "Ctrl-C".
-    KillEverything(global_child_pid, false, global_kill_delay);
-  }
-}
-
 // Run the command specified by the argv array and kill it after timeout
 // seconds.
-static void SpawnCommand(char *const *argv, double timeout_secs) {
+static void ExecCommand(char *const *argv) {
   for (int i = 0; argv[i] != NULL; i++) {
     PRINT_DEBUG("arg: %s\n", argv[i]);
   }
 
-  CHECK_CALL(global_child_pid = fork());
-  if (global_child_pid == 0) {
-    // In child.
-    ClearSignalMask();
+  // Force umask to include read and execute for everyone, to make
+  // output permissions predictable.
+  umask(022);
 
-    // Force umask to include read and execute for everyone, to make
-    // output permissions predictable.
-    umask(022);
-
-    // Does not return unless something went wrong.
-    CHECK_CALL(execvp(argv[0], argv));
-  } else {
-    // In parent.
-
-    // Set up a signal handler which kills all subprocesses when the given
-    // signal is triggered.
-    HandleSignal(SIGALRM, OnSignal);
-    HandleSignal(SIGTERM, OnSignal);
-    HandleSignal(SIGINT, OnSignal);
-    SetTimeout(timeout_secs);
-
-    int status = WaitChild(global_child_pid, argv[0]);
-
-    // The child is done for, but may have grandchildren that we still have to
-    // kill.
-    kill(-global_child_pid, SIGKILL);
-
-    if (global_signal > 0) {
-      // Don't trust the exit code if we got a timeout or signal.
-      UnHandle(global_signal);
-      raise(global_signal);
-    } else if (WIFEXITED(status)) {
-      exit(WEXITSTATUS(status));
-    } else {
-      int sig = WTERMSIG(status);
-      UnHandle(sig);
-      raise(sig);
-    }
-  }
+  // Does not return unless something went wrong.
+  CHECK_CALL(execvp(argv[0], argv));
 }
 
 int main(int argc, char *const argv[]) {
@@ -761,7 +684,6 @@ int main(int argc, char *const argv[]) {
   if (opt.sandbox_root == NULL) {
     Usage(argc, argv, "Sandbox root (-S) must be specified");
   }
-  global_kill_delay = opt.kill_delay_secs;
 
   int uid = SwitchToEuid();
   int gid = SwitchToEgid();
@@ -796,11 +718,8 @@ int main(int argc, char *const argv[]) {
   }
   ChangeRoot(&opt);
 
-  SpawnCommand(opt.args, opt.timeout_secs);
+  ExecCommand(opt.args);
 
-  free(opt.create_dirs);
-  free(opt.mount_sources);
-  free(opt.mount_targets);
-
-  return 0;
+  // should not be reached but just in case...
+  return 1;
 }
