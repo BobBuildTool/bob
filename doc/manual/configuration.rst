@@ -1285,6 +1285,13 @@ and not starting any new step as long as no ticket is available.
 
 Not available on Windows.
 
+.. attention::
+   The jobserver protocol does not specify if the pipe is blocking or
+   non-blocking.  Bob uses non-blocking pipes like GNU make starting with
+   version 4.3. Earlier versions of GNU make will fail with the following error
+   message: ``*** read jobs pipe: Resource temporarily unavailable.  Stop.``.
+   Either update your make version or disable the ``jobServer`` feature.
+
 .. _configuration-recipes-metaenv:
 
 metaEnvironment
