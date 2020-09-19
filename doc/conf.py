@@ -71,7 +71,7 @@ bobVersion = BOB_VERSION
 # Strip "-dirty" if building on Read the Docs. They change conf.py and thus
 # always taint the repository.
 if os.environ.get('READTHEDOCS') == 'True':
-    if bobVersion.endswith('.dirty'):
+    if bobVersion.endswith('dirty'):
         bobVersion = bobVersion[:-6]
 
 # The short X.Y version.
