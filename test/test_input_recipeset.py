@@ -1012,3 +1012,38 @@ class TestIfExpression(RecipesTmp, TestCase):
                 envOverrides={"USE_DEPS" : "1", "BAR" : "bar2"})
         ps.walkPackagePath("root/bar-1")
         ps.walkPackagePath("root/bar-2")
+
+class TestNoUndefinedToolsPolicy(RecipesTmp, TestCase):
+    """ Test behaviour of noUndefinedTools policy"""
+
+    def setUp(self):
+        super().setUp()
+        self.writeRecipe("root", """\
+            root: True
+            packageTools: ["undefined"]
+            packageScript: "true"
+            """)
+
+    def testOldBehaviour(self):
+        """Test that undefined tools are permissable on old policy setting.
+
+        The tool is silently ignored and dropped.
+        """
+        self.writeConfig({
+            "bobMinimumVersion" : "0.17",
+            "policies" : { "noUndefinedTools" : False },
+        })
+
+        packages = self.generate()
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual(list(ps.getTools().keys()), [])
+
+    def testNewBehaviour(self):
+        """Test that undefined tools generate a parsing error on new policy setting"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.17",
+            "policies" : { "noUndefinedTools" : True },
+        })
+        with self.assertRaises(ParseError):
+            packages = self.generate()
+            packages.walkPackagePath("root").getPackageStep()
