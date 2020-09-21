@@ -2524,10 +2524,17 @@ class Recipe(object):
         if doFingerprint:
             doFingerprint |= doFingerprintMaybe
 
+        # check that all tools that are required are available
+        toolsDetached = tools.detach()
+        if self.__recipeSet.getPolicy('noUndefinedTools') and \
+           not set(toolsDetached.keys()).issuperset(self.__toolDepPackage):
+            raise ParseError("Missing tools: " + ", ".join(sorted(
+                set(self.__toolDepPackage) - set(toolsDetached.keys()))))
+
         # create package
         # touchedTools = tools.touchedKeys()
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
-        p = CorePackage(self, tools.detach(), diffTools, sandbox, diffSandbox,
+        p = CorePackage(self, toolsDetached, diffTools, sandbox, diffSandbox,
                 directPackages, indirectPackages, states, uidGen(), doFingerprint)
 
         # optional checkout step
@@ -2854,6 +2861,7 @@ class RecipeSet:
                 schema.Optional('secureSSL') : bool,
                 schema.Optional('sandboxFingerprints') : bool,
                 schema.Optional('fingerprintVars') : bool,
+                schema.Optional('noUndefinedTools') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
@@ -2960,6 +2968,11 @@ class RecipeSet:
                 "0.16rc1",
                 InfoOnce("fingerprintVars policy not set. Fingerprint scripts may be run more often than needed.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#fingerprintvars for more information.")
+            ),
+            'noUndefinedTools' : (
+                "0.17.3.dev57",
+                InfoOnce("noUndefinedTools policy not set. Included but undefined tools are not detected at parsing time.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#noundefinedtools for more information.")
             ),
         }
         self.__buildHooks = {}
