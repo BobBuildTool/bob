@@ -23,8 +23,11 @@ class MockRecipe:
 
     checkoutAsserts = []
     toolDepCheckout = set(["a", "zz"])
+    toolDepCheckoutWeak = set()
     toolDepBuild = set(["a", "zz"])
+    toolDepBuildWeak = set()
     toolDepPackage = set(["a", "zz"])
+    toolDepPackageWeak = set()
 
 class MockCorePackage:
     def __init__(self, checkoutScript="script", checkoutDigestScript="digest",

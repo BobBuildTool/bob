@@ -769,6 +769,10 @@ class CoreStep(CoreItem):
         """Return relevant tool names for this CoreStep."""
         raise NotImplementedError
 
+    def _getToolKeysWeak(self):
+        """Return relevant weak tool names for this CoreStep."""
+        raise NotImplementedError
+
     def isDeterministic(self):
         return self.deterministic
 
@@ -827,14 +831,19 @@ class CoreStep(CoreItem):
             h.update(script.encode("utf8"))
         else:
             h.update(b'\x00\x00\x00\x00')
-        h.update(struct.pack("<I", len(self.getTools())))
-        for (name, tool) in sorted(self.getTools().items(), key=lambda t: t[0]):
-            h.update(DigestHasher.sliceRecipes(calculate(tool.coreStep)))
-            h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
-            h.update(tool.path.encode("utf8"))
-            for l in tool.libs:
-                h.update(struct.pack("<I", len(l)))
-                h.update(l.encode('utf8'))
+        tools = self.getTools()
+        weakTools = self._getToolKeysWeak()
+        h.update(struct.pack("<I", len(tools)))
+        for (name, tool) in sorted(tools.items(), key=lambda t: t[0]):
+            if name in weakTools:
+                h.update(name.encode("utf8"))
+            else:
+                h.update(DigestHasher.sliceRecipes(calculate(tool.coreStep)))
+                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
+                h.update(tool.path.encode("utf8"))
+                for l in tool.libs:
+                    h.update(struct.pack("<I", len(l)))
+                    h.update(l.encode('utf8'))
         h.update(struct.pack("<I", len(self.digestEnv)))
         for (key, val) in sorted(self.digestEnv.items()):
             h.update(struct.pack("<II", len(key), len(val)))
@@ -868,6 +877,16 @@ class CoreStep(CoreItem):
             for p in sandbox.paths:
                 h.update(struct.pack("<I", len(p)))
                 h.update(p.encode('utf8'))
+        # Include weak tools for the same reason as above.
+        weakTools = self._getToolKeysWeak()
+        for (name, tool) in sorted(self.getTools().items(), key=lambda t: t[0]):
+            if name in weakTools:
+                h.update(tool.coreStep.variantId)
+                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
+                h.update(tool.path.encode("utf8"))
+                for l in tool.libs:
+                    h.update(struct.pack("<I", len(l)))
+                    h.update(l.encode('utf8'))
         # providedEnv
         h.update(struct.pack("<I", len(self.providedEnv)))
         for (key, val) in sorted(self.providedEnv.items()):
@@ -1049,14 +1068,19 @@ class Step:
             h.update(script.encode("utf8"))
         else:
             h.update(b'\x00\x00\x00\x00')
-        h.update(struct.pack("<I", len(self.getTools())))
-        for (name, tool) in sorted(self.getTools().items(), key=lambda t: t[0]):
-            h.update(hasher.sliceRecipes(calculate(tool.step)))
-            h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
-            h.update(tool.path.encode("utf8"))
-            for l in tool.libs:
-                h.update(struct.pack("<I", len(l)))
-                h.update(l.encode('utf8'))
+        tools = self.getTools()
+        weakTools = self._coreStep._getToolKeysWeak()
+        h.update(struct.pack("<I", len(tools)))
+        for (name, tool) in sorted(tools.items(), key=lambda t: t[0]):
+            if name in weakTools:
+                h.update(name.encode('utf8'))
+            else:
+                h.update(hasher.sliceRecipes(calculate(tool.step)))
+                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
+                h.update(tool.path.encode("utf8"))
+                for l in tool.libs:
+                    h.update(struct.pack("<I", len(l)))
+                    h.update(l.encode('utf8'))
         h.update(struct.pack("<I", len(self._coreStep.digestEnv)))
         for (key, val) in sorted(self._coreStep.digestEnv.items()):
             h.update(struct.pack("<II", len(key), len(val)))
@@ -1095,16 +1119,21 @@ class Step:
             h.update(script.encode("utf8"))
         else:
             h.update(b'\x00\x00\x00\x00')
-        h.update(struct.pack("<I", len(self.getTools())))
-        tools = sorted(self.getTools().items(), key=lambda t: t[0])
+        tools = self.getTools()
+        weakTools = self._coreStep._getToolKeysWeak()
+        h.update(struct.pack("<I", len(tools)))
+        tools = sorted(tools.items(), key=lambda t: t[0])
         toolsDigests = await calculate([ tool.step for name,tool in tools ])
         for ((name, tool), d) in zip(tools, toolsDigests):
-            h.update(hasher.sliceRecipes(d))
-            h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
-            h.update(tool.path.encode("utf8"))
-            for l in tool.libs:
-                h.update(struct.pack("<I", len(l)))
-                h.update(l.encode('utf8'))
+            if name in weakTools:
+                h.update(name.encode('utf8'))
+            else:
+                h.update(hasher.sliceRecipes(d))
+                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
+                h.update(tool.path.encode("utf8"))
+                for l in tool.libs:
+                    h.update(struct.pack("<I", len(l)))
+                    h.update(l.encode('utf8'))
         h.update(struct.pack("<I", len(self._coreStep.digestEnv)))
         for (key, val) in sorted(self._coreStep.digestEnv.items()):
             h.update(struct.pack("<II", len(key), len(val)))
@@ -1336,6 +1365,9 @@ class CoreCheckoutStep(CoreStep):
     def _getToolKeys(self):
         return self.corePackage.recipe.toolDepCheckout
 
+    def _getToolKeysWeak(self):
+        return self.corePackage.recipe.toolDepCheckoutWeak
+
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
         ret = CheckoutStep(self, package, pathFormatter)
@@ -1467,6 +1499,9 @@ class CoreBuildStep(CoreStep):
     def _getToolKeys(self):
         return self.corePackage.recipe.toolDepBuild
 
+    def _getToolKeysWeak(self):
+        return self.corePackage.recipe.toolDepBuildWeak
+
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
         ret = BuildStep(self, package, pathFormatter)
@@ -1517,6 +1552,9 @@ class CorePackageStep(CoreStep):
 
     def _getToolKeys(self):
         return self.corePackage.recipe.toolDepPackage
+
+    def _getToolKeysWeak(self):
+        return self.corePackage.recipe.toolDepPackageWeak
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -2054,10 +2092,15 @@ class Recipe(object):
         self.__packageVarsWeak = set(recipe.get("packageVarsWeak", []))
         self.__packageVarsWeak |= self.__buildVarsWeak
         self.__toolDepCheckout = set(recipe.get("checkoutTools", []))
+        self.__toolDepCheckoutWeak = set(recipe.get("checkoutToolsWeak", []))
         self.__toolDepBuild = set(recipe.get("buildTools", []))
         self.__toolDepBuild |= self.__toolDepCheckout
+        self.__toolDepBuildWeak = set(recipe.get("buildToolsWeak", []))
+        self.__toolDepBuildWeak |= self.__toolDepCheckoutWeak
         self.__toolDepPackage = set(recipe.get("packageTools", []))
         self.__toolDepPackage |= self.__toolDepBuild
+        self.__toolDepPackageWeak = set(recipe.get("packageToolsWeak", []))
+        self.__toolDepPackageWeak |= self.__toolDepBuildWeak
         self.__shared = recipe.get("shared")
         self.__relocatable = recipe.get("relocatable")
         self.__jobServer = recipe.get("jobServer")
@@ -2212,8 +2255,11 @@ class Recipe(object):
             self.__packageVars |= cls.__packageVars
             self.__packageVarsWeak |= cls.__packageVarsWeak
             self.__toolDepCheckout |= cls.__toolDepCheckout
+            self.__toolDepCheckoutWeak |= cls.__toolDepCheckoutWeak
             self.__toolDepBuild |= cls.__toolDepBuild
+            self.__toolDepBuildWeak |= cls.__toolDepBuildWeak
             self.__toolDepPackage |= cls.__toolDepPackage
+            self.__toolDepPackageWeak |= cls.__toolDepPackageWeak
             if self.__buildNetAccess is None: self.__buildNetAccess = cls.__buildNetAccess
             if self.__packageNetAccess is None: self.__packageNetAccess = cls.__packageNetAccess
             for (n, p) in self.__properties.items():
@@ -2230,6 +2276,14 @@ class Recipe(object):
 
         # final shared value
         self.__shared = self.__shared == True
+
+        # Only keep weak tools that are not strong at the same time.
+        self.__toolDepCheckoutWeak -= self.__toolDepCheckout
+        self.__toolDepCheckout |= self.__toolDepCheckoutWeak
+        self.__toolDepBuildWeak -= self.__toolDepBuild
+        self.__toolDepBuild |= self.__toolDepBuildWeak
+        self.__toolDepPackageWeak -= self.__toolDepPackage
+        self.__toolDepPackage |= self.__toolDepPackageWeak
 
         # Either 'relocatable' was set in the recipe/class(es) or it defaults
         # to True unless a tool is defined. This was the legacy behaviour
@@ -2685,12 +2739,24 @@ Every dependency must only be given once."""
         return self.__toolDepCheckout
 
     @property
+    def toolDepCheckoutWeak(self):
+        return self.__toolDepCheckoutWeak
+
+    @property
     def toolDepBuild(self):
         return self.__toolDepBuild
 
     @property
+    def toolDepBuildWeak(self):
+        return self.__toolDepBuildWeak
+
+    @property
     def toolDepPackage(self):
         return self.__toolDepPackage
+
+    @property
+    def toolDepPackageWeak(self):
+        return self.__toolDepPackageWeak
 
     @property
     def fingerprintScriptList(self):
@@ -3420,6 +3486,9 @@ class RecipeSet:
             schema.Optional('checkoutTools') : [ toolNameSchema ],
             schema.Optional('buildTools') : [ toolNameSchema ],
             schema.Optional('packageTools') : [ toolNameSchema ],
+            schema.Optional('checkoutToolsWeak') : [ toolNameSchema ],
+            schema.Optional('buildToolsWeak') : [ toolNameSchema ],
+            schema.Optional('packageToolsWeak') : [ toolNameSchema ],
             schema.Optional('checkoutVars') : [ varNameUseSchema ],
             schema.Optional('buildVars') : [ varNameUseSchema ],
             schema.Optional('packageVars') : [ varNameUseSchema ],
