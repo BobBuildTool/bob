@@ -466,3 +466,22 @@ New behavior
    but whitelisted variables (see :ref:`configuration-config-whitelist`) are
    still available.
 
+noUndefinedTools
+~~~~~~~~~~~~~~~~
+
+Introduced in: 0.18
+
+It was perfectly valid to list tools in ``{checkout,build,package}Tools`` that
+are not defined. This could lead to build failures because of missing tools
+that could have been detected already at parsing time. In practice there is no
+need to rely on this behavior. It is always possible to define a place holder
+recipe to syntactically satisfy the dependency.
+
+Old behavior
+   It is not necessary that tools are actually defined when being used in a
+   recipe. If they are available they will be used. If a tool is undefined it
+   is silently ignored.
+
+New behavior
+   Tools listed in  ``{checkout,build,package}Tools`` must be defined. Any
+   undefined tool will lead to a parsing error.
