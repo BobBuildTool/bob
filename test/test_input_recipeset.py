@@ -1047,3 +1047,88 @@ class TestNoUndefinedToolsPolicy(RecipesTmp, TestCase):
         with self.assertRaises(ParseError):
             packages = self.generate()
             packages.walkPackagePath("root").getPackageStep()
+
+class TestToolsWeak(RecipesTmp, TestCase):
+    """Test behaviour or weak tools"""
+
+    def setUp(self):
+        super().setUp()
+        self.writeConfig({
+            "bobMinimumVersion" : "0.17",
+            "policies" : { "noUndefinedTools" : False },
+        })
+        self.writeRecipe("tool", """\
+            multiPackage:
+                "1":
+                    provideTools:
+                        tool: "."
+                    packageScript: "foo"
+                "2":
+                    provideTools:
+                        tool: "."
+                    packageScript: "bat"
+            """)
+
+    def testWeak(self):
+        """Weak tools have no impact on package"""
+        self.writeRecipe("r1", """\
+            root: True
+            depends:
+                - name: tool-1
+                  use: [tools]
+            packageToolsWeak: [tool]
+            """)
+        self.writeRecipe("r2", """\
+            root: True
+            depends:
+                - name: tool-2
+                  use: [tools]
+            packageToolsWeak: [tool]
+            """)
+        packages = self.generate()
+        r1 = packages.walkPackagePath("r1").getPackageStep()
+        r2 = packages.walkPackagePath("r2").getPackageStep()
+        self.assertEqual(r1.getVariantId(), r2.getVariantId())
+        self.assertNotEqual(r1.getTools()["tool"].getStep().getVariantId(),
+                            r2.getTools()["tool"].getStep().getVariantId())
+
+    def testWeakMissing(self):
+        """Weak tools that are missing still make a difference"""
+        self.writeRecipe("r1", """\
+            root: True
+            depends:
+                - name: tool-1
+                  use: [tools]
+            packageTools: [tool]
+            """)
+        self.writeRecipe("r2", """\
+            root: True
+            packageTools: [tool]
+            """)
+        packages = self.generate()
+        r1 = packages.walkPackagePath("r1").getPackageStep()
+        r2 = packages.walkPackagePath("r2").getPackageStep()
+        self.assertNotEqual(r1.getVariantId(), r2.getVariantId())
+
+    def testStrongOverride(self):
+        """A weak and strong tool refence is treated as strong"""
+        self.writeRecipe("r1", """\
+            root: True
+            depends:
+                - name: tool-1
+                  use: [tools]
+            packageTools: [tool]
+            packageToolsWeak: [tool]
+            """)
+        self.writeRecipe("r2", """\
+            root: True
+            depends:
+                - name: tool-2
+                  use: [tools]
+            packageTools: [tool]
+            packageToolsWeak: [tool]
+            """)
+        packages = self.generate()
+        r1 = packages.walkPackagePath("r1").getPackageStep()
+        r2 = packages.walkPackagePath("r2").getPackageStep()
+        self.assertNotEqual(r1.getVariantId(), r2.getVariantId())
