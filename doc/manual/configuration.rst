@@ -543,6 +543,8 @@ external command fails. Make sure to wrap calls to external tools with
 ``Check-Command`` or check ``$lastexitcode`` yourself. Otherwise the build will
 not detect errors involving external commands!
 
+.. _configuration-recipes-tools:
+
 {checkout,build,package}Tools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -564,6 +566,25 @@ If a step depends on a certain tool then the result of the following step is
 already indirectly dependent on this tool. Thus it can be available during the
 following step anyway.
 
+{checkout,build,package}ToolsWeak
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: List of strings
+
+This property has the same semantics as :ref:`configuration-recipes-tools` with
+one exception: despite the presence of the included tools the exact variants of
+the tools are not considered to influence the result. That is, how the tools
+are built and which versions of the tools are used, are ignored by Bob. They
+neither contribute to variant management nor will they trigger a rebuild of a
+package if they change.
+
+Typical examples of weak tools are script interpreters like make or bash. The
+exact version of these tools and the build flags of them are typically not
+relevant for the build result of a package. These tools can be safely declared
+as weak tools. On the other hand the C/C++-toolchain cannot be a weak tool
+because the toolchain version and build time options (e.g. target architecture)
+have a direct impact on the build results. Such toolchains must not be included
+weakly.
 
 .. _configuration-recipes-vars:
 
