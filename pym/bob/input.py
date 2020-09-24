@@ -2720,6 +2720,14 @@ Every dependency must only be given once."""
         return [ CheckoutAssert(cassert) for cassert in self.__checkoutAsserts ]
 
     @property
+    def checkoutVars(self):
+        return self.__checkoutVars
+
+    @property
+    def checkoutVarsWeak(self):
+        return self.__checkoutVarsWeak - self.__checkoutVars
+
+    @property
     def buildScript(self):
         return self.__build[0]
 
@@ -2728,12 +2736,28 @@ Every dependency must only be given once."""
         return self.__build[1]
 
     @property
+    def buildVars(self):
+        return self.__buildVars
+
+    @property
+    def buildVarsWeak(self):
+        return self.__buildVarsWeak - self.__buildVars
+
+    @property
     def packageScript(self):
         return self.__package[0]
 
     @property
     def packageDigestScript(self):
         return self.__package[1]
+
+    @property
+    def packageVars(self):
+        return self.__packageVars
+
+    @property
+    def packageVarsWeak(self):
+        return self.__packageVarsWeak - self.__packageVars
 
     @property
     def toolDepCheckout(self):

@@ -59,6 +59,11 @@ def __project(*args, **kwargs):
      doProject(*args, **kwargs)
      return 0
 
+def __show(*args, **kwars):
+     from .cmds.show import doShow
+     doShow(*args, **kwars)
+     return 0
+
 def __status(*args, **kwars):
      from .cmds.build.status import doStatus
      doStatus(*args, **kwars)
@@ -108,6 +113,7 @@ availableCommands = {
     "jenkins"       : ('hl', __jenkins, "Configure Jenkins server"),
     "ls"            : ('hl', __ls, "List package hierarchy"),
     "project"       : ('hl', __project, "Create project files"),
+    "show"          : ('hl', __show, "Show properties of a package"),
     "status"        : ('hl', __status, "Show SCM status"),
 
     "query-scm"     : ('ll', __queryscm, "Query SCM information"),
