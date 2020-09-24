@@ -13,6 +13,12 @@ WARNING = 4
 ERROR = 5
 HEADLINE = 6
 
+# The following color codes are only intended for package diffs
+ADDED = 7
+ADDED_HIGHLIGHT = 8
+DELETED = 9
+DELETED_HIGHLIGHT = 10
+
 ALWAYS = -2
 IMPORTANT = -1
 NORMAL = 0
@@ -20,7 +26,7 @@ INFO = 1
 DEBUG = 2
 TRACE = 3
 
-COLORS2CODE = [ "", "", "32", "34", "33", "31", "32;1" ]
+COLORS2CODE = [ "", "", "32", "34", "33", "31", "32;1", "32", "1;32;48;5;22", "31", "1;31;48;5;52" ]
 COLORS2TEXT = [ "NOTE", "NOTE", "NOTE", "INFO", "WARN", "ERR ", "====" ]
 
 def colorize(string, color):
