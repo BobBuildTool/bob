@@ -221,6 +221,7 @@ class Scm(metaclass=ABCMeta):
         return {
             "__source" : self.__source,
             "recipe" : self.__recipe,
+            "overridden" : bool(self.__overrides),
         }
 
     @abstractmethod
