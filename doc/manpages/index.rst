@@ -19,5 +19,6 @@ Contents:
    bob-query-path
    bob-query-recipe
    bob-query-scm
+   bob-show
    bob-status
 
