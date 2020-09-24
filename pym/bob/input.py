@@ -7,7 +7,8 @@ from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError, BobError
 from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
 from .pathspec import PackageSet
-from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
+from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
+    auditFromDir, getScm, SYNTHETIC_SCM_PROPS
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
@@ -354,7 +355,7 @@ def Scm(spec, env, overrides, recipeSet):
     if matchedOverrides:
         try:
             recipeSet.SCM_SCHEMA.validate({ k:v for k,v in spec.items()
-                if k != '__source' and k != 'recipe' })
+                if k not in SYNTHETIC_SCM_PROPS })
         except schema.SchemaError as e:
             raise ParseError("Error validating SCM after applying scmOverrides: {}".format(str(e)))
 
