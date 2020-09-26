@@ -647,7 +647,7 @@ class CoreSandbox(CoreItem):
         self.mounts.extend(recipeSet.getSandboxMounts())
         self.environment = {
             k : env.substitute(v, "providedSandbox::environment")
-            for (k, v) in spec.get('environment', {})
+            for (k, v) in spec.get('environment', {}).items()
         }
 
         # Calculate a "resultId" so that only identical sandboxes match
