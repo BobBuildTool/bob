@@ -9,5 +9,7 @@ checkoutScript: |
     echo ok
 buildScript: |
     echo ok
+packageVars: [FOO]
 packageScript: |
+    test $FOO = bar
     echo ok

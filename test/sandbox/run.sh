@@ -9,5 +9,5 @@ cleanup
 # Check if namespace feature works on this host.
 "${BOB_ROOT}/bin/bob-namespace-sandbox" -C || skip
 
-run_bob build root
+run_bob build -DFOO=bar root
 run_bob dev --sandbox -E root
