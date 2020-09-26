@@ -1,0 +1,9 @@
+packageScript: |
+    some tool
+provideTools:
+    tool:
+        path: .
+        environment:
+            FOO: bar
+provideVars:
+    BAR: baz

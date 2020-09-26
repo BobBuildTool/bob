@@ -1,0 +1,48 @@
+root: True
+
+metaEnvironment:
+    META: a
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+      forward: True
+    - name: tool
+      use: [tools, environment]
+      forward: True
+    - dep
+
+checkoutSCM:
+    - scm: cvs
+      dir: cvs
+      cvsroot: /foo
+      module: bar
+      rev: tag1
+    - scm: git
+      dir: git
+      url: git@git.test:foo/bar.git
+      commit: 0123456789abcdef0123456789abcdef01234567
+    - scm: import
+      dir: import
+      url: recipes
+    - scm: svn
+      dir: svn
+      url: https://svn.test/foo/bar
+      revision: 42
+    - scm: url
+      dir: url
+      url: ftp://url.test/foo/bar
+      digestSHA256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+checkoutDeterministic: True
+checkoutScript: |
+    true
+
+buildVars: [FOO, BAR]
+buildTools: [tool]
+buildScript: |
+    true
+
+packageVars: [META]
+packageScript: |
+    true

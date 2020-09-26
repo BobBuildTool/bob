@@ -1,0 +1,8 @@
+packageScript: |
+    some sandbox
+provideSandbox:
+    paths: ["/bin", "/usr/bin"]
+    mount:
+        - "/etc/resolv.conf"
+    environment:
+        AUTOCONF_BUILD: "x86_64-linux-gnu"
