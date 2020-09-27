@@ -23,6 +23,11 @@ import subprocess
 def normPath(p):
     return os.path.normcase(os.path.normpath(p))
 
+def dirIsEmpty(p):
+    if not os.path.isdir(p):
+        return False
+    return os.listdir(p) == []
+
 class GitScm(Scm):
 
     SCHEMA = schema.Schema({
@@ -560,6 +565,8 @@ class GitScm(Scm):
             if not os.path.exists(os.path.join(workspacePath, subPath, ".git")):
                 if shouldExist:
                     status.add(ScmTaint.modified, "> submodule not checked out: " + subPath)
+                elif not dirIsEmpty(os.path.join(workspacePath, subPath)):
+                    status.add(ScmTaint.modified, "> ignored submodule not empty: " + subPath)
                 continue
             elif not shouldExist:
                 status.add(ScmTaint.modified, "> submodule checked out: " + subPath)
@@ -735,6 +742,8 @@ class GitAudit(ScmAudit):
             if not os.path.exists(os.path.join(dir, subPath, ".git")):
                 if shouldExist:
                     return True # submodule is missing
+                elif not dirIsEmpty(os.path.join(dir, subPath)):
+                    return True # something in submodule which should not be there
                 else:
                     continue
             elif not shouldExist:
