@@ -262,6 +262,22 @@ class TestSubmodulesStatus(TestCase):
         self.assertTrue(status.dirty)
         self.assertTrue(audit["dirty"])
 
+    def testModifiedNotCloned(self):
+        """Test that modifications in not cloned submodules are detected"""
+        scm = self.createGitScm({'submodules':False})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub
+            echo created > some.txt
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
     def testModifiedSubSubModule(self):
         scm = self.createGitScm({'recurseSubmodules':True})
         self.invokeGit(scm)
