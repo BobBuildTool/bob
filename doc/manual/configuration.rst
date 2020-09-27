@@ -822,7 +822,7 @@ git    `Git`_ project               | ``url``: URL of remote repository
                                     | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
                                     | ``shallow``: Number of commits or cutoff date that should be fetched (optional)
                                     | ``singleBranch``: Fetch only single branch instead of all (optional)
-                                    | ``submodules``: Whether to clone submodules. (optional)
+                                    | ``submodules``: Whether to clone all / a subset of submodules. (optional)
                                     | ``recurseSubmodules``: Recusively clone submodules (optional, defaults to false)
                                     | ``shallowSubmodules``: Clone submodules shallowly (optional, defaults to true)
 import Import directory from        | ``url``: Directory path relative to project root.
@@ -906,13 +906,18 @@ git
       history if ``shallow`` is used in the recipes.
 
    By default submodules will not be cloned. Set the ``submodules`` property to
-   true to populate them automatically. To recursively clone submodules of
+   true to populate them automatically. You can also set it to a list of paths
+   to clone only a subset of submodules. To recursively clone submodules of
    submodules too, set the ``recurseSubmodules`` property to ``True``::
 
       checkoutSCM:
           - scm: git
             url: foo@bar.test
             submodules: True           # clone all direct submodules
+          - scm: git
+            url: subset@foo.test
+            submodules:                # clone only submodule "foo/bar"
+               - foo/bar
           - scm: git
             url: something@else.test
             submodules: True           # clone submodules
