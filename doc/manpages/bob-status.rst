@@ -117,12 +117,16 @@ Status codes can be interpreted as follows:
 - ``O`` = overridden. This SCM is affected by a
   :ref:`configuration-config-scmOverrides`. Pass ``--show-overrides`` to force
   the output of a ``STATUS`` line if the SCM is otherwise unmodified.
-- ``S`` = switched. The commit/tag/branch/URL is different from the recipe.
+- ``S`` = switched. The commit/tag/branch/URL is different from the recipe. In
+  case of submodules the current commit is different from the one tracked in
+  the parent tree.
 - ``U`` = unpushed commits on configured branch. Git only. Some commits were made
   locally to the configured branch but they have not yet been pushed to the remote.
 - ``u`` = unpushed commits not on configured branch. Git only. There are commits
   on other local branches than the configured branch, on a possibly detached HEAD
-  or in the stash that have not been pushed to a remote.
+  or in the stash that have not been pushed to a remote. In case of shallowly
+  cloned submodules this might be shown incorrectly because there is not enough
+  information available about the remotes.
 
 The command shows the status of the current checkout. If the recipe was changed and
 the next build would move a checkout to the attic then the current information still
