@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 from bob.input import GitScm
-from bob.invoker import Invoker
+from bob.invoker import Invoker, CmdFailedError
 from bob.errors import ParseError
 from bob.utils import asHexStr
 
@@ -615,6 +615,25 @@ class TestSubmodules(TestCase):
         """
         subprocess.check_call(cmds, shell=True, cwd=self.repodir)
 
+    def addSub2(self):
+        # Add 2nd submodule
+        cmds = """\
+            cd sub2
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo 2 > test.txt
+            git add test.txt
+            git commit -m "commit"
+            cd ..
+
+            cd main
+            git submodule add ../sub2
+            git commit -m "commit 2"
+            cd ..
+        """
+        subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+
     def testSubmoduleIgnoreDefault(self):
         """Test that submodules are ignored by default"""
         scm = self.createGitScm()
@@ -713,22 +732,7 @@ class TestSubmodules(TestCase):
             self.assertFalse(os.path.exists(os.path.join(workspace, "sub2/test.txt")))
 
             # update sub- and main module
-            cmds = """\
-                cd sub2
-                git init .
-                git config user.email "bob@bob.bob"
-                git config user.name test
-                echo 2 > test.txt
-                git add test.txt
-                git commit -m "commit"
-                cd ..
-
-                cd main
-                git submodule add ../sub2
-                git commit -m "commit 2"
-                cd ..
-            """
-            subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+            self.addSub2()
 
             self.invokeGit(workspace, scm)
             self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
@@ -829,3 +833,39 @@ class TestSubmodules(TestCase):
             log = subprocess.check_output(["git", "-C", "sub1", "log", "--oneline"],
                 cwd=workspace, universal_newlines=True).splitlines()
             self.assertTrue(len(log) > 1)
+
+    def testSubmoduleCloneSpecific(self):
+        """Test cloning of a subset of submodules"""
+        self.addSub2()
+        scm = self.createGitScm({ 'submodules' : ["sub2"] })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub2/test.txt")))
+
+    def testSubmoduleUpdateSpecific(self):
+        """Test update of a subset of submodules"""
+        self.addSub2()
+        scm = self.createGitScm({ 'submodules' : ["sub1"] })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub2")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub2/test.txt")))
+
+            self.updateSub1()
+
+            self.invokeGit(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
+            self.assertTrue(os.path.exists(os.path.join(workspace, "sub2")))
+            self.assertFalse(os.path.exists(os.path.join(workspace, "sub2/test.txt")))
+
+    def testSubmoduleCloneSpecificMissing(self):
+        """Trying to clone a specific submodule that does not exist fails"""
+        scm = self.createGitScm({ 'submodules' : ["sub42"] })
+        with tempfile.TemporaryDirectory() as workspace:
+            with self.assertRaises(CmdFailedError):
+                self.invokeGit(workspace, scm)

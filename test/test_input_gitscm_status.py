@@ -159,7 +159,7 @@ class TestSubmodulesStatus(TestCase):
         cls.repodir = cls.__repodir.name
 
         cmds = """\
-            mkdir -p main sub subsub
+            mkdir -p main sub subsub sub2
 
             # make sub-submodule
             cd subsub
@@ -183,6 +183,16 @@ class TestSubmodulesStatus(TestCase):
             git commit -m import
             cd ..
 
+            # setup second submodule
+            cd sub2
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo sub2 > test.txt
+            git add test.txt
+            git commit -m import
+            cd ..
+
             # setup main module
             cd main
             git init .
@@ -191,6 +201,7 @@ class TestSubmodulesStatus(TestCase):
             echo main > test.txt
             git add test.txt
             git submodule add ../sub
+            git submodule add ../sub2
             git commit -m import
             cd ..
         """
@@ -254,6 +265,22 @@ class TestSubmodulesStatus(TestCase):
         cmd = """\
             cd sub
             echo modified > test.txt
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testModifiedNotCloned(self):
+        """Test that modifications in not cloned submodules are detected"""
+        scm = self.createGitScm({'submodules':False})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub
+            echo created > some.txt
         """
         subprocess.check_call(cmd, shell=True, cwd=self.workspace)
 
@@ -369,6 +396,64 @@ class TestSubmodulesStatus(TestCase):
         cmd = """\
             cd sub
             git submodule update --init
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testSpecificUnmodified(self):
+        """Cloning a subset of submodules does not lead to dirty status"""
+        scm = self.createGitScm({'submodules' : ["sub2"]})
+        self.invokeGit(scm)
+        status, audit = self.statusGitScm(scm)
+
+        self.assertEqual(status.flags, set())
+        self.assertTrue(status.clean)
+        self.assertFalse(audit["dirty"])
+
+    def testSpecificModifiedSubmodule(self):
+        """Modifications are still detected if subset of submodules are cloned"""
+        scm = self.createGitScm({'submodules' : ["sub2"]})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub2
+            echo modified > test.txt
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testSpecificModifiedUnrelated(self):
+        """Test modifications in not checked out submodule are detected"""
+        scm = self.createGitScm({'submodules' : ["sub2"]})
+        self.invokeGit(scm)
+
+        cmd = """\
+            cd sub
+            echo created > some.txt
+        """
+        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testSpecificUnexpectedSubmodule(self):
+        """Detect populated submodule when it was ignored"""
+
+        scm = self.createGitScm({'submodules':["sub2"]})
+        self.invokeGit(scm)
+
+        cmd = """\
+            git submodule update --init sub
         """
         subprocess.check_call(cmd, shell=True, cwd=self.workspace)
 

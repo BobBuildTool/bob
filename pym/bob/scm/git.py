@@ -23,6 +23,11 @@ import subprocess
 def normPath(p):
     return os.path.normcase(os.path.normpath(p))
 
+def dirIsEmpty(p):
+    if not os.path.isdir(p):
+        return False
+    return os.listdir(p) == []
+
 class GitScm(Scm):
 
     SCHEMA = schema.Schema({
@@ -38,7 +43,7 @@ class GitScm(Scm):
         schema.Optional('sslVerify') : bool,
         schema.Optional('singleBranch') : bool,
         schema.Optional('shallow') : schema.Or(int, str),
-        schema.Optional('submodules') : bool,
+        schema.Optional('submodules') : schema.Or(bool, [str]),
         schema.Optional('recurseSubmodules') : bool,
         schema.Optional('shallowSubmodules') : bool,
     })
@@ -204,6 +209,9 @@ class GitScm(Scm):
             args += ["--depth", "1"]
         if self.__recurseSubmodules:
             args += ["--recursive"]
+        if isinstance(self.__submodules, list):
+            args.append("--")
+            args.extend(self.__submodules)
         await invoker.checkCommand(args, cwd=self.__dir)
 
     async def __updateSubmodulesPre(self, invoker, base = "."):
@@ -276,11 +284,14 @@ class GitScm(Scm):
         await invoker.checkCommand(args, cwd=self.__dir)
 
         # List all paths as per .gitmodules. This gives us the list of all
-        # known submodules.
+        # known submodules. Optionally restrict to user specified subset.
         args = [ "git", "-C", base, "config", "-f", ".gitmodules", "-z", "--get-regexp",
                  "path" ]
         allPaths = await invoker.checkOutputCommand(args, cwd=self.__dir)
         allPaths = [ p.split("\n")[1] for p in allPaths.split("\0") if p ]
+        if isinstance(self.__submodules, list):
+            subset = set(normPath(p) for p in self.__submodules)
+            allPaths = [ p for p in allPaths if normPath(p) in subset ]
 
         # Update only new or unmodified paths
         updatePaths = [ p for p in allPaths if oldState.get(normPath(p), True) ]
@@ -326,6 +337,8 @@ class GitScm(Scm):
 
         if self.__submodules:
             ret += " submodules"
+            if isinstance(self.__submodules, list):
+                ret += "[{}]".format(",".join(self.__submodules))
             if self.__recurseSubmodules:
                 ret += " recursive"
 
@@ -408,6 +421,7 @@ class GitScm(Scm):
                     ElementTree.SubElement(co, "timeout").text = str(timeout)
 
         if self.__submodules:
+            assert isinstance(self.__submodules, bool)
             sub = ElementTree.SubElement(extensions,
                     "hudson.plugins.git.extensions.impl.SubmoduleOption")
             if self.__recurseSubmodules:
@@ -431,7 +445,9 @@ class GitScm(Scm):
         return bool(self.__tag) or bool(self.__commit)
 
     def hasJenkinsPlugin(self):
-        return True
+        # Cloning a subset of submodules is not supported by the Jenkins
+        # git-plugin. Fall back to our implementation in this case.
+        return not isinstance(self.__submodules, list)
 
     def callGit(self, workspacePath, *args):
         cmdLine = ['git']
@@ -552,16 +568,27 @@ class GitScm(Scm):
                 if attribs.split(' ')[1] == "commit"
         }
 
+        # Normalize subset of submodules
+        if isinstance(shouldExist, list):
+            shouldExist = set(normPath(p) for p in shouldExist)
+        elif shouldExist:
+            shouldExist = set(normPath(p) for p in allPaths.keys())
+        else:
+            shouldExist = set()
+
         # Check each submodule for their commit, modifications and unpushed
         # stuff. Unconditionally recurse to even see if something is there even
         # tough it shouldn't.
         for path, commit in sorted(allPaths.items()):
             subPath = os.path.join(base, path)
+            subShouldExist = normPath(path) in shouldExist
             if not os.path.exists(os.path.join(workspacePath, subPath, ".git")):
-                if shouldExist:
+                if subShouldExist:
                     status.add(ScmTaint.modified, "> submodule not checked out: " + subPath)
+                elif not dirIsEmpty(os.path.join(workspacePath, subPath)):
+                    status.add(ScmTaint.modified, "> ignored submodule not empty: " + subPath)
                 continue
-            elif not shouldExist:
+            elif not subShouldExist:
                 status.add(ScmTaint.modified, "> submodule checked out: " + subPath)
 
             realCommit = self.callGit(workspacePath, "-C", subPath, "rev-parse", "HEAD")
@@ -591,7 +618,7 @@ class GitScm(Scm):
     def getAuditSpec(self):
         extra = {}
         if self.__submodules:
-            extra['submodules'] = True
+            extra['submodules'] = self.__submodules
             if self.__recurseSubmodules:
                 extra['recurseSubmodules'] = True
         return ("git", self.__dir, extra)
@@ -677,7 +704,7 @@ class GitAudit(ScmAudit):
         'commit' : str,
         'description' : str,
         'dirty' : bool,
-        schema.Optional('submodules') : bool,
+        schema.Optional('submodules') : schema.Or(bool, [str]),
         schema.Optional('recurseSubmodules') : bool,
     })
 
@@ -727,17 +754,28 @@ class GitAudit(ScmAudit):
                 if attribs.split(' ')[1] == "commit"
         }
 
+        # Normalize subset of submodules
+        if isinstance(shouldExist, list):
+            shouldExist = set(normPath(p) for p in shouldExist)
+        elif shouldExist:
+            shouldExist = set(normPath(p) for p in allPaths.keys())
+        else:
+            shouldExist = set()
+
         # Check each submodule for their commit and modifications.
         # Unconditionally recurse to even see if something is there even tough
         # it shouldn't. Bail out on first modification.
         for path, commit in sorted(allPaths.items()):
             subPath = os.path.join(base, path)
+            subShouldExist = normPath(path) in shouldExist
             if not os.path.exists(os.path.join(dir, subPath, ".git")):
-                if shouldExist:
+                if subShouldExist:
                     return True # submodule is missing
+                elif not dirIsEmpty(os.path.join(dir, subPath)):
+                    return True # something in submodule which should not be there
                 else:
                     continue
-            elif not shouldExist:
+            elif not subShouldExist:
                 # submodule checked out even though it shouldn't
                 return True
 
@@ -775,7 +813,7 @@ class GitAudit(ScmAudit):
             "dirty" : self.__dirty,
         }
         if self.__submodules:
-            ret["submodules"] = True
+            ret["submodules"] = self.__submodules
             if self.__recurseSubmodules:
                 ret["recurseSubmodules"] = True
         return ret
