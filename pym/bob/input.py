@@ -7,7 +7,8 @@ from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError, BobError
 from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
 from .pathspec import PackageSet
-from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, auditFromDir, getScm
+from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
+    auditFromDir, getScm, SYNTHETIC_SCM_PROPS
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
@@ -354,7 +355,7 @@ def Scm(spec, env, overrides, recipeSet):
     if matchedOverrides:
         try:
             recipeSet.SCM_SCHEMA.validate({ k:v for k,v in spec.items()
-                if k != '__source' and k != 'recipe' })
+                if k not in SYNTHETIC_SCM_PROPS })
         except schema.SchemaError as e:
             raise ParseError("Error validating SCM after applying scmOverrides: {}".format(str(e)))
 
@@ -647,7 +648,7 @@ class CoreSandbox(CoreItem):
         self.mounts.extend(recipeSet.getSandboxMounts())
         self.environment = {
             k : env.substitute(v, "providedSandbox::environment")
-            for (k, v) in spec.get('environment', {})
+            for (k, v) in spec.get('environment', {}).items()
         }
 
         # Calculate a "resultId" so that only identical sandboxes match
@@ -2719,6 +2720,14 @@ Every dependency must only be given once."""
         return [ CheckoutAssert(cassert) for cassert in self.__checkoutAsserts ]
 
     @property
+    def checkoutVars(self):
+        return self.__checkoutVars
+
+    @property
+    def checkoutVarsWeak(self):
+        return self.__checkoutVarsWeak - self.__checkoutVars
+
+    @property
     def buildScript(self):
         return self.__build[0]
 
@@ -2727,12 +2736,28 @@ Every dependency must only be given once."""
         return self.__build[1]
 
     @property
+    def buildVars(self):
+        return self.__buildVars
+
+    @property
+    def buildVarsWeak(self):
+        return self.__buildVarsWeak - self.__buildVars
+
+    @property
     def packageScript(self):
         return self.__package[0]
 
     @property
     def packageDigestScript(self):
         return self.__package[1]
+
+    @property
+    def packageVars(self):
+        return self.__packageVars
+
+    @property
+    def packageVarsWeak(self):
+        return self.__packageVarsWeak - self.__packageVars
 
     @property
     def toolDepCheckout(self):

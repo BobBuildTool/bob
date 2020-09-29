@@ -13,6 +13,8 @@ from .url import UrlScm, UrlAudit
 import os.path
 import schema
 
+SYNTHETIC_SCM_PROPS = frozenset(('__source', 'recipe', 'overridden'))
+
 async def auditFromDir(dir):
     if os.path.isdir(os.path.join(dir, ".git")):
         return await GitAudit.fromDir(dir, ".", {})

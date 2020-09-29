@@ -217,9 +217,11 @@ class Scm(metaclass=ABCMeta):
         return self.__source
 
     def getProperties(self, isJenkins):
+        # XXX: keep in sync with bob.scm.SYNTHETIC_SCM_PROPS
         return {
             "__source" : self.__source,
             "recipe" : self.__recipe,
+            "overridden" : bool(self.__overrides),
         }
 
     @abstractmethod

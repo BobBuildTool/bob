@@ -608,7 +608,14 @@ def funMatchScm(args, **options):
         raise ParseError('matchScm can only be used for queries')
 
     for scm in pkg.getCheckoutStep().getScmList():
-        if fnmatch.fnmatchcase(scm.getProperties().get(name), val): return "true"
+        prop = scm.getProperties(False).get(name)
+        if isinstance(prop, str):
+            if fnmatch.fnmatchcase(str(prop), val): return "true"
+        elif isinstance(prop, bool):
+            # Need to compare bool before int because bool is a subclass of int
+            if isTrue(val) == prop: return "true"
+        elif isinstance(prop, int):
+            if prop == int(val, 0): return "true"
 
     return "false"
 

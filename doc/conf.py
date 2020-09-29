@@ -268,6 +268,7 @@ man_pages = [
     ('manpages/bob-query-path', 'bob-query-path', 'Query path information', ['Jan Klötzke'], 1),
     ('manpages/bob-query-recipe', 'bob-query-recipe', 'Query package sources', ['Jan Klötzke'], 1),
     ('manpages/bob-query-scm', 'bob-query-scm', 'Query SCM information', ['Jan Klötzke'], 1),
+    ('manpages/bob-show', 'bob-show', 'Show properties of a package', ['Jan Klötzke'], 1),
     ('manpages/bob-status', 'bob-status', 'Show SCM status', ['Jan Klötzke'], 1),
 ]
 

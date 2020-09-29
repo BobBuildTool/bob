@@ -840,6 +840,14 @@ url    While not a real SCM it      | ``url``: File that should be downloaded
                                                            (optional, tar files only)
 ====== ============================ =======================================================================================
 
+The following synthetic attributes exist. They are generated internally
+and cannot be set in the recipe. They are intended to be matched in queries
+or to show additional information.
+
+* ``overridden``: Boolean that is true if a :ref:`configuration-config-scmOverrides`
+  was applied. Otherwise false.
+* ``recipe``: The file name of the recipe/class that defined this SCM
+
 .. _Git: http://git-scm.com/
 .. _Svn: http://subversion.apache.org/
 
@@ -2016,6 +2024,10 @@ If an override is matching the actions are then applied in the following order:
 All overrides values are mangled through :ref:`configuration-principle-subst`. Mangling is
 performed during calculation of the checkoutStep so that the full environment for this step is
 available for substitution.
+
+When an override is applied the ``overridden`` property of the SCM is set to
+true. This property can be used with the ``matchScm`` function in package
+queries to find packages whose SCM(s) have been overridden.
 
 alias
 ~~~~~

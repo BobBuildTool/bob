@@ -29,7 +29,8 @@ __bob_complete_dir()
                  compgen -d -P "$2" -S / -- "$1" ) )
 }
 
-__bob_commands="build dev clean graph help jenkins ls project status  query-scm query-recipe query-path query-meta"
+__bob_commands="build dev clean graph help jenkins ls project status  query-scm \
+                query-recipe query-path query-meta show"
 
 # Complete a Bob path
 #
@@ -351,6 +352,26 @@ __bob_query_recipe()
 __bob_status()
 {
   __bob_complete_path "--attic --develop --recursive --no-sandbox --release --sandbox --show-clean --show-overrides --verbose -D -c -r -v"
+}
+
+__bob_show()
+{
+    if [[ "$prev" = "--format" ]] ; then
+        __bob_complete_words "yaml json flat diff"
+    elif [[ "$prev" = "-f" ]] ; then
+        __bob_complete_words "buildNetAccess buildTools buildToolsWeak
+            buildVars buildVarsWeak checkoutAssert checkoutDeterministic
+            checkoutSCM checkoutTools checkoutToolsWeak checkoutVars
+            checkoutVarsWeak depends fingerprintIf jobServer meta
+            metaEnvironment packageNetAccess packageTools packageToolsWeak
+            packageVars packageVarsWeak relocatable root sandbox scriptLanguage
+            shared"
+    elif [[ "$prev" = "--indent" ]] ; then
+        COMPREPLY=( )
+    else
+        __bob_complete_path "-D -c --sandbox --no-sandbox --show-empty
+            --show-common --indent --no-indent --format -f"
+    fi
 }
 
 __bob_subcommands()
