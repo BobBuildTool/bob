@@ -1,0 +1,8 @@
+root: true
+
+checkoutSCM:
+  - scm: url
+    url: ${URL}
+
+buildScript: "true"
+packageScript: "true"
