@@ -168,7 +168,9 @@ if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 		fi
 	done
 
-	if type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
+	if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
+		: # No tests matched
+	elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
 		export -f run_unit_test
 		export RUN_PYTHON3
 		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_unit_test ::: "${RUN_TEST_NAMES[@]}"
@@ -193,7 +195,9 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 		fi
 	done
 
-	if type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
+	if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
+		: # No tests matched
+	elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
 		export -f run_blackbox_test
 		export RUN_PYTHON3
 		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_blackbox_test ::: "${RUN_TEST_NAMES[@]}"
