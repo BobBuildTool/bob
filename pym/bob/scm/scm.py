@@ -11,6 +11,8 @@ from shlex import quote
 import fnmatch
 import re
 
+SYNTHETIC_SCM_PROPS = frozenset(('__source', 'recipe', 'overridden'))
+
 class ScmOverride:
     def __init__(self, override):
         self.__match = override.get("match", {})
@@ -217,7 +219,7 @@ class Scm(metaclass=ABCMeta):
         return self.__source
 
     def getProperties(self, isJenkins):
-        # XXX: keep in sync with bob.scm.SYNTHETIC_SCM_PROPS
+        # XXX: keep in sync with SYNTHETIC_SCM_PROPS
         return {
             "__source" : self.__source,
             "recipe" : self.__recipe,
