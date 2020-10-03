@@ -902,16 +902,16 @@ cd {ROOT}
                 stepMessage(checkoutStep, "CHECKOUT", "skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString),
                     SKIPPED, IMPORTANT)
         else:
+            scmMap = { scm.getDirectory() : scm
+                       for scm in checkoutStep.getScmList() }
+
             if self.__cleanCheckout:
                 # check state of SCMs and invalidate if the directory is dirty
-                stats = {}
-                for scm in checkoutStep.getScmList():
-                    stats[scm.getDirectory()] = scm
                 for (scmDir, (scmDigest, scmSpec)) in oldCheckoutState.copy().items():
                     if scmDir is None: continue
                     if scmDigest != checkoutState.get(scmDir, (None, None))[0]: continue
                     if not os.path.exists(os.path.join(prettySrcPath, scmDir)): continue
-                    if stats[scmDir].status(checkoutStep.getWorkspacePath()).dirty:
+                    if scmMap[scmDir].status(checkoutStep.getWorkspacePath()).dirty:
                         # Invalidate scmDigest to forcibly move it away in the loop below.
                         # Do not use None here to distinguish it from a non-existent directory.
                         oldCheckoutState[scmDir] = (False, scmSpec)
@@ -922,10 +922,24 @@ cd {ROOT}
                 (BobState().getResultHash(prettySrcPath) is None) or
                 not compareDirectoryState(checkoutState, oldCheckoutState) or
                 (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
-                # move away old or changed source directories
+                # Switch or move away old or changed source directories
                 for (scmDir, (scmDigest, scmSpec)) in oldCheckoutState.copy().items():
                     if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir, (None, None))[0]):
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                        canSwitch = (scmDir in scmMap) and scmDigest and \
+                                     scmSpec is not None and \
+                                     scmMap[scmDir].canSwitch(scmSpec) and \
+                                     os.path.exists(scmPath)
+                        didSwitch = False
+                        if canSwitch:
+                            didSwitch = await self.__runScmSwitch(checkoutStep,
+                                scmPath, scmMap[scmDir], scmSpec)
+
+                        if didSwitch:
+                            oldCheckoutState[scmDir] = checkoutState[scmDir]
+                            BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
+                            continue
+
                         if os.path.exists(scmPath):
                             atticName = datetime.datetime.now().isoformat().translate(INVALID_CHAR_TRANS)+"_"+os.path.basename(scmPath)
                             stepMessage(checkoutStep, "ATTIC",
@@ -1508,3 +1522,30 @@ cd {ROOT}
         if len(log) > 43: log = log[:40] + "..."
         logger.setResult(log)
         return stdout
+
+    async def __runScmSwitch(self, step, scmPath, scm, oldSpec):
+        logFile = os.path.join(step.getWorkspacePath(), "..", "log.txt")
+        spec = StepSpec.fromStep(step, None, self.__envWhiteList, logFile)
+        invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
+            self.__verbose >= INFO, self.__verbose >= NORMAL,
+            self.__verbose >= DEBUG, self.__bufferedStdIO)
+
+        class Abort(Exception):
+            pass
+
+        try:
+            with stepExec(step, "SWITCH", scmPath) as logger:
+                ret = await invoker.executeScmSwitch(scm, oldSpec)
+                if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
+                if ret == -int(signal.SIGINT):
+                    raise BuildError("User aborted while inline switching SCM",
+                                     help = "Run again with '--resume' to skip already built packages.")
+                elif ret != 0:
+                    if self.__bufferedStdIO:
+                        logger.setError(invoker.getStdio().strip())
+                    # Use an exception here to implicitly set the failed state
+                    # of the logger.
+                    raise Abort()
+            return True
+        except Abort:
+            return False
