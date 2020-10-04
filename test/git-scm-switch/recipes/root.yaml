@@ -1,0 +1,9 @@
+root: True
+
+checkoutSCM:
+    scm: git
+    url: file://${SCM_DIR}
+    rev: ${SCM_REV}
+
+buildScript: "true"
+packageScript: "true"

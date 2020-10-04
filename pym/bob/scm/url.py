@@ -252,6 +252,21 @@ class UrlScm(Scm):
 
         return None
 
+    def canSwitch(self, oldSpec):
+        diff = self._diffSpec(oldSpec)
+
+        # Filter irrelevant properties
+        diff -= {"sslVerify"}
+
+        # Adding, changing or removing hash sums is ok as long as the url stays
+        # the same.
+        return diff.issubset({"digestSHA1", "digestSHA256"})
+
+    async def switch(self, invoker, oldSpec):
+        # The real work is done in invoke() below. It will fail if the file
+        # does not match.
+        return True
+
     async def invoke(self, invoker):
         os.makedirs(invoker.joinPath(self.__dir), exist_ok=True)
         workspaceFile = os.path.join(self.__dir, self.__fn)

@@ -115,7 +115,7 @@ class GitScm(Scm):
             properties.update({GitScm.REMOTE_PREFIX+key : val})
         return properties
 
-    async def invoke(self, invoker):
+    async def invoke(self, invoker, switch=False):
         # make sure the git directory exists
         if not os.path.isdir(invoker.joinPath(self.__dir, ".git")):
             await invoker.checkCommand(["git", "init", self.__dir])
@@ -171,21 +171,22 @@ class GitScm(Scm):
 
         # do the checkout
         if self.__tag or self.__commit:
-            await self.__checkoutTag(invoker, fetchCmd)
+            await self.__checkoutTag(invoker, fetchCmd, switch)
         else:
-            await self.__checkoutBranch(invoker, fetchCmd)
+            await self.__checkoutBranch(invoker, fetchCmd, switch)
 
-    async def __checkoutTag(self, invoker, fetchCmd):
+    async def __checkoutTag(self, invoker, fetchCmd, switch):
         # checkout only if HEAD is invalid
         head = await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
             stdout=False, cwd=self.__dir)
-        if head:
+        if head or switch:
             await invoker.checkCommand(fetchCmd, cwd=self.__dir)
             await invoker.checkCommand(["git", "checkout", "-q", "--no-recurse-submodules",
                 self.__commit if self.__commit else "tags/"+self.__tag], cwd=self.__dir)
+            # FIXME: will not be called again if interrupted!
             await self.__checkoutSubmodules(invoker)
 
-    async def __checkoutBranch(self, invoker, fetchCmd):
+    async def __checkoutBranch(self, invoker, fetchCmd, switch):
         await invoker.checkCommand(fetchCmd, cwd=self.__dir)
         if await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
                        stdout=False, cwd=self.__dir):
@@ -193,6 +194,21 @@ class GitScm(Scm):
             await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules", "-b", self.__branch,
                 "remotes/origin/"+self.__branch], cwd=self.__dir)
             await self.__checkoutSubmodules(invoker)
+        elif switch:
+            # We're switching the ref. There we will actively change the branch which
+            # is normally forbidden.
+            assert not self.__submodules
+            if await invoker.callCommand(["git", "show-ref", "-q", "--verify",
+                                          "refs/heads/" + self.__branch]):
+                # Branch does not exist. Create and checkout.
+                await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules",
+                    "-b", self.__branch, "remotes/origin/"+self.__branch], cwd=self.__dir)
+            else:
+                # Branch exists already. Checkout and fast forward...
+                await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules",
+                    self.__branch], cwd=self.__dir)
+                await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "merge",
+                    "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
         elif (await invoker.checkOutputCommand(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.__dir)) == self.__branch:
             # pull only if on original branch
             preUpdate = await self.__updateSubmodulesPre(invoker)
@@ -322,6 +338,41 @@ class GitScm(Scm):
             for p in updatePaths:
                 await self.__updateSubmodulesPost(invoker, subMods[p],
                                                   os.path.join(base, p))
+
+    def canSwitch(self, oldSpec):
+        diff = self._diffSpec(oldSpec)
+
+        # Filter irrelevant properties
+        diff -= {"sslVerify", 'singleBranch', 'shallow', 'shallowSubmodules'}
+        diff = set(prop for prop in diff if not prop.startswith("remote-"))
+
+        # Enabling "submodules" and/or "recurseSubmodules" is ok. The
+        # additional content will be checked out in invoke().
+        if not oldSpec.get("submodules", False) and self.__submodules:
+            diff.discard("submodules")
+        if not oldSpec.get("recursiveSubmodules", False) and self.__recurseSubmodules:
+            diff.discard("recursiveSubmodules")
+
+        # Without submodules the recursiveSubmodules property is irrelevant
+        if not self.__submodules:
+            diff.discard("recursiveSubmodules")
+
+        # For the rest we can try a inline switch. Git does not handle
+        # vanishing submodules well and neither do we. So if submodules are
+        # enabled then we do not do an in-place update.
+        if not diff:
+            return True
+        if not diff.issubset({"branch", "tag", "commit", "rev", "url"}):
+            return False
+        if self.__submodules:
+            return False
+        return True
+
+    async def switch(self, invoker, oldSpec):
+        # Try to checkout new state in old workspace. If something fails the
+        # old attic logic will take over.
+        await self.invoke(invoker, True)
+        return True
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this git module.

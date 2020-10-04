@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import ParseError
-from .scm import Scm, ScmStatus, ScmTaint, ScmOverride
+from .scm import Scm, ScmStatus, ScmTaint, ScmOverride, SYNTHETIC_SCM_PROPS
 from .cvs import CvsScm
 from .git import GitScm, GitAudit
 from .imp import ImportScm, ImportAudit
@@ -12,8 +12,6 @@ from .svn import SvnScm, SvnAudit
 from .url import UrlScm, UrlAudit
 import os.path
 import schema
-
-SYNTHETIC_SCM_PROPS = frozenset(('__source', 'recipe', 'overridden'))
 
 async def auditFromDir(dir):
     if os.path.isdir(os.path.join(dir, ".git")):

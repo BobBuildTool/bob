@@ -1,0 +1,5 @@
+scmOverrides:
+    - match:
+        scm: url
+      set:
+        digestSHA1: efed3690ea2243f5f1ac77cbb0987e5335440258

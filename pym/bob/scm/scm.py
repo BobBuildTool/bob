@@ -11,6 +11,8 @@ from shlex import quote
 import fnmatch
 import re
 
+SYNTHETIC_SCM_PROPS = frozenset(('__source', 'recipe', 'overridden'))
+
 class ScmOverride:
     def __init__(self, override):
         self.__match = override.get("match", {})
@@ -213,11 +215,22 @@ class Scm(metaclass=ABCMeta):
         self.__recipe = spec["recipe"]
         self.__overrides = overrides
 
+    def _diffSpec(self, oldSpec):
+        newSpec = self.getProperties(False)
+        ret = set()
+        for k in sorted(set(oldSpec.keys()) | set(newSpec.keys())):
+            if oldSpec.get(k) != newSpec.get(k):
+                ret.add(k)
+
+        ret -= SYNTHETIC_SCM_PROPS
+        ret -= {"if"}
+        return ret
+
     def getSource(self):
         return self.__source
 
     def getProperties(self, isJenkins):
-        # XXX: keep in sync with bob.scm.SYNTHETIC_SCM_PROPS
+        # XXX: keep in sync with SYNTHETIC_SCM_PROPS
         return {
             "__source" : self.__source,
             "recipe" : self.__recipe,
@@ -232,6 +245,28 @@ class Scm(metaclass=ABCMeta):
         configured for the right workspace and will do the logging, error
         handling and so on...
         """
+
+    def canSwitch(self, oldSpec):
+        """Determine if an inline switch of a checkout from oldSpec is
+        possible.
+
+        The judgement is purely done on the specification of this SCM and
+        oldSpec. If the SCM supports a switch from oldSpec then this method
+        may return True. It must return False in any other case. In case it
+        returns True the Scm.switch() method will be invoked to do the acutal
+        switch in the workspace. This might still fail if the workspace is in
+        an unexpected state.
+        """
+        return False
+
+    async def switch(self, workspacePath, oldSpec):
+        """Try to switch the checkout in the workspace from oldSpec.
+
+        If the switch succeeds then the checkout won't be moved to the attic.
+        The SCM has to make sure that the result is the same as if the SCM was
+        moved to the attic and a fresh checkout would have been done.
+        """
+        return False
 
     @abstractmethod
     def asDigestScript(self):

@@ -1,0 +1,5 @@
+scmOverrides:
+    - match:
+        scm: git
+      set:
+        submodules: True

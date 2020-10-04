@@ -504,6 +504,36 @@ class Invoker:
 
         return (ret, stdout, stderr)
 
+    async def executeScmSwitch(self, scm, oldSpec):
+        # make permissions predictable
+        os.umask(0o022)
+
+        ret = 1
+        try:
+            self.__openLog("SCM inline switch")
+            try:
+                await scm.switch(self, oldSpec)
+            except CmdFailedError as e:
+                self.error(scm.getSource(), "failed")
+                self.error(e.what)
+                raise
+            except Exception:
+                self.error(scm.getSource(), "failed")
+                raise
+
+            # everything went well
+            ret = 0
+
+        except OSError as e:
+            self.error("Something went wrong:", str(e))
+            ret = 1
+        except InvocationError as e:
+            ret = e.returncode
+        finally:
+            self.__closeLog(ret)
+
+        return ret
+
     async def callCommand(self, args, cwd=None, **kwargs):
         cwd = os.path.join(self.__cwd, cwd) if cwd else self.__cwd
         ret = await self.__runCommand(args, cwd, **kwargs)

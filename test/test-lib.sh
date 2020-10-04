@@ -90,6 +90,16 @@ expect_exist()
 	return 0
 }
 
+expect_not_exist()
+{
+	if [[ -e "$1" ]] ; then
+		echo "Unexpected file: $1" >&2
+		return 1
+	fi
+
+	return 0
+}
+
 skip()
 {
 	exit 240
