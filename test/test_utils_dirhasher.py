@@ -117,9 +117,9 @@ class TestHashDir(TestCase):
         s.st_uid=1000
         s.st_gid=1000
         s.st_size=3
-        s.st_atime=1452798827
-        s.st_mtime=1452798827
-        s.st_ctime=1452798827
+        s.st_atime_ns=1452798827
+        s.st_mtime_ns=1452798827
+        s.st_ctime_ns=1452798827
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
 
@@ -145,9 +145,9 @@ class TestHashDir(TestCase):
         s.st_uid=1000
         s.st_gid=1000
         s.st_size=4
-        s.st_atime=1601623698
-        s.st_mtime=-3600
-        s.st_ctime=1601623698
+        s.st_atime_ns=1601623698
+        s.st_mtime_ns=-3600
+        s.st_ctime_ns=1601623698
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
 
@@ -176,9 +176,9 @@ class TestHashDir(TestCase):
         s.st_gid=6
         s.st_rdev=2048
         s.st_size=0
-        s.st_atime=1453317243
-        s.st_mtime=1451854748
-        s.st_ctime=1451854748
+        s.st_atime_ns=1453317243
+        s.st_mtime_ns=1451854748
+        s.st_ctime_ns=1451854748
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
 
@@ -204,9 +204,9 @@ class TestHashDir(TestCase):
         s.st_gid=6
         s.st_rdev=1280
         s.st_size=0
-        s.st_atime=1453317243
-        s.st_mtime=1451854748
-        s.st_ctime=1451854748
+        s.st_atime_ns=1453317243
+        s.st_mtime_ns=1451854748
+        s.st_ctime_ns=1451854748
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
 

@@ -216,9 +216,6 @@ def hashFile(path, hasher=hashlib.sha1):
         logging.getLogger(__name__).warning("Cannot hash file: %s", str(e))
     return m.digest()
 
-def float2ns(v):
-    return int(v * 1000000000)
-
 class DirHasher:
     IGNORE_DIRS = frozenset([
         os.fsencode(".git"),
@@ -310,8 +307,8 @@ class DirHasher:
                     self.__inFile.seek(pos)
                 else:
                     self.__outFile.write(DirHasher.FileIndex.SIGNATURE)
-            self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, float2ns(st.st_ctime),
-                float2ns(st.st_mtime), st.st_dev, st.st_ino, st.st_mode, st.st_size,
+            self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, st.st_ctime_ns,
+                st.st_mtime_ns, st.st_dev, st.st_ino, st.st_mode, st.st_size,
                 digest, len(name)))
             self.__outFile.write(name)
 
@@ -319,8 +316,8 @@ class DirHasher:
             while self.__current.name < name:
                 if not self.__readEntry(): break
             e = self.__current
-            res = ((e.name == name) and (e.ctime == float2ns(st.st_ctime)) and
-                (e.mtime == float2ns(st.st_mtime)) and (e.dev == st.st_dev) and
+            res = ((e.name == name) and (e.ctime == st.st_ctime_ns) and
+                (e.mtime == st.st_mtime_ns) and (e.dev == st.st_dev) and
                 (e.ino == st.st_ino) and (e.mode == st.st_mode) and
                 (e.size == st.st_size))
             #if not res: print("Mismatch", e.name, name, e, st)
@@ -460,7 +457,7 @@ def hashPath(path, index=None, ignoreDirs=None):
 
 def binStat(path):
     st = os.stat(path)
-    return struct.pack('=qqLqLQ', float2ns(st.st_ctime), float2ns(st.st_mtime),
+    return struct.pack('=qqLqLQ', st.st_ctime_ns, st.st_mtime_ns,
                        st.st_dev, st.st_ino, st.st_mode, st.st_size)
 
 
