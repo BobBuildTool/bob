@@ -231,7 +231,7 @@ class DirHasher:
 
     class FileIndex:
         SIGNATURE        = b'BOB1'
-        CACHE_ENTRY_FMT  = '=QQLQLQ20sH'
+        CACHE_ENTRY_FMT  = '=qqLQLQ20sH'
         CACHE_ENTRY_SIZE = struct.calcsize(CACHE_ENTRY_FMT)
 
         class Stat:
@@ -460,7 +460,7 @@ def hashPath(path, index=None, ignoreDirs=None):
 
 def binStat(path):
     st = os.stat(path)
-    return struct.pack('=QQLqLQ', float2ns(st.st_ctime), float2ns(st.st_mtime),
+    return struct.pack('=qqLqLQ', float2ns(st.st_ctime), float2ns(st.st_mtime),
                        st.st_dev, st.st_ino, st.st_mode, st.st_size)
 
 
