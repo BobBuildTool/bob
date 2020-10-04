@@ -10,7 +10,7 @@ import binascii
 
 import os
 import sys
-from bob.utils import hashFile, hashDirectory
+from bob.utils import hashFile, hashDirectory, binStat
 
 class TestHashFile(TestCase):
     def testBigFile(self):
@@ -133,6 +133,36 @@ class TestHashDir(TestCase):
 
                 with open(index.name, "rb") as f:
                     assert f.read(4) == b'BOB1'
+
+    def testOldFile(self):
+        """Test negative time fields for files from the past"""
+
+        s = MagicMock()
+        s.st_mode=33188
+        s.st_ino=270794
+        s.st_dev=65026
+        s.st_nlink=1
+        s.st_uid=1000
+        s.st_gid=1000
+        s.st_size=4
+        s.st_atime=1601623698
+        s.st_mtime=-3600
+        s.st_ctime=1601623698
+        mock_lstat = MagicMock()
+        mock_lstat.return_value = s
+
+        with NamedTemporaryFile() as index:
+            with TemporaryDirectory() as tmp:
+                with open(os.path.join(tmp, "McFly"), 'wb') as f:
+                    pass
+
+                with patch('os.lstat', mock_lstat):
+                    h = hashDirectory(tmp, index.name)
+                with patch('os.stat', mock_lstat):
+                    b = binStat("whatever")
+
+        self.assertEqual(h, b'\xdc\xe1\xf4\x02\x01\xc3\xa1\xf7j\xac\xbc\xbf=1ey\x11\x1a\xc8\xda')
+        self.assertEqual(type(b), bytes)
 
     def testBlockDev(self):
         """Test that index handles block devices"""
