@@ -1132,3 +1132,71 @@ class TestToolsWeak(RecipesTmp, TestCase):
         r1 = packages.walkPackagePath("r1").getPackageStep()
         r2 = packages.walkPackagePath("r2").getPackageStep()
         self.assertNotEqual(r1.getVariantId(), r2.getVariantId())
+
+class TestScmIgnoreUserPolicy(RecipesTmp, TestCase):
+    """ Test behaviour of scmIgnoreUser policy"""
+
+    def setUp(self):
+        super().setUp()
+        self.writeRecipe("git", """\
+            root: True
+            buildScript: "true"
+            packageScript: "true"
+            multiPackage:
+                a:
+                    checkoutSCM:
+                        scm: git
+                        url: foo@host.xz:path/to/repo.git
+                b:
+                    checkoutSCM:
+                        scm: git
+                        url: bar@host.xz:path/to/repo.git
+            """)
+        self.writeRecipe("url", """\
+            root: True
+            buildScript: "true"
+            packageScript: "true"
+            multiPackage:
+                a:
+                    checkoutSCM:
+                        scm: url
+                        url: https://foo@host.test/file
+                b:
+                    checkoutSCM:
+                        scm: url
+                        url: https://bar@host.test/file
+            """)
+
+    def testOldBehaviour(self):
+        """Test that user name of URL is part of the variantId"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.17",
+            "policies" : { "scmIgnoreUser" : False },
+        })
+
+        packages = self.generate()
+
+        git_a = packages.walkPackagePath("git-a").getPackageStep()
+        git_b = packages.walkPackagePath("git-b").getPackageStep()
+        self.assertNotEqual(git_a.getVariantId(), git_b.getVariantId())
+
+        url_a = packages.walkPackagePath("url-a").getPackageStep()
+        url_b = packages.walkPackagePath("url-b").getPackageStep()
+        self.assertNotEqual(url_a.getVariantId(), url_b.getVariantId())
+
+    def testNewBehaviour(self):
+        """Test that user name in URL is not part of variantId on new policy setting"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.17",
+            "policies" : { "scmIgnoreUser" : True },
+        })
+
+        packages = self.generate()
+
+        git_a = packages.walkPackagePath("git-a").getPackageStep()
+        git_b = packages.walkPackagePath("git-b").getPackageStep()
+        self.assertEqual(git_a.getVariantId(), git_b.getVariantId())
+
+        url_a = packages.walkPackagePath("url-a").getPackageStep()
+        url_b = packages.walkPackagePath("url-b").getPackageStep()
+        self.assertEqual(url_a.getVariantId(), url_b.getVariantId())

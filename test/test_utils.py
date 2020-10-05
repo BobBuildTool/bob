@@ -10,7 +10,7 @@ import os, stat
 import asyncio
 
 from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion, \
-    getPlatformTag, run, check_output
+    getPlatformTag, run, check_output, removeUserFromUrl
 from bob.errors import BuildError, ParseError
 
 class TestJoinScripts(TestCase):
@@ -201,3 +201,91 @@ class TestAsyncSubprocess(TestCase):
         coro = check_output(["/bin/false"])
         self.assertRaises(CalledProcessError,
             asyncio.get_event_loop().run_until_complete, coro)
+
+class TestRemoveUserFromUrl(TestCase):
+    """Test removal of user from URL"""
+
+    def testRegular(self):
+        self.assertEqual(removeUserFromUrl("scheme://host.xz/path/to/repo.git"),
+            "scheme://host.xz/path/to/repo.git")
+
+    def testRegularWithAt(self):
+        self.assertEqual(removeUserFromUrl("scheme://host.xz/path/t@/repo.git"),
+            "scheme://host.xz/path/t@/repo.git")
+
+    def testRegularTrailingSlash(self):
+        self.assertEqual(removeUserFromUrl("scheme://host.xz/path/to/repo.git/"),
+            "scheme://host.xz/path/to/repo.git/")
+
+    def testRegularWithPort(self):
+        self.assertEqual(removeUserFromUrl("scheme://host.xz:8080/path/to/repo.git/"),
+            "scheme://host.xz:8080/path/to/repo.git/")
+
+    def testRegularUser(self):
+        self.assertEqual(removeUserFromUrl("scheme://user@host.xz/path/to/repo.git/"),
+            "scheme://host.xz/path/to/repo.git/")
+
+    def testRegulserUserAndPort(self):
+        self.assertEqual(removeUserFromUrl("scheme://user@host.xz:8080/path/to/repo.git/"),
+            "scheme://host.xz:8080/path/to/repo.git/")
+
+    def testScpLike(self):
+        self.assertEqual(removeUserFromUrl("host.xz:path/to/repo.git/"),
+            "host.xz:path/to/repo.git/")
+
+    def testScpLikeUser(self):
+        self.assertEqual(removeUserFromUrl("user@host.xz:path/to/repo.git/"),
+            "host.xz:path/to/repo.git/")
+
+    def testAbsPath(self):
+        self.assertEqual(removeUserFromUrl("/path/to/repo.git/"),
+            "/path/to/repo.git/")
+
+    def testAbsPathWithColon(self):
+        self.assertEqual(removeUserFromUrl("/foo:bar/repo.git/"),
+            "/foo:bar/repo.git/")
+
+    def testRelPath(self):
+        self.assertEqual(removeUserFromUrl("repo.git"),
+            "repo.git")
+
+    def testAbsPathWithColon(self):
+        self.assertEqual(removeUserFromUrl("./foo:bar"),
+            "./foo:bar")
+
+    def testAbsPathWithColonAndAt(self):
+        self.assertEqual(removeUserFromUrl("./foo@bar:baz"),
+            "./foo@bar:baz")
+
+    def testFileUrl(self):
+        self.assertEqual(removeUserFromUrl("file:///path/to/repo.git/"),
+            "file:///path/to/repo.git/")
+
+    def testInvalid(self):
+      self.assertEqual(removeUserFromUrl("invalid"),
+        "invalid")
+
+    def testWinPath(self):
+        self.assertEqual(removeUserFromUrl(r"C:\foo.bar"),
+            r"C:\foo.bar")
+
+    def testWinPathForwardSlash(self):
+        self.assertEqual(removeUserFromUrl(r"C:/foo.bar"),
+            r"C:/foo.bar")
+
+    def testWinPathFileUrl(self):
+        self.assertEqual(removeUserFromUrl(r"file:///C:/foo.bar"),
+            r"file:///C:/foo.bar")
+
+    def testWinPathFileUrlBackslash(self):
+        self.assertEqual(removeUserFromUrl(r"file:///C:\foo.bar"),
+            r"file:///C:\foo.bar")
+
+    def testWinUncPath(self):
+        self.assertEqual(removeUserFromUrl(r"\\server\path"),
+            r"\\server\path")
+
+    def testWinUncFileUrl(self):
+        self.assertEqual(removeUserFromUrl(r"file:///\\server\path"),
+            r"file:///\\server\path")
+
