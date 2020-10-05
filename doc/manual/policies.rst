@@ -485,3 +485,26 @@ Old behavior
 New behavior
    Tools listed in  ``{checkout,build,package}Tools`` must be defined. Any
    undefined tool will lead to a parsing error.
+
+.. _policies-scmIgnoreUser:
+
+scmIgnoreUser
+~~~~~~~~~~~~~
+
+Introduced in: 0.18
+
+The user information part of an URL is used as authentication for the resource
+that is encoded in the rest of the URL. Except for gaining authorization to the
+resource, the user information fundamentally does not influence the content
+that is referenced by the URL. To share binary artifacts between different user
+identities and to prevent repeated checkouts Bob will ignore the user
+information. This policy affects the ``git`` and ``url`` SCMs.
+
+Old behavior
+   The user information of the URL is significant for the checkout content.
+   Binary artifacts are not shared between different users. If the user
+   information of an URL changes the checkout is moved to the attic.
+
+New behavior
+   The user information in the URL of ``git`` and ``url`` SCMs is ignored. Bob
+   assumes that the actual content is unaffected by the authentication part.

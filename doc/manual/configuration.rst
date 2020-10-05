@@ -938,6 +938,15 @@ git
    Otherwise a warning will be shown and the submodule won't be updated,
    including possible sub-submodules.
 
+   .. attention:: Bob makes certain assumptions about your git usage. If any of
+      the following conditions are violated you may run into undefined
+      behaviour:
+
+      * Tags never change. You must not replace a tag with different content.
+      * The content of the git repository must not depend on the user
+        authentication. See :ref:`policies-scmIgnoreUser` policy.
+      * The build result is not influenced by shallow clones.
+
 import
    The ``import`` SCM copies the directory specified in ``url`` to the
    workspace. By default the destination is not overwritten unless the source
