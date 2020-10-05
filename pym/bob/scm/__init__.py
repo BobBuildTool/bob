@@ -48,7 +48,8 @@ def getScm(spec, overrides=[], recipeSet=None):
         return GitScm(spec, overrides, recipeSet and recipeSet.getPolicy('secureSSL'),
             recipeSet and recipeSet.getPolicy('scmIgnoreUser'))
     elif scm == "import":
-        return ImportScm(spec, overrides)
+        return ImportScm(spec, overrides,
+            recipeSet and recipeSet.getPolicy('pruneImportScm'))
     elif scm == "svn":
         return SvnScm(spec, overrides)
     elif scm == "cvs":

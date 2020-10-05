@@ -2952,6 +2952,7 @@ class RecipeSet:
                 schema.Optional('fingerprintVars') : bool,
                 schema.Optional('noUndefinedTools') : bool,
                 schema.Optional('scmIgnoreUser') : bool,
+                schema.Optional('pruneImportScm') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
@@ -3068,6 +3069,11 @@ class RecipeSet:
                 "0.17.3.dev97",
                 InfoOnce("scmIgnoreUser policy not set. Authentication part URL is tainting binary artifacts.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#scmignoreuser for more information.")
+            ),
+            'pruneImportScm' : (
+                "0.17.3.dev102",
+                InfoOnce("pruneImportScm policy not set. Incremental builds of 'import' SCM may lead to wrong results.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#pruneimportscm for more information.")
             ),
         }
         self.__buildHooks = {}

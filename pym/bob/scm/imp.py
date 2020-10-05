@@ -96,11 +96,11 @@ class ImportScm(Scm):
         schema.Optional('prune') : bool,
     })
 
-    def __init__(self, spec, overrides=[]):
+    def __init__(self, spec, overrides=[], pruneDefault=None):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
-        self.__prune = spec.get("prune", False)
+        self.__prune = spec.get("prune", pruneDefault or False)
         self.__data = spec.get("__data")
 
     def getProperties(self, isJenkins):
