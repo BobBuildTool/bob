@@ -2122,11 +2122,9 @@ class Recipe(object):
         self.__scriptLanguage = recipe.get("scriptLanguage")
         self.__checkout = fetchScripts(recipe, "checkout", incHelperBash, incHelperPwsh)
         self.__checkoutSCMs = recipe.get("checkoutSCM", [])
-        i = 0
         for scm in self.__checkoutSCMs:
             scm["__source"] = sourceName
-            scm["recipe"] = "{}#{}".format(sourceFile, i)
-            i += 1
+            scm["recipe"] = sourceFile
         self.__checkoutAsserts = recipe.get("checkoutAssert", [])
         i = 0
         for a in self.__checkoutAsserts:
