@@ -45,7 +45,8 @@ def auditFromData(data):
 def getScm(spec, overrides=[], recipeSet=None):
     scm = spec["scm"]
     if scm == "git":
-        return GitScm(spec, overrides, recipeSet and recipeSet.getPolicy('secureSSL'))
+        return GitScm(spec, overrides, recipeSet and recipeSet.getPolicy('secureSSL'),
+            recipeSet and recipeSet.getPolicy('scmIgnoreUser'))
     elif scm == "import":
         return ImportScm(spec, overrides)
     elif scm == "svn":
@@ -53,6 +54,7 @@ def getScm(spec, overrides=[], recipeSet=None):
     elif scm == "cvs":
         return CvsScm(spec, overrides)
     elif scm == "url":
-        return UrlScm(spec, overrides, recipeSet and recipeSet.getPolicy('tidyUrlScm'))
+        return UrlScm(spec, overrides, recipeSet and recipeSet.getPolicy('tidyUrlScm'),
+            recipeSet and recipeSet.getPolicy('scmIgnoreUser'))
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))

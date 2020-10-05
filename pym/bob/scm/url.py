@@ -6,7 +6,7 @@
 from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile, isWindows
+from ..utils import asHexStr, hashFile, isWindows, removeUserFromUrl
 from .scm import Scm, ScmAudit
 import asyncio
 import concurrent
@@ -161,7 +161,7 @@ class UrlScm(Scm):
         ],
     }
 
-    def __init__(self, spec, overrides=[], tidy=None):
+    def __init__(self, spec, overrides=[], tidy=None, stripUser=None):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
@@ -187,6 +187,7 @@ class UrlScm(Scm):
         self.__tidy = tidy
         self.__strip = spec.get("stripComponents", 0)
         self.__sslVerify = spec.get('sslVerify', True)
+        self.__stripUser = stripUser
 
     def getProperties(self, isJenkins):
         ret = super().getProperties(isJenkins)
@@ -336,8 +337,12 @@ class UrlScm(Scm):
         Otherwise it is "url dir extract". A "s#" is appended if leading paths
         are stripped where # is the number of stripped elements.
         """
+        if self.__stripUser:
+            filt = removeUserFromUrl
+        else:
+            filt = lambda x: x
         return ( self.__digestSha256 if self.__digestSha256
-                 else (self.__digestSha1 if self.__digestSha1 else self.__url)
+                 else (self.__digestSha1 if self.__digestSha1 else filt(self.__url))
                     ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
                     ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
 

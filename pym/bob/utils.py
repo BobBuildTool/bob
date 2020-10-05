@@ -59,6 +59,39 @@ def quoteCmdExe(string):
     else:
         return string
 
+def removeUserFromUrl(url):
+    """Remove the user information from an URL.
+
+    recognizes scp-like syntax as used by git too. If the schema was not
+    detected the original url is returned.
+    """
+
+    global __urlRE
+    try:
+        urlRE = __urlRE
+    except NameError:
+        # See rfc3986 for the allowed characters in the components
+        #                              ~~~~~~~~~ scheme ~~~~~~~~   ~~~~~~~~~~~~~ user ~~~~~~~~~~~~~ ~ h+p ~ ~~~~
+        __urlRE = urlRE = re.compile(r"([a-zA-Z][a-zA-Z0-9+-.]*)://([-._~a-zA-Z0-9:%!$&'()*+,;=]+@)?([^/]*)/(.*)")
+
+    m = urlRE.fullmatch(url)
+    if m is not None:
+        return "{}://{}/{}".format(m.group(1), m.group(3), m.group(4))
+
+    global __scpRE
+    try:
+        scpRE = __scpRE
+    except NameError:
+        #                              ~~~~~~~~~~~~~ user ~~~~~~~~~~~~~ ~ h+p ~~ ~~~~
+        __scpRE = scpRE = re.compile(r"([-._~a-zA-Z0-9:%!$&'()*+,;=]+@)?([^/:]+):(.*)")
+
+    m = scpRE.fullmatch(url)
+    if m is not None:
+        return "{}:{}".format(m.group(2), m.group(3))
+
+    # Nothing matched
+    return url
+
 def removePath(path):
     if sys.platform == "win32":
         def onerror(func, path, exc):

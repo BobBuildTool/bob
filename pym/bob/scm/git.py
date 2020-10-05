@@ -6,7 +6,7 @@
 from ..errors import ParseError, BuildError
 from ..stringparser import isTrue, IfExpression
 from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
-from ..utils import check_output, joinLines, run
+from ..utils import check_output, joinLines, run, removeUserFromUrl
 from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
 from shlex import quote
 from textwrap import dedent, indent
@@ -49,7 +49,7 @@ class GitScm(Scm):
     })
     REMOTE_PREFIX = "remote-"
 
-    def __init__(self, spec, overrides=[], secureSSL=None):
+    def __init__(self, spec, overrides=[], secureSSL=None, stripUser=None):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__branch = None
@@ -90,6 +90,7 @@ class GitScm(Scm):
         self.__submodules = spec.get('submodules', False)
         self.__recurseSubmodules = spec.get('recurseSubmodules', False)
         self.__shallowSubmodules = spec.get('shallowSubmodules', True)
+        self.__stripUser = stripUser
 
     def getProperties(self, isJenkins):
         properties = super().getProperties(isJenkins)
@@ -379,12 +380,17 @@ class GitScm(Scm):
 
         The format is "url rev-spec dir" where rev-spec depends on the given reference.
         """
+        if self.__stripUser:
+            filt = removeUserFromUrl
+        else:
+            filt = lambda x: x
+
         if self.__commit:
             ret = self.__commit + " " + self.__dir
         elif self.__tag:
-            ret = self.__url + " refs/tags/" + self.__tag + " " + self.__dir
+            ret = filt(self.__url) + " refs/tags/" + self.__tag + " " + self.__dir
         else:
-            ret = self.__url + " refs/heads/" + self.__branch + " " + self.__dir
+            ret = filt(self.__url) + " refs/heads/" + self.__branch + " " + self.__dir
 
         if self.__submodules:
             ret += " submodules"

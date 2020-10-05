@@ -2951,6 +2951,7 @@ class RecipeSet:
                 schema.Optional('sandboxFingerprints') : bool,
                 schema.Optional('fingerprintVars') : bool,
                 schema.Optional('noUndefinedTools') : bool,
+                schema.Optional('scmIgnoreUser') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
@@ -3062,6 +3063,11 @@ class RecipeSet:
                 "0.17.3.dev57",
                 InfoOnce("noUndefinedTools policy not set. Included but undefined tools are not detected at parsing time.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#noundefinedtools for more information.")
+            ),
+            'scmIgnoreUser' : (
+                "0.17.3.dev97",
+                InfoOnce("scmIgnoreUser policy not set. Authentication part URL is tainting binary artifacts.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#scmignoreuser for more information.")
             ),
         }
         self.__buildHooks = {}
