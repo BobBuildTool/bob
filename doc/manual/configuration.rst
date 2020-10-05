@@ -949,10 +949,17 @@ git
 
 import
    The ``import`` SCM copies the directory specified in ``url`` to the
-   workspace. By default the destination is not overwritten unless the source
-   file was changed more recently than the exiting destination in the workspace.
-   Set ``prune`` to ``True`` to always delete the destination directory before
-   importing the files.
+   workspace. By default the destination is always overwritten and obsolete
+   files are deleted. Set ``prune`` to ``False`` to only overwrite if the
+   source file was changed more recently than the exiting destination in the
+   workspace. Before Bob 0.18 the default was the other way around (see
+   :ref:`policies-pruneImportScm`).
+
+   In contrast to the other SCMs that fetch across the network the ``import``
+   SCM is always updated, even if ``--build-only`` is used. Because only local
+   files are imported there is no possibility to inadvertely fetch unwanted
+   changes from other users. The files should thus always be edited at the
+   import source location and not in the workspace.
 
    .. attention::
       Do not import large source trees when working with Jenkins builds. The

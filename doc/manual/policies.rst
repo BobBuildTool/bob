@@ -508,3 +508,35 @@ Old behavior
 New behavior
    The user information in the URL of ``git`` and ``url`` SCMs is ignored. Bob
    assumes that the actual content is unaffected by the authentication part.
+
+.. _policies-pruneImportScm:
+
+pruneImportScm
+~~~~~~~~~~~~~~
+
+Introduced in: 0.18
+
+The import SCM syncs a directory from the recipes to the source workspace.
+Before Bob 0.18 this was not done when building with ``--build-only`` even
+though the files are already locally present. It was anticipated that the user
+instead edits the source workspace directly and syncs its changes back to the
+recipes. To make this workable the ``prune`` property defaulted to ``False`` to
+prevent accidental deletion of changed in the workspace.
+
+This proved to be confusing, inefficient and additionally had the problem to
+potentially leave stale files in the workspace. Starting with Bob 0.18 the
+import SCM is always updated even if ``--build-only`` is specified. Now the
+user never needs to edit the workspace and the ``prune`` policy is mostly
+useless. This policy changes the default but keeps the property so that a user
+is still able to retain the old behaviour on a case-by-case basis.
+
+Old behaviour
+   The ``prune`` property of the import SCM defaults to ``False``. Deletions of
+   files at the source location are not propagated to the workspace. Files are
+   only overwritten if the source is younger than the destination file in the
+   workspace. This may lead to wrong build results because of stale files.
+
+New behaviour
+   The ``prune`` property defaults to ``True``. The user must edit the files at
+   the import source location because the destination in the workspace is
+   overwritten and obsolete files are deleted.
