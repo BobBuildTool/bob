@@ -1200,3 +1200,37 @@ class TestScmIgnoreUserPolicy(RecipesTmp, TestCase):
         url_a = packages.walkPackagePath("url-a").getPackageStep()
         url_b = packages.walkPackagePath("url-b").getPackageStep()
         self.assertEqual(url_a.getVariantId(), url_b.getVariantId())
+
+class TestPruneImportScmPolicy(RecipesTmp, TestCase):
+    """ Test behaviour of pruneImportScm policy"""
+
+    def setUp(self):
+        super().setUp()
+        self.writeRecipe("root", """\
+            root: True
+            checkoutSCM:
+                scm: import
+                url: ./recipes
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+    def testOldBehaviour(self):
+        """Test that prune was disabled in the past by default"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.17",
+            "policies" : { "pruneImportScm" : False },
+        })
+
+        pkg = self.generate().walkPackagePath("root")
+        self.assertFalse(pkg.getCheckoutStep().getScmList()[0].getProperties(False)["prune"])
+
+    def testNewBehaviour(self):
+        """Test that prune is the new default"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.17",
+            "policies" : { "pruneImportScm" : True },
+        })
+
+        pkg = self.generate().walkPackagePath("root")
+        self.assertTrue(pkg.getCheckoutStep().getScmList()[0].getProperties(False)["prune"])
