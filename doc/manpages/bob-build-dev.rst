@@ -131,7 +131,9 @@ Options
 
     If the sources of a package that needs to be built are missing then Bob
     will still check them out. This option just prevents updates of existing
-    source workspaces.
+    source workspaces that are fetched from remote locations. A notable
+    exception is the ``import`` SCM which will still update the workspace even
+    if this option is present.
 
 ``-c CONFIGFILE``
     Use additional configuration file.
