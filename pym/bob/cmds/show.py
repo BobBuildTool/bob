@@ -56,7 +56,7 @@ def dumpPackage(package):
         doc["checkoutTools"] = {
             name : "/".join(t.getStep().getPackage().getStack())
             for name, t in checkoutStep.getTools().items()
-            if name in recipe.toolDepCheckout
+            if name in (recipe.toolDepCheckout - recipe.toolDepCheckoutWeak)
         }
         doc["checkoutToolsWeak"] = {
             name : "/".join(t.getStep().getPackage().getStack())
@@ -83,7 +83,7 @@ def dumpPackage(package):
         doc["buildTools"] = {
             name : "/".join(t.getStep().getPackage().getStack())
             for name, t in buildStep.getTools().items()
-            if name in recipe.toolDepBuild
+            if name in (recipe.toolDepBuild - recipe.toolDepBuildWeak)
         }
         doc["buildToolsWeak"] = {
             name : "/".join(t.getStep().getPackage().getStack())
@@ -104,7 +104,7 @@ def dumpPackage(package):
     doc["packageTools"] = {
         name : "/".join(t.getStep().getPackage().getStack())
         for name, t in packageStep.getTools().items()
-        if name in recipe.toolDepPackage
+        if name in (recipe.toolDepPackage - recipe.toolDepPackageWeak)
     }
     doc["packageToolsWeak"] = {
         name : "/".join(t.getStep().getPackage().getStack())
