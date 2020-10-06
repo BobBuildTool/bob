@@ -466,6 +466,8 @@ New behavior
    but whitelisted variables (see :ref:`configuration-config-whitelist`) are
    still available.
 
+.. _policies-noUndefinedTools:
+
 noUndefinedTools
 ~~~~~~~~~~~~~~~~
 

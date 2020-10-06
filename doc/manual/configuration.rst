@@ -1323,6 +1323,8 @@ of the respective attributes of the recipe. For example the scripts of the
 inherited class of all steps are inserted in front of the scripts of the
 current recipe.
 
+.. _configuration-recipes-jobserver:
+
 jobServer
 ~~~~~~~~~
 

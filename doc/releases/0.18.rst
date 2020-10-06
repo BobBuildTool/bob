@@ -1,0 +1,238 @@
+Bob 0.18 Release Notes
+======================
+
+Changes made since Bob 0.17.0 include the following.
+
+New commands
+------------
+
+bob show - Show properties of a package
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The show command can be used to show all properties of a package as
+they were computed by Bob when evaluating the recipes. The output can
+be filtered and formatted in various ways. There is a special 'diff'
+output format that produces a diff view of two packages.
+
+See the :ref:`manpage-show` man page for more information.
+
+New features
+------------
+
+Recipes
+~~~~~~~
+
+* Added tool remapping support for dependencies.
+    
+  For each dependency in the :ref:`configuration-recipes-depends` list an
+  existing tool can be remapped to a new name, possibly replacing an existing
+  tool.This is useful to change tools for a single dependency, e.g. using the
+  host toolchain for the dependency instead of the current cross compiling
+  toolchain. Example::
+
+      tools:
+          target-toolchain: host-toolchain
+
+  This will replace ``target-toolchain`` for the dependency with the current
+  ``host-toolchain``. At the dependency both names will refer to the same
+  tool.
+
+* Bob gained support for git submodules
+
+  All submodules or a subset thereof can now be cloned if requested. Recursive
+  submodule clones are supported too. By default all submodules are cloned
+  shallowly but this can be overridden.
+
+  Bob implements the update of submodules itself and takes a more nuanced
+  approach than plain git. Whenever a submodules tracking commit is updated in
+  the master repository Bob will try to update the submodule. This is only done
+  if the submodule is at the same commit that was previously recorded in the
+  master repository. This will retain submodules in their state if they were
+  changed by the user but still update them automatically if the tracking
+  commit changed.
+
+* Added ``{checkout,build,package}ToolsWeak``
+    
+  Some tools do not make a difference in the result of a package despite their
+  presence (e.g. ``make``). These are typically script interpreters. How the
+  interpreter is built is usually without influence on the executed scripts.
+  Such tools may be included as weak tools.
+  
+  Weak tools are just identified through their name at the using package.
+  If a weak tool is renamed the dependent packages will still be rebuilt.
+  Any other changes to weak tools do not cause new artifacts to be built.
+
+User configuration (default.yaml)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Support HTTP(S) basic auth for binary archive access
+
+  This was already working on Jenkins builds because there ``curl`` is invoked.
+  The local implementation was updated to support that too.
+
+Bob build / bob dev
+~~~~~~~~~~~~~~~~~~~
+
+* Added GNU make job server support.
+
+  To avoid system overload on parallel builds Bob can provide a GNU make
+  compatible job server to the build script. This has to be explicitly enabled
+  by :ref:`configuration-recipes-jobserver` because it might change the
+  behaviour of the affected recipe. Like ``make`` the job server will only be
+  available if Bob was started with ``-j2`` or higher.
+
+  Likewise, if Bob is invoked in a ``make`` environment where a job server is
+  present Bob will participate in the scheme.
+
+* Update ``import`` SCMs also in build-only mode
+    
+  The ``import`` SCM just mirrors a local source tree into the workspace.
+  Previously this SCM has been skipped like any other in build-only mode.  This
+  does not match the usage of the ``import`` SCM, though. There the sources are
+  already local and the user will change them at the origin.  Because he has
+  already edited the local "copy" he has the expectation that his local changes
+  are picked up. He typically still wants to use "build-only" mode to prevent
+  pulling in any external changes. Therefore Bob will update ``impoprt`` SCMs
+  even in build-only mode.
+  
+  The ``import`` SCMs will only be updated if the recipe and workspace state
+  still match. The ``checkoutScript`` and all other SCMs are skipped as always
+  in build-only mode.
+
+* Most common updates of ``git`` SCMs do not trigger a move to attic anymore.
+
+  Bob will try to switch the branch/tag/commit without doing a fresh checkout.
+  If this fails, e.g. due to modified files, the checkout will still be moved
+  into the attic and a new checkout will be made. The change of the URL is
+  supported by optimistically fetching the new remote and using it. If the new
+  repository does not share a common history the fast-forward merge will fail
+  and the attic logic will replace the old module. The only drawback is that
+  the SCM will be dirty in the attic because of the half done checkout and the
+  switched remote.
+
+  Because submodules are hard to handle, e.g. if they are removed or renamed, the
+  in-place update is not done if submodules are enabled.
+
+* Updates of the ``digeshtSHA1`` or ``digestSHA256`` of an URL SCM do not
+  trigger a move to the attic anymore.
+
+Bob archive
+~~~~~~~~~~~
+
+* The ``clean`` expression has been extended to limit the number of artifacts.
+    
+  The retention expression is expanded to something loosely resembling
+  SQL. An optional ``LIMIT <num>`` after the predicate can limit the number
+  of retained artifacts. By default the artifacts are sorted by build date
+  in descending order so that the most recent ``<num>`` builds are kept. A
+  different field may be used with ``ORDER BY <field>``. The ordering can be
+  specified by ``DESC`` (descending) or ``ASC`` (ascending).
+
+  The following example retains only the last three builds from a recipe::
+
+      bob archive clean 'meta.recipe == "root" LIMIT 3'
+
+  See :ref:`manpage-archive` for more details.
+
+* Added support for multiple retention expressions. An artifact is kept if any
+  of the given expressions matches.
+
+* Warn user if no artifacts are found.
+
+  In case nothing is found in the current directory, chances are high
+  that the user is running ``bob archive`` from within the wrong
+  directory. Let them know so they can learn from it.
+
+* Added ``--fail`` option.
+
+  Analogous to ``bob query-path``, the ``--fail`` option enables non-zero
+  return values for some errors (specifically for being unable to find any
+  files in the archive, at least at the moment).
+
+Changed behaviour
+-----------------
+
+Backwards compatible policies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Introduced the :ref:`policies-noUndefinedTools` policy.
+
+  It was perfectly valid to list tools in ``{checkout,build,package}Tools``
+  that are not defined. This could lead to build failures because of missing
+  tools that could have been detected already at parsing time. In practice
+  there is no need to rely on this behavior.
+
+* Added the :ref:`policies-scmIgnoreUser` policy.
+
+  The user information part of an URL is used as authentication for the resource
+  that is encoded in the rest of the URL. Except for gaining authorization to the
+  resource, the user information fundamentally does not influence the content
+  that is referenced by the URL. To share binary artifacts between different user
+  identities and to prevent repeated checkouts Bob will ignore the user
+  information. This policy affects the ``git`` and ``url`` SCMs.
+
+* Flipped the default of the ``prune`` ``import`` SCM property.
+
+  Starting with this release the ``import`` SCM is always updated even if
+  ``--build-only`` is specified. The user can and should therefore only edit at
+  the source location of the import. The :ref:`policies-pruneImportScm` policy
+  consequently switched the default of the ``prune`` to ``True``.
+
+Other behavioural changes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* SIGUSR1 handler is enabled unconditionally.
+    
+  When Bob hangs it is possible to send SIGUSR1 to enter an interactive
+  Python shell. This feature needed to be enabled by an explicit
+  ``--debug=shl`` switch previously. This switch has been removed.
+
+* Default environment variable white list has been unified between MSYS2 and
+  native Windows versions.
+
+  There is no reason to make a distinction between native Windows and MSYS
+  in general. Even if Bob is called from an MSYS2 environment it is very
+  likely used to call native Windows executables. In this case the regular
+  environment variables are made available because applications typically
+  rely on them to be available.
+
+* The default environment white list on Windows has been expanded.
+
+  Almost all standard environment variables on Windows were added to the
+  whitelist. They may be needed by some tools because they describe standard
+  directory locations. See :ref:`configuration-config-whitelist` for the
+  authorative list of variables.
+
+* Jenkins builds now obey the ``shallow`` property of individual ``git`` SCMs.
+
+  Previously only the global ``scm.git.shallow`` Jenkins option would apply. If
+  a checkout has no ``shallow`` property set the global default will still
+  apply.
+
+Backwards incompatible changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* The URL of a http :ref:`configuration-config-archive` backed is now
+  validated.
+
+  The settings will be rejected if the URL is not parsable or has the wrong
+  schema (http or https). It is also checked that a password is supplied
+  (even if empty) whenever a user name is present.
+
+* Removed the ``#<num>`` suffix from SCM ``recipe`` synthetic property.
+    
+  The trailing number was intended to signify the number of the ``checkoutSCM``
+  entry in the source file when the ``query-scm`` command was first created.
+  This has never worked in the face of recipes that use ``multiPackage``.  Now
+  being a plain file name it is possible to match it with ``scmOverrides``.
+  This comes in handy if only a particular file should be overridden.
+
+Performance improvements
+------------------------
+
+* Fingerprints that are done in a sandbox are cached locally.
+
+  Fingerprints that have been calculated in a sandbox are up- and downloaded
+  from a binary artifact cache. Bob now caches these fingerprints locally to
+  prevent repeated fetches from the archive or calculations if the artifact
+  cache is not configured or available.

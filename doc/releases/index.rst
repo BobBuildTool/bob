@@ -9,3 +9,4 @@ Bob Release Notes
    0.15
    0.16
    0.17
+   0.18
