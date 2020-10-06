@@ -1863,8 +1863,18 @@ Specifies a list of environment variable keys that should be passed unchanged
 to all scripts during execution. The content of these variables are considered
 invariants of the build. It is no error if any variable specified in this list
 is not set. By default the following environment variables are passed to all
-scripts: ``TERM``, ``SHELL``, ``USER`` and ``HOME``. The names given with
-``whitelist`` are *added* to the list and does not replace the default list.
+scripts:
+
+* Linux and other POSIX platforms: ``TERM``, ``SHELL``, ``USER``, ``HOME``
+* Windows: ``ALLUSERSPROFILE``, ``APPDATA``, ``COMMONPROGRAMFILES``,
+  ``COMMONPROGRAMFILES(X86)``, ``COMSPEC``, ``HOMEDRIVE``, ``HOMEPATH``,
+  ``LOCALAPPDATA``, ``PATH``, ``PATHEXT``, ``PROGRAMDATA``, ``PROGRAMFILES``,
+  ``PROGRAMFILES(X86)``, ``SYSTEMDRIVE``, ``SYSTEMROOT``, ``TEMP``, ``TMP``,
+  ``WINDIR``
+* MSYS2: Union of POSIX and Windows white list
+
+The names given with ``whitelist`` are *added* to the list and does not replace
+the default list.
 
 Example::
 
