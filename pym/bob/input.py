@@ -2983,14 +2983,15 @@ class RecipeSet:
         self.__aliases = {}
         self.__recipes = {}
         self.__classes = {}
+        self.__whiteList = set()
         if isWindows():
-            self.__whiteList = set(["ALLUSERSPROFILE", "APPDATA",
+            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
                 "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "COMSPEC",
                 "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
                 "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
                 "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
-        else:
-            self.__whiteList = set(["PATH", "TERM", "SHELL", "USER", "HOME"])
+        if os.name == 'posix':
+            self.__whiteList |= set(["PATH", "TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
         self.__rootFilter = []
         self.__scmOverrides = []
