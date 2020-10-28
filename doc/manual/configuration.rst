@@ -749,14 +749,24 @@ checkoutDeterministic
 
 Type: Boolean
 
-By default any checkoutScript is considered indeterministic. The rationale is
+By default a ``checkoutScript`` is considered indeterministic. The rationale is
 that extra care must be taken for a script to fetch always the same sources. If
 you are sure that the result of the checkout script is always the same you may
-set this to ``True``. All checkoutSCMs on the other hand are capable of
-determining automatically whether they are determinstic.
+set this to ``True``.
+
+The ``checkoutDeterministic`` keyword only relates to the ``checkoutScript`` at
+the same level. Each recipe or class must declare the determinism of its
+``checkoutScript``. If there is no ``checkoutScript`` then
+``checkoutDeterministic`` implicitly defaults to ``True``. Everything in
+``checkoutSCM`` is *not* affected by ``checkoutDeterministic``. All SCMs
+included in Bob will determine their determinism based on the configuration
+automatically, e.g. using a commit or tag is considered deterministic while
+using a branch is indeterministic.
 
 If the checkout is deemed deterministic it enables Bob to apply various
-optimizations.  It is also the basis for binary artifacts.
+optimizations. Deterministic checkouts do not need to be executed every time
+and binary artifacts can be searched without executing the checkout script at
+all.
 
 .. _configuration-recipes-scm:
 
