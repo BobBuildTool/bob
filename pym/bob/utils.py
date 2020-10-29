@@ -430,16 +430,16 @@ class DirHasher:
     def __hashDir(self, prefix, path=b''):
         entries = []
         try:
-            dirEntries = os.listdir(os.path.join(prefix, path if path else b'.'))
+            dirEntries = os.scandir(os.path.join(prefix, path if path else b'.'))
         except OSError as e:
             logging.getLogger(__name__).warning("Cannot list directory: %s", str(e))
             dirEntries = []
 
-        for f in dirEntries:
+        for dirEntry in dirEntries:
+            f = dirEntry.name
             e = os.path.join(path, f)
             try:
-                s = os.lstat(os.path.join(prefix, e))
-                if stat.S_ISDIR(s.st_mode):
+                if dirEntry.is_dir(follow_symlinks=False):
                     # skip useless directories
                     if f in self.__ignoreDirs: continue
                     # add training '/' for directores for correct sorting
@@ -447,7 +447,7 @@ class DirHasher:
                 else:
                     # skip useless files
                     if f in DirHasher.IGNORE_FILES: continue
-                entries.append((e, f, s))
+                entries.append((e, f, dirEntry.stat(follow_symlinks=False)))
             except OSError as err:
                 logging.getLogger(__name__).warning("Cannot stat '%s': %s", e, str(err))
         entries = sorted(entries, key=lambda x: x[1])

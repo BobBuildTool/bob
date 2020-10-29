@@ -181,16 +181,18 @@ class TestHashDir(TestCase):
         s.st_ctime_ns=1451854748
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
+        entry = MagicMock()
+        entry.is_dir = MagicMock(return_value=False)
+        entry.name = b'sda'
+        entry.stat = mock_lstat
+        entries = MagicMock()
+        entries.return_value = [ entry ]
 
         with NamedTemporaryFile() as index:
-            with TemporaryDirectory() as tmp:
-                with open(os.path.join(tmp, "sda"), 'wb') as f:
-                    pass
+            with patch('os.scandir', entries):
+                h = hashDirectory("whatever", index.name)
 
-                with patch('os.lstat', mock_lstat):
-                    h = hashDirectory(tmp, index.name)
-
-        assert h == b'\xe8\x8e\xad\x9bv\xcbt\xc4\xcd\xa7x\xdb\xde\x96\xab@\x18\xb1\xdcX'
+        self.assertEqual(h, b'\xe8\x8e\xad\x9bv\xcbt\xc4\xcd\xa7x\xdb\xde\x96\xab@\x18\xb1\xdcX')
 
     def testChrDev(self):
         """Test that index handles character devices"""
@@ -209,14 +211,16 @@ class TestHashDir(TestCase):
         s.st_ctime_ns=1451854748
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
+        entry = MagicMock()
+        entry.is_dir = MagicMock(return_value=False)
+        entry.name = b'tty'
+        entry.stat = mock_lstat
+        entries = MagicMock()
+        entries.return_value = [ entry ]
 
         with NamedTemporaryFile() as index:
-            with TemporaryDirectory() as tmp:
-                with open(os.path.join(tmp, "tty"), 'wb') as f:
-                    pass
+            with patch('os.scandir', entries):
+                h = hashDirectory("whatever", index.name)
 
-                with patch('os.lstat', mock_lstat):
-                    h = hashDirectory(tmp, index.name)
-
-        assert h == b"\x9b\x98~\xa5\xd5\xc4\x1e\xe29'\x8d\x1e\xe1\x12\xdd\xf4\xa51\xf5d"
+        self.assertEqual(h, b"\x9b\x98~\xa5\xd5\xc4\x1e\xe29'\x8d\x1e\xe1\x12\xdd\xf4\xa51\xf5d")
 
