@@ -16,7 +16,7 @@ e.g.:
 * GNU ``tar``
 * ``hexdump``
 * ``curl`` as the default URL SCM downloader
-* source code management handlers as used (``curl``, ``cvs``, ``git``, ``svn``)
+* source code management handlers as used (``curl``, ``cvs``, ``git`` >= 2.13.0, ``svn``)
 * extractors based on the supported extensions (``7z``, GNU ``tar``, ``gunzip``, ``unxz``, ``unzip``)
 * ``azure-storage-blob`` Python library if the ``azure`` archive backend is
   used. Either install via pip (``python3 -m pip install azure-storage-blob``)
