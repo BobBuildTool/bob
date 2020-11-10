@@ -534,6 +534,11 @@ class Invoker:
 
         return ret
 
+    async def runCommand(self, args, cwd=None, **kwargs):
+        cwd = os.path.join(self.__cwd, cwd) if cwd else self.__cwd
+        ret = await self.__runCommand(args, cwd, **kwargs)
+        return ret
+
     async def callCommand(self, args, cwd=None, **kwargs):
         cwd = os.path.join(self.__cwd, cwd) if cwd else self.__cwd
         ret = await self.__runCommand(args, cwd, **kwargs)
