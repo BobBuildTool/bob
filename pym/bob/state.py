@@ -175,7 +175,7 @@ class _BobState():
 
         try:
             commit = True
-            with open(self.__uncommittedPath, "rb") as f:
+            with open(self.__uncommittedPath, "r+b") as f:
                 if verify:
                     data = f.read()
                     csum = struct.pack("=L", zlib.adler32(data[:-4]))
