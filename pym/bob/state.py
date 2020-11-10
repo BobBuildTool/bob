@@ -185,12 +185,12 @@ class _BobState():
                 os.replace(self.__uncommittedPath, self.__path)
                 return
             else:
-                print(colorize("Warning: discarding corrupted worspace state!", WARNING),
+                print(colorize("Warning: discarding corrupted workspace state!", WARNING),
                     file=sys.stderr)
                 print("You might experience build problems because state changes of the last invocation were lost.",
                     file=sys.stderr)
         except OSError as e:
-            print(colorize("Warning: cannot commit worspace state: "+str(e), WARNING),
+            print(colorize("Warning: cannot commit workspace state: "+str(e), WARNING),
                 file=sys.stderr)
 
         try:
