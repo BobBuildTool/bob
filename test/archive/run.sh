@@ -27,6 +27,10 @@ run_bob archive clean -v 'metaEnv.TYPE == "alpha"' 'meta.package == "root-bravo"
 newNum=$(find -name '*.tgz' | wc -l)
 test $oldNum -eq $newNum
 
+# Find one of the artifacts
+found=$(run_bob archive find 'meta.package == "root-bravo"')
+expect_exist "$found"
+
 # selectively keep one half
 run_bob archive clean --dry-run 'metaEnv.TYPE == "alpha"'
 run_bob archive clean -v 'metaEnv.TYPE == "alpha"'
