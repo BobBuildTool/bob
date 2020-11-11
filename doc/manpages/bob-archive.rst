@@ -25,6 +25,7 @@ Available sub-commands:
 
     bob archive clean [-h] [--dry-run] [-n] [-v] [-f]
                       expression [expression ...]
+    bob archive find [-h] [-n] [-v] [-f] expression [expression ...]
     bob archive scan [-h] [-v] [-f]
 
 Description
@@ -140,6 +141,16 @@ clean
         bob archive clean "meta.package == \"platform/app\" && \
                            build.date >= \"$(date -u -Idate -d-7days)\"" \
                           'meta.package == \"platform/app\" LIMIT 1'
+
+find
+    Find artifacts matching a retention expression.
+
+    This expressions that can be given to this command are the same as for the
+    ``clean`` command above. All artifacts that match at least one of the
+    expressions are printed on stdout. Use this command to search for
+    particular artifacts or to check that you retention expressions actually
+    match the intended artifacts.
+
 
 scan
     Scan for added artifacts.
