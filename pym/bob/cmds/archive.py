@@ -331,23 +331,8 @@ class RetainExpression(Base):
     def getRetained(self):
         return self.retained
 
-
-def doArchiveScan(argv):
-    parser = argparse.ArgumentParser(prog="bob archive scan")
-    parser.add_argument("-v", "--verbose", action='store_true',
-        help="Verbose operation")
-    parser.add_argument("-f", "--fail", action='store_true',
-        help="Return a non-zero error code in case of errors")
-    args = parser.parse_args(argv)
-
-    scanner = ArchiveScanner()
-    with scanner:
-        if not scanner.scan(args.verbose) and args.fail:
-            sys.exit(1)
-
-
 # meta.package == "root" && build.date > "2017-06-19" LIMIT 5 ORDER BY build.date ASC
-def doArchiveClean(argv):
+def query(scanner, expressions):
     varReference = pyparsing.Word(pyparsing.alphanums+'.')
     varReference.setParseAction(lambda s, loc, toks: VarReference(s, loc, toks))
 
@@ -378,6 +363,39 @@ def doArchiveClean(argv):
                            pyparsing.CaselessKeyword("DESC"))))
     expr.setParseAction(lambda s, loc, toks: RetainExpression(s, loc, toks))
 
+    try:
+        retainExpressions = [ expr.parseString(e, True)[0] for e in expressions ]
+    except pyparsing.ParseBaseException as e:
+        raise BobError("Invalid retention expression: " + str(e))
+
+    for bid in scanner.getBuildIds():
+        data = scanner.getVars(bid)
+        for expr in retainExpressions:
+            expr.evaluate(bid, data)
+
+    retained = set()
+    for expr in retainExpressions:
+        retained.update(expr.getRetained())
+
+    return retained
+
+
+def doArchiveScan(argv):
+    parser = argparse.ArgumentParser(prog="bob archive scan")
+    parser.add_argument("-v", "--verbose", action='store_true',
+        help="Verbose operation")
+    parser.add_argument("-f", "--fail", action='store_true',
+        help="Return a non-zero error code in case of errors")
+    args = parser.parse_args(argv)
+
+    scanner = ArchiveScanner()
+    with scanner:
+        if not scanner.scan(args.verbose) and args.fail:
+            sys.exit(1)
+
+
+# meta.package == "root" && build.date > "2017-06-19" LIMIT 5 ORDER BY build.date ASC
+def doArchiveClean(argv):
     parser = argparse.ArgumentParser(prog="bob archive clean")
     parser.add_argument('expression', nargs='+',
         help="Expression of artifacts that shall be kept")
@@ -391,11 +409,6 @@ def doArchiveClean(argv):
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
-    try:
-        retainExpressions = [ expr.parseString(e, True)[0] for e in args.expression ]
-    except pyparsing.ParseBaseException as e:
-        raise BobError("Invalid retention expression: " + str(e))
-
     scanner = ArchiveScanner()
     with scanner:
         if not args.noscan:
@@ -403,15 +416,9 @@ def doArchiveClean(argv):
                 sys.exit(1)
 
         # First pass: determine all directly retained artifacts
-        for bid in scanner.getBuildIds():
-            data = scanner.getVars(bid)
-            for expr in retainExpressions:
-                expr.evaluate(bid, data)
+        retained = query(scanner, args.expression)
 
         # Second pass: determine all transitively retained artifacts
-        retained = set()
-        for expr in retainExpressions:
-            retained.update(expr.getRetained())
         todo = set()
         for bid in retained:
             todo.update(scanner.getReferencedBuildIds(bid))
@@ -439,9 +446,35 @@ def doArchiveClean(argv):
                     raise BobError("Cannot remove {}: {}".format(victim, str(e)))
                 scanner.remove(bid)
 
+def doArchiveFind(argv):
+    parser = argparse.ArgumentParser(prog="bob archive find")
+    parser.add_argument('expression', nargs='+',
+        help="Expression that artifacts need to match")
+    parser.add_argument('-n', dest='noscan', action='store_true',
+        help="Skip scanning for new artifacts")
+    parser.add_argument("-v", "--verbose", action='store_true',
+        help="Verbose operation")
+    parser.add_argument("-f", "--fail", action='store_true',
+        help="Return a non-zero error code in case of errors")
+    args = parser.parse_args(argv)
+
+    scanner = ArchiveScanner()
+    with scanner:
+        if not args.noscan:
+            if not scanner.scan(args.verbose) and args.fail:
+                sys.exit(1)
+
+        # First pass: determine all directly retained artifacts
+        retained = query(scanner, args.expression)
+
+    for bid in sorted(retained):
+        bid = asHexStr(bid)
+        print(os.path.join(bid[0:2], bid[2:4], bid[4:] + "-1.tgz"))
+
 availableArchiveCmds = {
     "scan" : (doArchiveScan, "Scan archive for new artifacts"),
     "clean" : (doArchiveClean, "Clean archive from unneeded artifacts"),
+    "find" : (doArchiveFind, "Print matching artifacts"),
 }
 
 def doArchive(argv, bobRoot):
