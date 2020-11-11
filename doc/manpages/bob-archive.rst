@@ -34,10 +34,38 @@ The bob archive command can be used to manage local binary artifact archives.
 The command must be executed in the root of the archive and needs write access
 to create an index cache.
 
-Artifacts are managed by the information included in their
-:ref:`Audit Trail <audit-trail>`. See the Audit Trail documentation about the
-general included data. Currently the ``bob archive`` command has access to the
-``meta``, ``build`` and ``metaEnv`` sections of the audit trail.
+Artifacts are managed by the information included in their :ref:`Audit Trail
+<audit-trail>`. See the Audit Trail documentation for a detailed description of
+the included data. Currently the ``bob archive`` command has access to the
+``meta``, ``build`` and ``metaEnv`` sections of the audit trail:
+
+* ``build.date``: The date and time of the build (UTC, ISO 8601), e.g.
+  "2019-12-02T13:19:34.193136+00:00".
+* ``build.machine``: The hardware identifier as returned by the uname system call.
+* ``build.nodename``: The host name.
+* ``build.os-release``: Content of ``/etc/os-release``, if existing.
+* ``build.release``: The operating system release.
+* ``build.sysname``: The operating system name (e.g. "Linux").
+* ``build.version``: The operating system version.
+* ``meta.bob``: Bob version string.
+* ``meta.jenkins-build-tag``: Jenkins ``$BUILD_TAG`` (only present on Jenkins builds).
+* ``meta.jenkins-build-url``: Jenkins ``$BUILD_URL`` (only present on Jenkins builds).
+* ``meta.jenkins-node``: Jenkins ``$NODE_NAME`` (only present on Jenkins builds).
+* ``meta.language``: "bash" / "PowerShell"
+* ``meta.package``: Package path of the artifact that was built.
+* ``meta.recipe``: Name of the recipe that declared the package.
+* ``meta.step``: "src" / "build" / "dist"
+* ``metaEnv.<VAR>``: Value of :ref:`metaEnvironment <configuration-recipes-metaenv>`
+  variable ``<VAR>``.
+
+.. attention::
+   Be careful when matching by ``meta.package``. The retention expression (see
+   ``clean`` command below) has to match an actually present artifact. There
+   may be more than one possible path trough the dependency tree to the same
+   package.  It is also possible that multiple packages produce the identical
+   result. Only one such package will usually be built by Bob. None of these
+   alternate possible package paths are recorded so you should double check if
+   you query actually maches.
 
 Options
 -------
