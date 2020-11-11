@@ -304,7 +304,8 @@ class GitScm(Scm):
         # known submodules. Optionally restrict to user specified subset.
         args = [ "git", "-C", base, "config", "-f", ".gitmodules", "-z", "--get-regexp",
                  "path" ]
-        allPaths = await invoker.checkOutputCommand(args, cwd=self.__dir)
+        finishedProc = await invoker.runCommand(args, cwd=self.__dir, stdout=True)
+        allPaths = finishedProc.stdout.rstrip() if finishedProc.returncode == 0 else ""
         allPaths = [ p.split("\n")[1] for p in allPaths.split("\0") if p ]
         if isinstance(self.__submodules, list):
             subset = set(normPath(p) for p in self.__submodules)
@@ -506,7 +507,7 @@ class GitScm(Scm):
         # git-plugin. Fall back to our implementation in this case.
         return not isinstance(self.__submodules, list)
 
-    def callGit(self, workspacePath, *args):
+    def callGit(self, workspacePath, *args, check=True):
         cmdLine = ['git']
         cmdLine.extend(args)
         cwd = os.path.join(workspacePath, self.__dir)
@@ -514,8 +515,11 @@ class GitScm(Scm):
             output = subprocess.check_output(cmdLine, cwd=cwd,
                 universal_newlines=True, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
-            raise BuildError("git error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
-                cwd, " ".join(cmdLine), e.output.rstrip()))
+            if check:
+                raise BuildError("git error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
+                    cwd, " ".join(cmdLine), e.output.rstrip()))
+            else:
+                return ""
         except OSError as e:
             raise BuildError("Error calling git: " + str(e))
         return output.strip()
@@ -610,7 +614,7 @@ class GitScm(Scm):
         # List all paths as per .gitmodules. This gives us the list of all
         # known submodules.
         allPaths = self.callGit(workspacePath, "-C", base, "config", "-f",
-            ".gitmodules", "-z", "--get-regexp", "path")
+            ".gitmodules", "-z", "--get-regexp", "path", check=False)
         allPaths = [ p.split("\n")[1] for p in allPaths.split("\0") if p ]
         if not allPaths:
             return
@@ -794,9 +798,12 @@ class GitAudit(ScmAudit):
 
         # List all paths as per .gitmodules. This gives us the list of all
         # known submodules.
-        allPaths = await check_output(["git", "-C", base, "config", "-f",
-            ".gitmodules", "-z", "--get-regexp", "path"], cwd=dir,
-            universal_newlines=True)
+        try:
+            allPaths = await check_output(["git", "-C", base, "config", "-f",
+                ".gitmodules", "-z", "--get-regexp", "path"], cwd=dir,
+                universal_newlines=True)
+        except subprocess.CalledProcessError:
+            allPaths = "" # No key found in file. Probably empty
         allPaths = [ p.split("\n")[1] for p in allPaths.split("\0") if p ]
         if not allPaths:
             return False
