@@ -98,7 +98,7 @@ class _BobState():
                         state = pickle.load(f)
                 except OSError as e:
                     raise ParseError("Error loading workspace state: " + str(e))
-                except pickle.PickleError as e:
+                except (pickle.PickleError, ValueError) as e:
                     raise ParseError("Error decoding workspace state: " + str(e))
 
                 if state["version"] < _BobState.MIN_VERSION:
