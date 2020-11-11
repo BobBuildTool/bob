@@ -242,6 +242,21 @@ under the ``meta`` key and typically hold at least the following information:
     The executed step for this audit record. Can be ``src``, ``build`` or
     ``dist``.
 
+If the artifact was built on Jenkins the following additional information will
+be included:
+
+``jenkins-build-tag``
+   The Jenkins build tag (``jenkins-${JOB_NAME}-${BUILD_NUMBER}``) as set in
+   ``$BUILD_TAG``.
+
+``jenkins-node``
+   The name of the node where the artifact had been built. Equals 'master' for
+   master node. Taken over from ``$NODE_NAME``.
+
+``jenkins-build-url``
+   The URL where the results of the Jenkins  build can be found (``$BUILD_URL``).
+
+
 Example::
 
     "meta" : {
