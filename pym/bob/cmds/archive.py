@@ -333,7 +333,7 @@ class RetainExpression(Base):
 
 # meta.package == "root" && build.date > "2017-06-19" LIMIT 5 ORDER BY build.date ASC
 def query(scanner, expressions):
-    varReference = pyparsing.Word(pyparsing.alphanums+'.')
+    varReference = pyparsing.Word(pyparsing.alphanums+'._-')
     varReference.setParseAction(lambda s, loc, toks: VarReference(s, loc, toks))
 
     stringLiteral = pyparsing.QuotedString('"', '\\')
