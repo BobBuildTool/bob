@@ -159,6 +159,16 @@ def genUuid():
     ret = "".join(random.sample("0123456789abcdef", 8))
     return ret[:4] + '-' + ret[4:]
 
+def getAuditMeta(options):
+    return {
+        k[len("audit.meta."):] : v for k, v in sorted(options.items())
+        if k.startswith("audit.meta.")
+    }
+
+def verifyAuditMeta(meta):
+    valid = re.compile(r"[0-9A-Za-z._-]+")
+    return all(valid.fullmatch(k) for k in meta.keys())
+
 class JenkinsJob:
     def __init__(self, name, displayName, nameCalculator, recipe, archiveBackend):
         self.__name = name
@@ -331,8 +341,11 @@ class JenkinsJob:
         ret.append("EOF")
         return ret
 
-    def dumpStepAuditGen(self, step):
-        cmd = [
+    def dumpStepAuditGen(self, step, auditMeta):
+        cmd = []
+        for k, v in sorted(auditMeta.items()):
+            cmd += ["-D", quote(k), quote(v)]
+        cmd += [
             "-D", "bob", BOB_VERSION,
             "-D", "recipe", step.getPackage().getRecipe().getName(),
             "-D", "package", "/".join(step.getPackage().getStack()),
@@ -855,6 +868,9 @@ class JenkinsJob:
         xml.etree.ElementTree.SubElement(
             checkout, "command").text = "\n".join(buildIdCalc)
 
+        # extra audit trail meta variables
+        auditMeta = getAuditMeta(options)
+
         # generate audit trail of checkout steps
         if self.__checkoutSteps:
             checkoutAudit = [
@@ -862,7 +878,7 @@ class JenkinsJob:
                 "# generate audit trail of checkout step(s)"
             ]
             for d in sorted(self.__checkoutSteps.values()):
-                checkoutAudit.append(self.dumpStepAuditGen(d))
+                checkoutAudit.append(self.dumpStepAuditGen(d, auditMeta))
             audit = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
@@ -900,7 +916,7 @@ class JenkinsJob:
                     self.dumpStep(d, windows, affectedPackageSteps),
                     "", "# generate audit trail",
                     "cd \"$WORKSPACE\"",
-                    self.dumpStepAuditGen(d)
+                    self.dumpStepAuditGen(d, auditMeta)
                 ])
 
         # package steps
@@ -912,7 +928,7 @@ class JenkinsJob:
                 self.dumpStep(d, windows, [d]),
                 "", "# generate audit trail",
                 "cd \"$WORKSPACE\"",
-                self.dumpStepAuditGen(d),
+                self.dumpStepAuditGen(d, auditMeta),
                 "", "# pack result for archive and inter-job exchange",
                 "cd \"$WORKSPACE\"",
                 "tar zcfv {TGZ} -H pax --pax-option=\"bob-archive-vsn=1\" --transform='s|^{AUDIT}|meta/audit.json.gz|' --transform='s|^{WSP_PATH}|content|' {AUDIT} {WSP_PATH}".format(
@@ -1360,6 +1376,8 @@ def doJenkinsAdd(recipes, argv):
             parser.error("Archive sharing can not be used without upload enabled! Exiting..", file=sys.stderr)
         if not args.download:
             parser.error("Archive sharing can not be used without download enabled! Exiting..", file=sys.stderr)
+    if not verifyAuditMeta(getAuditMeta(options)):
+        parser.error("Invalid audit meta variable name")
 
     if args.name in BobState().getAllJenkins():
         print("Jenkins '{}' already added.".format(args.name), file=sys.stderr)
@@ -2155,6 +2173,8 @@ def doJenkinsSetOptions(recipes, argv):
             parser.error("Archive sharing can not be used without upload enabled! Exiting..")
         if not config.get('download', False):
             parser.error("Archive sharing can not be used without download enabled! Exiting..")
+    if not verifyAuditMeta(getAuditMeta(options)):
+        parser.error("Invalid audit meta variable name")
 
     BobState().setJenkinsConfig(args.name, config)
 
