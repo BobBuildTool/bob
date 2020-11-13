@@ -19,8 +19,8 @@ Synopsis
               [--without-provided] [-A | --audit] [-b | -B | --normal]
               [--clean | --incremental] [--always-checkout RE] [--resume]
               [-q] [-v] [--no-logfiles] [-D DEFINES] [-c CONFIGFILE]
-              [-e NAME] [-E] [--upload] [--link-deps] [--no-link-deps]
-              [--download MODE] [--sandbox | --no-sandbox]
+              [-e NAME] [-E] [-M META] [--upload] [--link-deps]
+              [--no-link-deps] [--download MODE] [--sandbox | --no-sandbox]
               [--clean-checkout]
               PACKAGE [PACKAGE ...]
 

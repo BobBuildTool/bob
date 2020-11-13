@@ -115,8 +115,12 @@ Options
 ``-B, --checkout-only``
     Don't build, just check out sources
 
-``-D DEFINES``
-    Override default environment variable
+``-D VAR=VALUE``
+    Override default or set environment variable.
+
+    Sets the variable ``VAR`` to ``VALUE``. This overrides the value possibly
+    set by ``default.yaml``, config files passed by ``-c`` or any file that was
+    included by either of these files.
 
 ``-E``
     Preserve whole environment.
@@ -125,6 +129,12 @@ Options
     from the environment. With this option all environment variables that are
     set while invoking Bob are kept. Use with care as this might affect some
     packages whose recipes are not robust.
+
+``-M VAR=VALUE``
+   Assign the meta variable ``VAR`` to the given value in the audit trail.
+   The variable can later be matched by :ref:`bob archive <manpage-archive>` as
+   ``meta.VAR`` to select artifacts built by this project. Variables that are
+   defined by Bob itself (e.g. ``meta.bob``) cannot be redifined!
 
 ``-b, --build-only``
     Don't checkout, just build and package

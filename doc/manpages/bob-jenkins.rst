@@ -190,6 +190,12 @@ artifacts.copy
          archive for sharing artifacts. Must be used together with ``--upload``
          and ``--download``.
 
+audit.meta.<var>
+   Assign the meta variable ``<var>`` to the given value in the audit trail.
+   The variable can later be matched by :ref:`bob archive <manpage-archive>` as
+   ``meta.<var>`` to select artifacts built by this project. Variables that are
+   defined by Bob itself (e.g. ``meta.jenkins-node``) cannot be redifined!
+
 jobs.isolate
     Regular expression that is matching package names. Any package that is
     matched is put into a separate job. Multiple variants of the same package
