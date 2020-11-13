@@ -283,6 +283,7 @@ cd {ROOT}
         self.__audit = True
         self.__fingerprints = { None : b'', "" : b'' }
         self.__workspaceLocks = {}
+        self.__auditMeta = {}
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -346,6 +347,14 @@ cd {ROOT}
 
     def setAudit(self, audit):
         self.__audit = audit
+
+    def setAuditMeta(self, keys):
+        r = re.compile(r"[0-9A-Za-z._-]+")
+        for k in keys.keys():
+            if not r.fullmatch(k):
+                raise BuildError("Meta audit key '{}' contains invalid characters!"
+                                    .format(k))
+        self.__auditMeta = keys
 
     def saveBuildState(self):
         state = {}
@@ -433,13 +442,19 @@ cd {ROOT}
         def auditOf(s):
             return os.path.join(s.getWorkspacePath(), "..", "audit.json.gz")
 
+        metaDefines = self.__auditMeta.copy()
+        metaDefines.update({
+            "bob" : BOB_VERSION,
+            "recipe" : step.getPackage().getRecipe().getName(),
+            "package" : "/".join(step.getPackage().getStack()),
+            "step" : step.getLabel(),
+            "language" : step.getPackage().getRecipe().scriptLanguage.index.value,
+        })
+
         with stepAction(step, "AUDIT", step.getWorkspacePath(), INFO) as a:
             audit = Audit.create(step.getVariantId(), buildId, resultHash)
-            audit.addDefine("bob", BOB_VERSION)
-            audit.addDefine("recipe", step.getPackage().getRecipe().getName())
-            audit.addDefine("package", "/".join(step.getPackage().getStack()))
-            audit.addDefine("step", step.getLabel())
-            audit.addDefine("language", step.getPackage().getRecipe().scriptLanguage.index.value)
+            for var, val in metaDefines.items():
+                audit.addDefine(var, val)
             for var, val in step.getPackage().getMetaEnv().items():
                 audit.addMetaEnv(var, val)
             audit.setRecipesAudit(await step.getPackage().getRecipe().getRecipeSet().getScmAudit())

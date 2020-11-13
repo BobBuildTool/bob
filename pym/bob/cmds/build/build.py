@@ -96,6 +96,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Preserve environment variable")
     parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
         help="Preserve whole environment")
+    parser.add_argument('-M', default=[], action='append', dest="meta",
+        help="Add meta key to audit trail")
     parser.add_argument('--upload', default=None, action='store_true',
         help="Upload to binary archive")
     parser.add_argument('--link-deps', default=None, help="Add linked dependencies to workspace paths",
@@ -115,6 +117,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
+    meta = processDefines(args.meta)
 
     startTime = time.time()
 
@@ -208,6 +211,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setMakeFds(makeFds)
         builder.setKeepGoing(args.keep_going)
         builder.setAudit(args.audit)
+        builder.setAuditMeta(meta)
         if args.resume: builder.loadBuildState()
 
         backlog = []
