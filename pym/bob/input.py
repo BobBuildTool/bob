@@ -991,8 +991,13 @@ class Step:
         return self._coreStep.getScript()
 
     def getJenkinsScript(self):
-        """Return the relevant parts as shell script that have no Jenkins plugin."""
-        return self._coreStep.getJenkinsScript()
+        import warnings
+        warnings.warn("getJenkinsScript is deprecated", DeprecationWarning)
+        """Return the relevant parts as shell script that have no Jenkins plugin.
+
+        Deprecated. Returns the same script as bob.input.Step.getScript()
+        """
+        return self.getScript()
 
     def getPostRunCmds(self):
         return self._coreStep.getPostRunCmds()
