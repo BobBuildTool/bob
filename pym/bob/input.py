@@ -109,13 +109,43 @@ class DigestHasher:
         """Extract host fingerprint digest part (if any)."""
         return digest[20:]
 
-def fetchScripts(recipe, prefix, resolveBash = lambda x, y: x, resolvePwsh = lambda x, y: x):
+def fetchFingerprintScripts(recipe):
     return {
-        ScriptLanguage.BASH : resolveBash(recipe.get(prefix + "ScriptBash",
-            recipe.get(prefix + "Script")), prefix + "Script[Bash]"),
-        ScriptLanguage.PWSH : resolvePwsh(recipe.get(prefix + "ScriptPwsh",
-            recipe.get(prefix + "Script")), prefix + "Script[Pwsh]"),
+        ScriptLanguage.BASH : recipe.get("fingerprintScriptBash",
+            recipe.get("fingerprintScript")),
+        ScriptLanguage.PWSH : recipe.get("fingerprintScriptPwsh",
+            recipe.get("fingerprintScript")),
     }
+
+def fetchScripts(recipe, prefix, resolveBash, resolvePwsh):
+    return {
+        ScriptLanguage.BASH : (
+            resolveBash(recipe.get(prefix + "SetupBash", recipe.get(prefix + "Setup")),
+                        prefix + "Setup[Bash]"),
+            resolveBash(recipe.get(prefix + "ScriptBash", recipe.get(prefix + "Script")),
+                        prefix + "Script[Bash]"),
+        ),
+        ScriptLanguage.PWSH : (
+            resolvePwsh(recipe.get(prefix + "SetupPwsh", recipe.get(prefix + "Setup")),
+                        prefix + "Setup[Pwsh]"),
+            resolvePwsh(recipe.get(prefix + "ScriptPwsh", recipe.get(prefix + "Script")),
+                        prefix + "Script[Pwsh]"),
+        )
+    }
+
+def mergeScripts(fragments, glue):
+    """Join all scripts of the recipe and its classes.
+
+    The result is a tuple with (setupScript, mainScript, digestScript)
+    """
+    return (
+        joinScripts((f[0][0] for f in fragments), glue),
+        joinScripts((f[1][0] for f in fragments), glue),
+        joinScripts(
+            ( joinScripts((f[0][1] for f in fragments), "\n"),
+              joinScripts((f[1][1] for f in fragments), "\n"),
+            ), "\n")
+    )
 
 
 class PluginProperty:
@@ -506,7 +536,7 @@ class AbstractTool:
             self.libs = spec.get('libs', [])
             self.netAccess = spec.get('netAccess', False)
             self.environment = spec.get('environment', {})
-            self.fingerprintScript = fetchScripts(spec, 'fingerprint')
+            self.fingerprintScript = fetchFingerprintScripts(spec)
             self.fingerprintIf = spec.get("fingerprintIf")
             self.fingerprintVars = set(spec.get("fingerprintVars", []))
 
@@ -748,7 +778,10 @@ class CoreStep(CoreItem):
     def getJenkinsPreRunCmds(self):
         return []
 
-    def getScript(self):
+    def getSetupScript(self):
+        raise NotImplementedError
+
+    def getMainScript(self):
         raise NotImplementedError
 
     def getPostRunCmds(self):
@@ -982,7 +1015,8 @@ class Step:
 
         Besides considerations of special backends (such as Jenkins) this
         script is what should be executed to build this step."""
-        return self._coreStep.getScript()
+        return joinScripts([self.getSetupScript(), self.getMainScript()],
+            self.getPackage().getRecipe().scriptLanguage.glue)
 
     def getJenkinsScript(self):
         import warnings
@@ -992,6 +1026,12 @@ class Step:
         Deprecated. Returns the same script as bob.input.Step.getScript()
         """
         return self.getScript()
+
+    def getSetupScript(self):
+        return self._coreStep.getSetupScript()
+
+    def getMainScript(self):
+        return self._coreStep.getMainScript()
 
     def getPostRunCmds(self):
         return self._coreStep.getPostRunCmds()
@@ -1339,7 +1379,7 @@ class CoreCheckoutStep(CoreStep):
             self.scmList = [ Scm(scm, fullEnv, overrides, recipeSet)
                 for scm in checkoutSCMs
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
-            isValid = (checkout[0] is not None) or bool(self.scmList)
+            isValid = (checkout[1] is not None) or bool(self.scmList)
 
             # Validate that SCM paths do not overlap
             knownPaths = []
@@ -1389,8 +1429,11 @@ class CoreCheckoutStep(CoreStep):
     def getJenkinsPreRunCmds(self):
         return [ s.getProperties(True) for s in self.scmList if not s.hasJenkinsPlugin() ]
 
-    def getScript(self):
-        return self.corePackage.recipe.checkoutScript
+    def getSetupScript(self):
+        return self.corePackage.recipe.checkoutSetupScript
+
+    def getMainScript(self):
+        return self.corePackage.recipe.checkoutMainScript
 
     def getPostRunCmds(self):
         return [s.getProperties() for s in self.corePackage.recipe.checkoutAsserts]
@@ -1483,8 +1526,8 @@ class CheckoutStep(Step):
 class CoreBuildStep(CoreStep):
     __slots__ = []
 
-    def __init__(self, corePackage, script=(None, None), digestEnv=Env(), env=Env(), args=[]):
-        isValid = script[0] is not None
+    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[]):
+        isValid = script[1] is not None
         super().__init__(corePackage, isValid, True, digestEnv, env, args)
 
     def _getToolKeys(self):
@@ -1505,8 +1548,11 @@ class CoreBuildStep(CoreStep):
     def isBuildStep(self):
         return True
 
-    def getScript(self):
-        return self.corePackage.recipe.buildScript
+    def getSetupScript(self):
+        return self.corePackage.recipe.buildSetupScript
+
+    def getMainScript(self):
+        return self.corePackage.recipe.buildMainScript
 
     def getDigestScript(self):
         return self.corePackage.recipe.buildDigestScript
@@ -1534,8 +1580,8 @@ class BuildStep(Step):
 class CorePackageStep(CoreStep):
     __slots__ = []
 
-    def __init__(self, corePackage, script=(None, None), digestEnv=Env(), env=Env(), args=[]):
-        isValid = script[0] is not None
+    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[]):
+        isValid = script[1] is not None
         super().__init__(corePackage, isValid, True, digestEnv, env, args)
 
     def _getToolKeys(self):
@@ -1556,8 +1602,11 @@ class CorePackageStep(CoreStep):
     def isPackageStep(self):
         return True
 
-    def getScript(self):
-        return self.corePackage.recipe.packageScript
+    def getSetupScript(self):
+        return self.corePackage.recipe.packageSetupScript
+
+    def getMainScript(self):
+        return self.corePackage.recipe.packageMainScript
 
     def getDigestScript(self):
         return self.corePackage.recipe.packageDigestScript
@@ -2116,7 +2165,7 @@ class Recipe(object):
             i += 1
         self.__build = fetchScripts(recipe, "build", incHelperBash, incHelperPwsh)
         self.__package = fetchScripts(recipe, "package", incHelperBash, incHelperPwsh)
-        self.__fingerprintScriptList = fetchScripts(recipe, "fingerprint")
+        self.__fingerprintScriptList = fetchFingerprintScripts(recipe)
         self.__fingerprintIf = recipe.get("fingerprintIf")
         self.__fingerprintVarsList = set(recipe.get("fingerprintVars", []))
 
@@ -2169,32 +2218,24 @@ class Recipe(object):
             self.__scriptLanguage = scriptLanguage
         glue = getLanguage(self.__scriptLanguage).glue
 
-        # Consider checkout deterministic by default if no checkout script is
-        # involved.
+        # Consider checkout deterministic by default if no checkoutScript is
+        # involved. A potential checkoutSetup is ignored.
         def coDet(r):
             ret = r.__checkoutDeterministic
             if ret is not None:
                 return ret
-            return r.__checkout[self.__scriptLanguage][0] is None
+            return r.__checkout[self.__scriptLanguage][1][0] is None
         self.__checkoutDeterministic = all(coDet(i) for i in inheritAll)
 
         # merge scripts and other lists
-        l = lambda x: x[self.__scriptLanguage]
+        selLang = lambda x: x[self.__scriptLanguage]
 
-        self.__checkout = (
-            joinScripts((l(i.__checkout)[0] for i in inheritAll), glue),
-            joinScripts((l(i.__checkout)[1] for i in inheritAll), "\n")
-        )
+        # Join all scripts. The result is a tuple with (setupScript, mainScript, digestScript)
+        self.__checkout = mergeScripts([ selLang(i.__checkout) for i in inheritAll ], glue)
         self.__checkoutSCMs = list(chain.from_iterable(i.__checkoutSCMs for i in inheritAll))
         self.__checkoutAsserts = list(chain.from_iterable(i.__checkoutAsserts for i in inheritAll))
-        self.__build = (
-            joinScripts((l(i.__build)[0] for i in inheritAll), glue),
-            joinScripts((l(i.__build)[1] for i in inheritAll), "\n")
-        )
-        self.__package = (
-            joinScripts((l(i.__package)[0] for i in inheritAll), glue),
-            joinScripts((l(i.__package)[1] for i in inheritAll), "\n")
-        )
+        self.__build = mergeScripts([ selLang(i.__build) for i in inheritAll ], glue)
+        self.__package = mergeScripts([ selLang(i.__package) for i in inheritAll ], glue)
         self.__fingerprintScriptList = [ i.__fingerprintScriptList for i in inheritAll ]
         self.__fingerprintVarsList = [ i.__fingerprintVarsList for i in inheritAll ]
         self.__fingerprintIf = [ i.__fingerprintIf for i in inheritAll ]
@@ -2254,8 +2295,8 @@ class Recipe(object):
             self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
 
         # the package step must always be valid
-        if self.__package[0] is None:
-            self.__package = ("", 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
+        if self.__package[1] is None:
+            self.__package = (None, "", 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
 
         # final shared value
         self.__shared = self.__shared == True
@@ -2575,7 +2616,7 @@ class Recipe(object):
                 directPackages, indirectPackages, states, uidGen(), doFingerprint)
 
         # optional checkout step
-        if self.__checkout != (None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
+        if self.__checkout != (None, None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
@@ -2585,7 +2626,7 @@ class Recipe(object):
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
         # optional build step
-        if self.__build != (None, None):
+        if self.__build != (None, None, None):
             buildDigestEnv = env.prune(self.__buildVars)
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
@@ -2686,12 +2727,16 @@ Every dependency must only be given once."""
             help="Each environment variable must be defined only by one used tool.")
 
     @property
-    def checkoutScript(self):
+    def checkoutSetupScript(self):
         return self.__checkout[0] or ""
 
     @property
-    def checkoutDigestScript(self):
+    def checkoutMainScript(self):
         return self.__checkout[1] or ""
+
+    @property
+    def checkoutDigestScript(self):
+        return self.__checkout[2] or ""
 
     @property
     def checkoutDeterministic(self):
@@ -2710,12 +2755,16 @@ Every dependency must only be given once."""
         return self.__checkoutVarsWeak - self.__checkoutVars
 
     @property
-    def buildScript(self):
-        return self.__build[0]
+    def buildSetupScript(self):
+        return self.__build[0] or ""
+
+    @property
+    def buildMainScript(self):
+        return self.__build[1]
 
     @property
     def buildDigestScript(self):
-        return self.__build[1]
+        return self.__build[2]
 
     @property
     def buildVars(self):
@@ -2726,12 +2775,16 @@ Every dependency must only be given once."""
         return self.__buildVarsWeak - self.__buildVars
 
     @property
-    def packageScript(self):
-        return self.__package[0]
+    def packageSetupScript(self):
+        return self.__package[0] or ""
+
+    @property
+    def packageMainScript(self):
+        return self.__package[1]
 
     @property
     def packageDigestScript(self):
-        return self.__package[1]
+        return self.__package[2]
 
     @property
     def packageVars(self):
@@ -3497,12 +3550,21 @@ class RecipeSet:
             schema.Optional('checkoutScript') : str,
             schema.Optional('checkoutScriptBash') : str,
             schema.Optional('checkoutScriptPwsh') : str,
+            schema.Optional('checkoutSetup') : str,
+            schema.Optional('checkoutSetupBash') : str,
+            schema.Optional('checkoutSetupPwsh') : str,
             schema.Optional('buildScript') : str,
             schema.Optional('buildScriptBash') : str,
             schema.Optional('buildScriptPwsh') : str,
+            schema.Optional('buildSetup') : str,
+            schema.Optional('buildSetupBash') : str,
+            schema.Optional('buildSetupPwsh') : str,
             schema.Optional('packageScript') : str,
             schema.Optional('packageScriptBash') : str,
             schema.Optional('packageScriptPwsh') : str,
+            schema.Optional('packageSetup') : str,
+            schema.Optional('packageSetupBash') : str,
+            schema.Optional('packageSetupPwsh') : str,
             schema.Optional('checkoutTools') : [ toolNameSchema ],
             schema.Optional('buildTools') : [ toolNameSchema ],
             schema.Optional('packageTools') : [ toolNameSchema ],

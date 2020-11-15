@@ -223,7 +223,7 @@ class BashLanguage:
             return p
 
     @staticmethod
-    def __formatSetup(spec, keepEnv):
+    def __formatProlog(spec, keepEnv):
         env = { key: quote(value) for (key, value) in spec.env.items() }
         env.update({
             "PATH": ":".join(
@@ -268,6 +268,15 @@ class BashLanguage:
         return "\n".join(ret)
 
     @staticmethod
+    def __formatSetup(spec):
+        return "\n".join([
+            "",
+            "# Recipe setup script",
+            spec.setupScript,
+            "cd \"${BOB_CWD}\"",
+        ])
+
+    @staticmethod
     def __formatScript(spec):
         colorize = not spec.isJenkins
         if spec.envFile:
@@ -275,7 +284,7 @@ class BashLanguage:
         else:
             envFile = None
         ret = [
-            BashLanguage.__formatSetup(spec, False),
+            BashLanguage.__formatProlog(spec, False),
             "",
             "# Setup",
             "declare -p > {}".format(quote(BashLanguage.__munge(envFile))) if envFile else "",
@@ -306,8 +315,10 @@ class BashLanguage:
                 trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do /bin/rm -f "$i" ; done' EXIT
                 set -o errtrace -o nounset -o pipefail
                 """),
-            "# Recipe script",
-            spec.script,
+            BashLanguage.__formatSetup(spec),
+            "",
+            "# Recipe main script",
+            spec.mainScript,
         ]
         return "\n".join(ret)
 
@@ -325,7 +336,8 @@ class BashLanguage:
     def setupShell(spec, tmpDir, keepEnv):
         realScriptFile, execScriptFile = BashLanguage.__scriptFilePaths(spec, tmpDir)
         with open(realScriptFile, "w") as f:
-            f.write(BashLanguage.__formatSetup(spec, keepEnv))
+            f.write(BashLanguage.__formatProlog(spec, keepEnv))
+            f.write(BashLanguage.__formatSetup(spec))
 
         args = ["bash", "--rcfile", BashLanguage.__munge(execScriptFile), "-s", "--"]
         args.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
@@ -410,7 +422,7 @@ class PwshLanguage:
         """)
 
     @staticmethod
-    def __formatSetup(spec):
+    def __formatProlog(spec):
         pathSep = ";" if sys.platform == "win32" else ":"
         env = { key: escapePwsh(value) for (key, value) in spec.env.items() }
         env.update({
@@ -446,13 +458,22 @@ class PwshLanguage:
         return "\n".join(ret)
 
     @staticmethod
+    def __formatSetup(spec):
+        return "\n".join([
+            "",
+            "# Recipe setup script",
+            spec.setupScript,
+            "cd $Env:BOB_CWD",
+        ])
+
+    @staticmethod
     def __formatScript(spec, trace):
         if spec.envFile:
             envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
         else:
             envFile = None
         ret = [
-            PwshLanguage.__formatSetup(spec),
+            PwshLanguage.__formatProlog(spec),
             "",
             "# Setup",
             dedent("""\
@@ -480,9 +501,10 @@ class PwshLanguage:
                 try {
                     $_BOB_TMP_CLEANUP = @()
                 """),
-            "# BEGIN BUILD SCRIPT",
-            spec.script,
-            "# END BUILD SCRIPT",
+            PwshLanguage.__formatSetup(spec),
+            "",
+            "# Recipe main script",
+            spec.mainScript,
             dedent("""\
                 } finally {
                     foreach($f in $_BOB_TMP_CLEANUP) {
@@ -506,6 +528,7 @@ class PwshLanguage:
     def setupShell(spec, tmpDir, keepEnv):
         realScriptFile, execScriptFile = PwshLanguage.__scriptFilePaths(spec, tmpDir)
         with open(realScriptFile, "w") as f:
+            f.write(PwshLanguage.__formatProlog(spec))
             f.write(PwshLanguage.__formatSetup(spec))
 
         interpreter = "powershell" if isWindows() else "pwsh"
@@ -621,7 +644,8 @@ class StepSpec:
                     s['depMounts'].append((extra.getWorkspacePath(), extra.getExecPath(step)))
 
         d['preRunCmds'] = step.getJenkinsPreRunCmds() if isJenkins else step.getPreRunCmds()
-        d['script'] = step.getScript()
+        d['setupScript'] = step.getSetupScript()
+        d['mainScript'] = step.getMainScript()
         d['postRunCmds'] = step.getPostRunCmds()
         d['fingerprintScript'] = step._getFingerprintScript()
 
@@ -716,8 +740,12 @@ class StepSpec:
         return self.__data['preRunCmds']
 
     @property
-    def script(self):
-        return self.__data['script']
+    def setupScript(self):
+        return self.__data['setupScript']
+
+    @property
+    def mainScript(self):
+        return self.__data['mainScript']
 
     @property
     def fingerprintScript(self):
