@@ -1,0 +1,9 @@
+# Defining some setup scripts. They should not enable the step yet.
+
+checkoutSetup: |
+    exit 1
+
+buildSetup: |
+    exit 1
+
+

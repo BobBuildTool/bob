@@ -1,0 +1,11 @@
+root: True
+inherit: [inert]
+
+packageSetup: |
+    foo()
+    {
+        echo foo > canary.txt
+    }
+
+packageScript: |
+    foo
