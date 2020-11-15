@@ -751,13 +751,7 @@ class CoreStep(CoreItem):
     def getScript(self):
         raise NotImplementedError
 
-    def getJenkinsScript(self):
-        raise NotImplementedError
-
     def getPostRunCmds(self):
-        return []
-
-    def getJenkinsPostRunCmds(self):
         return []
 
     def getDigestScript(self):
@@ -1001,9 +995,6 @@ class Step:
 
     def getPostRunCmds(self):
         return self._coreStep.getPostRunCmds()
-
-    def getJenkinsPostRunCmds(self):
-        return self._coreStep.getJenkinsPostRunCmds()
 
     def getDigestScript(self):
         """Return a long term stable script.
@@ -1401,14 +1392,8 @@ class CoreCheckoutStep(CoreStep):
     def getScript(self):
         return self.corePackage.recipe.checkoutScript
 
-    def getJenkinsScript(self):
-        return self.corePackage.recipe.checkoutScript
-
     def getPostRunCmds(self):
         return [s.getProperties() for s in self.corePackage.recipe.checkoutAsserts]
-
-    def getJenkinsPostRunCmds(self):
-        return [ s.getProperties() for s in self.corePackage.recipe.checkoutAsserts ]
 
     def getDigestScript(self):
         if self.isValid:
@@ -1523,9 +1508,6 @@ class CoreBuildStep(CoreStep):
     def getScript(self):
         return self.corePackage.recipe.buildScript
 
-    def getJenkinsScript(self):
-        return self.corePackage.recipe.buildScript
-
     def getDigestScript(self):
         return self.corePackage.recipe.buildDigestScript
 
@@ -1575,9 +1557,6 @@ class CorePackageStep(CoreStep):
         return True
 
     def getScript(self):
-        return self.corePackage.recipe.packageScript
-
-    def getJenkinsScript(self):
         return self.corePackage.recipe.packageScript
 
     def getDigestScript(self):

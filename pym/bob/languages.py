@@ -621,8 +621,8 @@ class StepSpec:
                     s['depMounts'].append((extra.getWorkspacePath(), extra.getExecPath(step)))
 
         d['preRunCmds'] = step.getJenkinsPreRunCmds() if isJenkins else step.getPreRunCmds()
-        d['script'] = step.getJenkinsScript() if isJenkins else step.getScript()
-        d['postRunCmds'] = step.getJenkinsPostRunCmds() if isJenkins else step.getPostRunCmds()
+        d['script'] = step.getScript()
+        d['postRunCmds'] = step.getPostRunCmds()
         d['fingerprintScript'] = step._getFingerprintScript()
 
         return self
