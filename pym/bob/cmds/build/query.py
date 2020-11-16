@@ -89,7 +89,7 @@ been executed or does not exist), the line is omitted.
             else:
                 if not args.quiet:
                     packageName = self.failedSteps[0].getPackage().getName()
-                    if len(self.failedSteps) is 1:
+                    if len(self.failedSteps) == 1:
                         print("Directory for {{{}}} step of package {} not present.".format(
                             self.failedSteps[0].getLabel(), packageName), file=sys.stderr)
                     else:
