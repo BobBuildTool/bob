@@ -453,6 +453,8 @@ can be configured.
 Recipe and class keywords
 -------------------------
 
+.. _configuration-recipes-scripts:
+
 {checkout,build,package}Script[{Bash,Pwsh}]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -542,6 +544,22 @@ there is no possibility to configure PowerShell to stop execution when an
 external command fails. Make sure to wrap calls to external tools with
 ``Check-Command`` or check ``$lastexitcode`` yourself. Otherwise the build will
 not detect errors involving external commands!
+
+{checkout,build,package}Setup[{Bash,Pwsh}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: String
+
+Setup scripts are prepended to the executed regular scripts defined by
+:ref:`configuration-recipes-scripts`. Defining a setup script does not yet
+enable the corresponding step. Conceptually a setup script is intended to
+define helper functions or variables but they should not yet execute anything.
+They are included when entering the shell environment of a step (i.e. calling
+``build.sh shell``). As such they are intended mainly for classes so that the
+definitions of a class are automatically available in the shell environment.
+
+Other than the above differences setup scripts are identical to
+:ref:`configuration-recipes-scripts`.
 
 .. _configuration-recipes-tools:
 

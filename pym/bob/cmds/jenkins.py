@@ -307,7 +307,7 @@ class JenkinsJob:
             cmds.append("fi")
             cmds.append("")
 
-        if d.getJenkinsScript() is not None:
+        if d.getScript() is not None:
             cmds.append("bob _invoke {} -vv".format(self._specName(d)))
 
         return "\n".join(cmds)
@@ -362,7 +362,7 @@ class JenkinsJob:
             cmd.extend(["--recipes",
                 quote(json.dumps(recipesAudit.dump(), sort_keys=True))])
         # environment is only persisted if a shell script is run
-        if step.getJenkinsScript() is not None:
+        if step.getScript() is not None:
             cmd.extend(["--env", JenkinsJob._envName(step)])
         if step.isCheckoutStep():
             for scm in step.getScmList():
@@ -821,7 +821,7 @@ class JenkinsJob:
         # checkout steps
         checkoutSCMs = []
         for d in sorted(self.__checkoutSteps.values()):
-            if d.getJenkinsScript() is not None:
+            if d.getScript() is not None:
                 checkout = xml.etree.ElementTree.SubElement(
                     builders, "hudson.tasks.Shell")
                 xml.etree.ElementTree.SubElement(
