@@ -1016,7 +1016,7 @@ class Step:
         Besides considerations of special backends (such as Jenkins) this
         script is what should be executed to build this step."""
         return joinScripts([self.getSetupScript(), self.getMainScript()],
-            self.getPackage().getRecipe().scriptLanguage.glue)
+            self.getPackage().getRecipe().scriptLanguage.glue) or ""
 
     def getJenkinsScript(self):
         import warnings
@@ -2760,7 +2760,7 @@ Every dependency must only be given once."""
 
     @property
     def buildMainScript(self):
-        return self.__build[1]
+        return self.__build[1] or ""
 
     @property
     def buildDigestScript(self):
@@ -2780,7 +2780,7 @@ Every dependency must only be given once."""
 
     @property
     def packageMainScript(self):
-        return self.__package[1]
+        return self.__package[1] or ""
 
     @property
     def packageDigestScript(self):
