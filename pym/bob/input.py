@@ -860,18 +860,14 @@ class CoreStep(CoreItem):
         else:
             h.update(b'\x00\x00\x00\x00')
         tools = self.getTools()
-        weakTools = self._getToolKeysWeak()
         h.update(struct.pack("<I", len(tools)))
         for (name, tool) in sorted(tools.items(), key=lambda t: t[0]):
-            if name in weakTools:
-                h.update(name.encode("utf8"))
-            else:
-                h.update(DigestHasher.sliceRecipes(calculate(tool.coreStep)))
-                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
-                h.update(tool.path.encode("utf8"))
-                for l in tool.libs:
-                    h.update(struct.pack("<I", len(l)))
-                    h.update(l.encode('utf8'))
+            h.update(DigestHasher.sliceRecipes(calculate(tool.coreStep)))
+            h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
+            h.update(tool.path.encode("utf8"))
+            for l in tool.libs:
+                h.update(struct.pack("<I", len(l)))
+                h.update(l.encode('utf8'))
         h.update(struct.pack("<I", len(self.digestEnv)))
         for (key, val) in sorted(self.digestEnv.items()):
             h.update(struct.pack("<II", len(key), len(val)))
@@ -1081,7 +1077,7 @@ class Step:
         return self.__package
 
     def getDigest(self, calculate, forceSandbox=False, hasher=DigestHasher,
-                  fingerprint=None, platform=b''):
+                  fingerprint=None, platform=b'', relaxTools=False):
         h = hasher()
         h.update(platform)
         if self._coreStep.isFingerprinted() and self.getSandbox() \
@@ -1106,7 +1102,7 @@ class Step:
         else:
             h.update(b'\x00\x00\x00\x00')
         tools = self.getTools()
-        weakTools = self._coreStep._getToolKeysWeak()
+        weakTools = self._coreStep._getToolKeysWeak() if relaxTools else []
         h.update(struct.pack("<I", len(tools)))
         for (name, tool) in sorted(tools.items(), key=lambda t: t[0]):
             if name in weakTools:
@@ -1130,7 +1126,7 @@ class Step:
         return h.digest()
 
     async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher,
-                            fingerprint=None, platform=b''):
+                            fingerprint=None, platform=b'', relaxTools=False):
         h = hasher()
         h.update(platform)
         if self._coreStep.isFingerprinted() and self.getSandbox() \
@@ -1157,7 +1153,7 @@ class Step:
         else:
             h.update(b'\x00\x00\x00\x00')
         tools = self.getTools()
-        weakTools = self._coreStep._getToolKeysWeak()
+        weakTools = self._coreStep._getToolKeysWeak() if relaxTools else []
         h.update(struct.pack("<I", len(tools)))
         tools = sorted(tools.items(), key=lambda t: t[0])
         toolsDigests = await calculate([ tool.step for name,tool in tools ])

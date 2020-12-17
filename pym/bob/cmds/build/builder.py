@@ -1359,7 +1359,8 @@ cd {ROOT}
             if ret is None:
                 fingerprint = await self._getFingerprint(step, depth)
                 ret = await step.getDigestCoro(lambda x: self.__getBuildIdList(x, depth+1),
-                    True, fingerprint=fingerprint, platform=getPlatformTag())
+                    True, fingerprint=fingerprint, platform=getPlatformTag(),
+                    relaxTools=True)
                 self.__buildDistBuildIds[path] = ret
 
         return ret
