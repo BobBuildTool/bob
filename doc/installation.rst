@@ -106,6 +106,29 @@ To fully run Bob you need the following tools:
 
 The compiler is only required on Linux.
 
+Offline installation
+--------------------
+
+In case you need to install Bob on machines without internet access the following commands
+may give you some hints how to do this:
+
+On a machine with internet access download the required packages.::
+
+   $ mkdir -p bob_install && cd bob_install
+   $ pip3 download BobBuildTool -d .
+   $ pip3 download sphinx -d .
+
+After this transfer the bob_install folder to your offline machine and
+install bob, but install the dependencies first. Otherwise they are not
+found or maybe in a wrong version already installed:::
+
+   $ pip3 --no-index --find-links /path/to/bob_install Setuptools
+   $ pip3 --no-index --find-links /path/to/bob_install Sphinx
+   $ pip3 --no-index --find-links /path/to/bob_install BobBuildTool
+
+Maybe there are some other dependencies missing, e.g. setuptools,
+setuptools_scm, wheel,...
+
 Linux/POSIX platform notes
 ==========================
 
