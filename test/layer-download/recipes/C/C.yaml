@@ -1,0 +1,4 @@
+inherit: [dummy]
+
+depends:
+    - A::A2

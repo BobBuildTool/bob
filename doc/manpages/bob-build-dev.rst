@@ -14,8 +14,8 @@ Options
 
     This option will just make sure that the sources of matching packages are
     checked out. Bob will still try to find matching binary artifacts to skip
-    the actual compilation of these packages. See the ``--download`` option
-    to control what is built and what is downloaded.
+    the actual compilation of these packages. See the ``--download`` and
+    ``--download-layer`` option to control what is built and what is downloaded.
 
 ``--audit``
     Generate an audit trail when building.
@@ -73,6 +73,22 @@ Options
       forced-deps
     packages=<packages regex>
       download modules that match a given regular expression, build all other.
+
+``--download-layer MODE``
+    Download from binary archive for layer (yes, no, forced)
+
+    Acts like ``--download`` but only for the modules of the layer that match a
+    given regular expression (``--download`` option will be overwritten for
+    matching modules).
+    Can be used multiple times (if regex is used also multiple times the last mode wins).
+    A sub layer is separated with a ``/``.
+
+    no=<layer regex>
+      build modules of a layer that match a given regular expression from sources
+    yes=<layer regex>
+      download modules of a layer that match a given regular expression, if download fails - build it from sources
+    forced=<layer regex>
+      like 'yes' above, but fail if any download fails
 
 ``--incremental``
     Reuse build directory for incremental builds.
@@ -203,7 +219,7 @@ Options
     current workspace. Because of the pipe-usage many tools like gcc,
     ls, git detect they are not running on a tty and disable output
     coloring. Disable the logfile generation to get the colored output
-    back. 
+    back.
 
 ``-p, --with-provided``
     Build provided dependencies too. In combination with ``--destination`` this

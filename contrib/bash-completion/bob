@@ -122,10 +122,12 @@ __bob_cook()
       __bob_complete_dir "$cur"
    elif [[ "$prev" = "--download" ]] ; then
          __bob_complete_words "yes no deps forced forced-deps forced-fallback"
+   elif [[ "$prev" = "--download-layer" ]] ; then
+         __bob_complete_words "yes= no= forced="
    elif [[ "$prev" = "--always-checkout" ]] ; then
       COMPREPLY=( )
    else
-      __bob_complete_path "--destination -j --jobs -k --keep-going -f --force -n --no-deps -p --with-provided --without-provided -b --build-only -B --checkout-only --normal --clean --incremental --always-checkout --resume -q --quiet -v --verbose --no-logfiles -D -c -e -E --upload --download --sandbox --no-sandbox --clean-checkout --no-link-deps --link-deps"
+      __bob_complete_path "--destination -j --jobs -k --keep-going -f --force -n --no-deps -p --with-provided --without-provided -b --build-only -B --checkout-only --normal --clean --incremental --always-checkout --resume -q --quiet -v --verbose --no-logfiles -D -c -e -E --upload --download --download-layer --sandbox --no-sandbox --clean-checkout --no-link-deps --link-deps"
    fi
 }
 

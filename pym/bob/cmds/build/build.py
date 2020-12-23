@@ -37,6 +37,10 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         if arg.startswith('packages=') or arg in ['yes', 'no', 'deps', 'forced', 'forced-deps', 'forced-fallback']:
             return arg
         raise argparse.ArgumentTypeError("{} invalid.".format(arg))
+    def _downloadLayerArgument(arg):
+        if re.match('^(yes|no|forced)=\S+$', arg):
+            return arg
+        raise argparse.ArgumentTypeError("{} invalid.".format(arg))
 
     parser.add_argument('packages', metavar='PACKAGE', type=str, nargs='+',
         help="(Sub-)package to build")
@@ -105,8 +109,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('--no-link-deps', default=None, help="Do not add linked dependencies to workspace paths",
         dest='link_deps', action='store_false')
     parser.add_argument('--download', metavar="MODE", default=None,
-        help="Download from binary archive (yes, no, deps, forced, forced-deps, forced-fallback, packages=<packages>",
+        help="Download from binary archive (yes, no, deps, forced, forced-deps, forced-fallback, packages=<packages>)",
         type=_downloadArgument)
+    parser.add_argument('--download-layer', metavar="MODE", action='append', default=[],
+        help="Download from binary archive for layer recipes (yes=<layer>, no=<layer>, forced=<layer>)",
+        type=_downloadLayerArgument)
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=None,
         help="Enable sandboxing")
@@ -204,6 +211,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setArchiveHandler(getArchiver(recipes))
         builder.setUploadMode(args.upload)
         builder.setDownloadMode(args.download)
+        builder.setDownloadLayerMode(args.download_layer)
         builder.setCleanCheckout(args.clean_checkout)
         builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
         builder.setLinkDependencies(args.link_deps)

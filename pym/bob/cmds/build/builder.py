@@ -267,6 +267,7 @@ cd {ROOT}
         self.__archive = DummyArchive()
         self.__downloadDepth = 0xffff
         self.__downloadDepthForce = 0xffff
+        self.__downloadLayerModes = []
         self.__downloadPackages = None
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
@@ -317,6 +318,18 @@ cd {ROOT}
         else:
             assert mode == 'no'
             self.__archive.wantDownload(False)
+
+    def setDownloadLayerMode(self, modes):
+        self.__downloadLayerModes = []
+        self.__archive.wantDownload(True)
+        for mode in modes:
+            regex = ""
+            modeKey, _, modeLayer = mode.partition("=")
+            try:
+                regex = re.compile(modeLayer)
+            except re.error as e:
+                raise BuildError("Invalid download layer regex '{}': {}".format(e.pattern, e))
+            self.__downloadLayerModes.append((regex, modeKey))
 
     def setUploadMode(self, mode):
         self.__archive.wantUpload(mode)
@@ -1124,8 +1137,17 @@ cd {ROOT}
         workspaceChanged = False
         wasDownloaded = False
         packageDigest = packageStep.getVariantId()
-        if depth >= self.__downloadDepth or (self.__downloadPackages and
-                self.__downloadPackages.search(packageStep.getPackage().getName())):
+        layer = "/".join(packageStep.getPackage().getRecipe().getLayer())
+        layerDownloadMode = None
+        if layer:
+            for mode in self.__downloadLayerModes:
+                if mode[0].match(layer):
+                    layerDownloadMode = mode[1]
+
+        if (depth >= self.__downloadDepth or (
+                self.__downloadPackages and
+                self.__downloadPackages.search(packageStep.getPackage().getName())) or
+                layerDownloadMode) and layerDownloadMode != 'no':
             # prune directory if we previously downloaded/built something different
             if (oldInputBuildId is not None) and (oldInputBuildId != packageBuildId):
                 prune = True
@@ -1159,6 +1181,8 @@ cd {ROOT}
                     packageHash = hashWorkspace(packageStep)
                     workspaceChanged = True
                     wasDownloaded = True
+                elif layerDownloadMode == 'forced':
+                    raise BuildError("Downloading artifact of layer %s failed" % layer)
                 elif depth >= self.__downloadDepthForce:
                     raise BuildError("Downloading artifact failed")
             elif oldWasDownloaded:

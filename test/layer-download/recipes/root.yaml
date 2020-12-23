@@ -1,0 +1,15 @@
+root: True
+
+depends:
+   - A::A
+   - B::B
+   - C::C
+
+buildScript: |
+   rm -rf *
+   for i in "${!BOB_DEP_PATHS[@]}" ; do
+      cp -a ${BOB_DEP_PATHS[$i]}/* ./
+   done
+
+packageScript: |
+   cp -r $1/* .

@@ -2144,6 +2144,7 @@ class Recipe(object):
         }
         self.__corePackagesByMatch = []
         self.__corePackagesById = {}
+        self.__layer = layer
 
         sourceName = ("Recipe " if isRecipe else "Class  ") + packageName + (
             ", layer "+"/".join(layer) if layer else "")
@@ -2191,6 +2192,9 @@ class Recipe(object):
             visited.add(clsName)
 
         return ret
+
+    def getLayer(self):
+        return self.__layer
 
     def resolveClasses(self):
         # must be done only once
