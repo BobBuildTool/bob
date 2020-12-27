@@ -163,7 +163,7 @@ archive:
         config = ElementTree.fromstring(send[0][1])
         for clone in config.iter('hudson.plugins.git.extensions.impl.CloneOption'):
             found = 0
-            for a in clone.getiterator():
+            for a in clone.iter():
                 if a.tag == 'shallow':
                     assert(a.text == 'true')
                     found += 1
@@ -183,7 +183,7 @@ archive:
         config = ElementTree.fromstring(send[0][1])
         for clone in config.iter('hudson.plugins.git.extensions.impl.CloneOption'):
             found = 0
-            for a in clone.getiterator():
+            for a in clone.iter():
                 if a.tag == 'timeout':
                     assert(a.text == '42')
                     found += 1
