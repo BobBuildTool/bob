@@ -41,6 +41,17 @@ import tempfile
 #    ==  1: package name, package steps, stderr, stdout
 #    ==  2: package name, package steps, stderr, stdout, set -x
 
+if sys.version_info >= (3, 7):
+    def asyncioCurrentTask(loop=None):
+        return asyncio.current_task(loop=loop)
+    def asyncioAllTasks(loop=None):
+        return asyncio.all_tasks(loop=loop)
+else:
+    def asyncioCurrentTask(loop=None):
+        return asyncio.Task.current_task(loop=loop)
+    def asyncioAllTasks(loop=None):
+        return asyncio.Task.all_tasks(loop=loop)
+
 async def gatherTasks(tasks):
     if not tasks:
         return []
@@ -669,7 +680,7 @@ cd {ROOT}
     async def __taskWrapper(self, coro, trackingKey=None, tracker=None,
                             fence=None, step=None, count=False):
         try:
-            task = asyncio.Task.current_task()
+            task = asyncioCurrentTask()
             self.__allTasks.add(task)
             if fence is not None:
                 await fence
@@ -711,7 +722,7 @@ cd {ROOT}
                 log("Cancel all running jobs...", WARNING)
             self.__running = False
             self.__restart = False
-            for i in asyncio.Task.all_tasks(): i.cancel()
+            for i in asyncioAllTasks(): i.cancel()
 
         async def dispatcher():
             if self.__jobs > 1:
