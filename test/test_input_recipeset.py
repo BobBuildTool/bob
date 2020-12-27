@@ -1070,7 +1070,11 @@ class TestToolsWeak(RecipesTmp, TestCase):
             """)
 
     def testWeak(self):
-        """Weak tools have no impact on package"""
+        """Weak tools have no impact on package build-id,
+
+        The variant-id is still affected to honestly reflect the build
+        structure of the recipes
+        """
         self.writeRecipe("r1", """\
             root: True
             depends:
@@ -1088,7 +1092,11 @@ class TestToolsWeak(RecipesTmp, TestCase):
         packages = self.generate()
         r1 = packages.walkPackagePath("r1").getPackageStep()
         r2 = packages.walkPackagePath("r2").getPackageStep()
-        self.assertEqual(r1.getVariantId(), r2.getVariantId())
+        def buildId(step):
+            # not the right definition but close enough for the test
+            return step.getDigest(buildId, relaxTools=True)
+        self.assertEqual(buildId(r1), buildId(r2))
+        self.assertNotEqual(r1.getVariantId(), r2.getVariantId())
         self.assertNotEqual(r1.getTools()["tool"].getStep().getVariantId(),
                             r2.getTools()["tool"].getStep().getVariantId())
 

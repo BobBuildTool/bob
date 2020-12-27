@@ -335,7 +335,8 @@ class JenkinsJob:
             fingerprint = self._fingerprintName(step)
             if fingerprint: fingerprint = "{sha1\n<" + fingerprint + "\n}"
             ret.extend(step.getDigest(lambda s: JenkinsJob._buildIdName(s), True,
-                SpecHasher, fingerprint=fingerprint, platform='p'))
+                SpecHasher, fingerprint=fingerprint, platform='p',
+                relaxTools=True))
 
         ret.append("EOF")
         return ret
