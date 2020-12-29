@@ -106,10 +106,15 @@ clean
       double quotes in the string itself escape them with ``\``.
     * Certain fields from the audit trail can be accessed by their name.
       Sub-fields are specified with a dot operator, e.g. ``meta.package``. All
-      fields are case sensitive and of string type.
+      fields are case sensitive and of string type. Referencing a non-existing
+      field is supported but will yield a distinct "undefined" value. This
+      special value can only be compared with ``==`` and ``!=`` with other
+      values.
     * Strings and fields can be compared by the following operators (in
       decreasing precedence): ``<``, ``<=``, ``>``, ``>=``, ``==``, ``!=``.
-      They have the same semantics as in Python.
+      They are compared character by character by their unicode code point. If
+      the end of a operand is reached before finding a difference the string
+      lengths are compared instead.
     * String comparisons can be logically combined with ``&&`` (and)
       respectively ``||`` (or). There is also a ``!`` (not) logical operator.
     * Parenthesis can be used to override precedence.
