@@ -182,10 +182,12 @@ class Base:
         self.__s = s
         self.__loc = loc
 
-    def barf(self, msg):
+    def barf(self, msg, help=None):
         h = "Offending query: " + self.__s + "\n" + (" " * (self.__loc + 17)) + \
             "^.-- Error location"
-        raise BobError("Bad syntax: "+msg+"!", help=h)
+        if help is not None:
+            h += "\n" + help
+        raise BobError("Bad query: "+msg+"!", help=h)
 
 class NotPredicate(Base):
     def __init__(self, s, loc, toks):
@@ -256,7 +258,11 @@ class ComparePredicate(Base):
         return "ComparePredicate({}, {})".format(self.left, self.right)
 
     def evalBool(self, data):
-        return self.op(self.left.evalString(data), self.right.evalString(data))
+        try:
+            return self.op(self.left.evalString(data), self.right.evalString(data))
+        except:
+            self.barf("predicate not supported between operands",
+                      "Most probably one of the sides of the expression referenced a non-existing field. Only '==' and '!=' are supported in this case.")
 
     def evalString(self, data):
         self.barf("operator in string context")
