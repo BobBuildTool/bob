@@ -53,7 +53,7 @@ layer has the same structure as shown above but is merged with the other layers
 during parsing. This structure is recursive (a layer may contain another layer)
 but is flattened during parsing. A typical structure might look like the
 following::
- 
+
     .
     ├── classes
     │   └── ...
@@ -2146,6 +2146,8 @@ destination     ``--destination``      String (Path)
 download        ``--download``         String (``yes``, ``no``, ``deps``, ``forced``,
                                        ``forced-deps``, ``forced-fallback`` or
                                        ``packages=<packages>``)
+download-layer  ``--download-layer``   String (``yes=<layer>``, ``no=<layer>``,
+                                       ``forced=<layer>)
 force           ``-f``                 Boolean
 link_deps       ``--[no-]link-deps``   Boolean
 no_deps         ``-n``                 Boolean
@@ -2208,7 +2210,7 @@ preBuildHook
 
     If the hook returns with a non-zero status the build will be interrupted.
 
-postBuildHook 
+postBuildHook
     The post-build hook is run after a local build finished, regardless if the
     build succeeded or failed. It receives the status as first argument
     (``success`` or ``fail``) and the relative paths to the workspaces of the

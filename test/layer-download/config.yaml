@@ -1,0 +1,5 @@
+bobMinimumVersion: "0.18"
+layers:
+    - componentA
+    - componentB
+

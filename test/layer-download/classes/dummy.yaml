@@ -1,0 +1,6 @@
+buildVars: [BOB_RECIPE_NAME]
+buildScript: |
+   touch ${BOB_RECIPE_NAME#*::}.txt
+
+packageScript: |
+   cp -r $1/* .
