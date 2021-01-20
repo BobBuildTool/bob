@@ -3,7 +3,13 @@
 
 # Run a simple PowerShell recipe. It also uses a minimal sandbox that mounts
 # the full host. Just see if exeuction works even if $PATH is empty in the
-# sandbox.
+# sandbox. There is also a bash recipe that overrides the script language back
+# to bash.
+
+cleanup
+run_bob dev root
+RES=$(run_bob query-path -f '{dist}' --develop root)
+diff -u "$RES/file.txt" recipes/file.txt
 
 cleanup
 type -p pwsh >/dev/null || skip

@@ -1,0 +1,15 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+scriptLanguage: "bash"
+
+checkoutDeterministic: True
+checkoutScript: |
+    cp $<<file.txt>> file.txt
+buildScript: |
+    cp $1/file.txt .
+packageScript: |
+    cp $1/file.txt .
