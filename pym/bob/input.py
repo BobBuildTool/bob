@@ -2994,7 +2994,9 @@ class RecipeSet:
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
         schema.Optional('layers') : [str],
-        schema.Optional('scriptLanguage', default="bash") : schema.Or("bash", "PowerShell"),
+        schema.Optional('scriptLanguage',
+                        default=ScriptLanguage.BASH) : schema.And(schema.Or("bash", "PowerShell"),
+                                                                  schema.Use(ScriptLanguage)),
     })
 
     SCM_SCHEMA = ScmValidator({
@@ -3490,7 +3492,7 @@ class RecipeSet:
                     e.pushFrame(path)
                     raise
 
-        scriptLanguage = ScriptLanguage(config["scriptLanguage"])
+        scriptLanguage = config["scriptLanguage"]
         recipesDir = os.path.join(rootDir, 'recipes')
         for root, dirnames, filenames in os.walk(recipesDir):
             for path in fnmatch.filter(filenames, "[!.]*.yaml"):
@@ -3624,7 +3626,8 @@ class RecipeSet:
             schema.Optional('fingerprintScriptPwsh', default="") : str,
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
-            schema.Optional('scriptLanguage') : schema.Or("bash", "PowerShell"),
+            schema.Optional('scriptLanguage') : schema.And(schema.Or("bash", "PowerShell"),
+                                                           schema.Use(ScriptLanguage)),
             schema.Optional('jobServer') : bool,
         }
         for (name, prop) in self.__properties.items():
