@@ -196,6 +196,33 @@ audit.meta.<var>
    ``meta.<var>`` to select artifacts built by this project. Variables that are
    defined by Bob itself (e.g. ``meta.jenkins-node``) cannot be redifined!
 
+jobs.gc.deps.artifacts
+   The number of build artifacts that are retained of intermediate or leaf
+   jobs. Only useful for ``artifacts.copy=jenkins``. Protocols and build logs
+   are not affected and will still be kept. Defaults to ``1``. If set to 0 all
+   artifacts will be retained.
+
+jobs.gc.deps.builds
+   Configure the number of builds that are retained of intermediate and leaf
+   jobs. Logs and artifacts of old builds exceeding this threshold are deleted
+   automatically by Jenkins. A separate binary archive
+   (``artifacts.copy=archive``) is not affected and must be separately managed
+   with :ref:`bob archive <manpage-archive>`. If not set, all Jenkins builds
+   will be kept.
+
+jobs.gc.root.artifacts
+   The number of build artifacts that are retained of root-jobs. Only useful
+   for ``artifacts.copy=jenkins``. Protocols and build logs are not affected
+   and will still be kept. By default everything will be retained.
+
+jobs.gc.root.builds
+   Configure the number of builds that are retained of root-jobs. These are
+   jobs that build packages that were given by the ``-r`` option. Logs and
+   artifacts of old builds exceeding this threshold are deleted automatically
+   by Jenkins. A separate binary archive (``artifacts.copy=archive``) is not
+   affected but must be separately managed with :ref:`bob archive
+   <manpage-archive>`.  If not set, all Jenkins builds will be kept.
+
 jobs.isolate
     Regular expression that is matching package names. Any package that is
     matched is put into a separate job. Multiple variants of the same package
