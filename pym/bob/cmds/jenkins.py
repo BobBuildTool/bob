@@ -610,11 +610,7 @@ class JenkinsJob:
                     root, "displayName").text = self.__displayName
             xml.etree.ElementTree.SubElement(root, "keepDependencies").text = "false"
             xml.etree.ElementTree.SubElement(root, "properties")
-            if (nodes != ''):
-                xml.etree.ElementTree.SubElement(root, "assignedNode").text = nodes
-                xml.etree.ElementTree.SubElement(root, "canRoam").text = "false"
-            else:
-                xml.etree.ElementTree.SubElement(root, "canRoam").text = "true"
+            xml.etree.ElementTree.SubElement(root, "canRoam").text = "true"
             xml.etree.ElementTree.SubElement(root, "disabled").text = "false"
             xml.etree.ElementTree.SubElement(
                 root, "blockBuildWhenDownstreamBuilding").text = "false"
@@ -661,6 +657,15 @@ class JenkinsJob:
         elif discard is not None:
             properties = root.find("properties")
             properties.remove(properties.find("jenkins.model.BuildDiscarderProperty"))
+
+        if (nodes != ''):
+            assignedNode = root.find("assignedNode")
+            if assignedNode is None:
+                assignedNode = xml.etree.ElementTree.SubElement(root, "assignedNode")
+            assignedNode.text = nodes
+            root.find("canRoam").text = "false"
+        else:
+            root.find("canRoam").text = "true"
 
         sharedDir = options.get("shared.dir", "${JENKINS_HOME}/bob")
 
