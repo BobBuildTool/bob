@@ -118,6 +118,18 @@ def wrapCommandArguments(cmd, arguments):
     ret.append(line)
     return ret
 
+def getGcNum(options, root, key):
+    key = "jobs.gc." + ("root" if root else "deps") + "." + key
+    try:
+        val = options.get(key, "1" if key == "jobs.gc.deps.artifacts" else "0")
+        num = int(val)
+    except ValueError:
+        raise ParseError("Invalid option '{}': '{}'".format(key, val))
+    if num <= 0:
+        return "-1"
+    else:
+        return str(num)
+
 class SpecHasher:
     """Track digest calculation and output as spec for bob-hash-engine.
 
@@ -597,19 +609,7 @@ class JenkinsJob:
                 xml.etree.ElementTree.SubElement(
                     root, "displayName").text = self.__displayName
             xml.etree.ElementTree.SubElement(root, "keepDependencies").text = "false"
-            properties = xml.etree.ElementTree.SubElement(root, "properties")
-            if not self.__isRoot:
-                # only retain one artifact per non-root job
-                discard = xml.etree.ElementTree.fromstring("""
-                    <jenkins.model.BuildDiscarderProperty>
-                      <strategy class="hudson.tasks.LogRotator">
-                        <daysToKeep>-1</daysToKeep>
-                        <numToKeep>-1</numToKeep>
-                        <artifactDaysToKeep>-1</artifactDaysToKeep>
-                        <artifactNumToKeep>1</artifactNumToKeep>
-                      </strategy>
-                    </jenkins.model.BuildDiscarderProperty>""")
-                properties.append(discard)
+            xml.etree.ElementTree.SubElement(root, "properties")
             if (nodes != ''):
                 xml.etree.ElementTree.SubElement(root, "assignedNode").text = nodes
                 xml.etree.ElementTree.SubElement(root, "canRoam").text = "false"
@@ -640,6 +640,27 @@ class JenkinsJob:
         xml.etree.ElementTree.SubElement(scmTrigger, "spec").text = options.get("scm.poll")
         xml.etree.ElementTree.SubElement(
             scmTrigger, "ignorePostCommitHooks").text = ("true" if isTrue(options.get("scm.ignore-hooks", "false")) else "false")
+
+        numToKeep = getGcNum(options, self.__isRoot, "builds")
+        artifactNumToKeep = getGcNum(options, self.__isRoot, "artifacts")
+        discard = root.find("./properties/jenkins.model.BuildDiscarderProperty/strategy[@class='hudson.tasks.LogRotator']")
+        if numToKeep != "-1" or artifactNumToKeep != "-1":
+            if discard is None:
+                discard = xml.etree.ElementTree.fromstring("""
+                      <strategy class="hudson.tasks.LogRotator">
+                        <daysToKeep>-1</daysToKeep>
+                        <numToKeep>-1</numToKeep>
+                        <artifactDaysToKeep>-1</artifactDaysToKeep>
+                        <artifactNumToKeep>1</artifactNumToKeep>
+                      </strategy>""")
+                xml.etree.ElementTree.SubElement(
+                    root.find("properties"),
+                    "jenkins.model.BuildDiscarderProperty").append(discard)
+            discard.find("numToKeep").text = numToKeep
+            discard.find("artifactNumToKeep").text = artifactNumToKeep
+        elif discard is not None:
+            properties = root.find("properties")
+            properties.remove(properties.find("jenkins.model.BuildDiscarderProperty"))
 
         sharedDir = options.get("shared.dir", "${JENKINS_HOME}/bob")
 
