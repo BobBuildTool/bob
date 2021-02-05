@@ -89,7 +89,7 @@ Options
     Every path to a package will be calculated and displayed in job description
 
 ``-n NODES, --nodes NODES``
-    Label for Jenkins Slave
+    Label for Jenkins slave. If empty, the jobs can be scheduled on any slave.
 
 ``--no-download``
     Disable binary archive download
