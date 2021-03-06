@@ -2455,14 +2455,17 @@ class Recipe(object):
                 thisDepTools = depTools
                 thisDepDiffTools = depDiffTools
 
+            thisDepEnv = depEnv.derive(
+                { key : env.substitute(value, "depends["+dep.recipe+"].environment["+key+"]")
+                  for key, value in dep.envOverride.items() })
+
             r = self.__recipeSet.getRecipe(dep.recipe)
             try:
                 if r.__packageName in stack:
                     raise ParseError("Recipes are cyclic (1st package in cylce)")
                 depStack = stack + [r.__packageName]
-                p, s = r.prepare(depEnv.derive(dep.envOverride),
-                                 sandboxEnabled, depStates, depSandbox,
-                                 thisDepTools, depStack)
+                p, s = r.prepare(thisDepEnv, sandboxEnabled, depStates,
+                                 depSandbox, thisDepTools, depStack)
                 subTreePackages.add(p.getName())
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
