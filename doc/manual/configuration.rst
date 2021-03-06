@@ -1105,7 +1105,10 @@ The following settings are supported:
 |             |                 |    environment:                                     |
 |             |                 |        FOO: value                                   |
 |             |                 |        BAR: baz                                     |
+|             |                 |        BAZ: "${VAR}"                                |
 |             |                 |                                                     |
+|             |                 | Value strings in this clause are subject to         |
+|             |                 | :ref:`configuration-principle-subst`.               |
 +-------------+-----------------+-----------------------------------------------------+
 | if          | String          | The string (subject to substitution) is interpreted |
 |             |                 | as boolean value. The dependency is only considered |
