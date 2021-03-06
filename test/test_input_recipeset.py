@@ -423,6 +423,87 @@ class TestDependencies(RecipesTmp, TestCase):
         self.assertRaises(ParseError, packages.getRootPackage)
 
 
+class TestDependencyEnv(RecipesTmp, TestCase):
+    """Tests related to "environment" block in dependencies"""
+
+    def testSetEnvironment(self):
+        """Variables set in environment block are available in dependency"""
+        self.writeRecipe("root", """\
+            root: True
+            environment:
+                FOO: "default"
+                ZZZ: "set"
+            depends:
+                - name: dep
+                  environment:
+                    FOO: overridden
+                    BAR: added
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("dep", """\
+            packageVars: [FOO, BAR, ZZZ]
+            """)
+
+        p = self.generate().walkPackagePath("root/dep")
+        self.assertEqual(
+            {"FOO": "overridden", "BAR": "added", "ZZZ": "set"},
+            p.getPackageStep().getEnv())
+
+    def testSubstitute(self):
+        """Variables in environment block are subject to variable substitution"""
+        self.writeRecipe("root", """\
+            root: True
+            environment:
+                FOO: "default"
+            depends:
+                - name: dep
+                  environment:
+                    BAR: "aa $FOO cc"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("dep", """\
+            packageVars: [FOO, BAR]
+            """)
+
+        p = self.generate().walkPackagePath("root/dep")
+        self.assertEqual(
+            {"FOO": "default", "BAR": "aa default cc"},
+            p.getPackageStep().getEnv())
+
+    def testSubstituteTakenFromPrivate(self):
+        """Substitutions in environment block are done with package-private env"""
+
+        # note the missing "forward: True"
+        self.writeRecipe("root", """\
+            root: True
+            environment:
+                FOO: "default"
+            depends:
+                - name: provider
+                  use: [environment, result]
+                - name: dep
+                  environment:
+                    BAR: "aa $FOO cc"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("provider", """\
+            provideVars:
+                FOO: provided-foo
+                BAZ: provided-baz
+            """)
+        self.writeRecipe("dep", """\
+            packageVars: [FOO, BAR, BAZ]
+            """)
+
+        p = self.generate().walkPackagePath("root/dep")
+        self.assertEqual(
+            {"FOO": "default", "BAR": "aa provided-foo cc"},
+            p.getPackageStep().getEnv())
+
+
 class TestNetAccess(RecipesTmp, TestCase):
 
     def testOldPolicy(self):
