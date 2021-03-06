@@ -2147,7 +2147,7 @@ download        ``--download``         String (``yes``, ``no``, ``deps``, ``forc
                                        ``forced-deps``, ``forced-fallback`` or
                                        ``packages=<packages>``)
 download-layer  ``--download-layer``   String (``yes=<layer>``, ``no=<layer>``,
-                                       ``forced=<layer>)
+                                       ``forced=<layer>```)
 force           ``-f``                 Boolean
 link_deps       ``--[no-]link-deps``   Boolean
 no_deps         ``-n``                 Boolean
