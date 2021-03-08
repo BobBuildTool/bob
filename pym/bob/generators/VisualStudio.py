@@ -154,11 +154,13 @@ class Project:
         self.dependencies = scan.dependencies
         self.runTargets = [ recipesRoot.joinpath(PureWindowsPath(i)) for i in scan.runTargets ]
 
-    def generateProject(self, projects, cmd):
+    def generateProject(self, projects, cmd, project):
         items = []
         incPaths = []
         if self.incPaths:
             for i in self.incPaths: incPaths.append(str(i))
+        if project.appendIncludeDirectories:
+            for i in project.appendIncludeDirectories: incPaths.append(str(i))
         if self.headers:
             g = ElementTree.Element("ItemGroup")
             for i in self.headers: ElementTree.SubElement(g, "ClInclude", {"Include" : str(i)})
@@ -306,7 +308,7 @@ class Vs2019Generator(CommonIDEGenerator):
         for name,project in projects.items():
             p = os.path.join(self.destination, name)
             os.makedirs(p, exist_ok=True)
-            self.updateFile(os.path.join(p, name+".vcxproj"), project.generateProject(projects, buildMeCmd),
+            self.updateFile(os.path.join(p, name+".vcxproj"), project.generateProject(projects, buildMeCmd, self),
                     encoding="utf-8", newline='\r\n')
             self.updateFile(os.path.join(p, name+".vcxproj.filters"), project.generateFilters(),
                     encoding="utf-8", newline='\r\n')
