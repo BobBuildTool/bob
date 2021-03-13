@@ -1,0 +1,7 @@
+root: True
+shared: True
+
+buildScript: |
+    true
+packageScript: |
+    echo shared > result.txt
