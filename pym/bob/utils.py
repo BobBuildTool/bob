@@ -178,20 +178,26 @@ def compareVersion(origLeft, origRight):
                             .format(origLeft, origRight))
     return ret
 
+
 def isWindows():
     """Check if we run on a windows platform.
 
     We have to rule out MSYS(2) and Cygwin as they are advertised a POSIX but
     in fact cannot truly hide the underlying system.
     """
-    if os.name == 'posix':
-        p = sys.platform
-        if p.startswith('msys'): return True
-        if p.startswith('cygwin'): return True
-        return False
-    return True
+    return __isWindows
 
-if isWindows():
+if os.name == 'posix':
+    if sys.platform.startswith('msys'):
+        __isWindows = True
+    elif sys.platform.startswith('cygwin'):
+        __isWindows = True
+    else:
+        __isWindows = False
+else:
+    __isWindows = True
+
+if __isWindows:
     INVALID_CHAR_TRANS = str.maketrans(':*?<>"|', '_______')
 else:
     INVALID_CHAR_TRANS = str.maketrans('', '')
