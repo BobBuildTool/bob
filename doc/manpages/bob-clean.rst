@@ -38,7 +38,7 @@ to see what would be deleted.
 
 Workspaces that hold source code are never deleted by default. Add the ``-s``
 option to consider these workspace directories too. Bob will still check each
-SCM in an unreferenced workspace for mdoifications.  If the SCM checkout has
+SCM in an unreferenced workspace for modifications.  If the SCM checkout has
 been modified in any way (e.g. changed or untracked files, unpushed commits)
 then the workspace is kept. Use ``-f`` to also delete such workspaces too.
 
@@ -49,7 +49,7 @@ Options
     Clean develop mode (*bob dev*) directories. This is the default.
 
 ``--release``
-    Clean release mode (*bob build*) directores.
+    Clean release mode (*bob build*) directories.
 
 ``--attic``
     Remove attic directories.
