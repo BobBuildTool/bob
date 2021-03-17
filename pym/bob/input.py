@@ -2947,24 +2947,24 @@ class RecipeSet:
 
     BUILD_DEV_SCHEMA = schema.Schema(
         {
-            schema.Optional('destination') : str,
-            schema.Optional('force') : bool,
-            schema.Optional('no_deps') : bool,
+            schema.Optional('always_checkout') : [str],
+            schema.Optional('audit') : bool,
             schema.Optional('build_mode') : schema.Or("build-only","normal", "checkout-only"),
             schema.Optional('checkout_only') : bool,
             schema.Optional('clean') : bool,
-            schema.Optional('verbosity') : int,
-            schema.Optional('no_logfiles') : bool,
-            schema.Optional('link_deps') : bool,
-            schema.Optional('upload') : bool,
+            schema.Optional('clean_checkout') : bool,
+            schema.Optional('destination') : str,
             schema.Optional('download') : schema.Or("yes", "no", "deps",
                 "forced", "forced-deps", "forced-fallback",
                 schema.Regex(r"^packages=.*$")),
-            schema.Optional('sandbox') : bool,
-            schema.Optional('clean_checkout') : bool,
-            schema.Optional('always_checkout') : [str],
+            schema.Optional('force') : bool,
             schema.Optional('jobs') : int,
-            schema.Optional('audit') : bool,
+            schema.Optional('link_deps') : bool,
+            schema.Optional('no_deps') : bool,
+            schema.Optional('no_logfiles') : bool,
+            schema.Optional('sandbox') : bool,
+            schema.Optional('upload') : bool,
+            schema.Optional('verbosity') : int,
         })
 
     GRAPH_SCHEMA = schema.Schema(
