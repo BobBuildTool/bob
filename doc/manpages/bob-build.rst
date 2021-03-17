@@ -20,9 +20,11 @@ Synopsis
               [--clean | --incremental] [--always-checkout RE] [--resume]
               [-q] [-v] [--no-logfiles] [-D DEFINES] [-c CONFIGFILE]
               [-e NAME] [-E] [-M META] [--upload] [--link-deps]
-              [--no-link-deps] [--download MODE] [--download-layer MODE] [--sandbox | --no-sandbox]
-              [--clean-checkout]
+              [--no-link-deps] [--download MODE] [--download-layer MODE]
+              [--shared | --no-shared] [--install | --no-install]
+              [--sandbox | --no-sandbox] [--clean-checkout]
               PACKAGE [PACKAGE ...]
+
 
 Description
 -----------

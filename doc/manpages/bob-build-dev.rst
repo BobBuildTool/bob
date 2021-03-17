@@ -97,11 +97,21 @@ Options
     as long as their recipes were not changed. If the recipe did change Bob
     will still do a clean build automatically.
 
+``--install``
+    Install shared packages. A shared location must have been configured so
+    that Bob knows where to put the package. This is the default.
+
 ``--link-deps``
     Create symlinks to dependencies next to workspace.
 
+``--no-install``
+    Do not install shared packages if a shared location is configured.
+
 ``--no-sandbox``
     Disable sandboxing
+
+``--no-shared``
+    Do not use shared packages even if they are available.
 
 ``--resume``
     Resume build where it was previously interrupted.
@@ -113,6 +123,9 @@ Options
 
 ``--sandbox``
     Enable sandboxing
+
+``--shared``
+    Use shared packages if they are available. This is the default.
 
 ``--upload``
     Upload to binary archive
@@ -126,7 +139,9 @@ Options
     trail.
 
     Note that it is not possible to upload such built artifacts to a binary
-    archive because vital information is missing.
+    archive because vital information is missing. It is also not possible to
+    install shared packages that were built without audit trail for the same
+    reason.
 
 ``-B, --checkout-only``
     Don't build, just check out sources
