@@ -161,8 +161,10 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             }
 
         for a in vars(args):
-            if getattr(args, a) == None:
+            if getattr(args, a) is None:
                 setattr(args, a, cfg.get(a, defaults.get(a)))
+            elif isinstance(getattr(args, a), list):
+                setattr(args, a, cfg.get(a, []) + getattr(args, a))
 
         if args.jobs is ...:
             args.jobs = os.cpu_count()
