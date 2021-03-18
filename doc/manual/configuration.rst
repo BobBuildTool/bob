@@ -2152,6 +2152,7 @@ download        ``--download``         String (``yes``, ``no``, ``deps``, ``forc
 download-layer  ``--download-layer``   String (``yes=<layer>``, ``no=<layer>``,
                                        ``forced=<layer>```)
 force           ``-f``                 Boolean
+jobs            ``-j``                 Integer
 link_deps       ``--[no-]link-deps``   Boolean
 no_deps         ``-n``                 Boolean
 no_logfiles     ``--no-logfiles``      Boolean
