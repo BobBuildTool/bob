@@ -388,8 +388,10 @@ class DirHasher:
             self.__ignoreDirs = DirHasher.IGNORE_DIRS | frozenset(os.fsencode(i) for i in ignoreDirs)
         else:
             self.__ignoreDirs = DirHasher.IGNORE_DIRS
+        self.size = 0
 
     def __hashEntry(self, prefix, entry, s):
+        self.size += s.st_size
         if stat.S_ISREG(s.st_mode):
             digest = self.__index.check(prefix, entry, s, hashFile)
         elif stat.S_ISDIR(s.st_mode):
@@ -484,6 +486,12 @@ class DirHasher:
 
 def hashDirectory(path, index=None, ignoreDirs=None):
     return DirHasher(index, ignoreDirs).hashDirectory(path)
+
+def hashDirectoryWithSize(path, index=None, ignoreDirs=None):
+    h = DirHasher(index, ignoreDirs)
+    retHash = h.hashDirectory(path)
+    retSize = h.size
+    return retHash, retSize
 
 def hashPath(path, index=None, ignoreDirs=None):
     return DirHasher(index, ignoreDirs).hashPath(path)
