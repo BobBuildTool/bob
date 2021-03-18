@@ -2956,6 +2956,7 @@ class RecipeSet:
             schema.Optional('download') : schema.Or("yes", "no", "deps",
                 "forced", "forced-deps", "forced-fallback",
                 schema.Regex(r"^packages=.*$")),
+            schema.Optional('download_layer') : [schema.Regex(r'^(yes|no|forced)=\S+$')],
             schema.Optional('force') : bool,
             schema.Optional('jobs') : int,
             schema.Optional('link_deps') : bool,
