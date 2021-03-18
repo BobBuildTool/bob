@@ -2950,7 +2950,6 @@ class RecipeSet:
             schema.Optional('always_checkout') : [str],
             schema.Optional('audit') : bool,
             schema.Optional('build_mode') : schema.Or("build-only","normal", "checkout-only"),
-            schema.Optional('checkout_only') : bool,
             schema.Optional('clean') : bool,
             schema.Optional('clean_checkout') : bool,
             schema.Optional('destination') : str,
