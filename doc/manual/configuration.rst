@@ -2149,8 +2149,8 @@ destination     ``--destination``      String (Path)
 download        ``--download``         String (``yes``, ``no``, ``deps``, ``forced``,
                                        ``forced-deps``, ``forced-fallback`` or
                                        ``packages=<packages>``)
-download-layer  ``--download-layer``   String (``yes=<layer>``, ``no=<layer>``,
-                                       ``forced=<layer>```)
+download_layer  ``--download-layer``   List of strings (``yes=<layer>``,
+                                       ``no=<layer>``, ``forced=<layer>```)
 force           ``-f``                 Boolean
 jobs            ``-j``                 Integer
 link_deps       ``--[no-]link-deps``   Boolean
