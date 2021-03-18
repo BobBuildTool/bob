@@ -2977,11 +2977,13 @@ class RecipeSet:
                 schema.Regex(r"^packages=.*$")),
             schema.Optional('download_layer') : [schema.Regex(r'^(yes|no|forced)=\S+$')],
             schema.Optional('force') : bool,
+            schema.Optional('install') : bool,
             schema.Optional('jobs') : int,
             schema.Optional('link_deps') : bool,
             schema.Optional('no_deps') : bool,
             schema.Optional('no_logfiles') : bool,
             schema.Optional('sandbox') : bool,
+            schema.Optional('shared') : bool,
             schema.Optional('upload') : bool,
             schema.Optional('verbosity') : int,
         })
@@ -3066,6 +3068,7 @@ class RecipeSet:
         self.__plugins = {}
         self.__commandConfig = {}
         self.__uiConfig = {}
+        self.__shareConfig = {}
         self.__policies = {
             'relativeIncludes' : (
                 "0.13",
@@ -3209,6 +3212,15 @@ class RecipeSet:
                     })
                 }]),
                 lambda x: self.__scmOverrides.extend([ ScmOverride(o) for o in x ])
+            ),
+            "share" : BuiltinSetting(
+                schema.Schema({
+                    'path' : str,
+                    schema.Optional('quota') : schema.Or(None, int,
+                        schema.Regex(r'^[0-9]+([KMGT](i?B)?)?$')),
+                    schema.Optional('autoClean') : bool,
+                }),
+                lambda x: updateDicRecursive(self.__shareConfig, x),
             ),
             "ui" : BuiltinSetting(
                 schema.Schema({
@@ -3376,6 +3388,9 @@ class RecipeSet:
 
     def scmOverrides(self):
         return self.__scmOverrides
+
+    def getShareConfig(self):
+        return self.__shareConfig
 
     async def getScmAudit(self):
         try:
