@@ -6,12 +6,13 @@
 from ...input import RecipeSet
 from ...scm import getScm, ScmTaint, ScmStatus
 from ...state import BobState
-from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT
+from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT, Warn
 from ...utils import removePath, processDefines
 import argparse
 import os
 
 from .builder import LocalBuilder
+from .share import getShare
 from .state import DevelopDirOracle
 
 __all__ = ['doClean']
@@ -91,6 +92,8 @@ def checkAtticSource(workspace, verbose):
     return checkSCM(workspace, ".", scmSpec, verbose)
 
 
+UNITS = ("Bytes", "KiB", "MiB", "GiB", "TiB")
+
 def doClean(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob clean",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -110,6 +113,8 @@ would get removed without actually deleting that already.
         help="Clean release mode directories (work/...)")
     group.add_argument('--attic', action='store_const', const='attic', dest='mode',
         help="Clean attic directories (dev/.../attic_*)")
+    group.add_argument('--shared', action='store_const', const='shared', dest='mode',
+        help="Clean shared package repository")
 
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
@@ -121,6 +126,10 @@ would get removed without actually deleting that already.
         help="Force deletion of unknown/unclean SCMs")
     parser.add_argument('-s', '--src', default=False, action='store_true',
         help="Clean source workspaces too")
+    parser.add_argument('--all-unused', default=False, action='store_true',
+        help="Remove all unused shared packages, even if quota is not exceeded")
+    parser.add_argument('--used', default=False, action='store_true',
+        help="Also remove used shared packages if quota is exceeded")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=None,
@@ -145,23 +154,35 @@ would get removed without actually deleting that already.
     recipes.setConfigFiles(args.configFile)
     recipes.parse(defines)
 
-    # Get directory name formatter into shape
-    if develop:
-        nameFormatter = recipes.getHook('developNameFormatter')
-        developPersister = DevelopDirOracle(nameFormatter, recipes.getHook('developNamePersister'))
-        nameFormatter = developPersister.getFormatter()
-    else:
-        # Special read-only "persister" that does create new entries. The
-        # actual formatter is irrelevant.
-        nameFormatter = LocalBuilder.releaseNameInterrogator
-    nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
-    packages = recipes.generatePackages(nameFormatter, args.sandbox)
-    if develop: developPersister.prime(packages)
-
     if args.mode == 'attic':
         delPaths = sorted(d for d in BobState().getAtticDirectories()
             if os.path.exists(d) and (args.force or checkAtticSource(d, args.verbose)))
+    elif args.mode == 'shared':
+        delPaths = []
+        share = getShare(recipes.getShareConfig())
+        repoSize = share.gc(args.used, args.all_unused, args.dry_run,
+                            lambda x: delPaths.append(x))
+        if (repoSize is not None) and (share.quota is not None) and (repoSize > share.quota):
+            excess = repoSize - share.quota
+            for unit in UNITS:
+                if excess < 1024: break
+                excess = excess // 1024
+            Warn("Could not free enough space to meet quota. ({}{} over quota)".format(excess, unit),
+                 help="You can add --used to remove packages that are still used.").show()
     else:
+        # Get directory name formatter into shape
+        if develop:
+            nameFormatter = recipes.getHook('developNameFormatter')
+            developPersister = DevelopDirOracle(nameFormatter, recipes.getHook('developNamePersister'))
+            nameFormatter = developPersister.getFormatter()
+        else:
+            # Special read-only "persister" that does create new entries. The
+            # actual formatter is irrelevant.
+            nameFormatter = LocalBuilder.releaseNameInterrogator
+        nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
+        packages = recipes.generatePackages(nameFormatter, args.sandbox)
+        if develop: developPersister.prime(packages)
+
         if args.mode == 'release':
             # collect all used paths
             usedPaths = collectPaths(packages.getRootPackage())
@@ -205,7 +226,7 @@ would get removed without actually deleting that already.
         for d in delPaths:
             if args.verbose or args.dry_run:
                 print("rm", d)
-            if not args.dry_run:
+            if not args.dry_run and args.mode != 'shared':
                 removePath(d)
                 if args.mode == 'attic':
                     BobState().delAtticDirectoryState(d)
