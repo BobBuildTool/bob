@@ -248,16 +248,14 @@ cd {ROOT}
     def makeRunnable(wrapFmt):
         baseDir = os.getcwd()
 
-        def fmt(step, mode, props, referrer):
+        def fmt(step, mode, props):
             if mode == 'workspace':
                 ret = wrapFmt(step, props)
+                return os.path.join(ret, "workspace") if ret is not None else None
+            elif mode == 'storage':
+                return BobState().getStoragePath(step.getWorkspacePath())
             else:
-                assert mode == 'exec'
-                if referrer.getSandbox() is None:
-                    ret = os.path.join(baseDir, wrapFmt(step, props))
-                else:
-                    ret = os.path.join("/bob", asHexStr(step.getVariantId()))
-            return os.path.join(ret, "workspace") if ret is not None else None
+                assert False, "invalid mode {}".format(mode)
 
         return fmt
 

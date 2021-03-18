@@ -625,7 +625,7 @@ class StepSpec:
             'env' : dict(step.getEnv()),
             'paths' : step.getPaths(),
             'libraryPaths' : step.getLibraryPaths(),
-            'workspace' : (step.getWorkspacePath(), step.getExecPath()),
+            'workspace' : (step.getStoragePath(), step.getExecPath()),
             'args' : [ a.getExecPath(step) for a in step.getArguments() ],
             'allPaths' : sorted([
                 (a.getPackage().getName(), a.getExecPath(step))
@@ -651,12 +651,12 @@ class StepSpec:
         # fetch sandbox if configured
         if step.getSandbox() is not None:
             d['sandbox'] = s = {
-                'root' : step.getSandbox().getStep().getWorkspacePath(),
+                'root' : step.getSandbox().getStep().getStoragePath(),
                 'paths' : step.getSandbox().getPaths(),
                 'hostMounts' : step.getSandbox().getMounts(),
                 'netAccess' : step.hasNetAccess(),
                 'depMounts' : [
-                    (dep.getWorkspacePath(), dep.getExecPath(step))
+                    (dep.getStoragePath(), dep.getExecPath(step))
                     for dep in step.getAllDepSteps() if dep.isValid()
                 ],
             }
@@ -666,7 +666,7 @@ class StepSpec:
             while extra.isValid() and len(extra.getArguments()) > 0:
                 extra = extra.getArguments()[0]
                 if extra.isValid():
-                    s['depMounts'].append((extra.getWorkspacePath(), extra.getExecPath(step)))
+                    s['depMounts'].append((extra.getStoragePath(), extra.getExecPath(step)))
 
         d['preRunCmds'] = step.getJenkinsPreRunCmds() if isJenkins else step.getPreRunCmds()
         d['setupScript'] = step.getSetupScript()
