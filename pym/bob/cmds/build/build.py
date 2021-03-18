@@ -205,7 +205,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
         setVerbosity(verbosity)
-        builder = LocalBuilder(recipes, verbosity, args.force,
+        builder = LocalBuilder(verbosity, args.force,
                                args.no_deps, True if args.build_mode == 'build-only' else False,
                                args.preserve_env, envWhiteList, bobRoot, args.clean,
                                args.no_logfiles)

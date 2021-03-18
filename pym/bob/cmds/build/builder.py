@@ -261,9 +261,8 @@ cd {ROOT}
 
         return fmt
 
-    def __init__(self, recipes, verbose, force, skipDeps, buildOnly, preserveEnv,
+    def __init__(self, verbose, force, skipDeps, buildOnly, preserveEnv,
                  envWhiteList, bobRoot, cleanBuild, noLogFile):
-        self.__recipes = recipes
         self.__wasRun= {}
         self.__wasSkipped = {}
         self.__wasDownloadTried = {}
@@ -871,7 +870,7 @@ cd {ROOT}
                 # Prohibit up-/download if we are on the old allRelocatable
                 # policy and the package is not explicitly relocatable and
                 # built outside the sandbox.
-                mayUpOrDownload = self.__recipes.getPolicy('allRelocatable') or \
+                mayUpOrDownload = step.getPackage().getRecipe().getRecipeSet().getPolicy('allRelocatable') or \
                     step.isRelocatable() or (step.getSandbox() is not None)
 
                 # Calculate build-id and fingerprint of expected artifact if
@@ -1480,13 +1479,13 @@ cd {ROOT}
         # fingerprint inside the sandbox and has been the default before Bob
         # 0.16.
         sandbox = (step.getSandbox() is not None) and step.getSandbox().getStep()
-        if sandbox and not self.__recipes.getPolicy('sandboxFingerprints'):
+        if sandbox and not step.getPackage().getRecipe().getRecipeSet().getPolicy('sandboxFingerprints'):
             return b''
 
         # A relocatable step with no fingerprinting is easy
         isFingerprinted = step._isFingerprinted()
         trackRelocation = step.isPackageStep() and not step.isRelocatable() and \
-            self.__recipes.getPolicy('allRelocatable')
+            step.getPackage().getRecipe().getRecipeSet().getPolicy('allRelocatable')
         if not isFingerprinted and not trackRelocation:
             return b''
 
