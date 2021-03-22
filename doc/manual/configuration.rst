@@ -1689,11 +1689,13 @@ be overwritten by the recipe or inheriting class.
 root
 ~~~~
 
-Type: Boolean
+Type: Boolean | String | IfExpression (:ref:`configuration-principle-booleans`)
 
-Recipe attribute which defaults to False. If set to True the recipe is declared
-a root recipe and becomes a top level package. There must be at least one root
-package in a project.
+Recipe attribute which defaults to ``False``. If set to ``True`` the recipe is
+declared a root recipe and becomes a top level package. If a string
+IfExpression is given it is subject to variable expansion and is interpreted as
+boolean according to the rules explained in
+:ref:`configuration-principle-booleans`.
 
 .. _configuration-recipes-scriptLanguage:
 
