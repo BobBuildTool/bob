@@ -1094,6 +1094,53 @@ class TestIfExpression(RecipesTmp, TestCase):
         ps.walkPackagePath("root/bar-1")
         ps.walkPackagePath("root/bar-2")
 
+class TestRootProperty(RecipesTmp, TestCase):
+    """Test root property evaluation"""
+
+    def testStringType(self):
+        """Test evaluation of string boolean type"""
+        self.writeRecipe("r1", """\
+            root: "True"
+            """)
+        self.writeRecipe("r2", """\
+            root: "${FOO:-0}"
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        ps = recipes.generatePackages(lambda x,y: "unused")
+        ps.walkPackagePath("r1")
+        self.assertRaises(BobError, ps.walkPackagePath, "r2")
+
+        recipes = RecipeSet()
+        recipes.parse({"FOO": "1"})
+        ps = recipes.generatePackages(lambda x,y: "unused")
+        ps.walkPackagePath("r1")
+        ps.walkPackagePath("r2")
+
+    def testStringType(self):
+        """Test evaluation of IfExpression"""
+        self.writeRecipe("r1", """\
+            root: !expr |
+                "True"
+            """)
+        self.writeRecipe("r2", """\
+            root: !expr |
+                "${FOO:-0}" == "bar"
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        ps = recipes.generatePackages(lambda x,y: "unused")
+        ps.walkPackagePath("r1")
+        self.assertRaises(BobError, ps.walkPackagePath, "r2")
+
+        recipes = RecipeSet()
+        recipes.parse({"FOO": "bar"})
+        ps = recipes.generatePackages(lambda x,y: "unused")
+        ps.walkPackagePath("r1")
+        ps.walkPackagePath("r2")
+
 class TestNoUndefinedToolsPolicy(RecipesTmp, TestCase):
     """ Test behaviour of noUndefinedTools policy"""
 
