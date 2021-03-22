@@ -403,9 +403,37 @@ as they work on packages:
   may be used as ``pattern``.
 
 Plugins may provide additional functions as described in
-:ref:`extending-hooks-string`. If a string is interpreted as a boolean then the
-empty string, "0" (zero) and "false" (case insensitive) are considered as logical
-"false".  Any other value is considered as "true".
+:ref:`extending-hooks-string`.
+
+.. _configuration-principle-booleans:
+
+Boolean properties
+~~~~~~~~~~~~~~~~~~
+
+Depending on the context one or more of the following types are supported in
+boolean properties:
+
+String
+  A string that is subject to
+  :ref:`variable subsitution <configuration-principle-subst>`. The empty
+  string, "0" (zero) and "false" (case insensitive) are considered as logical
+  "false". Any other value is considered as "true".
+
+Boolean
+  A YAML boolean value. (``True``, ``False``)
+
+IfExpression
+  An IfExpression which is a special YAML-type (``!expr``) defined by Bob. This
+  is an expression in infix notation that is using the same
+  :ref:`bobpaths_string_literals` and :ref:`bobpaths_string_function_calls` as
+  available for :ref:`manpage-bobpaths`. If the expression is a simple string
+  it's value is interpreted as defined above for plain strings. More complex
+  expressions are always of boolean type.  Example::
+
+     if: !expr |
+           "${FOO}" == "bar" || "${BAZ}"
+
+The allowed type is specified at each property individually.
 
 .. _configuration-principle-fingerprinting:
 
@@ -821,8 +849,10 @@ If the package is built from multiple modules you can give a list of SCMs::
             dir: src/bar
 
 There are three common (string) attributes in all SCM specifications: ``scm``,
-``dir`` and ``if``. By default the SCMs check out to the root of the workspace.
-You may specify any relative path in ``dir`` to checkout to this directory.
+``dir`` and ``if``. Additionally to the string type, the ``if`` property may
+be given as IfExpression (see :ref:`configuration-principle-booleans`). By
+default the SCMs check out to the root of the workspace. You may specify any
+relative path in ``dir`` to checkout to this directory.
 
 By using ``if`` you can selectively enable or disable a particular SCM using
 either a string or a expression. In case a string is given to the ``if``-keyword
@@ -830,7 +860,8 @@ it is substituted according to :ref:`configuration-principle-subst` and the fina
 string is interpreted as a boolean value (everything except the empty string, ``0``
 and ``false`` is considered true). In case you're using the expression syntax you
 can use :ref:`bobpaths_string_literals` and :ref:`bobpaths_string_function_calls`
-to express a condition. The SCM will only be considered if the condition passes.
+to express a condition (see :ref:`configuration-principle-booleans`). The SCM
+will only be considered if the condition passes.
 
 
 Currently the following ``scm`` values are supported:
@@ -1110,25 +1141,17 @@ The following settings are supported:
 |             |                 | Value strings in this clause are subject to         |
 |             |                 | :ref:`configuration-principle-subst`.               |
 +-------------+-----------------+-----------------------------------------------------+
-| if          | String          | The string (subject to substitution) is interpreted |
-|             |                 | as boolean value. The dependency is only considered |
-|             |                 | if the string is considered as true. See            |
-|             |                 | :ref:`configuration-principle-subst`.               |
+| if          | String |        | See :ref:`configuration-principle-booleans` for     |
+|             | IfExpression    | evaluation details. The dependency is only          |
+|             |                 | considered if the string/expression evaluates to    |
+|             |                 | true. The follwing two examples are equivilent::    |
 |             |                 |                                                     |
-|             |                 | Default: true                                       |
-+-------------+-----------------+-----------------------------------------------------+
-| if: !expr   | String          | The string is parsed as expression using the same   |
-|             |                 | :ref:`bobpaths_string_literals` and                 |
-|             |                 | :ref:`bobpaths_string_function_calls`               |
-|             |                 | as available for bobpaths.                          |
-|             |                 | The dependency is only considered if the expression |
-|             |                 | is considered as true.                              |
-|             |                 |                                                     |
-|             |                 | Default: true                                       |
-|             |                 | Example::                                           |
+|             |                 |      if: "$(or,$(eq,$FOO,bar),$BAZ)"                |
 |             |                 |                                                     |
 |             |                 |      if: !expr |                                    |
 |             |                 |            "${FOO}" == "bar" || "${BAZ}"            |
+|             |                 |                                                     |
+|             |                 | Default: "true"                                     |
 +-------------+-----------------+-----------------------------------------------------+
 | tools       | Dictionary      | Remap an existing tool to another name, possibly    |
 |             | (String ->      | replacing the other tool. This is useful to change  |
@@ -1286,6 +1309,7 @@ fingerprintIf
 ~~~~~~~~~~~~~
 
 Type: String | Boolean | ``null`` | IfExpression
+(:ref:`configuration-principle-booleans`)
 
 By default no fingerprinting is done unless at least one inherited class, used
 tool or the recipe explicitly enables it. This is done by either setting
