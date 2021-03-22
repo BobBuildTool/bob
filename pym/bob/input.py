@@ -2330,6 +2330,10 @@ class Recipe(object):
             providedDeps |= l
         self.__provideDeps = providedDeps
 
+        # Evaluate root property
+        if isinstance(self.__root, str) or isinstance(self.__root, IfExpression):
+            self.__root = rootEnv.evaluate(self.__root, "root")
+
     def getRecipeSet(self):
         return self.__recipeSet
 
@@ -3636,7 +3640,7 @@ class RecipeSet:
                     error="provideSandbox: invalid 'mount' property"),
                 schema.Optional('environment') : VarDefineValidator("provideSandbox::environment"),
             }),
-            schema.Optional('root') : bool,
+            schema.Optional('root') : schema.Or(bool, str, IfExpression),
             schema.Optional('shared') : bool,
             schema.Optional('relocatable') : bool,
             schema.Optional('buildNetAccess') : bool,
