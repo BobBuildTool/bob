@@ -95,9 +95,9 @@ def doLS(argv, bobRoot):
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
+    recipes.parse(defines)
 
-    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
+    packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
     showAliases = packages.getAliases() if args.package == "" else []
 
     printer = PackagePrinter(args.all, args.origin, args.recursive, args.unsorted)
@@ -142,8 +142,8 @@ def doQueryMeta(argv, bobRoot):
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
-    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
+    recipes.parse(defines)
+    packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
 
     def showPackage(package, recurse, done):
         # Show each package only once. Meta variables are fixed and not variant
@@ -208,8 +208,8 @@ are used:
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
-    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
+    recipes.parse(defines)
+    packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
 
     # update formats
     for fmt in args.formats:
@@ -263,8 +263,8 @@ def doQueryRecipe(argv, bobRoot):
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
-    package = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox).walkPackagePath(args.package)
+    recipes.parse(defines)
+    package = recipes.generatePackages(lambda s,m: "unused", args.sandbox).walkPackagePath(args.package)
 
     for fn in package.getRecipe().getSources():
         print(fn)

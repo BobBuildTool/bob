@@ -66,7 +66,7 @@ been executed or does not exist), the line is omitted.
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
     recipes.defineHook('developNamePersister', None)
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
+    recipes.parse(defines)
 
     # State variables in a class
     class State:
@@ -111,7 +111,7 @@ been executed or does not exist), the line is omitted.
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
 
     # Find roots
-    packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
+    packages = recipes.generatePackages(nameFormatter, args.sandbox)
     if args.dev: developPersister.prime(packages)
 
     matched = False

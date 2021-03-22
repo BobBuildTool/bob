@@ -537,8 +537,8 @@ def doGraph(argv, bobRoot):
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
-    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
+    recipes.parse(defines)
+    packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
 
     cfg = recipes.getCommandConfig().get('graph', {})
     defaults = {

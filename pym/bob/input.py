@@ -2082,7 +2082,7 @@ class Recipe(object):
             "packageScript" : "true"
         }
         ret = Recipe(recipeSet, recipe, [], "", ".", "", "", properties)
-        ret.resolveClasses()
+        ret.resolveClasses(Env())
         return ret
 
     def __init__(self, recipeSet, recipe, layer, sourceFile, baseDir, packageName, baseName,
@@ -2192,7 +2192,7 @@ class Recipe(object):
     def getLayer(self):
         return self.__layer
 
-    def resolveClasses(self):
+    def resolveClasses(self, rootEnv):
         # must be done only once
         if self.__classesResolved: return
         self.__classesResolved = True
@@ -3395,31 +3395,48 @@ class RecipeSet:
         else:
             return schema.validate(default)
 
-    def parse(self):
+    def parse(self, envOverrides={}, platform=sys.platform):
         if not os.path.isdir("recipes"):
             raise ParseError("No recipes directory found.")
         self.__cache.open()
         try:
-            self.__parse()
-
-            # config files overrule everything else
-            for c in self.__configFiles:
-                c = str(c) + ".yaml"
-                if not os.path.isfile(c):
-                    raise ParseError("Config file {} does not exist!".format(c))
-                self.__parseUserConfig(c)
+            self.__parse(envOverrides, platform)
         finally:
             self.__cache.close()
 
-    def __parse(self):
+    def __parse(self, envOverrides, platform):
         # Begin with root layer
         self.__parseLayer([], "9999")
+
+        # config files overrule everything else
+        for c in self.__configFiles:
+            c = str(c) + ".yaml"
+            if not os.path.isfile(c):
+                raise ParseError("Config file {} does not exist!".format(c))
+            self.__parseUserConfig(c)
+
+        # calculate start environment
+        if self.getPolicy("cleanEnvironment"):
+            osEnv = Env(os.environ)
+            osEnv.setFuns(self.__stringFunctions)
+            env = Env({ k : osEnv.substitute(v, k) for (k, v) in
+                self.__defaultEnv.items() })
+        else:
+            env = Env(os.environ).prune(self.__whiteList)
+            env.update(self.__defaultEnv)
+        env.setFuns(self.__stringFunctions)
+        env.update(envOverrides)
+        env["BOB_HOST_PLATFORM"] = platform
+        self.__rootEnv = env
 
         # resolve recipes and their classes
         rootRecipes = []
         for recipe in self.__recipes.values():
             try:
-                recipe.resolveClasses()
+                recipeEnv = env.copy()
+                recipeEnv.setFunArgs({ "recipe" : recipe, "sandbox" : False,
+                    "__tools" : {} })
+                recipe.resolveClasses(recipeEnv)
             except ParseError as e:
                 e.pushFrame(recipe.getPackageName())
                 raise
@@ -3665,32 +3682,7 @@ class RecipeSet:
             raise ParseError("Class {} requested but not found.".format(className))
         return self.__classes[className]
 
-    def __getEnvWithCacheKey(self, envOverrides, sandboxEnabled, platform):
-        # calculate start environment
-        if self.getPolicy("cleanEnvironment"):
-            osEnv = Env(os.environ)
-            osEnv.setFuns(self.__stringFunctions)
-            env = Env({ k : osEnv.substitute(v, k) for (k, v) in
-                self.__defaultEnv.items() })
-        else:
-            env = Env(os.environ).prune(self.__whiteList)
-            env.update(self.__defaultEnv)
-        env.setFuns(self.__stringFunctions)
-        env.update(envOverrides)
-        env["BOB_HOST_PLATFORM"] = platform
-
-        # calculate cache key for persisted packages
-        h = hashlib.sha1()
-        h.update(BOB_INPUT_HASH)
-        h.update(self.__cache.getDigest())
-        h.update(struct.pack("<I", len(env)))
-        for (key, val) in sorted(env.inspect().items()):
-            h.update(struct.pack("<II", len(key), len(val)))
-            h.update((key+val).encode('utf8'))
-        h.update(b'\x01' if sandboxEnabled else b'\x00')
-        return (env, h.digest())
-
-    def __generatePackages(self, nameFormatter, env, cacheKey, sandboxEnabled):
+    def __generatePackages(self, nameFormatter, cacheKey, sandboxEnabled):
         # use separate caches with and without sandbox
         if sandboxEnabled:
             cacheName = ".bob-packages-sb.pickle"
@@ -3710,7 +3702,7 @@ class RecipeSet:
 
         # not cached -> calculate packages
         states = { n:s() for (n,s) in self.__states.items() }
-        result = self.__rootRecipe.prepare(env, sandboxEnabled, states)[0]
+        result = self.__rootRecipe.prepare(self.__rootEnv, sandboxEnabled, states)[0]
 
         # save package tree for next invocation
         try:
@@ -3724,11 +3716,20 @@ class RecipeSet:
 
         return result.refDeref([], {}, None, nameFormatter)
 
-    def generatePackages(self, nameFormatter, envOverrides={}, sandboxEnabled=False,
-                         platform=sys.platform):
-        (env, cacheKey) = self.__getEnvWithCacheKey(envOverrides, sandboxEnabled, platform)
+    def generatePackages(self, nameFormatter, sandboxEnabled=False):
+        # calculate cache key for persisted packages
+        h = hashlib.sha1()
+        h.update(BOB_INPUT_HASH)
+        h.update(self.__cache.getDigest())
+        h.update(struct.pack("<I", len(self.__rootEnv)))
+        for (key, val) in sorted(self.__rootEnv.inspect().items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
+        h.update(b'\x01' if sandboxEnabled else b'\x00')
+        cacheKey = h.digest()
+
         return PackageSet(cacheKey, self.__aliases, self.__stringFunctions,
-            lambda: self.__generatePackages(nameFormatter, env, cacheKey, sandboxEnabled))
+            lambda: self.__generatePackages(nameFormatter, cacheKey, sandboxEnabled))
 
     def getPolicy(self, name, location=None):
         (policy, warning) = self.__policies[name]

@@ -56,8 +56,7 @@ class RecipesTmp:
     def generate(self, sandboxEnabled=False):
         recipes = RecipeSet()
         recipes.parse()
-        return recipes.generatePackages(lambda x,y: "unused",
-            sandboxEnabled=sandboxEnabled)
+        return recipes.generatePackages(lambda x,y: "unused", sandboxEnabled)
 
 
 class TestUserConfig(TestCase):
@@ -1076,21 +1075,22 @@ class TestIfExpression(RecipesTmp, TestCase):
 
     def testNested(self):
         """Test that nested if expressions are working"""
-        recipes = RecipeSet()
-        recipes.parse()
 
-        ps = recipes.generatePackages(lambda x,y: "unused",
-                envOverrides={"USE_DEPS" : "0", "BAR" : "bar2"})
+        recipes = RecipeSet()
+        recipes.parse(envOverrides={"USE_DEPS" : "0", "BAR" : "bar2"})
+        ps = recipes.generatePackages(lambda x,y: "unused")
         self.assertRaises(BobError, ps.walkPackagePath, "root/bar-1")
         self.assertRaises(BobError, ps.walkPackagePath, "root/bar-2")
 
-        ps = recipes.generatePackages(lambda x,y: "unused",
-                envOverrides={"USE_DEPS" : "1"})
+        recipes = RecipeSet()
+        recipes.parse(envOverrides={"USE_DEPS" : "1"})
+        ps = recipes.generatePackages(lambda x,y: "unused")
         ps.walkPackagePath("root/bar-1")
         self.assertRaises(BobError, ps.walkPackagePath, "root/bar-2")
 
-        ps = recipes.generatePackages(lambda x,y: "unused",
-                envOverrides={"USE_DEPS" : "1", "BAR" : "bar2"})
+        recipes = RecipeSet()
+        recipes.parse(envOverrides={"USE_DEPS" : "1", "BAR" : "bar2"})
+        ps = recipes.generatePackages(lambda x,y: "unused")
         ps.walkPackagePath("root/bar-1")
         ps.walkPackagePath("root/bar-2")
 

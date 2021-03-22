@@ -276,8 +276,8 @@ def doShow(argv, bobRoot):
 
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
-    packages = recipes.generatePackages(lambda s,m: "unused", defines, args.sandbox)
+    recipes.parse(defines)
+    packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
 
     if not args.show_empty:
         filt = filterEmpty

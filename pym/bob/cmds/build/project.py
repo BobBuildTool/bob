@@ -60,7 +60,7 @@ def doProject(argv, bobRoot):
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
     recipes.defineHook('developNamePersister', None)
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
+    recipes.parse(defines)
 
     envWhiteList = recipes.envWhiteList()
     envWhiteList |= set(args.white_list)
@@ -68,7 +68,7 @@ def doProject(argv, bobRoot):
     nameFormatter = recipes.getHook('developNameFormatter')
     developPersister = DevelopDirOracle(nameFormatter, recipes.getHook('developNamePersister'))
     nameFormatter = LocalBuilder.makeRunnable(developPersister.getFormatter())
-    packages = recipes.generatePackages(nameFormatter, defines, sandboxEnabled=args.sandbox)
+    packages = recipes.generatePackages(nameFormatter, args.sandbox)
     developPersister.prime(packages)
 
     generators = defaultGenerators.copy()

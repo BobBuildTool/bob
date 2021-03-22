@@ -143,7 +143,7 @@ would get removed without actually deleting that already.
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
     recipes.defineHook('developNamePersister', None)
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
+    recipes.parse(defines)
 
     # Get directory name formatter into shape
     if develop:
@@ -155,7 +155,7 @@ would get removed without actually deleting that already.
         # actual formatter is irrelevant.
         nameFormatter = LocalBuilder.releaseNameInterrogator
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
-    packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
+    packages = recipes.generatePackages(nameFormatter, args.sandbox)
     if develop: developPersister.prime(packages)
 
     if args.mode == 'attic':

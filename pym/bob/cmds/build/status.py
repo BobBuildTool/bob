@@ -265,7 +265,7 @@ def doStatus(argv, bobRoot):
     recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
     recipes.defineHook('developNamePersister', None)
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
+    recipes.parse(defines)
 
     if args.develop:
         # Develop names are stable. All we need to do is to replicate build's algorithm,
@@ -278,7 +278,7 @@ def doStatus(argv, bobRoot):
         nameFormatter = LocalBuilder.releaseNameInterrogator
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
 
-    packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
+    packages = recipes.generatePackages(nameFormatter, args.sandbox)
     if args.develop: developPersister.prime(packages)
 
     # Dummy query of attic directories. Will warn if project directory was

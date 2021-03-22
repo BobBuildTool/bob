@@ -1298,6 +1298,9 @@ def jenkinsNamePersister(jenkins, wrapFmt, uuid):
 def genJenkinsJobs(recipes, jenkins):
     jobs = {}
     config = BobState().getJenkinsConfig(jenkins)
+    recipes.parse(config.get('defines', {}),
+                  "msys" if config.get("windows", False) else "linux")
+
     prefix = config["prefix"]
     options = config.get("options", {})
     archiveHandler = getArchiver(recipes)
@@ -1308,12 +1311,10 @@ def genJenkinsJobs(recipes, jenkins):
         if not archiveHandler.canUploadJenkins() or not archiveHandler.canDownloadJenkins():
             raise ParseError("No archive for up and download found but artifacts.copy using archive enabled!")
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
-    windows = config.get("windows", False)
+
     packages = recipes.generatePackages(
         jenkinsNamePersister(jenkins, nameFormatter, config.get('uuid')),
-        config.get('defines', {}),
-        config.get('sandbox', False),
-        "msys" if windows else "linux")
+        config.get('sandbox', False))
     nameCalculator = JobNameCalculator(prefix)
     rootPackages = []
     for r in config["roots"]: rootPackages.extend(packages.queryPackagePath(r))
@@ -1451,8 +1452,6 @@ def doJenkinsExport(recipes, argv):
               file=sys.stderr)
         sys.exit(1)
 
-    jenkinsJobCreate = recipes.getHookStack('jenkinsJobCreate')
-
     jobs = genJenkinsJobs(recipes, args.name)
     buildOrder = genJenkinsBuildOrder(jobs)
     config = BobState().getJenkinsConfig(args.name)
@@ -1463,6 +1462,7 @@ def doJenkinsExport(recipes, argv):
     options = config.get("options", {})
     authtoken = config.get("authtoken")
 
+    jenkinsJobCreate = recipes.getHookStack('jenkinsJobCreate')
     for j in buildOrder:
         job = jobs[j]
         info = {
@@ -2233,7 +2233,6 @@ def doJenkins(argv, bobRoot):
     recipes = RecipeSet()
     recipes.defineHook('jenkinsNameFormatter', jenkinsNameFormatter)
     recipes.setConfigFiles(args.configFile)
-    recipes.parse()
 
     if args.subcommand in availableJenkinsCmds:
         BobState().setAsynchronous()

@@ -170,7 +170,7 @@ class TestRelocatable(TestCase):
         r = recipe.copy()
         r["root"] = True
         ret = Recipe(recipeSet, recipe, [], name+".yaml", cwd, name, name, {})
-        ret.resolveClasses()
+        ret.resolveClasses(Env())
         return ret.prepare(Env(), False, {})[0].refDeref([], {}, None, None)
 
     def testNormalRelocatable(self):

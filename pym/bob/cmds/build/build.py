@@ -134,7 +134,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
         recipes.defineHook('developNamePersister', None)
         recipes.setConfigFiles(args.configFile)
-        recipes.parse()
+        recipes.parse(defines)
 
         # if arguments are not passed on cmdline use them from default.yaml or set to default yalue
         if develop:
@@ -200,7 +200,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             nameFormatter = recipes.getHook('releaseNameFormatter')
             nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
         nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
-        packages = recipes.generatePackages(nameFormatter, defines, args.sandbox)
+        packages = recipes.generatePackages(nameFormatter, args.sandbox)
         if develop: developPersister.prime(packages)
 
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
