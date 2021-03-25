@@ -34,8 +34,33 @@ bob-libc-version()
     # Try glibc first
     cat >conftest.c <<EOF
 #include <stdio.h>
+#if defined(__MSYS__) || defined(__CYGWIN__)
+#include <cygwin/version.h>
+#elif defined(__MINGW32__) || defined(__MINGW64__)
+#include <windows.h>
+#else
 #include <gnu/libc-version.h>
-int main(){ printf("glibc %s\n", gnu_get_libc_version()); return 0; }
+#endif
+int main(void)
+{
+#if defined(CYGWIN_VERSION_DLL_IDENTIFIER)
+    printf("%s/%d.%d.%d\n", CYGWIN_VERSION_DLL_IDENTIFIER,
+        CYGWIN_VERSION_DLL_EPOCH,
+        CYGWIN_VERSION_DLL_MAJOR,
+        CYGWIN_VERSION_DLL_MINOR);
+#elif defined(__MSVCRT_VERSION__)
+    printf("mingw%d/msvcrt-%03x\n",
+#ifdef __MINGW64__
+        64,
+#else
+        32,
+#endif
+        __MSVCRT_VERSION__);
+#else
+    printf("glibc %s\n", gnu_get_libc_version());
+#endif
+    return 0;
+}
 EOF
     if ${1:-${CC:-cc}} -o conftest conftest.c >/dev/null ; then
         ./conftest && return 0
