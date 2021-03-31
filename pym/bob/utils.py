@@ -197,6 +197,36 @@ else:
     INVALID_CHAR_TRANS = str.maketrans('', '')
 
 
+__canSymlink = None
+
+def canSymlink():
+    # cached on first call
+    global __canSymlink
+    if __canSymlink is not None:
+        return __canSymlink
+
+    # On Windows it depends on the SeCreateSymbolicLinkPrivilege capability if
+    # it is possible to create symlinks. Try to create a symlink to see if we
+    # have the privilege. Either the symlink() call fails directly or MSYS
+    # silently creates a copy (unless MSYS=winsymlinks:nativestrict is set).
+    if sys.platform in ('msys', 'cygwin', 'win32'):
+        ret = False
+        try:
+            with TemporaryDirectory() as tmp:
+                with open(os.path.join(tmp, "file"), "w") as f:
+                    pass
+                canary = os.path.join(tmp, "canary")
+                os.symlink("file", canary)
+                ret = os.path.islink(canary)
+        except OSError:
+            pass
+    else:
+        ret = True
+
+    # cache result
+    __canSymlink = ret
+    return ret
+
 __platformTag = None
 
 def getPlatformTag():
@@ -213,22 +243,10 @@ def getPlatformTag():
     else:
         ret = b''
 
-    # On Windows it depends on the SeCreateSymbolicLinkPrivilege capability if
-    # it is possible to create symlinks. Try to create a symlink to see if we
-    # have the privilege. Either the symlink() call fails directly or MSYS
-    # silently creates a copy (unless MSYS=winsymlinks:nativestrict is set).
+    # It's not given that you can symlink on Windows. Things will behave
+    # differently so threat it as a separate platform.
     if p in ('msys', 'cygwin', 'win32'):
-        canSymlink = False
-        try:
-            with TemporaryDirectory() as tmp:
-                with open(os.path.join(tmp, "file"), "w") as f:
-                    pass
-                canary = os.path.join(tmp, "canary")
-                os.symlink("file", canary)
-                canSymlink = os.path.islink(canary)
-        except OSError:
-            pass
-        if canSymlink:
+        if canSymlink():
             ret += b'l'
 
     # cache result
