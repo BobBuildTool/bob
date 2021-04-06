@@ -127,7 +127,7 @@ __bob_cook()
    elif [[ "$prev" = "--always-checkout" ]] ; then
       COMPREPLY=( )
    else
-      __bob_complete_path "--destination -j --jobs -k --keep-going -f --force -n --no-deps -p --with-provided --without-provided -A --no-audit --audit -b --build-only -B --checkout-only --normal --clean --incremental --always-checkout --resume -q --quiet -v --verbose --no-logfiles -D -c -e -E -M --upload --link-deps --no-link-deps --download --download-layer --sandbox --no-sandbox --clean-checkout"
+      __bob_complete_path "--destination -j --jobs -k --keep-going -f --force -n --no-deps -p --with-provided --without-provided -A --no-audit --audit -b --build-only -B --checkout-only --normal --clean --incremental --always-checkout --resume -q --quiet -v --verbose --no-logfiles -D -c -e -E -M --upload --link-deps --no-link-deps --download --download-layer --shared --no-shared --install --no-install --sandbox --no-sandbox --clean-checkout"
    fi
 }
 
