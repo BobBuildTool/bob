@@ -1724,11 +1724,12 @@ marked as such. Typically large static packages (such as toolchains) are
 enabled as shared packages. By reusing the result the hard disk usage can be
 sometimes reduced drastically.
 
-The exact behaviour depends on the build backend. Currently the setting has no
-influence on local builds. On Jenkins the result will be copied to a separate
-directory in the Jenkins installation and will be used from there. This reduces
-the job workspace size considerably at the expense of having artifacts outside
-of Jenkins's regular control.
+The exact behaviour depends on the build backend. For local builds the location
+is configured by :ref:`configuration-config-share` in ``default.yaml``. On
+Jenkins the result will be copied to a separate directory in the Jenkins
+installation and will be used from there. This reduces the job workspace size
+considerably at the expense of having artifacts outside of Jenkins's regular
+control.
 
 .. _configuration-config:
 
@@ -2178,11 +2179,13 @@ download        ``--download``         String (``yes``, ``no``, ``deps``, ``forc
 download_layer  ``--download-layer``   List of strings (``yes=<layer>``,
                                        ``no=<layer>``, ``forced=<layer>```)
 force           ``-f``                 Boolean
+install         ``--[no-]install``     Boolean
 jobs            ``-j``                 Integer
 link_deps       ``--[no-]link-deps``   Boolean
 no_deps         ``-n``                 Boolean
 no_logfiles     ``--no-logfiles``      Boolean
 sandbox         ``--[no-]sandbox``     Boolean
+shared          ``--[no-]shared``      Boolean
 upload          ``--upload``           Boolean
 verbosity       ``-q | -v``            Integer (-2[quiet] .. 3[verbose], default 0)
 =============== ====================== ===============================================
@@ -2291,6 +2294,41 @@ The example above will mount the ``bin`` directory of the users home directory
 as ``/mnt`` inside the sandbox. The ``/mnt`` directory will be in ``$PATH``
 before any other search directory of the sandbox but still after any used tool
 (if any).
+
+.. _configuration-config-share:
+
+share
+~~~~~
+
+Packages marked as :ref:`configuration-recipes-shared` can be installed to a
+shared location. All projects that use the same shared location can benefit
+from sharing such shared packages on the same machine.
+
+Example::
+
+    share:
+        path: ~/.cache/bob
+        quota: "5G"
+        autoClean: True
+
+The ``path`` property is required. An initial ``~`` or ``~user`` component is replaced
+by the users home directory. By default no ``quota`` is set. The quota can either
+be set to ``null`` (explicitly disables quota), a number to give the maximum size
+in bytes or a string with optional magnitude suffix. The standard IEC units are
+supported (``KiB``, ``MiB``, ``GiB`` and ``TiB``) which can optionally be abbreviated
+by leaving out the ``iB`` suffix (e.g. ``G`` for ``GiB``). SI units (base 1000) are
+supported too (``KB``,  ``MB``, ``GB``, and ``TB``). The ``autoClean`` property,
+which defaults to ``True``, controls the garbage collection on installation time.
+If enabled, old and unused packages will be deleted automatically if the quota is
+exceeded. To manually clean the shared location call :ref:`bob clean --shared <manpage-clean>`.
+
+This setting only applies for local builds. For Jenkins builds the
+``shared.dir`` :ref:`bob-jenkins-extended-options` can be set.
+
+It is advisable to configure the shared package location and quota in the user
+configuration file (``~/.config/bob/default.yaml``). This way all projects
+built by the user will benefit from this location and the quota is consistently
+configured for all projects.
 
 ui
 ~~

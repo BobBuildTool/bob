@@ -19,6 +19,7 @@ import time
 
 from .state import DevelopDirOracle
 from .builder import LocalBuilder
+from .share import getShare
 
 def runHook(recipes, hook, args):
     hookCmd = recipes.getBuildHook(hook)
@@ -115,6 +116,16 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Download from binary archive for layer recipes (yes=<layer>, no=<layer>, forced=<layer>)",
         type=_downloadLayerArgument)
     group = parser.add_mutually_exclusive_group()
+    group.add_argument('--shared', action='store_true', default=None,
+        help="Use shared packages")
+    group.add_argument('--no-shared', action='store_false', dest='shared',
+        help="Do not use shared packages")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--install', action='store_true', default=None,
+        help="Install shared packages")
+    group.add_argument('--no-install', action='store_false', dest='install',
+        help="Do not install shared packages")
+    group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=None,
         help="Enable sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
@@ -158,6 +169,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 'jobs' : 1,
                 'keep_going' : False,
                 'audit' : True,
+                'shared' : True,
+                'install' : True,
             }
 
         for a in vars(args):
@@ -205,7 +218,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
         setVerbosity(verbosity)
-        builder = LocalBuilder(recipes, verbosity, args.force,
+        builder = LocalBuilder(verbosity, args.force,
                                args.no_deps, True if args.build_mode == 'build-only' else False,
                                args.preserve_env, envWhiteList, bobRoot, args.clean,
                                args.no_logfiles)
@@ -222,6 +235,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setKeepGoing(args.keep_going)
         builder.setAudit(args.audit)
         builder.setAuditMeta(meta)
+        builder.setShareHandler(getShare(recipes.getShareConfig()))
+        builder.setShareMode(args.shared, args.install)
         if args.resume: builder.loadBuildState()
 
         backlog = []

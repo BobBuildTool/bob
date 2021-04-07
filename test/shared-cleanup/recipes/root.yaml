@@ -1,0 +1,14 @@
+root: True
+shared: True
+
+multiPackage:
+    small:
+        packageScript: |
+            echo small > result.txt
+    medium:
+        packageScript: |
+            dd if=/dev/zero of=result.txt bs=1024 count=1
+    big:
+        packageScript: |
+            dd if=/dev/zero of=result.txt bs=1024 count=128
+

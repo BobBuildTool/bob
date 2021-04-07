@@ -69,6 +69,7 @@ class _BobState():
         self.__variantIds = {}
         self.__atticDirs = {}
         self.__createdWithVersion = self.CUR_VERSION
+        self.__storagePath = {}
 
         # lock state
         lockFile = ".bob-state.lock"
@@ -116,6 +117,7 @@ class _BobState():
                 self.__variantIds = state.get("variantIds", {})
                 self.__atticDirs = state.get("atticDirs", {})
                 self.__createdWithVersion = state.get("createdWithVersion", 0)
+                self.__storagePath = state.get("storagePath", {})
 
                 # version upgrades
                 if state["version"] == 2:
@@ -158,6 +160,7 @@ class _BobState():
                 "variantIds" : self.__variantIds,
                 "atticDirs" : self.__atticDirs,
                 "createdWithVersion" : self.__createdWithVersion,
+                "storagePath" : self.__storagePath,
             }
             try:
                 with open(self.__uncommittedPath, "wb") as f:
@@ -317,6 +320,24 @@ class _BobState():
             self.__variantIds[path] = variantId
             self.__save()
 
+    def setStoragePath(self, workspace, storage):
+        """Set storage path for workspace.
+
+        Usually the workspace is also where the files are stored. Only if
+        workspace and storage path differ we store the actual storage location.
+        """
+        if storage == workspace: storage = None
+        if self.__storagePath.get(workspace) != storage:
+            if storage is None:
+                del self.__storagePath[workspace]
+            else:
+                self.__storagePath[workspace] = storage
+            self.__save()
+
+    def getStoragePath(self, workspace):
+        """Return diverted storage path for workspace (if any)."""
+        return self.__storagePath.get(workspace, workspace)
+
     def resetWorkspaceState(self, path, dirState):
         needSave = False
         if path in self.__results:
@@ -333,6 +354,9 @@ class _BobState():
             needSave = True
         if path in self.__variantIds:
             del self.__variantIds[path]
+            needSave = True
+        if path in self.__storagePath:
+            del self.__storagePath[path]
             needSave = True
         if needSave:
             self.__save()

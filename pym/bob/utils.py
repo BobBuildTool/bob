@@ -178,24 +178,60 @@ def compareVersion(origLeft, origRight):
                             .format(origLeft, origRight))
     return ret
 
+
 def isWindows():
     """Check if we run on a windows platform.
 
     We have to rule out MSYS(2) and Cygwin as they are advertised a POSIX but
     in fact cannot truly hide the underlying system.
     """
-    if os.name == 'posix':
-        p = sys.platform
-        if p.startswith('msys'): return True
-        if p.startswith('cygwin'): return True
-        return False
-    return True
+    return __isWindows
 
-if isWindows():
+if os.name == 'posix':
+    if sys.platform.startswith('msys'):
+        __isWindows = True
+    elif sys.platform.startswith('cygwin'):
+        __isWindows = True
+    else:
+        __isWindows = False
+else:
+    __isWindows = True
+
+if __isWindows:
     INVALID_CHAR_TRANS = str.maketrans(':*?<>"|', '_______')
 else:
     INVALID_CHAR_TRANS = str.maketrans('', '')
 
+
+__canSymlink = None
+
+def canSymlink():
+    # cached on first call
+    global __canSymlink
+    if __canSymlink is not None:
+        return __canSymlink
+
+    # On Windows it depends on the SeCreateSymbolicLinkPrivilege capability if
+    # it is possible to create symlinks. Try to create a symlink to see if we
+    # have the privilege. Either the symlink() call fails directly or MSYS
+    # silently creates a copy (unless MSYS=winsymlinks:nativestrict is set).
+    if sys.platform in ('msys', 'cygwin', 'win32'):
+        ret = False
+        try:
+            with TemporaryDirectory() as tmp:
+                with open(os.path.join(tmp, "file"), "w") as f:
+                    pass
+                canary = os.path.join(tmp, "canary")
+                os.symlink("file", canary)
+                ret = os.path.islink(canary)
+        except OSError:
+            pass
+    else:
+        ret = True
+
+    # cache result
+    __canSymlink = ret
+    return ret
 
 __platformTag = None
 
@@ -213,22 +249,10 @@ def getPlatformTag():
     else:
         ret = b''
 
-    # On Windows it depends on the SeCreateSymbolicLinkPrivilege capability if
-    # it is possible to create symlinks. Try to create a symlink to see if we
-    # have the privilege. Either the symlink() call fails directly or MSYS
-    # silently creates a copy (unless MSYS=winsymlinks:nativestrict is set).
+    # It's not given that you can symlink on Windows. Things will behave
+    # differently so threat it as a separate platform.
     if p in ('msys', 'cygwin', 'win32'):
-        canSymlink = False
-        try:
-            with TemporaryDirectory() as tmp:
-                with open(os.path.join(tmp, "file"), "w") as f:
-                    pass
-                canary = os.path.join(tmp, "canary")
-                os.symlink("file", canary)
-                canSymlink = os.path.islink(canary)
-        except OSError:
-            pass
-        if canSymlink:
+        if canSymlink():
             ret += b'l'
 
     # cache result
@@ -388,8 +412,10 @@ class DirHasher:
             self.__ignoreDirs = DirHasher.IGNORE_DIRS | frozenset(os.fsencode(i) for i in ignoreDirs)
         else:
             self.__ignoreDirs = DirHasher.IGNORE_DIRS
+        self.size = 0
 
     def __hashEntry(self, prefix, entry, s):
+        self.size += s.st_size
         if stat.S_ISREG(s.st_mode):
             digest = self.__index.check(prefix, entry, s, hashFile)
         elif stat.S_ISDIR(s.st_mode):
@@ -484,6 +510,12 @@ class DirHasher:
 
 def hashDirectory(path, index=None, ignoreDirs=None):
     return DirHasher(index, ignoreDirs).hashDirectory(path)
+
+def hashDirectoryWithSize(path, index=None, ignoreDirs=None):
+    h = DirHasher(index, ignoreDirs)
+    retHash = h.hashDirectory(path)
+    retSize = h.size
+    return retHash, retSize
 
 def hashPath(path, index=None, ignoreDirs=None):
     return DirHasher(index, ignoreDirs).hashPath(path)

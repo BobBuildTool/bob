@@ -1283,15 +1283,12 @@ def jenkinsNamePersister(jenkins, wrapFmt, uuid):
         if uuid: ret = ret + "-" + uuid
         return ret
 
-    def fmt(step, mode, props, referrer):
+    def fmt(step, mode, props):
         if mode == 'workspace':
             return persist(step, props)
         else:
-            assert mode == 'exec'
-            if referrer.getSandbox() is None:
-                return persist(step, props)
-            else:
-                return os.path.join("/bob", asHexStr(step.getVariantId()), "workspace")
+            assert mode == 'storage'
+            return step.getWorkspacePath()
 
     return fmt
 

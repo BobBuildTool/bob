@@ -129,34 +129,40 @@ def symlinkFail(target, name):
     raise OSError
 
 class TestPlatformTag(TestCase):
+    @patch('bob.utils.__canSymlink', None)
     @patch('bob.utils.__platformTag', None)
     @patch('bob.utils.sys.platform', 'linux')
     def testPosix(self):
         self.assertEqual(getPlatformTag(), b'')
 
+    @patch('bob.utils.__canSymlink', None)
     @patch('bob.utils.__platformTag', None)
     @patch('bob.utils.sys.platform', 'msys')
     @patch('bob.utils.os.symlink', symlinkFail)
     def testMSYSLinkFail(self):
         self.assertEqual(getPlatformTag(), b'm')
 
+    @patch('bob.utils.__canSymlink', None)
     @patch('bob.utils.__platformTag', None)
     @patch('bob.utils.sys.platform', 'msys')
     @patch('bob.utils.os.symlink', copyAsSymlink)
     def testMSYSLinkCopy(self):
         self.assertEqual(getPlatformTag(), b'm')
 
+    @patch('bob.utils.__canSymlink', None)
     @patch('bob.utils.__platformTag', None)
     @patch('bob.utils.sys.platform', 'msys')
     def testMSYSLinkOk(self):
         self.assertEqual(getPlatformTag(), b'ml')
 
+    @patch('bob.utils.__canSymlink', None)
     @patch('bob.utils.__platformTag', None)
     @patch('bob.utils.sys.platform', 'win32')
     @patch('bob.utils.os.symlink', symlinkFail)
     def testWindowsLinkFail(self):
         self.assertEqual(getPlatformTag(), b'w')
 
+    @patch('bob.utils.__canSymlink', None)
     @patch('bob.utils.__platformTag', None)
     @patch('bob.utils.sys.platform', 'win32')
     def testWindowsLinkOk(self):
