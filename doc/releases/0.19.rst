@@ -1,0 +1,143 @@
+Bob 0.19 Release Notes
+======================
+
+Changes made since Bob 0.18.0 include the following.
+
+New commands
+------------
+
+bob archive find - Find artifacts matching a retention expression
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The find command can be used to verify that a retention expression
+actually matches the intended artifacts. It can also be used to find
+particular artifacts in an artifact cache. All matching file names will
+be printed to stdout.
+
+For example, to find all archives of a particular package, use::
+
+    bob archive find 'meta.package == "some/package"'
+
+New features
+------------
+
+Platform support
+~~~~~~~~~~~~~~~~
+
+* Compatibility to Python 3.9 has been added
+
+* The built-in fingerprint script function ``bob-libc-version`` gained support
+  for MSYS2.
+
+Audit trail
+~~~~~~~~~~~
+
+* Added support for user defined audit trail meta data.
+
+  Arbitrary key/value pairs for the audit trail meta data section can be
+  defined. They are included as ``meta.<VAR>`` in the audit trail. This might
+  later be used in :ref:`manpage-archive` to select artifacts based on these
+  keys. Internally defined keys (e.g. ``meta.recipe``) have precedence and will
+  always override user provided keys.
+
+Recipes
+~~~~~~~
+
+* Added :ref:`configuration-recipes-setup`.
+
+  Setup scripts are prepended to the executed regular scripts defined by
+  :ref:`configuration-recipes-scripts`. Defining a setup script does not yet
+  enable the corresponding step. Conceptually a setup script is intended to
+  define helper functions or variables but they should not yet execute anything.
+  They are included when entering the shell environment of a step (i.e. calling
+  ``build.sh shell``). As such, they are intended mainly for classes so that the
+  definitions of a class are automatically available in the shell environment.
+
+* Variable substitution has been added in ``depends`` ``environment`` section.
+
+  The value strings in the environment block of the
+  :ref:`configuration-recipes-depends` section are now substituted. The
+  substitution will use the currently built up environment, that is with the
+  values of provided variables of dependencies defined above.
+
+* The :ref:`configuration-recipes-root` property gained boolean expressions.
+
+  Additionally to the plain boolean type the root property may be a string
+  or an IfExpression (see :ref:`configuration-principle-booleans`). The
+  expressions are evaluated with the initial environment (including overrides
+  from the command line) and have access to all user defined string functions.
+
+Bob build / bob dev
+~~~~~~~~~~~~~~~~~~~
+
+* Bob gained the ``--download-layer`` option.
+
+  With ``--download-layer [yes|no|forced]=<regex>`` the download of packages
+  from layers matching the given regex can be configured separately. It
+  overrides the general settings of ``--download`` for packages of matching
+  layers. The switch can be given multiple times.
+
+* Support for shared packages on local builds has been added.
+
+  Shared packages were already supported on Jenkins builds for packages that
+  are marked as :ref:`configuration-recipes-shared`. This support has been
+  implemented for local builds too. Such packages can now be installed to a
+  user configurable shared location. The location and an optional quota are
+  configured in ``default.yaml`` in the :ref:`configuration-config-share`
+  section.
+
+Bob clean
+~~~~~~~~~
+
+* Gained support for shared packages garbage collection.
+
+  By default only unused packages are collected until the user defined quota is
+  met. This can be expanded by either deleting all currently unused shared
+  packages or even remove used ones.
+
+Bob jenkins
+~~~~~~~~~~~
+
+* Added ``jobs.gc.*`` extended options to configure retained builds/artifacts.
+
+  Lets the user configure the number of builds and/or artifacts that are
+  retained per root-package and for the other packages. The by-date setting
+  offered by Jenkins is explicitly not supported because it would break
+  dependent jobs if the timeout hits.
+
+Changed behaviour
+-----------------
+
+Other behavioural changes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Always set node label on Jenkins jobs.
+
+  The node label was only set initially when jobs were created in previous
+  versions. After this the ``--nodes`` setting had no effect which was
+  surprising to the user. This has been rectified by setting the node label
+  unconditionally on all updates.
+
+* ``bob.input.Step.getJenkinsScript()`` has been deprecated.  This method
+  already returned the same as ``getScript()`` since Bob 0.18.
+
+Performance improvements
+------------------------
+
+* Bob now uses ``os.scandir`` for better hashing performance on Windows. This
+  saves one system call per file when Bob scans for changes in a workspace.
+
+* Reduced the number of ``fsync`` calls at runtime.
+
+  Previously the state was always synced after being changed to be safe against
+  hard crashes of the machine. This is now done only once when Bob terminates.
+
+Bug fixes
+---------
+
+* The Visual Studio project generator supports the ``-I`` switch (`#400 <https://github.com/BobBuildTool/bob/issues/400>`_)
+* Defining the ``always_checkout`` property in :ref:`configuration-config-commands` section of ``default.yaml`` now works
+* Setting ``scriptLanguage: bash`` in ``config.yaml`` does not crash anymore (`#394 <https://github.com/BobBuildTool/bob/issues/394>`_)
+* Fixed crash when comparing undefined fields in ``bob archive`` expressions
+* Fixed potential deadlock with certain recipe structures that use weak tools (`#387 <https://github.com/BobBuildTool/bob/issues/387>`_)
+* Fix handling of empty ``.gitmodules``  (`#375 <https://github.com/BobBuildTool/bob/issues/375>`_)

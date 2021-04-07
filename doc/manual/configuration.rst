@@ -573,6 +573,8 @@ external command fails. Make sure to wrap calls to external tools with
 ``Check-Command`` or check ``$lastexitcode`` yourself. Otherwise the build will
 not detect errors involving external commands!
 
+.. _configuration-recipes-setup:
+
 {checkout,build,package}Setup[{Bash,Pwsh}]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1685,6 +1687,8 @@ defines at least one tool. In this case the default value is ``False`` if the
 :ref:`policies-allRelocatable` policy is unset or disabled. If the policy is
 set the default value is always ``True``.  Inherited values from a class will
 be overwritten by the recipe or inheriting class.
+
+.. _configuration-recipes-root:
 
 root
 ~~~~
