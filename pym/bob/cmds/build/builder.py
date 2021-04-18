@@ -1074,7 +1074,7 @@ cd {ROOT}
                 # reflect new checkout state
                 BobState().setDirectoryState(prettySrcPath, checkoutState)
                 BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
-                BobState().setVariantId(prettySrcPath, self.__getIncrementalVariantId(checkoutStep))
+                BobState().setVariantId(prettySrcPath, await self.__getIncrementalVariantId(checkoutStep))
             else:
                 stepMessage(checkoutStep, "CHECKOUT", "skipped (fixed package {})".format(prettySrcPath),
                     SKIPPED, IMPORTANT)
@@ -1118,7 +1118,8 @@ cd {ROOT}
         # id of this step is stable. As most tools rely on stable input
         # directories we have to make a clean build if any of the
         # dependency directories change.
-        buildDigest = [self.__getIncrementalVariantId(buildStep), buildStep.getExecPath()] + \
+        buildVariantId = await self.__getIncrementalVariantId(buildStep)
+        buildDigest = [buildVariantId, buildStep.getExecPath()] + \
             [ i.getExecPath(buildStep) for i in buildStep.getArguments() if i.isValid() ]
 
         # get directory into shape
@@ -1408,7 +1409,7 @@ cd {ROOT}
                 BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
                 await self._runShell(packageStep, "package", a)
                 packageHash = hashWorkspace(packageStep)
-                packageDigest = self.__getIncrementalVariantId(packageStep)
+                packageDigest = await self.__getIncrementalVariantId(packageStep)
                 workspaceChanged = True
                 self.__statistic.packagesBuilt += 1
             audit = await self._generateAudit(packageStep, depth, packageHash)
@@ -1640,7 +1641,7 @@ cd {ROOT}
         # start from scratch
         raise RestartBuildException()
 
-    def __getIncrementalVariantId(self, step):
+    async def __getIncrementalVariantId(self, step):
         """Calculate the variant-id with respect to workspace state.
 
         The real variant-id can be calculated solely by looking at the recipes.
@@ -1659,13 +1660,13 @@ cd {ROOT}
         have been cooked. Otherwise the state may have stale data.
         """
 
-        def getStoredVId(dep):
-            ret = BobState().getVariantId(dep.getWorkspacePath())
-            if ret is None:
-                ret = dep.getVariantId()
+        async def getStoredVId(deps):
+            ret = []
+            for dep in deps:
+                ret.append(BobState().getVariantId(dep.getWorkspacePath()) or dep.getVariantId())
             return ret
 
-        return step.getDigest(getStoredVId)
+        return await step.getDigestCoro(lambda x: getStoredVId(x))
 
     async def __yieldJobWhile(self, coro, ignoreExecutionStop = False):
         """Yield the job slot while waiting for a coroutine.
