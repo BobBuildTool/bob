@@ -86,10 +86,13 @@ class DummyArchive:
     def canUploadJenkins(self):
         return False
 
+    def canCache(self):
+        return False
+
     async def uploadPackage(self, step, buildId, audit, content):
         pass
 
-    async def downloadPackage(self, step, buildId, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content, caches=[]):
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
@@ -138,6 +141,7 @@ class BaseArchive:
         self.__ignoreErrors = "nofail" in flags
         self.__useLocal = "nolocal" not in flags
         self.__useJenkins = "nojenkins" not in flags
+        self.__useCache = "cache" in flags
         self.__wantDownload = False
         self.__wantUpload = False
 
@@ -161,6 +165,9 @@ class BaseArchive:
 
     def canUploadJenkins(self):
         return self.__wantUpload and self.__useUpload and self.__useJenkins
+
+    def canCache(self):
+        return self.__useCache
 
     def __extractPackage(self, tar, audit, content):
         if tar.pax_headers.get('bob-archive-vsn', "0") != "1":
@@ -192,7 +199,7 @@ class BaseArchive:
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
 
-    async def downloadPackage(self, step, buildId, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content, caches=[]):
         if not self.canDownloadLocal():
             return False
 
@@ -202,24 +209,36 @@ class BaseArchive:
         with stepAction(step, "DOWNLOAD", content, details=details) as a:
             try:
                 ret, msg, kind = await loop.run_in_executor(None, BaseArchive._downloadPackage,
-                    self, buildId, suffix, audit, content)
+                    self, buildId, suffix, audit, content, caches)
                 if not ret: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Download of package interrupted.")
 
-    def _downloadPackage(self, buildId, suffix, audit, content):
+    def cachePackage(self, buildId):
+        try:
+            return self._openUploadFile(buildId, ARTIFACT_SUFFIX)
+        except ArtifactExistsError:
+            return None
+        except (ArtifactUploadError, OSError) as e:
+            if self.__ignoreErrors:
+                return None
+            else:
+                raise BuildError("Cannot cache artifact: " + str(e))
+
+    def _downloadPackage(self, buildId, suffix, audit, content, caches):
         # Set default signal handler so that KeyboardInterrupt is raised.
         # Needed to gracefully handle ctrl+c.
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
             with self._openDownloadFile(buildId, suffix) as (name, fileobj):
-                with tarfile.open(name, "r|*", fileobj=fileobj, errorlevel=1) as tar:
-                    removePath(audit)
-                    removePath(content)
-                    os.makedirs(content)
-                    self.__extractPackage(tar, audit, content)
+                with Tee(name, fileobj, buildId, caches) as fo:
+                    with tarfile.open(None, "r|*", fileobj=fo, errorlevel=1) as tar:
+                        removePath(audit)
+                        removePath(content)
+                        os.makedirs(content)
+                        self.__extractPackage(tar, audit, content)
             return (True, None, None)
         except ArtifactNotFoundError:
             return (False, "not found", WARNING)
@@ -378,6 +397,91 @@ class BaseArchive:
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Download of fingerprint interrupted.")
+
+
+class Tee:
+    def __init__(self, fileName, fileObj, buildId, caches):
+        if fileObj is not None:
+            self.__file = fileObj
+            self.__owner = False
+        else:
+            self.__file = open(fileName, "rb")
+            self.__owner = True
+
+        self.__caches = []
+        try:
+            for c in caches:
+                mirror = c.cachePackage(buildId)
+                if mirror is not None:
+                    self.__caches.append(MirrorWriter(mirror, c._ignoreErrors()))
+        except:
+            for c in self.__caches: c.abort()
+            raise
+
+    def __enter__(self):
+        return MirrorLeecher(self.__file, self.__caches)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            if self.__owner: self.__file.close()
+            if exc_type is None:
+                while self.__caches:
+                    c = self.__caches.pop(0)
+                    try:
+                        c.commit()
+                    except ArtifactExistsError:
+                        pass
+                    except (ArtifactUploadError, OSError) as e:
+                        if not c.ignoreErrors:
+                            raise BuildError("Cannot cache artifact: " + str(e))
+        finally:
+            for c in self.__caches: c.abort()
+        return False
+
+class MirrorWriter:
+    def __init__(self, uploader, ignoreErrors):
+        self.ignoreErrors = ignoreErrors
+        self.__finalizer = uploader.__exit__
+        self.__fileName, self.__fileObj = uploader.__enter__()
+        if self.__fileName is not None:
+            self.__fileObj = open(self.__fileName, "wb")
+
+    def write(self, data):
+        self.__fileObj.write(data)
+
+    def commit(self):
+        if self.__fileName is not None:
+            self.__fileObj.close()
+        self.__finalizer(None, None, None)
+
+    def abort(self):
+        if self.__fileName is not None:
+            self.__fileObj.close()
+        self.__finalizer(True, None, None)
+
+class MirrorLeecher:
+    def __init__(self, fileObj, caches):
+        self.__file = fileObj
+        self.__caches = caches
+
+    def read(self, size=-1):
+        ret = self.__file.read(size)
+        if ret:
+            i = 0
+            while i < len(self.__caches):
+                c = self.__caches[i]
+                try:
+                    c.write(ret)
+                    i += 1
+                except (ArtifactUploadError, OSError) as e:
+                    del self.__caches[i]
+                    c.abort()
+                    if not c._ignoreErrors():
+                        raise BuildError("Cannot cache artifact: " + str(e))
+        return ret
+
+    def close(self):
+        pass
 
 
 class LocalArchive(BaseArchive):
@@ -1097,7 +1201,9 @@ class MultiArchive:
     async def downloadPackage(self, step, buildId, audit, content):
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            if await i.downloadPackage(step, buildId, audit, content): return True
+            caches = [ a for a in self.__archives if (a is not i) and a.canCache() ]
+            if await i.downloadPackage(step, buildId, audit, content, caches):
+                return True
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
