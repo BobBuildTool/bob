@@ -36,7 +36,8 @@ script:
     - python3 setup.py bdist_wheel --plat-name manylinux1_x86_64
 
 after_success:
-    - codecov
+    # Coverage is not complete on Python <3.7 (see pym/bob/utils.py)
+    - test $TRAVIS_PYTHON_VERSION != 3.6 && codecov
 
 deploy:
     provider: pypi

@@ -640,12 +640,34 @@ class EventLoopWrapper:
             loop = asyncio.get_event_loop()
             origSigInt = signal.getsignal(signal.SIGINT)
             signal.signal(signal.SIGINT, signal.SIG_IGN)
-            # fork early before process gets big
-            if sys.platform == 'msys':
-                multiprocessing.set_start_method('fork')
+
+            method = 'fork' if sys.platform == 'msys' else 'forkserver'
+
+            # Hack to get coverage data with the multiprocessing module. Up to
+            # date coverage.py cannot trace cross fork/exec. Taken and adapted
+            # from https://gist.github.com/andreycizov/ee59806a3ac6955c127e511c5e84d2b6
+            if os.environ.get('ENABLE_COVERAGE_HACK') and (sys.version_info >= (3, 7)):
+                ctx = multiprocessing.get_context(method)
+                from coverage import Coverage
+                from multiprocessing.context import Process
+                class CoverageProcess(Process):
+                    def run(self):
+                        cov = Coverage(data_suffix=True)
+                        cov._warn_no_data = True
+                        cov._warn_unimported_source = True
+                        cov.start()
+                        try:
+                            super().run()
+                        finally:
+                            cov.stop()
+                            cov.save()
+                ctx.Process = CoverageProcess
+                executor = concurrent.futures.ProcessPoolExecutor(mp_context=ctx)
             else:
-                multiprocessing.set_start_method('forkserver')
-            executor = concurrent.futures.ProcessPoolExecutor()
+                multiprocessing.set_start_method(method)
+                executor = concurrent.futures.ProcessPoolExecutor()
+
+            # fork early before process gets big
             executor.submit(dummy).result()
             signal.signal(signal.SIGINT, origSigInt)
         loop.set_default_executor(executor)
