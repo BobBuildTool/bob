@@ -1968,6 +1968,12 @@ the following list for possible flags. The default is ``[download, upload]``.
     Use this archive to upload artifacts. To actually upload to the archive the
     build must be performed with uploads enabled (``--upload``).
 
+``cache``
+    Use this archive to cache downloaded artifacts from other archives. If a
+    binary artifact was successfully downloaded from another archive it will
+    be uploaded into this archive, unless it already exists there. Useful to
+    cache artifacts locally on slow network connections.
+
 ``nofail``
     Don't fail the build if the upload or download from this archive fails. In
     any case it is never an error if a download does not find the requested
