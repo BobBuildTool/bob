@@ -99,6 +99,9 @@ if [[ -n $COVERAGE ]] ; then
     # make sure coverage is installed in the current environment
     if python3 -c "import coverage" 2>/dev/null; then
         RUN_PYTHON3="$COVERAGE run --source $PWD/pym  --parallel-mode"
+	# The multiprocessing module is incompatible with coverage.py. Enable
+	# the hack in pym/bob/utils.py to still get some data.
+	export ENABLE_COVERAGE_HACK=1
     else
         RUN_PYTHON3=python3
         COVERAGE=
