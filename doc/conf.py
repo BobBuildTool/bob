@@ -275,6 +275,11 @@ man_pages = [
 # If true, show URL addresses after external links.
 #man_show_urls = False
 
+# If true, make a section directory on build man page. Was introduced in
+# version 3.3 and defaults to True in version 4.0 and later. We do it manually
+# in setup.py to keep compatibility with older Sphinx version who do not have
+# this feature.
+man_make_section_directory = False
 
 # -- Options for Texinfo output -------------------------------------------
 
