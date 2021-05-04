@@ -1239,7 +1239,7 @@ class Step:
         the project directoy. The storage path may also change between
         invocations if the shared location changes.
         """
-        if self.isPackageStep():
+        if self.isPackageStep() and self.isShared():
             return self.__pathFormatter(self, 'storage', self.__package._getStates())
         else:
             return self.getWorkspacePath()
@@ -1629,7 +1629,12 @@ class CorePackageStep(CoreStep):
 class PackageStep(Step):
 
     def isShared(self):
-        return self.getPackage().getRecipe().isShared()
+        """Determine if the PackageStep be shared.
+
+        Requires the recipe to be marked as shared and the result must be
+        position independent.
+        """
+        return self.getPackage().getRecipe().isShared() and self.isRelocatable()
 
     def isRelocatable(self):
         """Returns True if the package step is relocatable."""
