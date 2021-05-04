@@ -258,7 +258,6 @@ cd {ROOT}
 
     @staticmethod
     def makeRunnable(wrapFmt):
-        baseDir = os.getcwd()
 
         def fmt(step, mode, props):
             if mode == 'workspace':
