@@ -258,7 +258,6 @@ cd {ROOT}
 
     @staticmethod
     def makeRunnable(wrapFmt):
-        baseDir = os.getcwd()
 
         def fmt(step, mode, props):
             if mode == 'workspace':
@@ -1719,7 +1718,7 @@ cd {ROOT}
         # If the package is not relocatable the exec path is mixed into the
         # fingerprint to tag the relocation information at the artifact.
         if trackRelocation:
-            fingerprint += step.getExecPath().encode(
+            fingerprint += os.path.abspath(step.getExecPath()).encode(
                 locale.getpreferredencoding(False), 'replace')
 
         return hashlib.sha1(fingerprint).digest()
