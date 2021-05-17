@@ -413,12 +413,13 @@ class PwshResolver(IncludeResolver):
     def _includeFile(self, content):
         var = "$_{}{}".format(self.varBase, self.count)
         self.count += 1
-        self.prolog.extend([
-            "{VAR} = (New-TemporaryFile).FullName".format(VAR=var),
-            "$_BOB_TMP_CLEANUP += {VAR}".format(VAR=var),
-            "[Convert]::FromBase64String(@'"])
+        self.prolog.append(dedent("""\
+            {VAR} = (New-TemporaryFile).FullName
+            $_BOB_TMP_CLEANUP += {VAR}
+            [io.file]::WriteAllBytes({VAR}, [Convert]::FromBase64String(@'"""
+                .format(VAR=var)))
         self.prolog.extend(sliceString(b64encode(content).decode("ascii"), 76))
-        self.prolog.append("'@) | Set-Content {VAR} -AsByteStream".format(VAR=var))
+        self.prolog.append("'@))")
         return var
 
     def _includeLiteral(self, content):
