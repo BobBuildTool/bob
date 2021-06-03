@@ -14,6 +14,7 @@ import hashlib
 
 from bob.input import UrlScm
 from bob.invoker import Invoker
+from bob.errors import ParseError
 from bob.utils import asHexStr
 
 class DummyPackage:
@@ -29,7 +30,19 @@ class DummyStep:
 def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
-class TestLiveBuildId(TestCase):
+class UrlScmTest:
+
+    def createUrlScm(self, spec = {}):
+        s = {
+            'scm' : 'url',
+            'url' : self.url,
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        s.update(spec)
+        return UrlScm(s)
+
+class TestLiveBuildId(UrlScmTest, TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -73,16 +86,6 @@ class TestLiveBuildId(TestCase):
             else:
                 self.assertTrue(spec.startswith('='))
                 self.assertEqual(bytes.fromhex(spec[1:]), expected)
-
-    def createUrlScm(self, spec = {}):
-        s = {
-            'scm' : 'url',
-            'url' : self.url,
-            'recipe' : "foo.yaml#0",
-            '__source' : "Recipe foo",
-        }
-        s.update(spec)
-        return UrlScm(s)
 
     def testHasLiveBuildId(self):
         """Only with digest we have live-build-ids"""
@@ -170,4 +173,18 @@ class TestWindowsPaths(TestCase):
 
         s["url"] = r"C:\X\Y\my-pkg.zip"
         self.assertEqual(UrlScm(s).getProperties(False)["fileName"], "my-pkg.zip")
+
+class TestSpecs(UrlScmTest, TestCase):
+
+    url = "/does/not/exist"
+
+    def testInvalidSHA1(self):
+        """Invalid SHA1 digest is rejected"""
+        with self.assertRaises(ParseError):
+            self.createUrlScm({ "digestSHA1" : "invalid" })
+
+    def testInvalidSHA256(self):
+        """Invalid SHA256 digest is rejected"""
+        with self.assertRaises(ParseError):
+            self.createUrlScm({ "digestSHA256" : "invalid" })
 
