@@ -134,6 +134,7 @@ class UrlScm(Scm):
         (".tar.bz2",   "tar"),
         (".tar.bzip2", "tar"),
         (".tgz",       "tar"),
+        (".txz",       "tar"),
         (".tar",       "tar"),
         (".gz",        "gzip"),
         (".xz",        "xz"),
