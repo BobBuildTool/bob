@@ -15,6 +15,7 @@ import shutil
 import stat
 import struct
 import sys
+import sysconfig
 
 def hashString(string):
     h = hashlib.md5()
@@ -178,6 +179,19 @@ def compareVersion(origLeft, origRight):
                             .format(origLeft, origRight))
     return ret
 
+
+def getPlatformString():
+    return __platformString
+
+def isMsys():
+    return __isMsys
+
+if sys.platform.startswith('msys') or sysconfig.get_platform().startswith('msys'):
+    __isMsys = True
+    __platformString = 'msys'
+else:
+    __isMsys = False
+    __platformString = sys.platform
 
 def isWindows():
     """Check if we run on a windows platform.
@@ -641,7 +655,7 @@ class EventLoopWrapper:
             origSigInt = signal.getsignal(signal.SIGINT)
             signal.signal(signal.SIGINT, signal.SIG_IGN)
             # fork early before process gets big
-            if sys.platform == 'msys':
+            if isWindows():
                 multiprocessing.set_start_method('fork')
             else:
                 multiprocessing.set_start_method('forkserver')
