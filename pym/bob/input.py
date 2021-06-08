@@ -13,7 +13,7 @@ from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
-    updateDicRecursive, hashString, getPlatformTag, isWindows
+    updateDicRecursive, hashString, getPlatformTag, isWindows, getPlatformString
 from itertools import chain
 from os.path import expanduser
 from string import Template
@@ -3434,7 +3434,7 @@ class RecipeSet:
         else:
             return schema.validate(default)
 
-    def parse(self, envOverrides={}, platform=sys.platform):
+    def parse(self, envOverrides={}, platform=getPlatformString()):
         if not os.path.isdir("recipes"):
             raise ParseError("No recipes directory found.")
         self.__cache.open()

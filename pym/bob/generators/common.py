@@ -216,7 +216,7 @@ class CommonIDEGenerator:
             # find all executables
             if package.getPackageStep().isValid():
                 packageDir = package.getPackageStep().getWorkspacePath()
-                if sys.platform in ["msys", "win32"]:
+                if isWindows():
                     for root, directory, filenames in os.walk(packageDir):
                         for filename in filenames:
                             target = os.path.join(root, filename)

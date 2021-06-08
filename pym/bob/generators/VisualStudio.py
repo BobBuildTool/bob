@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .common import CommonIDEGenerator
-from ..utils import quoteCmdExe
+from ..utils import quoteCmdExe, isMsys
 from pathlib import Path, PureWindowsPath
 from shlex import quote as quoteBash
 from uuid import UUID
@@ -278,7 +278,7 @@ class Vs2019Generator(CommonIDEGenerator):
 
         # gather root paths
         bobPwd = Path(os.getcwd())
-        if sys.platform == 'msys':
+        if isMsys():
             if os.getenv('WD') is None:
                 raise BuildError("Cannot create Visual Studio project for Windows! MSYS2 must be started by msys2_shell.cmd script!")
             msysRoot = PureWindowsPath(os.getenv('WD')) / '..' / '..'
@@ -331,7 +331,7 @@ class Vs2019Generator(CommonIDEGenerator):
 
     def __generateBuildme(self, extra, projectRoot, bobRoot):
         buildMe = []
-        if sys.platform == 'msys':
+        if isMsys():
             extra = " ".join(quoteBash(e) for e in extra)
             buildMe.append("#!/bin/sh")
             buildMe.append("export PATH=" + quoteBash(os.environ["PATH"]))
