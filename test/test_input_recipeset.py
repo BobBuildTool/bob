@@ -263,6 +263,26 @@ class TestUserConfig(TestCase):
                 {'FOO' : 'default', 'BAR' : 'lower', 'BAZ' : 'higher' })
 
 
+class TestProjectConfiguration(RecipesTmp, TestCase):
+    def testInvalid(self):
+        """Invalid data type of config.yaml is detected"""
+        self.writeConfig([])
+        with self.assertRaises(ParseError):
+            self.generate()
+
+    def testInvalidMinVerType(self):
+        """Invalid type of bobMinimumVersion is detected"""
+        self.writeConfig({ "bobMinimumVersion" : 1 })
+        with self.assertRaises(ParseError):
+            self.generate()
+
+    def testInvalidMinVerStr(self):
+        """Invalid bobMinimumVersion is detected"""
+        self.writeConfig({ "bobMinimumVersion" : "a.b" })
+        with self.assertRaises(ParseError):
+            self.generate()
+
+
 class TestDependencies(RecipesTmp, TestCase):
     def testDuplicateRemoval(self):
         """Test that provided dependencies do not replace real dependencies"""
