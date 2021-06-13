@@ -3001,7 +3001,7 @@ class RecipeSet:
         })
 
     STATIC_CONFIG_SCHEMA = schema.Schema({
-        schema.Optional('bobMinimumVersion') : schema.Regex(r'^[0-9]+(\.[0-9]+){0,2}(rc[0-9]+)?(.dev[0-9]+)?$'),
+        schema.Optional('bobMinimumVersion') : str, # validated separately in preValidate
         schema.Optional('plugins') : [str],
         schema.Optional('policies') : schema.Schema(
             {
@@ -3428,9 +3428,9 @@ class RecipeSet:
     def loadBinary(self, path):
         return self.__cache.loadBinary(path)
 
-    def loadYaml(self, path, schema, default={}):
+    def loadYaml(self, path, schema, default={}, preValidate=lambda x: None):
         if os.path.exists(path):
-            return self.__cache.loadYaml(path, schema, default)
+            return self.__cache.loadYaml(path, schema, default, preValidate)
         else:
             return schema.validate(default)
 
@@ -3493,10 +3493,21 @@ class RecipeSet:
         if not os.path.isdir(rootDir or "."):
             raise ParseError("Layer '{}' does not exist!".format("/".join(layer)))
 
-        config = self.loadYaml(os.path.join(rootDir, "config.yaml"), RecipeSet.STATIC_CONFIG_SCHEMA)
+        configYaml = os.path.join(rootDir, "config.yaml")
+        def preValidate(data):
+            if not isinstance(data, dict):
+                raise ParseError("{}: invalid format".format(configYaml))
+            minVer = data.get("bobMinimumVersion", "0.1")
+            if not isinstance(minVer, str):
+                raise ParseError("{}: bobMinimumVersion must be a string".format(configYaml))
+            if not re.fullmatch(r'^[0-9]+(\.[0-9]+){0,2}(rc[0-9]+)?(.dev[0-9]+)?$', minVer):
+                raise ParseError("{}: invalid bobMinimumVersion".format(configYaml))
+            if compareVersion(BOB_VERSION, minVer) < 0:
+                raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
+
+        config = self.loadYaml(configYaml, RecipeSet.STATIC_CONFIG_SCHEMA,
+            preValidate=preValidate)
         minVer = config.get("bobMinimumVersion", "0.1")
-        if compareVersion(BOB_VERSION, minVer) < 0:
-            raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
         if compareVersion(maxVer, minVer) < 0:
             raise ParseError("Layer '{}' reqires a higher Bob version than root project!"
                                 .format("/".join(layer)))
@@ -3842,7 +3853,7 @@ class YamlCache:
     def getDigest(self):
         return self.__digest
 
-    def loadYaml(self, name, yamlSchema, default):
+    def loadYaml(self, name, yamlSchema, default, preValidate):
         try:
             bs = binStat(name)
             if self.__hot:
@@ -3862,6 +3873,7 @@ class YamlCache:
                     raise ParseError("Error while parsing {}: {}".format(name, str(e)))
 
             if data is None: data = default
+            preValidate(data)
             try:
                 data = yamlSchema.validate(data)
             except schema.SchemaError as e:
