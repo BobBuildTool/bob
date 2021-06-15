@@ -139,6 +139,7 @@ bob-hash-libraries()
 class ScriptLanguage(Enum):
     BASH = 'bash'
     PWSH = 'PowerShell'
+    PYTHON = 'python'
 
 
 class IncludeResolver:
@@ -185,7 +186,7 @@ class IncludeResolver:
         raise NotImplementedError()
 
     def _resolveContent(self, result):
-        raise NotImplementedError()
+        return result
 
     def resolve(self, result):
         return (self._resolveContent(result), "\n".join(self.__incDigests), self.__incFiles)
@@ -397,19 +398,11 @@ class BashLanguage:
 
 
 class PwshResolver(IncludeResolver):
-    def __init__(self, fileLoader, baseDir, origText, sourceName, varBase):
-        super().__init__(fileLoader, baseDir, origText, sourceName, varBase)
-        self.prolog = []
-        self.count = 0
-
     def _includeFile(self, name):
         return '"$_BOB_TMP_BASE/' + escapePwsh(name) + '"'
 
     def _includeLiteral(self, content):
         return quotePwsh(content.decode('utf8'))
-
-    def _resolveContent(self, result):
-        return "\n".join(self.prolog + [result])
 
 
 class PwshLanguage:
@@ -574,9 +567,149 @@ class PwshLanguage:
         return [interpreter, "-c", spec.fingerprintScript]
 
 
+class PythonResolver(IncludeResolver):
+    def _includeFile(self, name):
+        return 'os.path.join(_BOB_TMP_BASE, ' + repr(name) + ')'
+
+    def _includeLiteral(self, content):
+        return repr(content.decode('utf8'))
+
+
+class PythonLanguage:
+    index = ScriptLanguage.PYTHON
+    glue = "\nos.chdir(os.environ['BOB_CWD'])\n"
+    Resolver = PythonResolver
+
+    PROLOGUE = dedent("""\
+        import os, os.path, sys
+        """)
+
+    @staticmethod
+    def __formatProlog(spec, tmpDir):
+        pathSep = ";" if sys.platform == "win32" else ":"
+        env = { key : repr(value) for (key, value) in spec.env.items() }
+        env.update({
+            "PATH": '"' + pathSep + '".join([' + ", ".join(
+                [repr(os.path.abspath(p)) for p in spec.paths] +
+                (['os.environ["PATH"]'] if not spec.hasSandbox else
+                 [repr(p) for p in spec.sandboxPaths])
+            ) + '])',
+            "LD_LIBRARY_PATH": '"' + pathSep + '".join(' +
+                repr([ os.path.abspath(p) for p in spec.libraryPaths ]) + ')',
+            "BOB_CWD": repr(os.path.abspath(spec.workspaceExecPath)),
+        })
+
+        ret = [
+            "# Convenience helpers",
+            PythonLanguage.PROLOGUE,
+            "",
+            "# Special Bob array variables:",
+            "BOB_ALL_PATHS = dict({})".format(repr(sorted(
+                [ (name, os.path.abspath(path)) for name, path in spec.allPaths ]
+            ))),
+            "BOB_DEP_PATHS = dict({})".format(repr(sorted(
+                [ (name, os.path.abspath(path)) for name,path in spec.depPaths ]
+            ))),
+            "BOB_TOOL_PATHS = dict({})".format(repr(sorted(
+                [ (name, os.path.abspath(path)) for name,path in spec.toolPaths ]
+            ))),
+            '_BOB_TMP_BASE = ' + repr("/tmp" if spec.hasSandbox else os.path.join(tmpDir, "tmp")),
+            "",
+            "# Environment:",
+            "\n".join('os.environ["{}"] = {}'.format(k, v) for (k,v) in sorted(env.items())),
+        ]
+        return "\n".join(ret)
+
+    @staticmethod
+    def __formatSetup(spec):
+        return "\n".join([
+            "",
+            "# Recipe setup script",
+            spec.setupScript,
+            "os.chdir(os.environ['BOB_CWD'])",
+        ])
+
+    @staticmethod
+    def __formatScript(spec, tmpDir, trace):
+        if spec.envFile:
+            envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
+        else:
+            envFile = None
+        ret = [
+            PythonLanguage.__formatProlog(spec, tmpDir),
+            "",
+            "# Setup",
+            dedent("""\
+                with open({ENV_FILE}, "w") as f:
+                    f.write(repr({{ "env" : dict(os.environ), "globals" : globals() }}))
+                """.format(ENV_FILE=repr(envFile))) if envFile else "",
+            "os.chdir(os.environ['BOB_CWD'])",
+            "",
+            PythonLanguage.__formatSetup(spec),
+            "",
+            "# Recipe main script",
+            spec.mainScript,
+        ]
+        return "\n".join(ret)
+
+    @staticmethod
+    def __scriptFilePaths(spec, tmpDir):
+        if spec.hasSandbox:
+            execScriptFile = "/.script.py"
+            realScriptFile = (spec.scriptHint or os.path.join(tmpDir, ".script")) + ".py"
+        else:
+            execScriptFile = (spec.scriptHint or os.path.join(tmpDir, "script")) + ".py"
+            realScriptFile = execScriptFile
+        return (os.path.abspath(realScriptFile), os.path.abspath(execScriptFile))
+
+    @staticmethod
+    def setupShell(spec, tmpDir, keepEnv):
+        realScriptFile, execScriptFile = PythonLanguage.__scriptFilePaths(spec, tmpDir)
+        with open(realScriptFile, "w") as f:
+            f.write(PythonLanguage.__formatProlog(spec, tmpDir))
+            f.write(PythonLanguage.__formatSetup(spec))
+
+        args = [sys.executable, "-i", execScriptFile]
+        args.extend(os.path.abspath(a) for a in spec.args)
+
+        return (realScriptFile, execScriptFile, args)
+
+    @staticmethod
+    def setupCall(spec, tmpDir, keepEnv, trace):
+        realScriptFile, execScriptFile = PythonLanguage.__scriptFilePaths(spec, tmpDir)
+        with open(realScriptFile, "w") as f:
+            f.write(PythonLanguage.__formatScript(spec, tmpDir, trace))
+
+        args = [sys.executable, execScriptFile]
+        args.extend(os.path.abspath(a) for a in spec.args)
+
+        return (realScriptFile, execScriptFile, args)
+
+    @staticmethod
+    def mangleFingerprints(scriptFragments, env):
+        # join the script fragments first
+        script = joinScripts(scriptFragments, PythonLanguage.glue)
+
+        # do not add preamble for empty scripts
+        if not script: return ""
+
+        # Add snippets as they match and a default settings preamble
+        ret = [script]
+        for n,v in sorted(env.items()):
+            ret.append('os.environ["{}"] = {}'.format(k, repr(v)))
+        ret.append(PythonLanguage.PROLOGUE)
+
+        return "\n".join(reversed(ret))
+
+    @staticmethod
+    def setupFingerprint(spec, env):
+        return [sys.executable, "-c", spec.fingerprintScript]
+
+
 LANG = {
     ScriptLanguage.BASH : BashLanguage,
     ScriptLanguage.PWSH : PwshLanguage,
+    ScriptLanguage.PYTHON : PythonLanguage,
 }
 
 def getLanguage(language):
