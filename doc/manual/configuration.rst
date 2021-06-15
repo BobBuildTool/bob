@@ -667,6 +667,7 @@ the variable list:
 
   * ``linux``: Linux
   * ``msys``: Windows/MSYS2
+  * ``cygwin``: Windows/Cygwin
   * ``win32``: Windows
   * ``darwin``: Mac OS X
 

@@ -15,6 +15,7 @@ import shutil
 import stat
 import struct
 import sys
+import sysconfig
 
 def hashString(string):
     h = hashlib.md5()
@@ -178,6 +179,19 @@ def compareVersion(origLeft, origRight):
                             .format(origLeft, origRight))
     return ret
 
+
+def getPlatformString():
+    return __platformString
+
+def isMsys():
+    return __isMsys
+
+if sys.platform.startswith('msys') or sysconfig.get_platform().startswith('msys'):
+    __isMsys = True
+    __platformString = 'msys'
+else:
+    __isMsys = False
+    __platformString = sys.platform
 
 def isWindows():
     """Check if we run on a windows platform.
@@ -641,7 +655,7 @@ class EventLoopWrapper:
             origSigInt = signal.getsignal(signal.SIGINT)
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-            method = 'fork' if sys.platform == 'msys' else 'forkserver'
+            method = 'fork' if isWindows() else 'forkserver'
 
             # Hack to get coverage data with the multiprocessing module. Up to
             # date coverage.py cannot trace cross fork/exec. Taken and adapted
