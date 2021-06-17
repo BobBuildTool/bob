@@ -18,6 +18,8 @@ cp recipe1.yaml "$bob/recipes/t.yaml"
 work=$dir/work
 mkdir "$work"
 git init "$work"
+git -C "$work" config user.email "bob@bob.bob"
+git -C "$work" config user.name test
 
 echo init > "$work/file.txt"
 git -C "$work" add file.txt

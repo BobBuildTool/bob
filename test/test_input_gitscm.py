@@ -710,6 +710,8 @@ class TestSubmodules(TestCase):
 
             cmds = """\
                 cd sub1
+                git config user.email "bob@bob.bob"
+                git config user.name test
                 echo canary > canary.txt
                 git add canary.txt
                 git commit -m canary
@@ -750,6 +752,8 @@ class TestSubmodules(TestCase):
             # update sub- and main module
             cmds = """\
                 cd main
+                git config user.email "bob@bob.bob"
+                git config user.name test
                 git rm sub1
                 git commit -m "commit 2"
                 cd ..

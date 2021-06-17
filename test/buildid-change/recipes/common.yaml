@@ -7,6 +7,8 @@ checkoutScript: |
     # simulate that repo changed 
     if [[ ${APPLY_CHANGE:-0} != 0 ]] ; then
         echo "second" > second.txt
+        git config user.email "bob@bob.bob"
+        git config user.name test
         git add second.txt
         git commit -m '2nd commit'
         git push

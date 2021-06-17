@@ -310,6 +310,8 @@ class TestSubmodulesStatus(TestCase):
 
         cmd = """\
             cd sub
+            git config user.email "bob@bob.bob"
+            git config user.name test
             echo modified > test.txt
             git add test.txt
             git commit -m modified
@@ -331,6 +333,8 @@ class TestSubmodulesStatus(TestCase):
             cd sub
             echo modified > test.txt
             cd some/deep/path
+            git config user.email "bob@bob.bob"
+            git config user.name test
             echo modified > test.txt
             git add test.txt
             git commit -m modified
