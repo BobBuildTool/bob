@@ -182,6 +182,22 @@ class GitScm(Scm):
             stdout=False, cwd=self.__dir)
         if head or switch:
             await invoker.checkCommand(fetchCmd, cwd=self.__dir)
+            if self.__commit and (self.__shallow is not None):
+                # Shallow clones might not fetch the requested commit if the
+                # depth is too small. The problem is that we cannot blindly
+                # always request the commit explicitly because this is rejected
+                # by git-upload-pack by default. Instead check here that we got
+                # the commit and only if this is not the case we fetch a 2nd
+                # time with the explicit commit.
+                haveCommit = await invoker.callCommand(["git", "cat-file", "-e",
+                    self.__commit], cwd=self.__dir) == 0
+                if not haveCommit:
+                    ok = await invoker.callCommand(fetchCmd + [self.__commit],
+                        cwd=self.__dir)
+                    if ok != 0:
+                        self.fail("Plain git-fetch in", self.__dir,
+                            "did not download the requested commit and the explicit fetch failed!",
+                            returncode=ok)
             await invoker.checkCommand(["git", "checkout", "-q", "--no-recurse-submodules",
                 self.__commit if self.__commit else "tags/"+self.__tag], cwd=self.__dir)
             # FIXME: will not be called again if interrupted!
