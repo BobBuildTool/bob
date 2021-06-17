@@ -1,4 +1,4 @@
-name: Python package
+name: CI/CD
 
 on: [push, pull_request]
 
@@ -41,8 +41,6 @@ jobs:
               # Coverage is not complete on Python <3.7 (see pym/bob/utils.py)
               if: matrix.python-version != '3.6'
               uses: codecov/codecov-action@v1
-              with:
-                env_vars: OS,PYTHON
 
             - name: Publish package
               if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
