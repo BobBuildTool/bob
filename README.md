@@ -8,7 +8,7 @@ for complex embedded projects and thus focuses on reproducible builds while
 still being nice to developers in agile environments.
 
 [![Documentation Status](http://readthedocs.org/projects/bob-build-tool/badge/?version=latest)](http://bob-build-tool.readthedocs.io/en/latest/?badge=latest)
-[![Build Status](https://travis-ci.org/BobBuildTool/bob.svg?branch=master)](https://travis-ci.org/BobBuildTool/bob)
+[![Build Status](https://github.com/BobBuildTool/bob/actions/workflows/workflow.yaml/badge.svg)](https://github.com/BobBuildTool/bob/actions/workflows/workflow.yaml)
 [![codecov.io](https://codecov.io/github/BobBuildTool/bob/coverage.svg?branch=master)](https://codecov.io/github/BobBuildTool/bob?branch=master)
 
 Installation
