@@ -1,0 +1,53 @@
+name: Python package
+
+on: [push, pull_request]
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: [3.6, 3.7, 3.8, 3.9]
+
+        steps:
+            - uses: actions/checkout@v2
+              with:
+                # Shallow clones break the build because the right Bob version
+                # cannot be inferred due to missing tags.
+                fetch-depth: 300
+
+            - name: Set up Python ${{ matrix.python-version }}
+              uses: actions/setup-python@v2
+              with:
+                python-version: ${{ matrix.python-version }}
+
+            - name: Install dependencies
+              run: |
+                python -m pip install --upgrade pip
+                pip install PyYAML codecov schema python-magic pyparsing sphinx wheel
+                sudo apt-get update
+                sudo apt-get install cvs
+
+            - name: Run unit tests
+              run: |
+                git config --global init.defaultBranch master # keep the old name
+                eatmydata ./test/run-tests.sh
+
+            - name: Build Python package
+              run: |
+                python3 setup.py sdist bdist_wheel --plat-name manylinux1_x86_64
+
+            - name: Upload coverage to Codecov
+              # Coverage is not complete on Python <3.7 (see pym/bob/utils.py)
+              if: matrix.python-version != '3.6'
+              uses: codecov/codecov-action@v1
+              with:
+                env_vars: OS,PYTHON
+
+            - name: Publish package
+              if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+              uses: pypa/gh-action-pypi-publish@release/v1
+              with:
+                user: __token__
+                password: ${{ secrets.PYPI_API_TOKEN }}
+
