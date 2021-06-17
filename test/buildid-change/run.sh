@@ -15,6 +15,8 @@ popd
 D="$(mktemp -d)"
 pushd "$D"
 git init .
+git config user.email "bob@bob.bob"
+git config user.name test
 echo "first" > first.txt
 git add first.txt
 git commit -m '1st commit'
