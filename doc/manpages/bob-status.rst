@@ -75,7 +75,7 @@ Options
     ``--show-overrides``. See :ref:`manpage-bob-status-verbosity` below.
 
 ``--show-overrides``
-    Show checkouts that have active :ref:`configuration-config-scmOverrides`
+    Show checkouts that have active :ref:`scmOverrides <configuration-config-scmOverrides>`
     (``O``) even if the SCM is unchanged. Override information is always
     displayed if a checkout is shown but a ``STATUS`` line is normally only
     emitted if the SCM was modified. Adding ``-v`` will additionally show the
@@ -115,8 +115,9 @@ Status codes can be interpreted as follows:
   checkout at the same location. This is indicated by a simultaneous ``A`` flag
   (see above).
 - ``O`` = overridden. This SCM is affected by a
-  :ref:`configuration-config-scmOverrides`. Pass ``--show-overrides`` to force
-  the output of a ``STATUS`` line if the SCM is otherwise unmodified.
+  :ref:`scmOverrides <configuration-config-scmOverrides>`. Pass
+  ``--show-overrides`` to force the output of a ``STATUS`` line if the SCM is
+  otherwise unmodified.
 - ``S`` = switched. The commit/tag/branch/URL is different from the recipe. In
   case of submodules the current commit is different from the one tracked in
   the parent tree.
