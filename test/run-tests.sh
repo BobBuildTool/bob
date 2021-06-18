@@ -150,6 +150,9 @@ fi
 # go to tests directory
 pushd test > /dev/null
 
+# remove stale coverage data
+[[ -z $COVERAGE ]] || find -type f -name '.coverage.*' -delete || true
+
 # add marker to log.txt
 {
 	echo "######################################################################"
@@ -173,8 +176,8 @@ if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 	elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
 		export -f run_unit_test
 		export RUN_PYTHON3
-		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_unit_test ::: "${RUN_TEST_NAMES[@]}"
-		: $((FAILED+=$?))
+		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_unit_test ::: \
+		  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
 	else
 		for i in "${RUN_TEST_NAMES[@]}" ; do
 			if ! run_unit_test "$i" ; then
@@ -200,8 +203,8 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 	elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
 		export -f run_blackbox_test
 		export RUN_PYTHON3
-		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_blackbox_test ::: "${RUN_TEST_NAMES[@]}"
-		: $((FAILED+=$?))
+		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_blackbox_test ::: \
+		  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
 	else
 		for i in "${RUN_TEST_NAMES[@]}" ; do
 			if ! run_blackbox_test "$i" ; then
@@ -215,7 +218,8 @@ popd > /dev/null
 
 # collect coverage
 if [[ -n $COVERAGE ]]; then
-	$COVERAGE combine test "${RUN_TEST_DIRS[@]}"
+	$COVERAGE combine $(find test/ -type f -name '.coverage.*' \
+	                    -printf '%h\n' | sort -u)
 	if [[ $GEN_HTML -eq 1 ]] ; then
 		$COVERAGE html
 	fi
