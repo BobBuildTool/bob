@@ -116,7 +116,8 @@ setup(
     name = "BobBuildTool",
     use_scm_version = {
         # let setuptools_scm handle this
-        'write_to' : "pym/bob/version.py"
+        'write_to' : "pym/bob/version.py",
+        'local_scheme' : "no-local-version",
     },
 
     # Locate the python stuff. Exclude the development stuff in the release
