@@ -13,7 +13,7 @@ import tempfile
 import hashlib
 
 from bob.input import UrlScm
-from bob.invoker import Invoker
+from bob.invoker import Invoker, InvocationError
 from bob.errors import ParseError
 from bob.utils import asHexStr
 
@@ -31,18 +31,6 @@ def run(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 class UrlScmTest:
-
-    def createUrlScm(self, spec = {}):
-        s = {
-            'scm' : 'url',
-            'url' : self.url,
-            'recipe' : "foo.yaml#0",
-            '__source' : "Recipe foo",
-        }
-        s.update(spec)
-        return UrlScm(s)
-
-class TestLiveBuildId(UrlScmTest, TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -63,6 +51,11 @@ class TestLiveBuildId(UrlScmTest, TestCase):
             d.update(f.read())
             cls.urlSha256 = asHexStr(d.digest())
 
+        with open(fn, "rb") as f:
+            d = hashlib.sha512()
+            d.update(f.read())
+            cls.urlSha512 = asHexStr(d.digest())
+
     @classmethod
     def tearDownClass(cls):
         cls.__repodir.cleanup()
@@ -71,6 +64,18 @@ class TestLiveBuildId(UrlScmTest, TestCase):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, False, True, True, True, True, False)
         run(scm.invoke(invoker))
+
+    def createUrlScm(self, spec = {}):
+        s = {
+            'scm' : 'url',
+            'url' : self.url,
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        s.update(spec)
+        return UrlScm(s)
+
+class TestLiveBuildId(UrlScmTest, TestCase):
 
     def callCalcLiveBuildId(self, scm):
         with tempfile.TemporaryDirectory() as workspace:
@@ -95,6 +100,8 @@ class TestLiveBuildId(UrlScmTest, TestCase):
         self.assertTrue(s.hasLiveBuildId())
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
         self.assertTrue(s.hasLiveBuildId())
+        s = self.createUrlScm({'digestSHA512' : self.urlSha512})
+        self.assertTrue(s.hasLiveBuildId())
 
     def testPredictLiveBildId(self):
         """Predict live-build-id"""
@@ -104,6 +111,8 @@ class TestLiveBuildId(UrlScmTest, TestCase):
         self.assertEqual(run(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha1))
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
         self.assertEqual(run(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha256))
+        s = self.createUrlScm({'digestSHA512' : self.urlSha512})
+        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha512))
 
     def testCalcLiveBuildId(self):
         s = self.createUrlScm()
@@ -112,6 +121,8 @@ class TestLiveBuildId(UrlScmTest, TestCase):
         self.assertEqual(self.callCalcLiveBuildId(s), bytes.fromhex(self.urlSha1))
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
         self.assertEqual(self.callCalcLiveBuildId(s), bytes.fromhex(self.urlSha256))
+        s = self.createUrlScm({'digestSHA512' : self.urlSha512})
+        self.assertEqual(self.callCalcLiveBuildId(s), bytes.fromhex(self.urlSha512))
 
     def testHashEngine(self):
         s = self.createUrlScm()
@@ -120,6 +131,8 @@ class TestLiveBuildId(UrlScmTest, TestCase):
         self.processHashEngine(s, bytes.fromhex(self.urlSha1))
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
         self.processHashEngine(s, bytes.fromhex(self.urlSha256))
+        s = self.createUrlScm({'digestSHA512' : self.urlSha512})
+        self.processHashEngine(s, bytes.fromhex(self.urlSha512))
 
 def fakeWindows():
     return True
@@ -188,3 +201,42 @@ class TestSpecs(UrlScmTest, TestCase):
         with self.assertRaises(ParseError):
             self.createUrlScm({ "digestSHA256" : "invalid" })
 
+    def testInvalidSHA512(self):
+        """Invalid SHA512 digest is rejected"""
+        with self.assertRaises(ParseError):
+            self.createUrlScm({ "digestSHA512" : "invalid" })
+
+class TestDigestMatch(UrlScmTest, TestCase):
+
+    def testSHA1Match(self):
+        scm = self.createUrlScm({ "digestSHA1" : self.urlSha1 })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, scm)
+
+    def testSHA1Mismatch(self):
+        scm = self.createUrlScm({ "digestSHA1" : "0"*40 })
+        with tempfile.TemporaryDirectory() as workspace:
+            with self.assertRaises(InvocationError):
+                self.invokeScm(workspace, scm)
+
+    def testSHA256Match(self):
+        scm = self.createUrlScm({ "digestSHA256" : self.urlSha256 })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, scm)
+
+    def testSHA256Mismatch(self):
+        scm = self.createUrlScm({ "digestSHA256" : "0"*64 })
+        with tempfile.TemporaryDirectory() as workspace:
+            with self.assertRaises(InvocationError):
+                self.invokeScm(workspace, scm)
+
+    def testSHA512Match(self):
+        scm = self.createUrlScm({ "digestSHA512" : self.urlSha512 })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, scm)
+
+    def testSHA512Mismatch(self):
+        scm = self.createUrlScm({ "digestSHA512" : "0"*128 })
+        with tempfile.TemporaryDirectory() as workspace:
+            with self.assertRaises(InvocationError):
+                self.invokeScm(workspace, scm)
