@@ -122,6 +122,7 @@ class UrlScm(Scm):
         schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('digestSHA1') : str,
         schema.Optional('digestSHA256') : str,
+        schema.Optional('digestSHA512') : str,
         schema.Optional('extract') : schema.Or(bool, str),
         schema.Optional('fileName') : str,
         schema.Optional('stripComponents') : int,
@@ -175,6 +176,11 @@ class UrlScm(Scm):
             # validate digest
             if re.match("^[0-9a-f]{64}$", self.__digestSha256) is None:
                 raise ParseError("Invalid SHA256 digest: '" + str(self.__digestSha256) + "'")
+        self.__digestSha512 = spec.get("digestSHA512")
+        if self.__digestSha512:
+            # validate digest
+            if re.match("^[0-9a-f]{128}$", self.__digestSha512) is None:
+                raise ParseError("Invalid SHA512 digest: '" + str(self.__digestSha512) + "'")
         self.__dir = spec.get("dir", ".")
         self.__fn = spec.get("fileName")
         if not self.__fn:
@@ -197,6 +203,7 @@ class UrlScm(Scm):
             'url' : self.__url,
             'digestSHA1' : self.__digestSha1,
             'digestSHA256' : self.__digestSha256,
+            'digestSHA512' : self.__digestSha512,
             'dir' : self.__dir,
             'fileName' : self.__fn,
             'extract' : self.__extract,
@@ -262,7 +269,7 @@ class UrlScm(Scm):
 
         # Adding, changing or removing hash sums is ok as long as the url stays
         # the same.
-        return diff.issubset({"digestSHA1", "digestSHA256"})
+        return diff.issubset({"digestSHA1", "digestSHA256", "digestSHA512"})
 
     async def switch(self, invoker, oldSpec):
         # The real work is done in invoke() below. It will fail if the file
@@ -315,6 +322,11 @@ class UrlScm(Scm):
             d = hashFile(destination, hashlib.sha256).hex()
             if d != self.__digestSha256:
                 invoker.fail("SHA256 digest did not match! expected:", self.__digestSha256, "got:", d)
+        if self.__digestSha512:
+            invoker.trace("<sha512sum>", workspaceFile)
+            d = hashFile(destination, hashlib.sha512).hex()
+            if d != self.__digestSha512:
+                invoker.fail("SHA512 digest did not match! expected:", self.__digestSha512, "got:", d)
 
         # Run optional extractors
         extractors = self.__getExtractors()
@@ -342,16 +354,18 @@ class UrlScm(Scm):
             filt = removeUserFromUrl
         else:
             filt = lambda x: x
-        return ( self.__digestSha256 if self.__digestSha256
-                 else (self.__digestSha1 if self.__digestSha1 else filt(self.__url))
-                    ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
-                    ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
+        return ( self.__digestSha512 or self.__digestSha256 or 
+                 self.__digestSha1 or filt(self.__url)
+               ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
+               ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
 
     def getDirectory(self):
         return self.__dir if self.__tidy else os.path.join(self.__dir, self.__fn)
 
     def isDeterministic(self):
-        return (self.__digestSha1 is not None) or (self.__digestSha256 is not None)
+        return (self.__digestSha1 is not None) or \
+               (self.__digestSha256 is not None) or \
+               (self.__digestSha512 is not None)
 
     def getAuditSpec(self):
         return ("url", os.path.join(self.__dir, self.__fn),
@@ -364,7 +378,9 @@ class UrlScm(Scm):
         return self.calcLiveBuildId(None)
 
     def calcLiveBuildId(self, workspacePath):
-        if self.__digestSha256:
+        if self.__digestSha512:
+            return bytes.fromhex(self.__digestSha512)
+        elif self.__digestSha256:
             return bytes.fromhex(self.__digestSha256)
         elif self.__digestSha1:
             return bytes.fromhex(self.__digestSha1)
@@ -372,7 +388,9 @@ class UrlScm(Scm):
             return None
 
     def getLiveBuildIdSpec(self, workspacePath):
-        if self.__digestSha256:
+        if self.__digestSha512:
+            return "=" + self.__digestSha512
+        elif self.__digestSha256:
             return "=" + self.__digestSha256
         elif self.__digestSha1:
             return "=" + self.__digestSha1
