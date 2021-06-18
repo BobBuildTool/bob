@@ -895,6 +895,7 @@ svn    `Svn`_ repository            | ``url``: URL of SVN module
 url    While not a real SCM it      | ``url``: File that should be downloaded
        allows to download (and      | ``digestSHA1``: Expected SHA1 digest of the file (optional)
        extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
+                                    | ``digestSHA512``: Expected SHA512 digest of the file (optional)
                                     | ``extract``: Extract directive (optional, default: auto)
                                     | ``fileName``: Local file name (optional, default: url file name)
                                     | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
@@ -1033,16 +1034,17 @@ svn
    numeric ``revision`` Bob considers the SCM as deterministic.
 
 url
-   The ``url`` SCM naturally needs an ``url`` attribute. If a SHA digest is given
-   with ``digestSHA1`` and/or ``digestSHA256`` the downloaded file will be checked
-   for a matching hash sum. This also makes the URL deterministic for Bob.
-   Otherwise the URL will be checked in each build for updates. Based on the file
-   name ending Bob will try to extract the downloaded file. You may prevent this
-   by setting the ``extract`` attribute to ``no`` or ``False``. If the heuristic
-   fails the extraction tool may be specified as ``tar``, ``gzip``, ``xz``, ``7z``
-   or ``zip`` directly. For ``tar`` files it is possible to strip a configurable
-   number of leading components from file names on extraction by the
-   ``stripComponents`` attribute.
+   The ``url`` SCM naturally needs an ``url`` attribute. If a SHA digest is
+   given with ``digestSHA1``, ``digestSHA256`` and/or ``digestSHA512`` the
+   downloaded file will be checked for a matching hash sum. This also makes the
+   URL deterministic for Bob. Otherwise the URL will be checked in each build
+   for updates. Based on the file name ending, Bob will try to extract the
+   downloaded file. You may prevent this by setting the ``extract`` attribute
+   to ``no`` or ``False``. If the heuristic fails, the extraction tool may be
+   specified as ``tar``, ``gzip``, ``xz``, ``7z`` or ``zip`` directly. For
+   ``tar`` files it is possible to strip a configurable number of leading
+   components from file names on extraction by the ``stripComponents``
+   attribute.
 
    .. note::
        Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy) the whole
