@@ -4,7 +4,7 @@ import json
 import http.client
 import re
 import socket
-from threading import Thread
+from threading import Thread, Lock
 
 CRUMBDATA=b"""
 <defaultCrumbIssuer>
@@ -74,22 +74,29 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         return
 
 class StoppableHttpServer (HTTPServer):
-    recieveBuf  = []
-    transmitBuf = {}
+    def __init__(self, address, handler):
+        super().__init__(address, handler)
+        self.recieveBuf  = []
+        self.transmitBuf = {}
+        self.mutex = Lock()
 
     def rxJenkinsData(self, data):
-        self.recieveBuf.append(data)
+        with self.mutex:
+            self.recieveBuf.append(data)
 
     def getTxData(self):
-        return self.transmitBuf
+        with self.mutex:
+            return self.transmitBuf.copy()
 
     def getJenkinsData(self):
-        ret = self.recieveBuf.copy()
-        self.recieveBuf = []
-        return ret
+        with self.mutex:
+            ret = self.recieveBuf.copy()
+            self.recieveBuf = []
+            return ret
 
     def addJenkinsData(self, request, data):
-        self.transmitBuf[request] = data
+        with self.mutex:
+            self.transmitBuf[request] = data
 
 class JenkinsMock():
     def start_mock_server(self):
