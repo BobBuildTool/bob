@@ -744,7 +744,7 @@ cd {ROOT}
             raise CancelBuildException
         except CancelBuildException:
             raise
-        except concurrent.futures.CancelledError:
+        except asyncio.CancelledError:
             raise CancelBuildException
         except Exception as e:
             self.__buildErrors.append(e)
@@ -804,7 +804,7 @@ cd {ROOT}
                 loop.run_until_complete(j)
             except CancelBuildException:
                 pass
-            except concurrent.futures.CancelledError:
+            except asyncio.CancelledError:
                 pass
             finally:
                 try:
@@ -1668,7 +1668,7 @@ cd {ROOT}
                 try:
                     await self.__runners.acquire()
                     acquired = True
-                except concurrent.futures.CancelledError:
+                except asyncio.CancelledError:
                     pass
         if not self.__running and not ignoreExecutionStop: raise CancelBuildException
         return ret
