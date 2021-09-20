@@ -3444,6 +3444,14 @@ class RecipeSet:
             self.__cache.close()
 
     def __parse(self, envOverrides, platform):
+        self.__createSchemas()
+
+        # global user config(s)
+        if not DEBUG['ngd']:
+            self.__parseUserConfig("/etc/bobdefault.yaml", True)
+            self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
+                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
+
         # Begin with root layer
         self.__parseLayer([], "9999")
 
@@ -3512,8 +3520,6 @@ class RecipeSet:
             raise ParseError("Layer '{}' reqires a higher Bob version than root project!"
                                 .format("/".join(layer)))
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
-        self.__loadPlugins(rootDir, layer, config.get("plugins", []))
-        self.__createSchemas()
 
         # Determine policies. The root layer determines the default settings
         # implicitly by bobMinimumVersion or explicitly via 'policies'. All
@@ -3529,16 +3535,14 @@ class RecipeSet:
             for (name, behaviour) in config.get("policies", {}).items():
                 self.__policies[name] = (behaviour, None)
 
-        # global user config(s)
-        if not DEBUG['ngd'] and not layer:
-            self.__parseUserConfig("/etc/bobdefault.yaml", True)
-            self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
-                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
-
         # First parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
         for l in config.get("layers", []):
             self.__parseLayer(layer + [l], maxVer)
+
+        # Load plugins and re-create schemas as new keys may have been added
+        self.__loadPlugins(rootDir, layer, config.get("plugins", []))
+        self.__createSchemas()
 
         # project user config(s)
         if layer and not self.getPolicy("relativeIncludes"):
