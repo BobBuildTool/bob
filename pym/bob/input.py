@@ -3262,6 +3262,7 @@ class RecipeSet:
     def __loadPlugin(self, mangledName, fileName, name):
         # dummy load file to hash state
         self.loadBinary(fileName)
+        pluginStat = binStat(fileName)
         try:
             from importlib.machinery import SourceFileLoader
             loader = SourceFileLoader(mangledName, fileName)
@@ -3309,6 +3310,8 @@ class RecipeSet:
         properties = manifest.get('properties', {})
         if not isinstance(properties, dict):
             raise ParseError("Plugin '"+fileName+"': 'properties' has wrong type!")
+        if properties:
+            self.__pluginPropDeps += pluginStat
         for (i,j) in properties.items():
             if not isinstance(i, str):
                 raise ParseError("Plugin '"+fileName+"': property name must be a string!")
@@ -3351,6 +3354,8 @@ class RecipeSet:
         settings = manifest.get('settings', {})
         if not isinstance(settings, dict):
             raise ParseError("Plugin '"+fileName+"': 'settings' has wrong type!")
+        if settings:
+            self.__pluginSettingsDeps += pluginStat
         for (i,j) in settings.items():
             if not isinstance(i, str):
                 raise ParseError("Plugin '"+fileName+"': settings name must be a string!")
@@ -3432,7 +3437,7 @@ class RecipeSet:
         if os.path.exists(path):
             return self.__cache.loadYaml(path, schema, default, preValidate)
         else:
-            return schema.validate(default)
+            return schema[0].validate(default)
 
     def parse(self, envOverrides={}, platform=getPlatformString()):
         if not os.path.isdir("recipes"):
@@ -3444,6 +3449,8 @@ class RecipeSet:
             self.__cache.close()
 
     def __parse(self, envOverrides, platform):
+        self.__pluginPropDeps = b''
+        self.__pluginSettingsDeps = b''
         self.__createSchemas()
 
         # global user config(s)
@@ -3513,7 +3520,7 @@ class RecipeSet:
             if compareVersion(BOB_VERSION, minVer) < 0:
                 raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
 
-        config = self.loadYaml(configYaml, RecipeSet.STATIC_CONFIG_SCHEMA,
+        config = self.loadYaml(configYaml, (RecipeSet.STATIC_CONFIG_SCHEMA, b''),
             preValidate=preValidate)
         minVer = config.get("bobMinimumVersion", "0.1")
         if compareVersion(maxVer, minVer) < 0:
@@ -3708,13 +3715,13 @@ class RecipeSet:
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
                 error="property '"+name+"' has an invalid type")
 
-        self.__classSchema = schema.Schema(classSchemaSpec)
+        self.__classSchema = (schema.Schema(classSchemaSpec), self.__pluginPropDeps)
 
         recipeSchemaSpec = classSchemaSpec.copy()
         recipeSchemaSpec[schema.Optional('multiPackage')] = schema.Schema({
             MULTIPACKAGE_NAME_SCHEMA : recipeSchemaSpec
         })
-        self.__recipeSchema = schema.Schema(recipeSchemaSpec)
+        self.__recipeSchema = (schema.Schema(recipeSchemaSpec), self.__pluginPropDeps)
 
         userConfigSchemaSpec = {
             schema.Optional('include') : schema.Schema([str]),
@@ -3723,7 +3730,7 @@ class RecipeSet:
         for (name, setting) in self.__settings.items():
             userConfigSchemaSpec[schema.Optional(name)] = schema.Schema(setting.validate,
                 error="setting '"+name+"' has an invalid type")
-        self.__userConfigSchema = schema.Schema(userConfigSchemaSpec)
+        self.__userConfigSchema = (schema.Schema(userConfigSchemaSpec), self.__pluginSettingsDeps)
 
 
     def getRecipe(self, packageName):
@@ -3859,7 +3866,7 @@ class YamlCache:
 
     def loadYaml(self, name, yamlSchema, default, preValidate):
         try:
-            bs = binStat(name)
+            bs = binStat(name) + yamlSchema[1]
             if self.__hot:
                 self.__cur.execute("SELECT digest, data FROM yaml WHERE name=? AND stat=?",
                                     (name, bs))
@@ -3879,7 +3886,7 @@ class YamlCache:
             if data is None: data = default
             preValidate(data)
             try:
-                data = yamlSchema.validate(data)
+                data = yamlSchema[0].validate(data)
             except schema.SchemaError as e:
                 raise ParseError("Error while validating {}: {}".format(name, str(e)))
 
