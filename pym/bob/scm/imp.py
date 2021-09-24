@@ -88,13 +88,18 @@ def unpackTree(data, dest):
 
 class ImportScm(Scm):
 
-    SCHEMA = schema.Schema({
+    DEFAULTS = {
+        schema.Optional('dir') : str,
+        schema.Optional('prune') : bool,
+    }
+
+    __SCHEMA = {
         'scm' : 'import',
         'url' : str,
-        schema.Optional('dir') : str,
         schema.Optional('if') : schema.Or(str, IfExpression),
-        schema.Optional('prune') : bool,
-    })
+    }
+
+    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
 
     def __init__(self, spec, overrides=[], pruneDefault=None):
         super().__init__(spec, overrides)

@@ -16,14 +16,19 @@ from xml.etree import ElementTree
 
 class SvnScm(Scm):
 
-    SCHEMA = schema.Schema({
+    DEFAULTS = {
+        schema.Optional('dir') : str,
+        schema.Optional('sslVerify') : bool,
+    };
+
+    __SCHEMA = {
         'scm' : 'svn',
         'url' : str,
-        schema.Optional('dir') : str,
         schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('revision') : schema.Or(int, str),
-        schema.Optional('sslVerify') : bool,
-    })
+    }
+
+    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
 
     def __init__(self, spec, overrides=[]):
         super().__init__(spec, overrides)

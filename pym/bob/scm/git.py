@@ -30,23 +30,28 @@ def dirIsEmpty(p):
 
 class GitScm(Scm):
 
-    SCHEMA = schema.Schema({
+    DEFAULTS = {
+        schema.Optional('branch') : str,
+        schema.Optional('sslVerify') : bool,
+        schema.Optional('singleBranch') : bool,
+        schema.Optional('submodules') : schema.Or(bool, [str]),
+        schema.Optional('recurseSubmodules') : bool,
+        schema.Optional('shallowSubmodules') : bool,
+        schema.Optional('shallow') : schema.Or(int, str),
+        schema.Optional('dir') : str,
+    }
+
+    __SCHEMA = {
         'scm' : 'git',
         'url' : str,
-        schema.Optional('dir') : str,
         schema.Optional('if') : schema.Or(str, IfExpression),
-        schema.Optional('branch') : str,
         schema.Optional('tag') : str,
         schema.Optional('commit') : str,
         schema.Optional('rev') : str,
         schema.Optional(schema.Regex('^remote-.*')) : str,
-        schema.Optional('sslVerify') : bool,
-        schema.Optional('singleBranch') : bool,
-        schema.Optional('shallow') : schema.Or(int, str),
-        schema.Optional('submodules') : schema.Or(bool, [str]),
-        schema.Optional('recurseSubmodules') : bool,
-        schema.Optional('shallowSubmodules') : bool,
-    })
+    }
+
+    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
     REMOTE_PREFIX = "remote-"
 
     def __init__(self, spec, overrides=[], secureSSL=None, stripUser=None):

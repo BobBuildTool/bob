@@ -852,7 +852,7 @@ If the package is built from multiple modules you can give a list of SCMs::
             dir: src/bar
 
 There are three common (string) attributes in all SCM specifications: ``scm``,
-``dir`` and ``if``. Additionally to the string type, the ``if`` property may
+``dir`` (\*) and ``if``. Additionally to the string type, the ``if`` property may
 be given as IfExpression (see :ref:`configuration-principle-booleans`). By
 default the SCMs check out to the root of the workspace. You may specify any
 relative path in ``dir`` to checkout to this directory.
@@ -876,31 +876,31 @@ cvs    CVS repository               | ``cvsroot``: repository location ("``:ext:
                                     | ``module``: module name
                                     | ``rev``: revision, branch, or tag name (optional)
 git    `Git`_ project               | ``url``: URL of remote repository
-                                    | ``branch``: Branch to check out (optional, default: master)
+                                    | ``branch`` (\*): Branch to check out (optional, default: master)
                                     | ``tag``: Checkout this tag (optional, overrides branch attribute)
                                     | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
                                     | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
                                     | ``remote-*``: additional remote repositories (optional, see below)
-                                    | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
-                                    | ``shallow``: Number of commits or cutoff date that should be fetched (optional)
-                                    | ``singleBranch``: Fetch only single branch instead of all (optional)
-                                    | ``submodules``: Whether to clone all / a subset of submodules. (optional)
-                                    | ``recurseSubmodules``: Recusively clone submodules (optional, defaults to false)
-                                    | ``shallowSubmodules``: Clone submodules shallowly (optional, defaults to true)
+                                    | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
+                                    | ``shallow`` (\*): Number of commits or cutoff date that should be fetched (optional)
+                                    | ``singleBranch`` (\*): Fetch only single branch instead of all (optional)
+                                    | ``submodules`` (\*): Whether to clone all / a subset of submodules. (optional)
+                                    | ``recurseSubmodules`` (\*): Recusively clone submodules (optional, defaults to false)
+                                    | ``shallowSubmodules`` (\*): Clone submodules shallowly (optional, defaults to true)
 import Import directory from        | ``url``: Directory path relative to project root.
-       project                      | ``prune``: Delete destination directory before importing files.
+       project                      | ``prune`` (\*): Delete destination directory before importing files.
 svn    `Svn`_ repository            | ``url``: URL of SVN module
                                     | ``revision``: Optional revision number (optional)
-                                    | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
+                                    | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
 url    While not a real SCM it      | ``url``: File that should be downloaded
        allows to download (and      | ``digestSHA1``: Expected SHA1 digest of the file (optional)
        extract) files/archives.     | ``digestSHA256``: Expected SHA256 digest of the file (optional)
                                     | ``digestSHA512``: Expected SHA512 digest of the file (optional)
-                                    | ``extract``: Extract directive (optional, default: auto)
-                                    | ``fileName``: Local file name (optional, default: url file name)
-                                    | ``sslVerify``: Whether to verify the SSL certificate when fetching (optional)
-                                    | ``stripComponents``: Number of leading components stripped from file name
-                                                           (optional, tar files only)
+                                    | ``extract`` (\*): Extract directive (optional, default: auto)
+                                    | ``fileName`` (\*): Local file name (optional, default: url file name)
+                                    | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
+                                    | ``stripComponents`` (\*): Number of leading components stripped from file name
+                                                                (optional, tar files only)
 ====== ============================ =======================================================================================
 
 The following synthetic attributes exist. They are generated internally
@@ -2078,6 +2078,23 @@ the anonymous access to the container can be used like this::
 
 The ``flags: [download]`` makes sure that Bob does not try to upload artifacts
 in case other backends are configured too.
+
+scmDefaults
+~~~~~~~~~~~
+
+Type: Dict of SCM dicts
+
+Default settings for SCMs are applied if the value is not set in the
+recipe. Useable values are marked with `(*)` in (:ref:`configuration-recipes-scm`).
+
+Example::
+
+   scmDefaults:
+      git:
+         branch: "main"
+         singleBranch: True
+      url:
+         extract: False
 
 .. _configuration-config-scmOverrides:
 

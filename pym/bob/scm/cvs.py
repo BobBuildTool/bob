@@ -11,14 +11,19 @@ import subprocess
 
 class CvsScm(Scm):
 
-    SCHEMA = schema.Schema({
+    DEFAULTS = {
+        schema.Optional('dir') : str
+    }
+
+    __SCHEMA = {
         'scm' : 'cvs',
         'cvsroot' : str,
         'module' : str,
-        schema.Optional('dir') : str,
         schema.Optional('if') : str,
         schema.Optional('rev') : str
-    })
+    }
+
+    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
 
     # Checkout using CVS
     # - mandatory parameters: cvsroot, module
