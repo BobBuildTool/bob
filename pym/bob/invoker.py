@@ -95,6 +95,7 @@ class Invoker:
         self.__trace = trace
         self.__sandboxHelperPath = None
         self.__stdioBuffer = io.BytesIO() if redirect else None
+        self.__warnedDuplicates = { '' }
 
         # Redirection is a bit complicated. We have to consider two levels: the
         # optional log file and the console.
@@ -206,17 +207,22 @@ class Invoker:
 
         # Sanity check on Windows that there are no environment variables that
         # differ only in case. The Windows envrionment is used case insensitive
-        # by libc getenv() but the kernel passes the variables as-is.
+        # by libc getenv() but the kernel passes the variables as-is. We warn
+        # only about variables that are defined in the recipe. It's not our
+        # business if the inherited OS environment already has duplicates.
         if isWindows():
-            duplicates = []
-            old = ""
-            for i in sorted(env.keys(), key=str.upper):
-                if i.upper() == old.upper():
-                    duplicates.append((old, i))
-                old = i
-            if duplicates:
-                self.fail("Colliding environment variables:",
-                    ", ".join("{} ~= {}".format(i, j) for i,j in duplicates))
+            duplicates = set()
+            definedEnvVars = set(self.__spec.env.keys())
+            allEnvVars = set(env.keys()) | definedEnvVars
+            for i in definedEnvVars:
+                matchedVars = [ v for v in allEnvVars if v.upper() == i.upper() ]
+                if len(matchedVars) > 1:
+                    duplicates.add(" vs. ".join(sorted(matchedVars)))
+            duplicates = ", ".join(sorted(duplicates))
+            if duplicates not in self.__warnedDuplicates:
+                self.warn("Duplicate environment variables:", duplicates+"!",
+                    "It is unspecified which variant is used by the invoked processes.")
+                self.__warnedDuplicates.add(duplicates)
 
         loop = asyncio.get_event_loop()
         exitFuture = asyncio.Future()
