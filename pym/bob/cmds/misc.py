@@ -6,11 +6,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..input import RecipeSet
-from ..errors import BuildError
+from ..errors import ParseError, BuildError
 from ..utils import processDefines
 import argparse
 import codecs
 import sys
+import os, os.path
 
 try:
     # test if stdout can handle box drawing characters
@@ -268,3 +269,42 @@ def doQueryRecipe(argv, bobRoot):
 
     for fn in package.getRecipe().getSources():
         print(fn)
+
+def doInit(argv, bobRoot):
+    parser = argparse.ArgumentParser(prog="bob init",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""Initialize out-of-source build tree.
+
+Create a Bob build tree in the current directory or at the given BUILD
+directory. The recipes, classes, plugins and all other files are taken from the
+project root directory at PROJECT.
+""")
+    parser.add_argument('project', metavar="PROJECT",
+        help="Project root directory")
+    parser.add_argument('build', nargs='?', metavar="BUILD", default=".",
+        help="Build directory (default: .)")
+
+    args = parser.parse_args(argv)
+
+    recipesDir = os.path.join(args.project, "recipes")
+    if not os.path.isdir(recipesDir):
+        raise ParseError("No recipes directory found in " + recipesDir)
+
+    try:
+        os.makedirs(args.build, exist_ok=True)
+        if os.path.samefile(args.project, args.build):
+            print("The project directory does not need to be initialized.",
+                  file=sys.stderr)
+            return
+    except OSError as e:
+        raise ParseError("Error creating build directory: " + str(e))
+
+    projectLink = os.path.join(args.build, ".bob-project")
+    if os.path.exists(projectLink):
+        raise ParseError("Build tree already initialized!")
+
+    try:
+        with open(projectLink, "w") as f:
+            f.write(os.path.abspath(args.project))
+    except OSError as e:
+        raise ParseError("Cannot create project link: " + str(e))

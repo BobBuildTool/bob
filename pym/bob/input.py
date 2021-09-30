@@ -3457,15 +3457,24 @@ class RecipeSet:
             return schema[0].validate(default)
 
     def parse(self, envOverrides={}, platform=getPlatformString()):
-        if not os.path.isdir("recipes"):
-            raise ParseError("No recipes directory found.")
+        recipesRoot = ""
+        if os.path.isfile(".bob-project"):
+            try:
+                with open(".bob-project") as f:
+                    recipesRoot = f.read()
+            except OSError as e:
+                raise ParseError("Broken project link: " + str(e))
+        recipesDir = os.path.join(recipesRoot, "recipes")
+        if not os.path.isdir(recipesDir):
+            raise ParseError("No recipes directory found in " + recipesDir)
         self.__cache.open()
         try:
-            self.__parse(envOverrides, platform)
+            self.__parse(envOverrides, platform, recipesRoot)
         finally:
             self.__cache.close()
+        self.__projectRoot = recipesRoot or os.getcwd()
 
-    def __parse(self, envOverrides, platform):
+    def __parse(self, envOverrides, platform, recipesRoot=""):
         self.__pluginPropDeps = b''
         self.__pluginSettingsDeps = b''
         self.__createSchemas()
@@ -3477,7 +3486,11 @@ class RecipeSet:
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
 
         # Begin with root layer
-        self.__parseLayer([], "9999")
+        self.__parseLayer([], "9999", recipesRoot)
+
+        # Out-of-tree builds may have a dedicated default.yaml
+        if recipesRoot:
+            self.__parseUserConfig("default.yaml", True)
 
         # config files overrule everything else
         for c in self.__configFiles:
@@ -3520,8 +3533,8 @@ class RecipeSet:
         self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(filteredRoots), self.__properties)
         self.__addRecipe(self.__rootRecipe)
 
-    def __parseLayer(self, layer, maxVer):
-        rootDir = os.path.join("", *(os.path.join("layers", l) for l in layer))
+    def __parseLayer(self, layer, maxVer, recipesRoot):
+        rootDir = os.path.join(recipesRoot, *(os.path.join("layers", l) for l in layer))
         if not os.path.isdir(rootDir or "."):
             raise ParseError("Layer '{}' does not exist!".format("/".join(layer)))
 
@@ -3562,7 +3575,7 @@ class RecipeSet:
         # First parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
         for l in config.get("layers", []):
-            self.__parseLayer(layer + [l], maxVer)
+            self.__parseLayer(layer + [l], maxVer, recipesRoot)
 
         # Load plugins and re-create schemas as new keys may have been added
         self.__loadPlugins(rootDir, layer, config.get("plugins", []))
@@ -3830,6 +3843,15 @@ class RecipeSet:
         except AttributeError:
             self.__sandboxFingerprints = self.getPolicy("sandboxFingerprints")
             return self.__sandboxFingerprints
+
+    def getProjectRoot(self):
+        """Get project root directory.
+
+        The project root is where the recipes, classes and layers are located.
+        In case of out-of-tree builds it will be distinct from the build
+        directory.
+        """
+        return self.__projectRoot
 
 
 class YamlCache:
