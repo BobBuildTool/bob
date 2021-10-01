@@ -1,0 +1,11 @@
+root: true
+
+checkoutSCM:
+  scm: git
+  url: ${URL}
+
+buildScript: |
+  /bin/true
+
+packageScript: |
+  /bin/true

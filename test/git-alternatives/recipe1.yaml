@@ -1,0 +1,14 @@
+root: true
+
+checkoutSCM:
+  scm: git
+  url: ${URL}
+  references:
+     - "<<GIT_REFERENCE>>"
+  dissociate: false
+
+buildScript: |
+  /bin/true
+
+packageScript: |
+  /bin/true

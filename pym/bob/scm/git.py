@@ -39,6 +39,13 @@ class GitScm(Scm):
         schema.Optional('shallowSubmodules') : bool,
         schema.Optional('shallow') : schema.Or(int, str),
         schema.Optional('dir') : str,
+        schema.Optional('references') :
+            schema.Schema([schema.Or(str, {
+                schema.Optional('url') : str,
+                'repo'    : str,
+                schema.Optional('optional') : bool,
+            })]),
+        schema.Optional('dissociate') : bool,
     }
 
     __SCHEMA = {
@@ -96,6 +103,26 @@ class GitScm(Scm):
         self.__recurseSubmodules = spec.get('recurseSubmodules', False)
         self.__shallowSubmodules = spec.get('shallowSubmodules', True)
         self.__stripUser = stripUser
+        self.__references = spec.get('references')
+        self.__dissociate = spec.get('dissociate', False)
+        self.__resolvedReferences = []
+
+        def __resolveReferences(self, alt):
+            # if the reference is a string it's used as optional reference
+            if isinstance(alt, str):
+                return (alt, True)
+            else:
+                try:
+                    sub = re.sub(alt.get('url', '.*'), alt['repo'], self.__url)
+                    if sub == self.__url:
+                        raise ParseError("`url` pattern '" +
+                            alt.get('url','.*') + " did not apply to: " + self.__url)
+                    return (sub, alt.get('optional', True))
+                except re.error:
+                    raise ParseError("Invalid `url` pattern: " + alt.get('url', '.*'))
+        if self.__references is not None:
+            self.__resolvedReferences = [ ref for ref in [__resolveReferences(self, a) for a in
+                self.__references]]
 
     def getProperties(self, isJenkins):
         properties = super().getProperties(isJenkins)
@@ -116,15 +143,34 @@ class GitScm(Scm):
             'submodules' : self.__submodules,
             'recurseSubmodules' : self.__recurseSubmodules,
             'shallowSubmodules' : self.__shallowSubmodules,
+            'references' : self.__references,
+            'dissociate' : self.__dissociate,
         })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
         return properties
 
     async def invoke(self, invoker, switch=False):
+        alternatesFile = invoker.joinPath(self.__dir, ".git/objects/info/alternates")
+
         # make sure the git directory exists
         if not os.path.isdir(invoker.joinPath(self.__dir, ".git")):
             await invoker.checkCommand(["git", "init", self.__dir])
+            # setup local reference repo by writing the alternates file
+            if self.__resolvedReferences:
+                with open(alternatesFile, "w") as a:
+                    for (ref, optional) in self.__resolvedReferences:
+                        refPath=None
+                        if os.path.isdir(os.path.join(ref, ".git", "objects")):
+                            refPath = ref + "/.git/objects\n"
+                        elif os.path.isdir(os.path.join(ref, "objects")):
+                            refPath = ref + "/objects\n"
+                        elif not optional:
+                            raise BuildError("Unable to use reference for '" + self.__url + "'. '" +
+                                ref + "' is not existing'.")
+                        if refPath:
+                            invoker.info("Add git reference: " + refPath)
+                            a.write(refPath)
 
         # Shallow implies singleBranch
         if self.__singleBranch is None:
@@ -180,6 +226,10 @@ class GitScm(Scm):
             await self.__checkoutTag(invoker, fetchCmd, switch)
         else:
             await self.__checkoutBranch(invoker, fetchCmd, switch)
+
+        if os.path.exists(alternatesFile) and self.__dissociate:
+            await invoker.checkCommand(["git", "repack", "-a"], cwd=self.__dir)
+            os.unlink(alternatesFile)
 
     async def __checkoutTag(self, invoker, fetchCmd, switch):
         # checkout only if HEAD is invalid
@@ -249,6 +299,7 @@ class GitScm(Scm):
             args += ["--depth", "1"]
         if self.__recurseSubmodules:
             args += ["--recursive"]
+
         if isinstance(self.__submodules, list):
             args.append("--")
             args.extend(self.__submodules)
