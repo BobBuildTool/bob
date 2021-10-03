@@ -53,6 +53,12 @@ class RecipesTmp:
         with open(os.path.join(path, "config.yaml"), "w") as f:
             f.write(yaml.dump(content))
 
+    def writeDefault(self, content, layer=[]):
+        path = os.path.join("", *(os.path.join("layers", l) for l in layer))
+        if path: os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "default.yaml"), "w") as f:
+            f.write(yaml.dump(content))
+
     def generate(self, sandboxEnabled=False):
         recipes = RecipeSet()
         recipes.parse()
@@ -1390,3 +1396,152 @@ class TestPruneImportScmPolicy(RecipesTmp, TestCase):
 
         pkg = self.generate().walkPackagePath("root")
         self.assertTrue(pkg.getCheckoutStep().getScmList()[0].getProperties(False)["prune"])
+
+
+class TestScmDefaults(RecipesTmp, TestCase):
+    """ Test scmDefault Settings in default.yaml"""
+
+    def testScmDefaultsGit(self):
+        """Test scmDefaults for git scm"""
+        with TemporaryDirectory() as tmp:
+            self.writeRecipe("root", """\
+                root: True
+                checkoutSCM:
+                   scm: git
+                   url: foo@bar
+                buildScript: "true"
+                packageScript: "true"
+                """)
+            pkg = self.generate().walkPackagePath("root")
+            props = pkg.getCheckoutStep().getScmList()[0].getProperties(False)
+            self.assertEqual(props["branch"], "master")
+            self.assertEqual(props["sslVerify"], None)
+            self.assertEqual(props["shallow"], None)
+            self.assertEqual(props["singleBranch"], None)
+            self.assertFalse(props["submodules"])
+            self.assertFalse(props["recurseSubmodules"])
+            self.assertTrue(props["shallowSubmodules"])
+
+            self.writeDefault(
+                { "scmDefaults" : {
+                    "git" : {
+                        "branch" : "main" ,
+                        "sslVerify" : True,
+                        "shallow" : 42,
+                        "singleBranch" : True,
+                        "submodules" : True,
+                        "recurseSubmodules" : True,
+                        "shallowSubmodules" : False,
+                        "dir" : "git",
+                    }
+                }})
+
+            pkg = self.generate().walkPackagePath("root")
+            props = pkg.getCheckoutStep().getScmList()[0].getProperties(False)
+            self.assertEqual(props["branch"], "main")
+            self.assertTrue(props["sslVerify"])
+            self.assertEqual(props["shallow"], 42)
+            self.assertTrue(props["singleBranch"])
+            self.assertTrue(props["submodules"])
+            self.assertTrue(props["recurseSubmodules"])
+            self.assertFalse(props["shallowSubmodules"])
+            self.assertEqual(props["dir"], "git")
+
+            self.writeRecipe("root", """\
+                root: True
+                checkoutSCM:
+                   scm: git
+                   url: foo@bar
+                   branch: "foobar"
+                   shallow: 7
+                   singleBranch: false
+                   submodules: false
+                buildScript: "true"
+                packageScript: "true"
+                """)
+            pkg = self.generate().walkPackagePath("root")
+            props = pkg.getCheckoutStep().getScmList()[0].getProperties(False)
+            self.assertEqual(props["branch"], "foobar")
+            self.assertTrue(props["sslVerify"])
+            self.assertEqual(props["shallow"], 7)
+            self.assertFalse(props["singleBranch"])
+            self.assertFalse(props["submodules"])
+            self.assertTrue(props["recurseSubmodules"])
+            self.assertFalse(props["shallowSubmodules"])
+
+    def testScmDefaultsImport(self):
+        """Test default settings for import scm"""
+        with TemporaryDirectory() as tmp:
+            self.writeRecipe("root", """\
+                root: True
+                checkoutSCM:
+                   scm: import
+                   url: foo@bar
+                buildScript: "true"
+                packageScript: "true"
+                """)
+
+            pkg = self.generate().walkPackagePath("root")
+            self.assertFalse(pkg.getCheckoutStep().getScmList()[0].getProperties(False)["prune"])
+            self.writeDefault({"scmDefaults" :
+                { "import" : { "prune" : True}}})
+
+            pkg = self.generate().walkPackagePath("root")
+            self.assertTrue(pkg.getCheckoutStep().getScmList()[0].getProperties(False)["prune"])
+
+    def testScmDefaultsSvn(self):
+        """Test default settings for svn-scm"""
+        with TemporaryDirectory() as tmp:
+            self.writeRecipe("root", """\
+                root: True
+                checkoutSCM:
+                   scm: svn
+                   url: foo@bar
+                buildScript: "true"
+                packageScript: "true"
+                """)
+
+            pkg = self.generate().walkPackagePath("root")
+            props = pkg.getCheckoutStep().getScmList()[0].getProperties(False)
+            self.assertTrue(props["sslVerify"])
+            self.writeDefault({"scmDefaults" :
+                { "svn" : { "sslVerify" : False}}})
+
+            pkg = self.generate().walkPackagePath("root")
+            props = pkg.getCheckoutStep().getScmList()[0].getProperties(False)
+            self.assertFalse(props["sslVerify"])
+
+    def testScmDefaultsUrl(self):
+        """Test default settings for url scm"""
+        with TemporaryDirectory() as tmp:
+            self.writeRecipe("root", """\
+                root: True
+                checkoutSCM:
+                   scm: url
+                   url: foo@bar/foobar.tgz
+                buildScript: "true"
+                packageScript: "true"
+                """)
+
+            pkg = self.generate().walkPackagePath("root")
+            props = pkg.getCheckoutStep().getScmList()[0].getProperties(False)
+            self.assertTrue(props["sslVerify"])
+            self.assertTrue(props["extract"])
+            self.assertEqual(props["stripComponents"], 0)
+            self.assertTrue( props["fileName"])
+
+            self.writeDefault({"scmDefaults" :
+                { "url" : {
+                    "sslVerify" : False,
+                    "extract" : False,
+                    "fileName" : "downloaded_file",
+                    "stripComponents" : 1,
+                }}})
+
+            pkg = self.generate().walkPackagePath("root")
+            props = pkg.getCheckoutStep().getScmList()[0].getProperties(False)
+            self.assertFalse(props["sslVerify"])
+            self.assertFalse(props["extract"])
+            self.assertEqual(props["stripComponents"], 1)
+            self.assertEqual(props["fileName"], "downloaded_file")
+

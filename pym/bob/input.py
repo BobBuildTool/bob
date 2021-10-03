@@ -389,6 +389,10 @@ def Scm(spec, env, overrides, recipeSet):
         except schema.SchemaError as e:
             raise ParseError("Error validating SCM after applying scmOverrides: {}".format(str(e)))
 
+    # apply scmDefaults
+    for k, v in recipeSet.scmDefaults().get(spec['scm'], {}).items():
+        spec.setdefault(k, v)
+
     # create scm instance
     return getScm(spec, matchedOverrides, recipeSet)
 
@@ -3148,7 +3152,7 @@ class RecipeSet:
         }
         self.__buildHooks = {}
         self.__sandboxOpts = {}
-
+        self.__scmDefaults = {}
         def updateArchive(x): self.__archive = x
 
         if sys.platform == "win32":
@@ -3202,6 +3206,16 @@ class RecipeSet:
                 }),
                 lambda x: updateDicRecursive(self.__sandboxOpts, x),
                 True
+            ),
+            "scmDefaults" : BuiltinSetting(
+                schema.Schema({
+                    schema.Optional('cvs') : schema.Schema(CvsScm.DEFAULTS),
+                    schema.Optional('git') : schema.Schema(GitScm.DEFAULTS),
+                    schema.Optional('import') : schema.Schema(ImportScm.DEFAULTS),
+                    schema.Optional('svn') : schema.Schema(SvnScm.DEFAULTS),
+                    schema.Optional('url') : schema.Schema(UrlScm.DEFAULTS)
+                }),
+                lambda x: updateDicRecursive(self.__scmDefaults, x)
             ),
             "scmOverrides" : BuiltinSetting(
                 schema.Schema([{
@@ -3395,6 +3409,9 @@ class RecipeSet:
 
     def defaultEnv(self):
         return self.__defaultEnv
+
+    def scmDefaults(self):
+        return self.__scmDefaults
 
     def scmOverrides(self):
         return self.__scmOverrides

@@ -115,7 +115,14 @@ def parseUrl(url):
 
 class UrlScm(Scm):
 
-    SCHEMA = schema.Schema({
+    DEFAULTS = {
+        schema.Optional('extract') : schema.Or(bool, str),
+        schema.Optional('fileName') : str,
+        schema.Optional('stripComponents') : int,
+        schema.Optional('sslVerify') : bool,
+    }
+
+    __SCHEMA = {
         'scm' : 'url',
         'url' : str,
         schema.Optional('dir') : str,
@@ -123,11 +130,9 @@ class UrlScm(Scm):
         schema.Optional('digestSHA1') : str,
         schema.Optional('digestSHA256') : str,
         schema.Optional('digestSHA512') : str,
-        schema.Optional('extract') : schema.Or(bool, str),
-        schema.Optional('fileName') : str,
-        schema.Optional('stripComponents') : int,
-        schema.Optional('sslVerify') : bool,
-    })
+    }
+
+    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
 
     EXTENSIONS = [
         (".tar.gz",    "tar"),
