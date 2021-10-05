@@ -1,0 +1,10 @@
+depends:
+    - prog
+
+buildScript: |
+    true
+packageScript: |
+    true
+
+provideSandbox:
+    paths: []
