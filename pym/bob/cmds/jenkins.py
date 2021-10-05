@@ -1328,13 +1328,13 @@ def genJenkinsJobs(recipes, jenkins):
     return jobs
 
 def genJenkinsBuildOrder(jobs):
-    def visit(j, pending, processing, order):
+    def visit(j, pending, processing, order, stack):
         if j in processing:
-            raise ParseError("Jobs are cyclic")
+            raise ParseError("Jobs are cyclic: " + " -> ".join(stack))
         if j in pending:
             processing.add(j)
             for d in jobs[j].getDependentJobs():
-                visit(d, pending, processing, order)
+                visit(d, pending, processing, order, stack + [d])
             pending.remove(j)
             processing.remove(j)
             order.append(j)
@@ -1345,7 +1345,7 @@ def genJenkinsBuildOrder(jobs):
     while pending:
         j = pending.pop()
         pending.add(j)
-        visit(j, pending, processing, order)
+        visit(j, pending, processing, order, [j])
 
     return order
 
