@@ -181,6 +181,23 @@ def verifyAuditMeta(meta):
     valid = re.compile(r"[0-9A-Za-z._-]+")
     return all(valid.fullmatch(k) for k in meta.keys())
 
+def getJenkinsVariantId(step):
+    """Get the variant-id of a step with it's sandbox dependency.
+
+    Even though the sandbox is considered an invariant of the build
+    (sandboxInvariant policy) it still needs to be respected when building the
+    packages. Because the Jenkins logic cannot rely on lazy evaluation like the
+    local builds we need to regard the sandbox as real dependency.
+
+    This is only relevant when calculating the job graph. The actual build
+    result still uses the original variant- and build-id.
+    """
+    vid = step.getVariantId()
+    sandbox = step.getSandbox()
+    if sandbox:
+        vid += sandbox.getStep().getVariantId()
+    return vid
+
 class JenkinsJob:
     def __init__(self, name, displayName, nameCalculator, recipe, archiveBackend):
         self.__name = name
@@ -242,7 +259,7 @@ class JenkinsJob:
         return "\n".join(description)
 
     def addStep(self, step):
-        vid = step.getVariantId()
+        vid = getJenkinsVariantId(step)
         if step.isCheckoutStep():
             self.__checkoutSteps.setdefault(vid, step)
         elif step.isBuildStep():
@@ -262,7 +279,7 @@ class JenkinsJob:
             # add dependencies unless they are built by this job or invalid
             for dep in step.getAllDepSteps(True):
                 if not dep.isValid(): continue
-                vid = dep.getVariantId()
+                vid = getJenkinsVariantId(dep)
                 if vid in self.__steps: continue
                 self.__deps.setdefault(vid, dep)
 
@@ -1108,7 +1125,7 @@ class JobNameCalculator:
         # Helper function that recursively adds the packages to the graph.
         # Recursion stops at already known packages.
         def addStep(step, parentJob):
-            sbxVariantId = step._getSandboxVariantId()
+            sbxVariantId = getJenkinsVariantId(step)
             job = vidToJob.get(sbxVariantId)
             if job is None:
                 if step.isPackageStep():
@@ -1207,9 +1224,9 @@ class JobNameCalculator:
 
     def getJobDisplayName(self, step):
         if step.isPackageStep():
-            vid = step._getSandboxVariantId()
+            vid = getJenkinsVariantId(step)
         else:
-            vid = step.getPackage().getPackageStep()._getSandboxVariantId()
+            vid = getJenkinsVariantId(step.getPackage().getPackageStep())
         return self.__prefix + self.__packageName[vid]
 
     def getJobInternalName(self, step):
@@ -1220,11 +1237,11 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, al
                     shortdescription):
 
     if step.isPackageStep() and shortdescription:
-        if step.getVariantId() in allVariantIds:
+        if getJenkinsVariantId(step) in allVariantIds:
             name = nameCalculator.getJobInternalName(step)
             return jobs[name]
         else:
-            allVariantIds.add(step.getVariantId())
+            allVariantIds.add(getJenkinsVariantId(step))
 
     name = nameCalculator.getJobInternalName(step)
     if name in jobs:
@@ -1272,14 +1289,8 @@ def jenkinsNameFormatter(step, props):
 def jenkinsNamePersister(jenkins, wrapFmt, uuid):
 
     def persist(step, props):
-        vid = step.getVariantId()
-        # Make sure that build steps of sandboxed and non-sandboxed builds are
-        # not mixed. Does not apply to other steps because checkout steps must
-        # be self contained and package steps are always built clean.
-        if step.isBuildStep():
-            vid += b'\x00' if step.getSandbox() is None else b'\x01'
         ret = BobState().getJenkinsByNameDirectory(
-            jenkins, wrapFmt(step, props), vid)
+            jenkins, wrapFmt(step, props), getJenkinsVariantId(step))
         if uuid: ret = ret + "-" + uuid
         return ret
 
