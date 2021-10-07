@@ -2388,15 +2388,21 @@ class Recipe(object):
         return self.__root == True
 
     def isRelocatable(self):
-        """Returns True if the packages of this recipe are relocatable."""
+        """Returns True if the packages of this recipe are relocatable.
+
+        :meta private:
+        """
         return self.__relocatable
 
     def isShared(self):
         return self.__shared
 
     def jobServer(self):
-        """Returns True if the jobserver should be used to schedule
-        builds for this recipe."""
+        """Returns True if the jobserver should be used to schedule builds for
+        this recipe.
+
+        :meta private:
+        """
         return self.__jobServer
 
     def prepare(self, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,

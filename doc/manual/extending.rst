@@ -57,7 +57,7 @@ internal and might change without notice.
    :members:
 
 .. autoclass:: bob.input.Recipe()
-   :members: getName, getPackageName, isRoot
+   :members:
 
 .. autoclass:: bob.input.Package()
    :members:
