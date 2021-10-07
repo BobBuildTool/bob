@@ -104,3 +104,9 @@ skip()
 {
 	exit 240
 }
+
+die()
+{
+	echo "$@"
+	exit 1
+}
