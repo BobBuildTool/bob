@@ -2214,6 +2214,15 @@ class Recipe(object):
         return ret
 
     def getLayer(self):
+        """Get layer to which this recipe belongs.
+
+        Returns a list of the layer hierarchy. The root layer is represented
+        by an empty list. If the recipe belongs to a nested layer the layers
+        are named from top to bottom. Example:
+        ``layers/foo/layers/bar/recipes/baz.yaml`` -> ``['foo', 'bar']``.
+
+        :rtype: List[str]
+        """
         return self.__layer
 
     def resolveClasses(self, rootEnv):
@@ -2359,6 +2368,7 @@ class Recipe(object):
             self.__root = rootEnv.evaluate(self.__root, "root")
 
     def getRecipeSet(self):
+        """Get the :class:`RecipeSet` to which the recipe belongs"""
         return self.__recipeSet
 
     def getSources(self):
@@ -2978,6 +2988,10 @@ class MountValidator:
         raise schema.SchemaError(None, "Mount entry must be a string or a two/three items list!")
 
 class RecipeSet:
+    """The RecipeSet corresponds to the project root directory.
+
+    It holds global information about the project.
+    """
 
     BUILD_DEV_SCHEMA = schema.Schema(
         {
@@ -3408,12 +3422,20 @@ class RecipeSet:
         return self.__projectGenerators
 
     def envWhiteList(self):
+        """The set of all white listed environment variables
+
+        :rtype: Set[str]
+        """
         return set(self.__whiteList)
 
     def archiveSpec(self):
         return self.__archive
 
     def defaultEnv(self):
+        """The default environment that each root recipe inherits
+
+        :rtype: Mapping[str, str]
+        """
         return self.__defaultEnv
 
     def scmDefaults(self):
