@@ -11,6 +11,7 @@ Contents:
    bob-clean
    bob-dev
    bob-graph
+   bob-init
    bob-jenkins
    bob-ls
    bobpaths
