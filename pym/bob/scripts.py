@@ -44,6 +44,11 @@ def __help(*args, **kwargs):
     doHelp(availableCommands.keys(), *args, **kwargs)
     return 0
 
+def __init(*args, **kwargs):
+    from .cmds.misc import doInit
+    doInit(*args, **kwargs)
+    return 0
+
 def __jenkins(*args, **kwargs):
      from .cmds.jenkins import doJenkins
      doJenkins(*args, **kwargs)
@@ -110,6 +115,7 @@ availableCommands = {
     "clean"         : ('hl', __clean, "Delete unused src/build/dist paths of release builds"),
     "graph"         : ('hl', __graph, "Make a interactive dependency graph"),
     "help"          : ('hl', __help, "Display help information about command"),
+    "init"          : ('hl', __init, "Initialize build tree"),
     "jenkins"       : ('hl', __jenkins, "Configure Jenkins server"),
     "ls"            : ('hl', __ls, "List package hierarchy"),
     "project"       : ('hl', __project, "Create project files"),

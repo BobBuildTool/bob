@@ -169,6 +169,20 @@ and test the whole QEMU image. The choice is yours.
    before moving on. Otherwise you risk that your changes are wiped out if Bob
    determines that a clean build is needed (e.g. due to recipe changes).
 
+Out of tree builds
+==================
+
+The :ref:`manpage-dev` and :ref:`manpage-build` commands do not need to be
+executed in the project directory directly. It is also possible to initialize
+an external build directory with :ref:`manpage-bob-init`::
+
+    $ bob init . /path/to/build/directory
+    $ cd /path/to/build/directory
+    $ bob dev vexpress
+
+Each build directory can have its own :ref:`configuration-config-usr` that
+overrides the defaults of the project.
+
 Query SCM status
 ================
 

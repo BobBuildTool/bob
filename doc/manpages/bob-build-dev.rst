@@ -1,3 +1,12 @@
+Build tree location
+-------------------
+
+The build can be done directly in the project root directory or in a separate
+directory. To build outside of the project directory the build-tree must first
+be initialized with :ref:`bob init <manpage-bob-init>`. Any number of build
+trees may refer to the same project. Inside the external build-tree there may
+be a dedicated ``default.yaml``, overriding settings from the project.
+
 Options
 -------
 
@@ -255,3 +264,4 @@ See also
 --------
 
 :ref:`bobpaths(7) <manpage-bobpaths>` :ref:`bob-status(1) <manpage-bob-status>`
+:ref:`bob-init(1) <manpage-bob-init>`

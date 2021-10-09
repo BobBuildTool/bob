@@ -14,7 +14,7 @@ for cmd, (hl, func, help) in sorted(availableCommands.items()):
 echo "$cmds"
 for c in $cmds; do
 	case "$c" in
-		archive | jenkins | help | _*)
+		archive | init | jenkins | help | _*)
 			;;
 		clean)
 			run_bob $c -DBAR=1 -c testconfig

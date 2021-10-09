@@ -29,8 +29,8 @@ __bob_complete_dir()
                  compgen -d -P "$2" -S / -- "$1" ) )
 }
 
-__bob_commands="build dev clean graph help jenkins ls project status  query-scm \
-                query-recipe query-path query-meta show"
+__bob_commands="build dev clean graph help init jenkins ls project status \
+                query-scm query-recipe query-path query-meta show"
 
 # Complete a Bob path
 #
@@ -160,6 +160,18 @@ __bob_help()
 __bob_ls()
 {
    __bob_complete_path "-a --all -c -D -d --direct --no-sandbox -o --origin -p --prefixed -r --recursive --sandbox -u --unsorted"
+}
+
+__bob_init()
+{
+   case "$cur" in
+      -*)
+         __bob_complete_words "-h --help"
+         ;;
+      *)
+         __bob_complete_dir "$cur"
+         ;;
+   esac
 }
 
 __bob_jenkins_add()

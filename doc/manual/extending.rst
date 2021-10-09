@@ -56,8 +56,11 @@ internal and might change without notice.
 .. autoclass:: bob.input.PluginState()
    :members:
 
+.. autoclass:: bob.input.RecipeSet()
+   :members:
+
 .. autoclass:: bob.input.Recipe()
-   :members: getName, getPackageName, isRoot
+   :members:
 
 .. autoclass:: bob.input.Package()
    :members:
