@@ -7,10 +7,20 @@
 
 git_dir1=$(mktemp -d)
 git_dir2=$(mktemp -d)
-trap 'rm -rf "$git_dir1" "$git_dir2"' EXIT
+git_submod=$(mktemp -d)
+trap 'rm -rf "$git_dir1" "$git_dir2" "$git_submod"' EXIT
 cleanup
 
 # Prepare git repositories
+
+pushd "$git_submod"
+git init .
+git config user.email "bob@bob.bob"
+git config user.name test
+echo sub > sub.txt
+git add sub.txt
+git commit -m import
+popd
 
 pushd "$git_dir1"
 git init .
@@ -18,6 +28,7 @@ git config user.email "bob@bob.bob"
 git config user.name test
 echo "hello world" > test.txt
 git add test.txt
+git submodule add "$git_submod" submod
 git commit -m "first commit"
 git tag -a -m "First Tag" tag1
 git checkout -b foobar
@@ -54,9 +65,20 @@ run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="refs/heads/master" root
 expect_output "hello world" cat dev/src/root/1/workspace/test.txt
 expect_exist dev/src/root/1/workspace/canary.txt
 
+# Enabling submodules on branch is ok
+run_bob dev -c submodules -DSCM_DIR="$git_dir1" -DSCM_REV="refs/heads/master" root
+expect_exist dev/src/root/1/workspace/canary.txt
+expect_exist dev/src/root/1/workspace/submod/sub.txt
+
+# But disabling submodules on branch must trigger an attic move
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="refs/heads/master" root
+expect_not_exist dev/src/root/1/workspace/canary.txt
+expect_not_exist dev/src/root/1/workspace/submod/sub.txt
+
 # Change repository but keep branch. This must move the dir into the attic
 # because they do not share a common history and the branch cannot be
 # forwarded.
+echo canary > dev/src/root/1/workspace/canary.txt
 run_bob dev -DSCM_DIR="$git_dir2" -DSCM_REV="refs/heads/master" root -j
 expect_not_exist dev/src/root/1/workspace/test.txt
 expect_output "hello bob" cat dev/src/root/1/workspace/bob.txt
@@ -71,13 +93,15 @@ expect_output "changed" cat dev/src/root/1/workspace/test.txt
 expect_not_exist dev/src/root/1/workspace/bob.txt
 expect_exist dev/src/root/1/workspace/canary.txt
 
-# Enabling submodules is ok
+# Enabling submodules on tags is ok
 run_bob dev -c submodules -DSCM_DIR="$git_dir1" -DSCM_REV="refs/tags/tag2" root
 expect_exist dev/src/root/1/workspace/canary.txt
+expect_exist dev/src/root/1/workspace/submod/sub.txt
 
-# But disabling submodules must trigger an attic move
+# But disabling submodules on tags must trigger an attic move
 run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="refs/tags/tag2" root
 expect_not_exist dev/src/root/1/workspace/canary.txt
+expect_not_exist dev/src/root/1/workspace/submod/sub.txt
 
 # Trying to trigger an inline upgrade for dirty data will fail and move to attic.
 echo canary > dev/src/root/1/workspace/canary.txt
