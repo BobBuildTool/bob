@@ -219,18 +219,20 @@ class GitScm(Scm):
         elif switch:
             # We're switching the ref. There we will actively change the branch which
             # is normally forbidden.
-            assert not self.__submodules
             if await invoker.callCommand(["git", "show-ref", "-q", "--verify",
                                           "refs/heads/" + self.__branch]):
                 # Branch does not exist. Create and checkout.
                 await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules",
                     "-b", self.__branch, "remotes/origin/"+self.__branch], cwd=self.__dir)
+                await self.__checkoutSubmodules(invoker)
             else:
                 # Branch exists already. Checkout and fast forward...
                 await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules",
                     self.__branch], cwd=self.__dir)
+                preUpdate = await self.__updateSubmodulesPre(invoker)
                 await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "merge",
                     "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
+                await self.__updateSubmodulesPost(invoker, preUpdate)
         elif (await invoker.checkOutputCommand(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.__dir)) == self.__branch:
             # pull only if on original branch
             preUpdate = await self.__updateSubmodulesPre(invoker)
