@@ -87,6 +87,16 @@ GEN_HTML=0
 RUN_JOBS=
 unset RUN_UNITTEST_PAT
 unset RUN_BLACKBOX_PAT
+export PYTHONDEVMODE=1
+export PYTHONASYNCIODEBUG=1
+export PYTHONWARNINGS=error
+if [[ $(python3 --version) = "Python 3.9.7" ]] ; then
+	# Stupid workaround for https://bugs.python.org/issue45097
+	# Just ignore all deprecation warnings. To add insult to injury we
+	# can't just ignore anything caused by asyncio because the full pacakge
+	# name must be given in PYTHONWARNINGS.
+	PYTHONWARNINGS+=",ignore::DeprecationWarning"
+fi
 
 # check if python coverage is installed
 if type -fp coverage3 >/dev/null; then
