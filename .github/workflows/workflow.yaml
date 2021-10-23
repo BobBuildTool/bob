@@ -22,14 +22,14 @@ jobs:
             - name: Install dependencies
               run: |
                 python -m pip install --upgrade pip
-                pip install PyYAML codecov schema python-magic pyparsing sphinx wheel
+                pip install PyYAML coverage schema python-magic pyparsing sphinx wheel
                 sudo apt-get update
                 sudo apt-get install cvs
 
             - name: Run unit tests
               run: |
                 git config --global init.defaultBranch master # keep the old name
-                eatmydata ./test/run-tests.sh
+                eatmydata ./test/run-tests.sh -c xml
 
             - name: Build Python package
               run: |
@@ -38,7 +38,7 @@ jobs:
             - name: Upload coverage to Codecov
               # Coverage is not complete on Python <3.7 (see pym/bob/utils.py)
               if: matrix.python-version != '3.6'
-              uses: codecov/codecov-action@v1
+              uses: codecov/codecov-action@v2
 
             - name: Publish package
               if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
