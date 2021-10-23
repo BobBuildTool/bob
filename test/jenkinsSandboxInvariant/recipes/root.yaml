@@ -1,0 +1,12 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+      forward: True
+    - prog
+
+buildScript: |
+    true
+packageScript: |
+    true
