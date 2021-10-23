@@ -139,7 +139,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
     startTime = time.time()
 
-    with EventLoopWrapper() as loop:
+    with EventLoopWrapper() as (loop, executor):
         recipes = RecipeSet()
         recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
         recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
@@ -223,6 +223,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                                args.preserve_env, envWhiteList, bobRoot, args.clean,
                                args.no_logfiles)
 
+        builder.setExecutor(executor)
         builder.setArchiveHandler(getArchiver(recipes))
         builder.setUploadMode(args.upload)
         builder.setDownloadMode(args.download)

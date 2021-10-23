@@ -305,9 +305,8 @@ class UrlScm(Scm):
                     shutil.copy(url.path, destination)
             elif url.scheme in ["http", "https", "ftp"]:
                 invoker.trace("<wget>", self.__url, ">", workspaceFile)
-                loop = asyncio.get_event_loop()
                 try:
-                    err = await loop.run_in_executor(None, UrlScm._download, self, destination)
+                    err = await invoker.runInExecutor(UrlScm._download, self, destination)
                     if err:
                         invoker.fail(err)
                 except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):

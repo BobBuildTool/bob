@@ -45,18 +45,21 @@ def doInvoke(argv, bobRoot):
         raise BuildError("Error reading spec: " + str(e))
 
     # Let's do it...
-    with EventLoopWrapper() as loop:
+    with EventLoopWrapper() as (loop, executor):
         if args.mode == 'shell':
-            invoker = Invoker(spec, args.preserve_env, True, True, True, False, False)
+            invoker = Invoker(spec, args.preserve_env, True, True, True, False,
+                              False, executor=executor)
             ret = loop.run_until_complete(invoker.executeStep(InvocationMode.SHELL,
                 args.clean, args.keep_sandbox))
         elif args.mode == 'run':
             invoker = Invoker(spec, args.preserve_env, args.no_logfiles,
-                verbosity >= 2, verbosity >= 1, verbosity >= 3, False)
+                verbosity >= 2, verbosity >= 1, verbosity >= 3, False,
+                executor=executor)
             ret = loop.run_until_complete(invoker.executeStep(InvocationMode.CALL,
                 args.clean, args.keep_sandbox))
         elif args.mode == 'fingerprint':
-            invoker = Invoker(spec, args.preserve_env, True, True, True, verbosity >= 3, False)
+            invoker = Invoker(spec, args.preserve_env, True, True, True,
+                              verbosity >= 3, False, executor=executor)
             (ret, stdout, stderr) = loop.run_until_complete(invoker.executeFingerprint(args.keep_sandbox))
             if ret == 0:
                 sys.stdout.buffer.write(stdout)

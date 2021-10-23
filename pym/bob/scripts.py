@@ -313,7 +313,7 @@ def auditEngine():
     parser.add_argument("resultHash")
     args = parser.parse_args()
 
-    def cmd(loop):
+    def cmd(loop, executor):
         from .audit import Audit
         import json
         import os
@@ -345,8 +345,8 @@ def auditEngine():
 
         return 0
 
-    with EventLoopWrapper() as loop:
-        return catchErrors(cmd, loop)
+    with EventLoopWrapper() as (loop, executor):
+        return catchErrors(cmd, loop, executor)
 
 def __process(l, inFile, stateDir):
     if l.startswith("="):
