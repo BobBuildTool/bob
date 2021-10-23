@@ -28,7 +28,10 @@ import schema
 import sqlite3
 import struct
 import sys
-import yaml
+try:
+    from yaml import load as yamlLoad, CSafeLoader as YamlSafeLoader
+except ImportError:
+    from yaml import load as yamlLoad, SafeLoader as YamlSafeLoader
 
 warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 warnDepends = WarnOnce("The same package is named multiple times as dependency!",
@@ -3887,7 +3890,7 @@ class YamlCache:
         expr = loader.construct_scalar(node)
         return IfExpression(expr)
 
-    yaml.SafeLoader.add_constructor(u'!expr', __if_expression_constructor)
+    YamlSafeLoader.add_constructor(u'!expr', __if_expression_constructor)
 
     def open(self):
         try:
@@ -3945,7 +3948,7 @@ class YamlCache:
             with open(name, "r", encoding='utf8') as f:
                 try:
                     rawData = f.read()
-                    data = yaml.safe_load(rawData)
+                    data = yamlLoad(rawData, Loader=YamlSafeLoader)
                     digest = hashlib.sha1(rawData.encode('utf8')).digest()
                 except Exception as e:
                     raise ParseError("Error while parsing {}: {}".format(name, str(e)))
