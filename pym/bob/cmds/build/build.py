@@ -39,7 +39,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             return arg
         raise argparse.ArgumentTypeError("{} invalid.".format(arg))
     def _downloadLayerArgument(arg):
-        if re.match('^(yes|no|forced)=\S+$', arg):
+        if re.match(r'^(yes|no|forced)=\S+$', arg):
             return arg
         raise argparse.ArgumentTypeError("{} invalid.".format(arg))
 
