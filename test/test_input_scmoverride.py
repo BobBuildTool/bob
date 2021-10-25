@@ -206,4 +206,4 @@ class TestScmOverride(TestCase):
         }
 
         o = ScmOverride(spec)
-        self.assertEqual(spec, yaml.load(str(o)))
+        self.assertEqual(spec, yaml.load(str(o), Loader=yaml.Loader))

@@ -307,6 +307,10 @@ cd {ROOT}
         self.__share = NullShare()
         self.__useSharedPackages = False
         self.__installSharedPackages = False
+        self.__executor = None
+
+    def setExecutor(self, executor):
+        self.__executor = executor
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
@@ -622,7 +626,8 @@ cd {ROOT}
 
         invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
             self.__verbose >= INFO, self.__verbose >= NORMAL,
-            self.__verbose >= DEBUG, self.__bufferedStdIO)
+            self.__verbose >= DEBUG, self.__bufferedStdIO,
+            executor=self.__executor)
         if step.jobServer() and self.__jobServer:
             invoker.setMakeParameters(self.__jobServer.getMakeFd(), self.__jobs)
         ret = await invoker.executeStep(InvocationMode.CALL, cleanWorkspace)
@@ -643,7 +648,8 @@ cd {ROOT}
         spec = StepSpec.fromStep(step, logFile=logFile)
         invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
             self.__verbose >= INFO, self.__verbose >= NORMAL,
-            self.__verbose >= DEBUG, self.__bufferedStdIO)
+            self.__verbose >= DEBUG, self.__bufferedStdIO,
+            executor=self.__executor)
         ret = await invoker.executeLocalSCMs()
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):
@@ -1081,7 +1087,8 @@ cd {ROOT}
         if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
             liveBId = checkoutStep.calcLiveBuildId()
             if liveBId is not None:
-                await self.__archive.uploadLocalLiveBuildId(checkoutStep, liveBId, checkoutHash)
+                await self.__archive.uploadLocalLiveBuildId(checkoutStep, liveBId, checkoutHash,
+                    executor=self.__executor)
 
         # We're done. The sanity check below won't change the result but would
         # trigger this step again.
@@ -1333,7 +1340,7 @@ cd {ROOT}
         if BobState().getResultHash(prettyPackagePath) is None:
             audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
             wasDownloaded = await self.__archive.downloadPackage(packageStep,
-                packageBuildId, audit, prettyPackagePath)
+                packageBuildId, audit, prettyPackagePath, executor=self.__executor)
             if wasDownloaded:
                 self.__statistic.packagesDownloaded += 1
                 BobState().setInputHashes(prettyPackagePath,
@@ -1400,7 +1407,7 @@ cd {ROOT}
             audit = await self._generateAudit(packageStep, depth, packageHash)
             if mayUpOrDownload and self.__archive.canUploadLocal():
                 await self.__archive.uploadPackage(packageStep, packageBuildId,
-                    audit, prettyPackagePath)
+                    audit, prettyPackagePath, executor=self.__executor)
 
         # Rehash directory if content was changed
         if workspaceChanged:
@@ -1499,7 +1506,7 @@ cd {ROOT}
         if bid is not None:
             return bid
 
-        bid = await self.__archive.downloadLocalLiveBuildId(step, liveBId)
+        bid = await self.__archive.downloadLocalLiveBuildId(step, liveBId, executor=self.__executor)
         if bid is not None:
             BobState().setBuildId(key, bid)
 
@@ -1727,7 +1734,8 @@ cd {ROOT}
         async with self.__runners:
             # If this is built in a sandbox then the artifact cache may help...
             if sandbox:
-                fingerprint = await self.__archive.downloadLocalFingerprint(sandbox, key)
+                fingerprint = await self.__archive.downloadLocalFingerprint(sandbox, key,
+                    executor=self.__executor)
             else:
                 fingerprint = None
 
@@ -1743,7 +1751,8 @@ cd {ROOT}
                 # only be run once so we don't need to worry here about duplicate
                 # uploads.
                 if sandbox:
-                    await self.__archive.uploadLocalFingerprint(sandbox, key, fingerprint)
+                    await self.__archive.uploadLocalFingerprint(sandbox, key, fingerprint,
+                        executor=self.__executor)
 
             # Cache result so that we don't ever need to spawn a task
             self.__fingerprints[key] = fingerprint
@@ -1757,7 +1766,8 @@ cd {ROOT}
 
     async def __runFingerprintScript(self, step, logger):
         spec = StepSpec.fromStep(step, None, self.__envWhiteList)
-        invoker = Invoker(spec, self.__preserveEnv, True, True, True, False, True)
+        invoker = Invoker(spec, self.__preserveEnv, True, True, True, False, True,
+                          executor=self.__executor)
         (ret, stdout, stderr) = await invoker.executeFingerprint()
 
         if ret == -int(signal.SIGINT):
@@ -1780,7 +1790,8 @@ cd {ROOT}
         spec = StepSpec.fromStep(step, None, self.__envWhiteList, logFile)
         invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
             self.__verbose >= INFO, self.__verbose >= NORMAL,
-            self.__verbose >= DEBUG, self.__bufferedStdIO)
+            self.__verbose >= DEBUG, self.__bufferedStdIO,
+            executor=self.__executor)
 
         class Abort(Exception):
             pass

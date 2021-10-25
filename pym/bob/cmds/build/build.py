@@ -39,7 +39,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             return arg
         raise argparse.ArgumentTypeError("{} invalid.".format(arg))
     def _downloadLayerArgument(arg):
-        if re.match('^(yes|no|forced)=\S+$', arg):
+        if re.match(r'^(yes|no|forced)=\S+$', arg):
             return arg
         raise argparse.ArgumentTypeError("{} invalid.".format(arg))
 
@@ -139,7 +139,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
     startTime = time.time()
 
-    with EventLoopWrapper() as loop:
+    with EventLoopWrapper() as (loop, executor):
         recipes = RecipeSet()
         recipes.defineHook('releaseNameFormatter', LocalBuilder.releaseNameFormatter)
         recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
@@ -223,6 +223,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                                args.preserve_env, envWhiteList, bobRoot, args.clean,
                                args.no_logfiles)
 
+        builder.setExecutor(executor)
         builder.setArchiveHandler(getArchiver(recipes))
         builder.setUploadMode(args.upload)
         builder.setDownloadMode(args.download)

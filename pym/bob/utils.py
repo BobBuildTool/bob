@@ -684,13 +684,12 @@ class EventLoopWrapper:
             # fork early before process gets big
             executor.submit(dummy).result()
             signal.signal(signal.SIGINT, origSigInt)
-        loop.set_default_executor(executor)
 
         self.__loop = loop
         self.__executor = executor
 
     def __enter__(self):
-        return self.__loop
+        return (self.__loop, self.__executor)
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.__executor.shutdown()

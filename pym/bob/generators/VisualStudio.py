@@ -42,7 +42,7 @@ SOLUTION_PROJECT_TEMPLATE = """\
 Project("{{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}}") = "{NAME}", "{NAME}\\{NAME}.vcxproj", "{{{GUID}}}"
 EndProject"""
 
-PROJECT_TEMPLATE = """\
+PROJECT_TEMPLATE = r"""\
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">

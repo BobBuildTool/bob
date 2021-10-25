@@ -10,9 +10,8 @@ usage: ${0##*/} [-h] [-b PATTERN] [-c] [-j JOBS] [-n] [-u PATTERN]
 optional arguments:
   -h              show this help message and exit
   -b PATTERN      Only execute black box tests matching PATTERN
-  -c              Create HTML coverage report
+  -c TYPE         Create coverage report (html, xml)
   -j JOBS         Run JOBS tests in parallel (requires GNU parallel)
-  -n              Do not record coverage even if python3-coverage is found.
   -u PATTERN      Only execute unit tests matching PATTERN
 EOF
 }
@@ -83,36 +82,22 @@ cd "${0%/*}/.."
 COVERAGE=
 FAILED=0
 RUN_TEST_DIRS=( )
-GEN_HTML=0
 RUN_JOBS=
 unset RUN_UNITTEST_PAT
 unset RUN_BLACKBOX_PAT
-
-# check if python coverage is installed
-if type -fp coverage3 >/dev/null; then
-   COVERAGE=coverage3
-elif type -fp python3-coverage >/dev/null; then
-   COVERAGE=python3-coverage
-fi
-
-if [[ -n $COVERAGE ]] ; then
-    # make sure coverage is installed in the current environment
-    if python3 -c "import coverage" 2>/dev/null; then
-        RUN_PYTHON3="$COVERAGE run --source $PWD/pym  --parallel-mode"
-	# The multiprocessing module is incompatible with coverage.py. Enable
-	# the hack in pym/bob/utils.py to still get some data.
-	export ENABLE_COVERAGE_HACK=1
-    else
-        RUN_PYTHON3=python3
-        COVERAGE=
-        echo "coverage3 is installed but not in the current environment" >&2
-    fi
-else
-	RUN_PYTHON3=python3
+export PYTHONDEVMODE=1
+export PYTHONASYNCIODEBUG=1
+export PYTHONWARNINGS=error
+if [[ $(python3 --version) = "Python 3.9.7" ]] ; then
+	# Stupid workaround for https://bugs.python.org/issue45097
+	# Just ignore all deprecation warnings. To add insult to injury we
+	# can't just ignore anything caused by asyncio because the full pacakge
+	# name must be given in PYTHONWARNINGS.
+	PYTHONWARNINGS+=",ignore::DeprecationWarning"
 fi
 
 # option processing
-while getopts ":hb:cj:nu:" opt; do
+while getopts ":hb:c:j:u:" opt; do
 	case $opt in
 		h)
 			usage
@@ -122,7 +107,15 @@ while getopts ":hb:cj:nu:" opt; do
 			RUN_BLACKBOX_PAT="$OPTARG"
 			;;
 		c)
-			GEN_HTML=1
+			case "$OPTARG" in
+				html|xml)
+					COVERAGE="$OPTARG"
+					;;
+				*)
+					echo "Invalid coverage format" >&2
+					exit 1
+					;;
+			esac
 			;;
 		j)
 			RUN_JOBS="$OPTARG"
@@ -140,6 +133,34 @@ while getopts ":hb:cj:nu:" opt; do
 			;;
 	esac
 done
+
+# check if python coverage is installed if coverage is required
+if [[ -z $COVERAGE ]] ; then
+	:
+elif type -fp coverage3 >/dev/null; then
+	RUN_COVERAGE=coverage3
+elif type -fp python3-coverage >/dev/null; then
+	RUN_COVERAGE=python3-coverage
+else
+	echo "Coverage requeted but coverage3 is not installed" >&2
+	echo "Try 'python3 -m pip install coverage'..." >&2
+	exit 1
+fi
+
+if [[ -n $RUN_COVERAGE ]] ; then
+    # make sure coverage is installed in the current environment
+    if python3 -c "import coverage" 2>/dev/null; then
+        RUN_PYTHON3="$RUN_COVERAGE run --source $PWD/pym  --parallel-mode"
+	# The multiprocessing module is incompatible with coverage.py. Enable
+	# the hack in pym/bob/utils.py to still get some data.
+	export ENABLE_COVERAGE_HACK=1
+    else
+        echo "coverage3 is installed but not usable!" >&2
+	exit 1
+    fi
+else
+	RUN_PYTHON3=python3
+fi
 
 # execute everything if nothing was specified
 if [[ -z ${RUN_UNITTEST_PAT+isset} && -z ${RUN_BLACKBOX_PAT+isset} ]] ; then
@@ -220,12 +241,10 @@ fi
 popd > /dev/null
 
 # collect coverage
-if [[ -n $COVERAGE ]]; then
-	$COVERAGE combine $(find test/ -type f -name '.coverage.*' \
-	                    -printf '%h\n' | sort -u)
-	if [[ $GEN_HTML -eq 1 ]] ; then
-		$COVERAGE html
-	fi
+if [[ -n $RUN_COVERAGE ]]; then
+	$RUN_COVERAGE combine $(find test/ -type f -name '.coverage.*' \
+	                        -printf '%h\n' | sort -u)
+	$RUN_COVERAGE $COVERAGE
 fi
 
 if [[ $FAILED -gt 127 ]] ; then

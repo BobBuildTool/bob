@@ -79,7 +79,8 @@ class InvocationMode(Enum):
     SHELL = 'shell'
 
 class Invoker:
-    def __init__(self, spec, preserveEnv, noLogFiles, showStdOut, showStdErr, trace, redirect):
+    def __init__(self, spec, preserveEnv, noLogFiles, showStdOut, showStdErr,
+                 trace, redirect, executor=None):
         self.__spec = spec
         self.__cwd = spec.workspaceWorkspacePath
         self.__preserveEnv = preserveEnv
@@ -96,6 +97,7 @@ class Invoker:
         self.__sandboxHelperPath = None
         self.__stdioBuffer = io.BytesIO() if redirect else None
         self.__warnedDuplicates = { '' }
+        self.__executor = executor
 
         # Redirection is a bit complicated. We have to consider two levels: the
         # optional log file and the console.
@@ -594,3 +596,7 @@ class Invoker:
     def setMakeParameters(self, fds, jobs):
         self.__makeFds = fds
         self.__makeJobs = jobs
+
+    async def runInExectutor(self, func, *args):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.__executor, func, *args)

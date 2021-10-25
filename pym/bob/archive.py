@@ -89,10 +89,11 @@ class DummyArchive:
     def canCache(self):
         return False
 
-    async def uploadPackage(self, step, buildId, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content, executor=None):
         pass
 
-    async def downloadPackage(self, step, buildId, audit, content, caches=[]):
+    async def downloadPackage(self, step, buildId, audit, content, caches=[],
+                              executor=None):
         return False
 
     def upload(self, step, buildIdFile, tgzFile):
@@ -101,19 +102,19 @@ class DummyArchive:
     def download(self, step, buildIdFile, tgzFile):
         return ""
 
-    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
+    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
         pass
 
-    async def downloadLocalLiveBuildId(self, step, liveBuildId):
+    async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
         return None
 
     def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
         return ""
 
-    async def uploadLocalFingerprint(self, step, key, fingerprint):
+    async def uploadLocalFingerprint(self, step, key, fingerprint, executor=None):
         pass
 
-    async def downloadLocalFingerprint(self, step, key):
+    async def downloadLocalFingerprint(self, step, key, executor=None):
         return None
 
     def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
@@ -199,7 +200,8 @@ class BaseArchive:
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
 
-    async def downloadPackage(self, step, buildId, audit, content, caches=[]):
+    async def downloadPackage(self, step, buildId, audit, content, caches=[],
+                              executor=None):
         if not self.canDownloadLocal():
             return False
 
@@ -208,7 +210,7 @@ class BaseArchive:
         details = " from {}".format(self._remoteName(buildId, suffix))
         with stepAction(step, "DOWNLOAD", content, details=details) as a:
             try:
-                ret, msg, kind = await loop.run_in_executor(None, BaseArchive._downloadPackage,
+                ret, msg, kind = await loop.run_in_executor(executor, BaseArchive._downloadPackage,
                     self, buildId, suffix, audit, content, caches)
                 if not ret: a.fail(msg, kind)
                 return ret
@@ -255,14 +257,14 @@ class BaseArchive:
             # to prevent ugly backtraces when user presses ctrl+c.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    async def downloadLocalLiveBuildId(self, step, liveBuildId):
+    async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
         if not self.canDownloadLocal():
             return None
 
         loop = asyncio.get_event_loop()
         with stepAction(step, "MAP-SRC", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
             try:
-                ret, msg, kind = await loop.run_in_executor(None,
+                ret, msg, kind = await loop.run_in_executor(executor,
                     BaseArchive._downloadLocalFile, self, liveBuildId, BUILDID_SUFFIX)
                 if ret is None: a.fail(msg, kind)
                 return ret
@@ -294,7 +296,7 @@ class BaseArchive:
     def _openUploadFile(self, buildId, suffix):
         raise ArtifactUploadError("not implemented")
 
-    async def uploadPackage(self, step, buildId, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content, executor=None):
         if not self.canUploadLocal():
             return
         if not audit:
@@ -307,7 +309,7 @@ class BaseArchive:
         details = " to {}".format(self._remoteName(buildId, suffix))
         with stepAction(step, "UPLOAD", content, details=details) as a:
             try:
-                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadPackage,
+                msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadPackage,
                     self, buildId, suffix, audit, content)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
@@ -339,14 +341,14 @@ class BaseArchive:
             signal.signal(signal.SIGINT, signal.SIG_DFL)
         return ("ok", EXECUTED)
 
-    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
+    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
         if not self.canUploadLocal():
             return
 
         loop = asyncio.get_event_loop()
         with stepAction(step, "CACHE-BID", self._remoteName(liveBuildId, BUILDID_SUFFIX), (INFO,TRACE)) as a:
             try:
-                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalFile, self, liveBuildId, BUILDID_SUFFIX, buildId)
+                msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadLocalFile, self, liveBuildId, BUILDID_SUFFIX, buildId)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Upload of build-id interrupted.")
@@ -372,26 +374,26 @@ class BaseArchive:
             signal.signal(signal.SIGINT, signal.SIG_DFL)
         return ("ok", EXECUTED)
 
-    async def uploadLocalFingerprint(self, step, key, fingerprint):
+    async def uploadLocalFingerprint(self, step, key, fingerprint, executor=None):
         if not self.canUploadLocal():
             return
 
         loop = asyncio.get_event_loop()
         with stepAction(step, "CACHE-FPR", self._remoteName(key, FINGERPRINT_SUFFIX)) as a:
             try:
-                msg, kind = await loop.run_in_executor(None, BaseArchive._uploadLocalFile, self, key, FINGERPRINT_SUFFIX, fingerprint)
+                msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadLocalFile, self, key, FINGERPRINT_SUFFIX, fingerprint)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Upload of build-id interrupted.")
 
-    async def downloadLocalFingerprint(self, step, key):
+    async def downloadLocalFingerprint(self, step, key, executor=None):
         if not self.canDownloadLocal():
             return None
 
         loop = asyncio.get_event_loop()
         with stepAction(step, "MAP-FPRNT", self._remoteName(key, FINGERPRINT_SUFFIX)) as a:
             try:
-                ret, msg, kind = await loop.run_in_executor(None,
+                ret, msg, kind = await loop.run_in_executor(executor,
                     BaseArchive._downloadLocalFile, self, key, FINGERPRINT_SUFFIX)
                 if ret is None: a.fail(msg, kind)
                 return ret
@@ -1193,16 +1195,16 @@ class MultiArchive:
     def canUploadJenkins(self):
         return any(i.canUploadJenkins() for i in self.__archives)
 
-    async def uploadPackage(self, step, buildId, audit, content):
+    async def uploadPackage(self, step, buildId, audit, content, executor=None):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            await i.uploadPackage(step, buildId, audit, content)
+            await i.uploadPackage(step, buildId, audit, content, executor=executor)
 
-    async def downloadPackage(self, step, buildId, audit, content):
+    async def downloadPackage(self, step, buildId, audit, content, executor=None):
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
             caches = [ a for a in self.__archives if (a is not i) and a.canCache() ]
-            if await i.downloadPackage(step, buildId, audit, content, caches):
+            if await i.downloadPackage(step, buildId, audit, content, caches, executor):
                 return True
         return False
 
@@ -1216,16 +1218,16 @@ class MultiArchive:
             i.download(step, buildIdFile, tgzFile) for i in self.__archives
             if i.canDownloadJenkins())
 
-    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId):
+    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            await i.uploadLocalLiveBuildId(step, liveBuildId, buildId)
+            await i.uploadLocalLiveBuildId(step, liveBuildId, buildId, executor=executor)
 
-    async def downloadLocalLiveBuildId(self, step, liveBuildId):
+    async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
         ret = None
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            ret = await i.downloadLocalLiveBuildId(step, liveBuildId)
+            ret = await i.downloadLocalLiveBuildId(step, liveBuildId, executor=executor)
             if ret is not None: break
         return ret
 
@@ -1234,16 +1236,16 @@ class MultiArchive:
             i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId, isWin)
             for i in self.__archives if i.canUploadJenkins())
 
-    async def uploadLocalFingerprint(self, step, key, fingerprint):
+    async def uploadLocalFingerprint(self, step, key, fingerprint, executor=None):
         for i in self.__archives:
             if not i.canUploadLocal(): continue
-            await i.uploadLocalFingerprint(step, key, fingerprint)
+            await i.uploadLocalFingerprint(step, key, fingerprint, executor=executor)
 
-    async def downloadLocalFingerprint(self, step, key):
+    async def downloadLocalFingerprint(self, step, key, executor=None):
         ret = None
         for i in self.__archives:
             if not i.canDownloadLocal(): continue
-            ret = await i.downloadLocalFingerprint(step, key)
+            ret = await i.downloadLocalFingerprint(step, key, executor=executor)
             if ret is not None: break
         return ret
 
