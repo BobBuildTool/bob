@@ -11,7 +11,7 @@ from ..languages import StepSpec
 from ..state import BobState
 from ..stringparser import isTrue
 from ..tty import WarnOnce
-from ..utils import asHexStr, processDefines
+from ..utils import asHexStr, processDefines, sslNoVerifyContext
 from shlex import quote
 import argparse
 import ast
@@ -1568,7 +1568,7 @@ class JenkinsConnection:
         # Optionally disable SSL certificate checks
         if not sslVerify:
             handlers.append(urllib.request.HTTPSHandler(
-                context=ssl.SSLContext(ssl.PROTOCOL_SSLv23)))
+                context=sslNoVerifyContext()))
 
         # handle authorization
         username = url.get("username")

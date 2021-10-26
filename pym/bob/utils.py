@@ -730,3 +730,11 @@ async def check_output(args, **kwargs):
     """The subprocess.check_output() call as coroutine."""
     import subprocess
     return (await run(args, check=True, stdout=subprocess.PIPE, **kwargs)).stdout
+
+def sslNoVerifyContext():
+    """Generate a SSL context that does not validate certificates."""
+    import ssl
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context

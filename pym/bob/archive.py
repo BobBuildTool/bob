@@ -23,7 +23,7 @@ from . import BOB_VERSION
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
-from .utils import asHexStr, removePath, isWindows
+from .utils import asHexStr, removePath, isWindows, sslNoVerifyContext
 from shlex import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
 import argparse
@@ -676,7 +676,7 @@ class SimpleHttpArchive(BaseArchive):
         if url.scheme == 'http':
             connection = http.client.HTTPConnection(url.hostname, url.port)
         elif url.scheme == 'https':
-            ctx = None if self.__sslVerify else ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+            ctx = None if self.__sslVerify else sslNoVerifyContext()
             connection = http.client.HTTPSConnection(url.hostname, url.port,
                                                      context=ctx)
         else:
