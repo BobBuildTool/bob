@@ -10,7 +10,7 @@ import os, stat
 import asyncio
 
 from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion, \
-    getPlatformTag, run, check_output, removeUserFromUrl
+    getPlatformTag, run, check_output, removeUserFromUrl, runInEventLoop
 from bob.errors import BuildError, ParseError
 
 class TestJoinScripts(TestCase):
@@ -174,7 +174,7 @@ class TestAsyncSubprocess(TestCase):
 
     def testRunSuccess(self):
         coro = run("echo ok", shell=True)
-        proc = asyncio.get_event_loop().run_until_complete(coro)
+        proc = runInEventLoop(coro)
         self.assertEqual(proc.returncode, 0)
 
     def testRunCaptureStr(self):
@@ -182,31 +182,31 @@ class TestAsyncSubprocess(TestCase):
         coro = run("echo ok; echo err >&2", shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             universal_newlines=True)
-        proc = asyncio.get_event_loop().run_until_complete(coro)
+        proc = runInEventLoop(coro)
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout, "ok\n")
         self.assertEqual(proc.stderr, "err\n")
 
     def testRunFail(self):
         coro = run(["/bin/false"])
-        proc = asyncio.get_event_loop().run_until_complete(coro)
+        proc = runInEventLoop(coro)
         self.assertNotEqual(proc.returncode, 0)
 
     def testCheckOutputBin(self):
         coro = check_output("echo ok", shell=True)
-        stdout = asyncio.get_event_loop().run_until_complete(coro)
+        stdout = runInEventLoop(coro)
         self.assertEqual(stdout, b'ok\n')
 
     def testCheckOutputStr(self):
         coro = check_output("echo ok", shell=True, universal_newlines=True)
-        stdout = asyncio.get_event_loop().run_until_complete(coro)
+        stdout = runInEventLoop(coro)
         self.assertEqual(stdout, "ok\n")
 
     def testCheckOutputFail(self):
         from subprocess import CalledProcessError
         coro = check_output(["/bin/false"])
         self.assertRaises(CalledProcessError,
-            asyncio.get_event_loop().run_until_complete, coro)
+            runInEventLoop, coro)
 
 class TestRemoveUserFromUrl(TestCase):
     """Test removal of user from URL"""

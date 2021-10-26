@@ -15,7 +15,7 @@ import hashlib
 from bob.input import UrlScm
 from bob.invoker import Invoker, InvocationError
 from bob.errors import ParseError
-from bob.utils import asHexStr
+from bob.utils import asHexStr, runInEventLoop
 
 class DummyPackage:
     def getName(self):
@@ -26,9 +26,6 @@ class DummyPackage:
 class DummyStep:
     def getPackage(self):
         return DummyPackage()
-
-def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
 
 class UrlScmTest:
 
@@ -63,7 +60,7 @@ class UrlScmTest:
     def invokeScm(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, False, True, True, True, True, False)
-        run(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker))
 
     def createUrlScm(self, spec = {}):
         s = {
@@ -106,13 +103,13 @@ class TestLiveBuildId(UrlScmTest, TestCase):
     def testPredictLiveBildId(self):
         """Predict live-build-id"""
         s = self.createUrlScm()
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), None)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), None)
         s = self.createUrlScm({'digestSHA1' : self.urlSha1})
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha1))
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha1))
         s = self.createUrlScm({'digestSHA256' : self.urlSha256})
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha256))
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha256))
         s = self.createUrlScm({'digestSHA512' : self.urlSha512})
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha512))
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), bytes.fromhex(self.urlSha512))
 
     def testCalcLiveBuildId(self):
         s = self.createUrlScm()

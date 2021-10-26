@@ -1,6 +1,7 @@
 
 from unittest import TestCase
 from bob.cmds.build.builder import InternalJobServer, JobServerSemaphore
+from bob.utils import runInEventLoop
 import asyncio
 
 class TestJobServer:
@@ -16,20 +17,25 @@ class TestJobServer:
     def release(self):
         self.__jobServerSem.release()
 
-def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
-
+# Migrate to unittest.IsolatedAsyncioTestCase starting with Python 3.8
 class TestJobserverTest (TestCase):
-    def setUp (self):
-        self.__t = TestJobServer()
-
     def testAcquire(self):
-        _run(self.__t.testAcquire())
-        self.__t.release()
-        _run(self.__t.testAcquire(2))
-        self.__t.release()
-        self.__t.release()
+        runInEventLoop(self._testAcquire())
+
+    async def _testAcquire(self):
+        t = TestJobServer()
+
+        await t.testAcquire()
+        t.release()
+
+        await t.testAcquire(2)
+        t.release()
+        t.release()
 
     def testReleaseToOften(self):
+        runInEventLoop(self._testReleaseToOften())
+
+    async def _testReleaseToOften(self):
+        t = TestJobServer()
         with self.assertRaises(ValueError):
-            self.__t.release()
+            t.release()

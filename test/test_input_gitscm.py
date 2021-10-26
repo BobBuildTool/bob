@@ -14,7 +14,7 @@ import tempfile
 from bob.input import GitScm
 from bob.invoker import Invoker, CmdFailedError
 from bob.errors import ParseError
-from bob.utils import asHexStr
+from bob.utils import asHexStr, runInEventLoop
 
 class DummyPackage:
     def getName(self):
@@ -25,9 +25,6 @@ class DummyPackage:
 class DummyStep:
     def getPackage(self):
         return DummyPackage()
-
-def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
 
 def createGitScm(spec = {}):
     s = { 'scm' : "git", 'url' : "MyURL", 'recipe' : "foo.yaml#0",
@@ -250,7 +247,7 @@ class RealGitRepositoryTestCase(TestCase):
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, False, True, True, True, True, False)
-        run(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker))
 
 
 class TestGitRemotes(RealGitRepositoryTestCase):
@@ -344,15 +341,15 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
     def testPredictBranch(self):
         """See if we can predict remote branches correctly"""
         s = self.createGitScm()
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), self.commit_master)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), self.commit_master)
 
         s = self.createGitScm({ 'branch' : 'foobar' })
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), self.commit_foobar)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), self.commit_foobar)
 
     def testPredictLightweightTags(self):
         """Lightweight tags are just like branches"""
         s = self.createGitScm({ 'tag' : 'lightweight' })
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), self.commit_lightweight)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), self.commit_lightweight)
 
     def testPredictAnnotatedTags(self):
         """Predict commit object of annotated tags.
@@ -360,24 +357,24 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
         Annotated tags are separate git objects that point to a commit object.
         We have to predict the commit object, not the tag object."""
         s = self.createGitScm({ 'tag' : 'annotated' })
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), self.commit_annotated)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), self.commit_annotated)
 
     def testPredictCommit(self):
         """Predictions of explicit commit-ids are easy."""
         s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), self.commit_foobar)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), self.commit_foobar)
 
     def testPredictBroken(self):
         """Predictions of broken URLs must not fail"""
         s = self.createGitScm({ 'url' : '/does/not/exist' })
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), None)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), None)
 
     def testPredictDeleted(self):
         """Predicting deleted branches/tags must not fail"""
         s = self.createGitScm({ 'branch' : 'nx' })
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), None)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), None)
         s = self.createGitScm({ 'tag' : 'nx' })
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), None)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), None)
 
     def testCalcBranch(self):
         """Clone branch and calculate live-build-id"""
@@ -457,7 +454,7 @@ class TestShallow(TestCase):
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, False, True, True, True, True, False)
-        run(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker))
 
         log = subprocess.check_output(["git", "log", "--oneline"],
             cwd=workspace, universal_newlines=True).strip().split("\n")
@@ -570,7 +567,7 @@ class TestSubmodules(TestCase):
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, False, True, True, True, True, False)
-        run(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker))
 
     def updateSub1(self):
         # update sub- and main-module

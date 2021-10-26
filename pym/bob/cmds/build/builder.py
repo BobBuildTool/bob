@@ -665,9 +665,9 @@ cd {ROOT}
     def getStatistic(self):
         return self.__statistic
 
-    def __createGenericTask(self, coro):
+    def __createGenericTask(self, loop, coro):
         """Create and return task for coroutine."""
-        return asyncio.get_event_loop().create_task(self.__taskWrapper(coro))
+        return loop.create_task(self.__taskWrapper(coro))
 
     def __createCookTask(self, coro, step, checkoutOnly, tracker, count):
         """Create and return task for a cook()-like coroutine.
@@ -756,7 +756,7 @@ cd {ROOT}
             self.__buildErrors.append(e)
             raise CancelBuildException
 
-    def cook(self, steps, checkoutOnly, depth=0):
+    def cook(self, steps, checkoutOnly, loop, depth=0):
         def cancelJobs():
             if self.__jobs > 1:
                 log("Cancel all running jobs...", WARNING)
@@ -767,19 +767,18 @@ cd {ROOT}
         async def dispatcher():
             if self.__jobs > 1:
                 packageJobs = [
-                    self.__createGenericTask(lambda s=step: self._cookTask(s, checkoutOnly, depth))
+                    self.__createGenericTask(loop, lambda s=step: self._cookTask(s, checkoutOnly, depth))
                     for step in steps ]
                 await gatherTasks(packageJobs)
             else:
                 packageJobs = []
                 for step in steps:
-                    job = self.__createGenericTask(lambda s=step: self._cookTask(s, checkoutOnly, depth))
+                    job = self.__createGenericTask(loop, lambda s=step: self._cookTask(s, checkoutOnly, depth))
                     packageJobs.append(job)
                     await asyncio.wait({job})
                 # retrieve results as last step to --keep-going
                 for job in packageJobs: job.result()
 
-        loop = asyncio.get_event_loop()
         self.__restart = True
         while self.__restart:
             self.__running = True
@@ -801,7 +800,7 @@ cd {ROOT}
             self.__tasksDone = 0
             self.__tasksNum = 0
 
-            j = self.__createGenericTask(dispatcher)
+            j = self.__createGenericTask(loop, dispatcher)
             try:
                 loop.add_signal_handler(signal.SIGINT, cancelJobs)
             except NotImplementedError:
