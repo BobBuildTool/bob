@@ -55,9 +55,9 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
         if 'doDelete' in self.path:
+            self.server.rxJenkinsData((self.path , ''))
             self.send_response(302)
             self.end_headers()
-            self.server.rxJenkinsData((self.path , ''))
             return
         if 'createItem' in self.path:
             length = int(self.headers.get('content-length',0))

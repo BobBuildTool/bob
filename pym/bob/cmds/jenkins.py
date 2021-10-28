@@ -11,7 +11,7 @@ from ..languages import StepSpec
 from ..state import BobState
 from ..stringparser import isTrue
 from ..tty import WarnOnce
-from ..utils import asHexStr, processDefines
+from ..utils import asHexStr, processDefines, runInEventLoop, sslNoVerifyContext
 from shlex import quote
 import argparse
 import ast
@@ -66,9 +66,6 @@ BOB_JENKINS_FINGERPRINT_SCRIPT
 """
 
 SHARED_GENERATION = '-2'
-
-def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
 
 class Wiper:
     def __init__(self):
@@ -236,7 +233,7 @@ class JenkinsJob:
         description.extend([
             "<h2>Recipe</h2>",
             "<p>Name: " + self.__recipe.getName()
-                + "<br/>Source: " + run(self.__recipe.getRecipeSet().getScmStatus())
+                + "<br/>Source: " + runInEventLoop(self.__recipe.getRecipeSet().getScmStatus())
                 + "<br/>Configured: " + date
                 + "<br/>Bob version: " + BOB_VERSION + "</p>",
             "<h2>Packages</h2>", "<ul>"
@@ -386,7 +383,7 @@ class JenkinsJob:
         ]
         for (var, val) in sorted(step.getPackage().getMetaEnv().items()):
             cmd.extend(["-E", var, quote(val)])
-        recipesAudit = run(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
+        recipesAudit = runInEventLoop(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
         if recipesAudit is not None:
             cmd.extend(["--recipes",
                 quote(json.dumps(recipesAudit.dump(), sort_keys=True))])
@@ -1568,7 +1565,7 @@ class JenkinsConnection:
         # Optionally disable SSL certificate checks
         if not sslVerify:
             handlers.append(urllib.request.HTTPSHandler(
-                context=ssl.SSLContext(ssl.PROTOCOL_SSLv23)))
+                context=sslNoVerifyContext()))
 
         # handle authorization
         username = url.get("username")

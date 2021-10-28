@@ -13,10 +13,7 @@ import tempfile
 
 from bob.invoker import Invoker
 from bob.scm import GitScm, ScmTaint, GitAudit
-from bob.utils import removePath
-
-def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+from bob.utils import removePath, runInEventLoop
 
 class TestGitScmStatus(TestCase):
     repodir = ""
@@ -232,12 +229,12 @@ class TestSubmodulesStatus(TestCase):
     def invokeGit(self, scm):
         spec = MagicMock(workspaceWorkspacePath=self.workspace, envWhiteList=set())
         invoker = Invoker(spec, False, True, True, True, True, False)
-        run(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker))
 
     def statusGitScm(self, scm):
         status = scm.status(self.workspace)
         _git, dir, extra = scm.getAuditSpec()
-        audit = run(GitAudit.fromDir(self.workspace, dir, extra)).dump()
+        audit = runInEventLoop(GitAudit.fromDir(self.workspace, dir, extra)).dump()
         return status, audit
 
     def testUnmodifiedRegular(self):

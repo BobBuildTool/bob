@@ -20,6 +20,7 @@ import urllib.parse
 
 from bob.archive import DummyArchive, SimpleHttpArchive, getArchiver
 from bob.errors import BuildError
+from bob.utils import runInEventLoop
 
 DOWNLOAD_ARITFACT = b'\x00'*20
 NOT_EXISTS_ARTIFACT = b'\x01'*20
@@ -43,7 +44,7 @@ class DummyStep:
 
 def run(coro):
     with patch('bob.archive.signal.signal'):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return runInEventLoop(coro)
 
 def callJenkinsScript(script, workspace):
     env = os.environ.copy()

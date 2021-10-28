@@ -640,7 +640,6 @@ class EventLoopWrapper:
 
         if sys.platform == 'win32':
             loop = asyncio.ProactorEventLoop()
-            asyncio.set_event_loop(loop)
             multiprocessing.set_start_method('spawn')
             executor = concurrent.futures.ProcessPoolExecutor()
         else:
@@ -651,7 +650,7 @@ class EventLoopWrapper:
             # have to ignore BrokenProcessPool errors as we will likely hit them.
             # To "prime" the process pool a dummy workload must be executed because
             # the processes are spawned lazily.
-            loop = asyncio.get_event_loop()
+            loop = asyncio.new_event_loop()
             origSigInt = signal.getsignal(signal.SIGINT)
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -689,11 +688,15 @@ class EventLoopWrapper:
         self.__executor = executor
 
     def __enter__(self):
+        import asyncio
+        asyncio.set_event_loop(self.__loop)
         return (self.__loop, self.__executor)
 
     def __exit__(self, exc_type, exc_value, traceback):
+        import asyncio
         self.__executor.shutdown()
         self.__loop.close()
+        asyncio.set_event_loop(None)
 
 
 async def run(args, universal_newlines=False, check=False, shell=False, **kwargs):
@@ -730,3 +733,26 @@ async def check_output(args, **kwargs):
     """The subprocess.check_output() call as coroutine."""
     import subprocess
     return (await run(args, check=True, stdout=subprocess.PIPE, **kwargs)).stdout
+
+def runInEventLoop(coro):
+    """Backwards compatibility stub for asyncio.run()"""
+    import asyncio
+
+    if sys.version_info.minor >= 7:
+        return asyncio.run(coro)
+
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+def sslNoVerifyContext():
+    """Generate a SSL context that does not validate certificates."""
+    import ssl
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context

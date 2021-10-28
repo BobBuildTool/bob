@@ -3302,8 +3302,11 @@ class RecipeSet:
         pluginStat = binStat(fileName)
         try:
             from importlib.machinery import SourceFileLoader
+            from importlib.util import spec_from_loader, module_from_spec
             loader = SourceFileLoader(mangledName, fileName)
-            mod = loader.load_module()
+            spec = spec_from_loader(mangledName, loader)
+            mod = module_from_spec(spec)
+            loader.exec_module(mod)
         except SyntaxError as e:
             import traceback
             raise ParseError("Error loading plugin "+fileName+": "+str(e),

@@ -261,12 +261,12 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             setTui(args.jobs)
             builder.enableBufferedIO()
         try:
-            builder.cook(backlog, True if args.build_mode == 'checkout-only' else False)
+            builder.cook(backlog, True if args.build_mode == 'checkout-only' else False, loop)
             for p in backlog:
                 resultPath = p.getWorkspacePath()
                 if resultPath not in results:
                     results.append(resultPath)
-            builder.cook(providedBacklog, True if args.build_mode == 'checkout-only' else False, 1)
+            builder.cook(providedBacklog, True if args.build_mode == 'checkout-only' else False, loop, 1)
             for p in providedBacklog:
                 resultPath = p.getWorkspacePath()
                 if resultPath not in results:

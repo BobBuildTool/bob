@@ -6,7 +6,7 @@
 from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile, isWindows, removeUserFromUrl
+from ..utils import asHexStr, hashFile, isWindows, removeUserFromUrl, sslNoVerifyContext
 from .scm import Scm, ScmAudit
 import asyncio
 import concurrent
@@ -220,7 +220,7 @@ class UrlScm(Scm):
     def _download(self, destination):
         headers = {}
         headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
-        context = None if self.__sslVerify else ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        context = None if self.__sslVerify else sslNoVerifyContext()
         if os.path.isfile(destination) and self.__url.startswith("http"):
             # Try to avoid download if possible
             headers["If-Modified-Since"] = time2HTTPDate(os.stat(destination).st_mtime)

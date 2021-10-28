@@ -12,7 +12,7 @@ import tempfile
 from bob.errors import BuildError
 from bob.scm.imp import ImportScm, ImportAudit
 from bob.invoker import Invoker, InvocationError
-from bob.utils import hashDirectory
+from bob.utils import hashDirectory, runInEventLoop
 
 class DummyPackage:
     def getName(self):
@@ -23,9 +23,6 @@ class DummyPackage:
 class DummyStep:
     def getPackage(self):
         return DummyPackage()
-
-def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
 
 
 class TestImportScm(TestCase):
@@ -63,7 +60,7 @@ class TestImportScm(TestCase):
     def invokeScm(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, False, True, True, True, True, False)
-        run(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker))
 
     def testProperties(self):
         """Query some static proerties of SCM"""
@@ -81,7 +78,7 @@ class TestImportScm(TestCase):
     def testLiveBuildId(self):
         """Test prediction and calculation of live-build-id"""
         s = self.createImportScm()
-        self.assertEqual(run(s.predictLiveBuildId(DummyStep())), self.digest)
+        self.assertEqual(runInEventLoop(s.predictLiveBuildId(DummyStep())), self.digest)
 
         with tempfile.TemporaryDirectory() as workspace:
             self.invokeScm(workspace, s)
@@ -163,7 +160,7 @@ class TestImportScm(TestCase):
         s = self.createImportScm()
         with tempfile.TemporaryDirectory() as workspace:
             self.invokeScm(workspace, s)
-            audit = run(ImportAudit.fromDir(*s.getAuditSpec()))
+            audit = runInEventLoop(ImportAudit.fromDir(*s.getAuditSpec()))
 
             d = audit.dump()
             self.assertEqual(d["type"], "import")
