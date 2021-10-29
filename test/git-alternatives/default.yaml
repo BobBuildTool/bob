@@ -1,0 +1,10 @@
+scmDefaults:
+   git:
+      references:
+         -
+           url: ".*"
+           repo: "bar"
+         -
+           url: "/tmp/.*/"
+           repo: "<<GIT_REFERENCE>>/"
+           optional: False

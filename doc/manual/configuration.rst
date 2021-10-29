@@ -887,6 +887,17 @@ git    `Git`_ project               | ``url``: URL of remote repository
                                     | ``submodules`` (\*): Whether to clone all / a subset of submodules. (optional)
                                     | ``recurseSubmodules`` (\*): Recusively clone submodules (optional, defaults to false)
                                     | ``shallowSubmodules`` (\*): Clone submodules shallowly (optional, defaults to true)
+                                    | ``references`` (\*): Git reference. A local reference repo to be used as
+                                    |       alternate (see man git-clone).
+                                    |       A list of strings or a dictionaries with
+                                    |        ``url``: (optional, Regex-String, default: ``.*``). The matching part
+                                    |           of the remote URL is replaced by
+                                    |        ``repo``: (String) local storage path.
+                                    |        ``optional``: (Boolean, default True). Marks the reference as
+                                    |           optional if true. Otherwise a error is raised if the
+                                    |           local reference repo didn't exitst.
+                                    |   Note: ``references`` are not used for submodules.
+                                    | ``disassociate``: (Boolean, default false). Diasassociate the reference.
 import Import directory from        | ``url``: Directory path relative to project root.
        project                      | ``prune`` (\*): Delete destination directory before importing files.
 svn    `Svn`_ repository            | ``url``: URL of SVN module
@@ -975,6 +986,21 @@ git
       :ref:`configuration-config-scmOverrides` too.  This can be used to
       improve the build times of existing projects or to fetch the whole
       history if ``shallow`` is used in the recipes.
+
+   Another option is to use a local mirror of the repo. To use this define
+   `references` either in the recipe or in :ref:`configuration-config-scmDefaults`.
+
+   E.g. if the remote URL of your repo is 'git@foo.bar/repo.git' and you have a
+   local mirror of this repo is at `/mirror/repo.git` put::
+
+        references:
+          -
+           url: "git@foo.bar"
+           repo: "/mirror/"
+           optional: False
+
+   in your default.yaml to use the local mirror. Note: The `url` parameter must
+   match for every repo in the recipes. Use regex pattern to achive this.
 
    By default submodules will not be cloned. Set the ``submodules`` property to
    true to populate them automatically. You can also set it to a list of paths
@@ -2078,6 +2104,8 @@ the anonymous access to the container can be used like this::
 
 The ``flags: [download]`` makes sure that Bob does not try to upload artifacts
 in case other backends are configured too.
+
+.. _configuration-config-scmDefaults:
 
 scmDefaults
 ~~~~~~~~~~~
