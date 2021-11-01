@@ -2022,6 +2022,12 @@ the following table for supported backends and their configuration.
 Backend     Description
 =========== ===================================================================
 none        Do not use a binary repository (default).
+artifactory JFrog Artifactory backend. Use the ``url`` keyword to provide the
+            repository url. Use optional keys ``username`` to specify the user
+            and ``key`` for the API-key or password. Without ``username`` and
+            ``key`` either no authentication or the global artifactory
+            configuration file is used. See dohq-artifactory documentation for
+            details.
 azure       Microsoft Azure Blob storage backend. The account must be specified
             in the ``account`` key. Either a ``key`` or a ``sasToken`` may
             be set to authenticate, otherwise an anonymous access is used.
@@ -2044,8 +2050,8 @@ shell       This backend can be used to execute commands that do the actual up-
             example below for a possible use with ``scp``.
 =========== ===================================================================
 
-The directory layouts of the ``azure``, ``file``, ``http`` and ``shell``
-(``$BOB_REMOTE_ARTIFACT``) backends are compatible. If multiple download
+The directory layouts of the ``artifactory``, ``azure``, ``file``, ``http`` and
+``shell`` (``$BOB_REMOTE_ARTIFACT``) backends are compatible. If multiple download
 backends are available they will be tried in order until a matching artifact is
 found. All available upload backends are used for uploading artifacts. Any
 failing upload will fail the whole build.
