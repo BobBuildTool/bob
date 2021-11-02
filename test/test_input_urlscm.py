@@ -9,13 +9,16 @@ from unittest.mock import MagicMock, patch
 import asyncio
 import os
 import subprocess
+import shutil
 import tempfile
 import hashlib
+
+from mocks.http_server import HttpServerMock
 
 from bob.input import UrlScm
 from bob.invoker import Invoker, InvocationError
 from bob.errors import ParseError
-from bob.utils import asHexStr, runInEventLoop
+from bob.utils import asHexStr, runInEventLoop, getProcessPoolExecutor
 
 class DummyPackage:
     def getName(self):
@@ -32,6 +35,7 @@ class UrlScmTest:
     @classmethod
     def setUpClass(cls):
         cls.__repodir = tempfile.TemporaryDirectory()
+        cls.dir = cls.__repodir.name
         fn = os.path.join(cls.__repodir.name, "test.txt")
         cls.url = "file://" + fn
 
@@ -58,9 +62,14 @@ class UrlScmTest:
         cls.__repodir.cleanup()
 
     def invokeScm(self, workspace, scm):
-        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
-        invoker = Invoker(spec, False, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        executor = getProcessPoolExecutor()
+        try:
+            spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+            invoker = Invoker(spec, False, True, True, True, True, False,
+                              executor=executor)
+            runInEventLoop(scm.invoke(invoker))
+        finally:
+            executor.shutdown()
 
     def createUrlScm(self, spec = {}):
         s = {
@@ -71,6 +80,12 @@ class UrlScmTest:
         }
         s.update(spec)
         return UrlScm(s)
+
+    def assertContent(self, fn):
+        with open(fn, "rb") as f:
+            d = hashlib.sha1()
+            d.update(f.read())
+        self.assertEqual(self.urlSha1, asHexStr(d.digest()))
 
 class TestLiveBuildId(UrlScmTest, TestCase):
 
@@ -234,6 +249,159 @@ class TestDigestMatch(UrlScmTest, TestCase):
 
     def testSHA512Mismatch(self):
         scm = self.createUrlScm({ "digestSHA512" : "0"*128 })
+        with tempfile.TemporaryDirectory() as workspace:
+            with self.assertRaises(InvocationError):
+                self.invokeScm(workspace, scm)
+
+class TestDownloads(UrlScmTest, TestCase):
+
+    def testDownload(self):
+        """Simple download via HTTP"""
+        with HttpServerMock(self.dir) as port:
+            scm = self.createUrlScm({
+                "url" : "http://localhost:{}/test.txt".format(port),
+            })
+            with tempfile.TemporaryDirectory() as workspace:
+                self.invokeScm(workspace, scm)
+                self.assertContent(os.path.join(workspace, "test.txt"))
+
+    def testDownloadAgain(self):
+        """Download existing file again. Should not transfer the file again"""
+        with HttpServerMock(self.dir) as port:
+            scm = self.createUrlScm({
+                "url" : "http://localhost:{}/test.txt".format(port),
+            })
+            with tempfile.TemporaryDirectory() as workspace:
+                fn = os.path.join(workspace, "test.txt")
+                self.invokeScm(workspace, scm)
+                self.assertContent(fn)
+                fs1 = os.stat(fn)
+                self.invokeScm(workspace, scm)
+                fs2 = os.stat(fn)
+        self.assertEqual(fs1, fs2)
+
+    def testDownloadNotExisting(self):
+        """Try to download an invalid file -> 404"""
+        with HttpServerMock(self.dir) as port:
+            scm = self.createUrlScm({
+                "url" : "http://localhost:{}/invalid.txt".format(port),
+            })
+            with tempfile.TemporaryDirectory() as workspace:
+                with self.assertRaises(InvocationError):
+                    self.invokeScm(workspace, scm)
+
+    def testNoResponse(self):
+        """Remote server does not send a response."""
+        with HttpServerMock(self.dir, noResponse=True) as port:
+            scm = self.createUrlScm({
+                "url" : "http://localhost:{}/test.txt".format(port),
+            })
+            with tempfile.TemporaryDirectory() as workspace:
+                with self.assertRaises(InvocationError):
+                    self.invokeScm(workspace, scm)
+
+class TestExtraction:
+
+    @classmethod
+    def setUpClass(cls):
+        cls.__repodir = tempfile.TemporaryDirectory()
+        cls.dir = cls.__repodir.name
+
+        src = os.path.join(cls.dir, "src")
+        os.mkdir(src)
+
+        with open(os.path.join(src, "test.txt"), "w") as f:
+            f.write("Hello world!")
+
+        cls.tarGzFile = os.path.join(cls.dir, "test.tar.gz")
+        subprocess.run(["tar", "-zcf", cls.tarGzFile, src],
+            cwd=cls.dir, check=True)
+        with open(cls.tarGzFile, "rb") as f:
+            cls.tarGzDigestSha1 = hashlib.sha1(f.read()).digest().hex()
+
+        cls.gzFile = os.path.join(cls.dir, "test.txt.gz")
+        subprocess.run("gzip -k src/test.txt && mv src/test.txt.gz .",
+            shell=True, cwd=cls.dir, check=True)
+        with open(cls.gzFile, "rb") as f:
+            cls.gzDigestSha256 = hashlib.sha256(f.read()).digest().hex()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.__repodir.cleanup()
+
+    def invokeScm(self, workspace, scm):
+        executor = getProcessPoolExecutor()
+        try:
+            spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+            invoker = Invoker(spec, False, True, True, True, True, False,
+                              executor=executor)
+            runInEventLoop(scm.invoke(invoker))
+        finally:
+            executor.shutdown()
+
+    def createUrlScm(self, spec = {}):
+        s = {
+            'scm' : 'url',
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        s.update(spec)
+        return UrlScm(s)
+
+    def assertExists(self, fn):
+        self.assertTrue(os.path.exists(fn), "file "+fn+" does not exist")
+
+    def assertNotExists(self, fn):
+        self.assertFalse(os.path.exists(fn), "file "+fn+" does exist")
+
+    def testTarGz(self):
+        scm = self.createUrlScm({
+            "url" : self.tarGzFile,
+            "digestSHA1" : self.tarGzDigestSha1,
+        })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, scm)
+            self.assertExists(os.path.join(workspace, "src", "test.txt"))
+
+    def testTarGzStripComponents(self):
+        scm = self.createUrlScm({
+            "url" : self.tarGzFile,
+            "digestSHA1" : self.tarGzDigestSha1,
+            "stripComponents" : 1,
+        })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, scm)
+            self.assertNotExists(os.path.join(workspace, "src"))
+            self.assertExists(os.path.join(workspace, "test.txt"))
+
+    def testTarGzNoExtract(self):
+        scm = self.createUrlScm({
+            "url" : self.tarGzFile,
+            "digestSHA1" : self.tarGzDigestSha1,
+            "extract" : False,
+        })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, scm)
+            self.assertExists(os.path.join(workspace, "test.tar.gz"))
+            self.assertNotExists(os.path.join(workspace, "src"))
+            self.assertNotExists(os.path.join(workspace, "src", "test.txt"))
+
+    def testGz(self):
+        scm = self.createUrlScm({
+            "url" : self.gzFile,
+            "digestSHA256" : self.gzDigestSha256,
+        })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, scm)
+            self.assertExists(os.path.join(workspace, "test.txt.gz"))
+            self.assertExists(os.path.join(workspace, "test.txt"))
+
+    def testGzStripComponentsNotSupported(self):
+        scm = self.createUrlScm({
+            "url" : self.gzFile,
+            "digestSHA256" : self.gzDigestSha256,
+            "stripComponents" : 1,
+        })
         with tempfile.TemporaryDirectory() as workspace:
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, scm)

@@ -631,61 +631,75 @@ def infixBinaryOp(handler, *args, **kwargs):
 def dummy():
     pass
 
+__startMethodSet = False
+def __setStartMethod(method):
+    global __startMethodSet
+    if not __startMethodSet:
+        import multiprocessing
+        multiprocessing.set_start_method(method)
+        __startMethodSet = True
+
+def getProcessPoolExecutor():
+    import multiprocessing
+    import signal
+    import concurrent.futures
+
+    if sys.platform == 'win32':
+        __setStartMethod('spawn')
+        executor = concurrent.futures.ProcessPoolExecutor()
+    else:
+        # The ProcessPoolExecutor is a barely usable for our interactive use
+        # case. On SIGINT any busy executor should stop. The only way how this
+        # does not explode is that we ignore SIGINT before spawning the process
+        # pool and re-enable SIGINT in every executor. In the main process we
+        # have to ignore BrokenProcessPool errors as we will likely hit them.
+        # To "prime" the process pool a dummy workload must be executed because
+        # the processes are spawned lazily.
+        origSigInt = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+        method = 'fork' if isWindows() else 'forkserver'
+
+        # Hack to get coverage data with the multiprocessing module. Up to
+        # date coverage.py cannot trace cross fork/exec. Taken and adapted
+        # from https://gist.github.com/andreycizov/ee59806a3ac6955c127e511c5e84d2b6
+        if os.environ.get('ENABLE_COVERAGE_HACK') and (sys.version_info >= (3, 7)):
+            ctx = multiprocessing.get_context(method)
+            from coverage import Coverage
+            from multiprocessing.context import Process
+            class CoverageProcess(Process):
+                def run(self):
+                    cov = Coverage(data_suffix=True)
+                    cov._warn_no_data = True
+                    cov._warn_unimported_source = True
+                    cov.start()
+                    try:
+                        super().run()
+                    finally:
+                        cov.stop()
+                        cov.save()
+            ctx.Process = CoverageProcess
+            executor = concurrent.futures.ProcessPoolExecutor(mp_context=ctx)
+        else:
+            __setStartMethod(method)
+            executor = concurrent.futures.ProcessPoolExecutor()
+
+        # fork early before process gets big
+        executor.submit(dummy).result()
+        signal.signal(signal.SIGINT, origSigInt)
+
+    return executor
+
 class EventLoopWrapper:
     def __init__(self):
         import asyncio
-        import multiprocessing
-        import signal
-        import concurrent.futures
 
         if sys.platform == 'win32':
-            loop = asyncio.ProactorEventLoop()
-            multiprocessing.set_start_method('spawn')
-            executor = concurrent.futures.ProcessPoolExecutor()
+            self.__loop = asyncio.ProactorEventLoop()
         else:
-            # The ProcessPoolExecutor is a barely usable for our interactive use
-            # case. On SIGINT any busy executor should stop. The only way how this
-            # does not explode is that we ignore SIGINT before spawning the process
-            # pool and re-enable SIGINT in every executor. In the main process we
-            # have to ignore BrokenProcessPool errors as we will likely hit them.
-            # To "prime" the process pool a dummy workload must be executed because
-            # the processes are spawned lazily.
-            loop = asyncio.new_event_loop()
-            origSigInt = signal.getsignal(signal.SIGINT)
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            self.__loop = asyncio.new_event_loop()
 
-            method = 'fork' if isWindows() else 'forkserver'
-
-            # Hack to get coverage data with the multiprocessing module. Up to
-            # date coverage.py cannot trace cross fork/exec. Taken and adapted
-            # from https://gist.github.com/andreycizov/ee59806a3ac6955c127e511c5e84d2b6
-            if os.environ.get('ENABLE_COVERAGE_HACK') and (sys.version_info >= (3, 7)):
-                ctx = multiprocessing.get_context(method)
-                from coverage import Coverage
-                from multiprocessing.context import Process
-                class CoverageProcess(Process):
-                    def run(self):
-                        cov = Coverage(data_suffix=True)
-                        cov._warn_no_data = True
-                        cov._warn_unimported_source = True
-                        cov.start()
-                        try:
-                            super().run()
-                        finally:
-                            cov.stop()
-                            cov.save()
-                ctx.Process = CoverageProcess
-                executor = concurrent.futures.ProcessPoolExecutor(mp_context=ctx)
-            else:
-                multiprocessing.set_start_method(method)
-                executor = concurrent.futures.ProcessPoolExecutor()
-
-            # fork early before process gets big
-            executor.submit(dummy).result()
-            signal.signal(signal.SIGINT, origSigInt)
-
-        self.__loop = loop
-        self.__executor = executor
+        self.__executor = getProcessPoolExecutor()
 
     def __enter__(self):
         import asyncio

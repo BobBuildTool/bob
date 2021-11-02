@@ -10,7 +10,7 @@ from unittest import TestCase
 from bob.utils import removePath
 from bob.errors import BuildError
 
-from jenkins.jenkins_mock import JenkinsMock
+from mocks.jenkins_mock import JenkinsMock
 
 from bob.cmds.jenkins import doJenkins
 from bob.state import finalize
