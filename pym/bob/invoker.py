@@ -597,6 +597,6 @@ class Invoker:
         self.__makeFds = fds
         self.__makeJobs = jobs
 
-    async def runInExectutor(self, func, *args):
+    async def runInExecutor(self, func, *args):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.__executor, func, *args)
