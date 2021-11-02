@@ -8,8 +8,9 @@ from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
 from ..utils import asHexStr, hashFile, isWindows, removeUserFromUrl, sslNoVerifyContext
 from .scm import Scm, ScmAudit
+from http.client import HTTPException
 import asyncio
-import concurrent
+import concurrent.futures.process
 import contextlib
 import hashlib
 import os, os.path
@@ -257,6 +258,8 @@ class UrlScm(Scm):
         except urllib.error.HTTPError as e:
             if e.code != 304:
                 return "HTTP error {}: {}".format(e.code, e.reason)
+        except HTTPException as e:
+            return "HTTP error: " + str(e)
         finally:
             if tmpFileName is not None:
                 os.remove(tmpFileName)
