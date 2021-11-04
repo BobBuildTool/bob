@@ -1,0 +1,95 @@
+Bob 0.20 Release Notes
+======================
+
+Changes made since Bob 0.19.0 include the following.
+
+New commands
+------------
+
+bob init - Initialize out-of-source build tree
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This new command initializes a build tree that uses the project recipes from
+another location. This can be used to create multiple build trees from the same
+recipes. Every build tree can have a different configuration.
+
+New features
+------------
+
+Platform support
+~~~~~~~~~~~~~~~~
+
+* Compatibility to Python 3.10 has been added
+* Bob gained support for PowerShell 5
+
+Recipes
+~~~~~~~
+
+* Added support for automatic extraction of ``*.txz`` archives in URL SCM.
+* The URL SCM gained support for SHA512 digests.
+* The git SCM now has an option to setup local reference repos.
+
+  One or more local repositories can be referenced to speed up cloning of
+  repositories and to save network bandwidth. The local path can optionally be
+  derived from the original URL via a regular expression. See
+  :ref:`configuration-recipes-scm` for more details.
+
+User configuration (default.yaml)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Binary archives can be marked as cache.
+  
+  An optional "cache" flag can be added to the :ref:`archive specification
+  <configuration-config-archive>`. Using this flag, an archive will receive
+  downloaded artifacts from other archives. If a binary artifact was
+  successfully downloaded, it will be uploaded into all archives having the
+  "cache" flag set, unless it already exists there.
+
+  This is useful to automatically populate a local download cache. If an
+  artifact needs to be fetched again it can be used from the local cache
+  instead of downloading it from the network.
+
+* Most SCM default values can now be adjusted with the new
+  :ref:`configuration-config-scmDefaults` key.
+
+Bob build / bob dev
+~~~~~~~~~~~~~~~~~~~
+
+* Made shallow git clones with explicit commits more reliable.
+
+  On a shallow clone the fetched tip(s) are only partially cloned. If the git
+  SCM is configured to use a specific commit it might be possible that the
+  commit was not downloaded if the branch advanced too much. A special fallback
+  was added to re-fetch from the server with the explicit commit id, if the
+  initial fetch failed to download the required commit.
+
+* Added support for out-of-tree builds.
+
+  A new :ref:`manpage-bob-init` command was added, which initializes a build
+  tree that points to the project root directory where the recipes are read
+  from. The build tree might have it's own ``default.yaml`` too.
+
+Changed behaviour
+-----------------
+
+Backwards incompatible changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* The plugin load order in conjunction with layers was fixed.
+
+  Lower layers have a lower precedence than higher layers. The root
+  project should be able to override settings made by a lower layer. This
+  was already the case for ``default.yaml`` stuff but plugins were still
+  loaded in the wrong order. Plugins of lower layers are now loaded before
+  plugins of higher layers so that these can override them.
+
+Bug fixes
+---------
+
+* Fixed location tracking of non-relocatable packages (`#410 <https://github.com/BobBuildTool/bob/issues/410>`_)
+* Fixed platform detection on recent MSYS2 versions.  (`#416 <https://github.com/BobBuildTool/bob/issues/416>`_)
+* Check ``bobMinimumVersion`` before applying ``config.yaml`` schema. (`#420 <https://github.com/BobBuildTool/bob/issues/420>`_)
+* Fixed detection of plugin changes. (`#430 <https://github.com/BobBuildTool/bob/issues/430>`_)
+* Fix crash on Windows if environment has variables that only differ in case. (`#432 <https://github.com/BobBuildTool/bob/issues/432>`_)
+* Fixed failures to create Jenkins jobs if an artifact is built in different sandboxes. (`#438 <https://github.com/BobBuildTool/bob/issues/438>`_)
+* Fixed crash if git submodules were enabled for an existing checkout. (`#440 <https://github.com/BobBuildTool/bob/issues/440>`_)
