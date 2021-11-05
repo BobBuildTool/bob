@@ -18,7 +18,7 @@ from bob.utils import removePath, isWindows
 from bob.errors import BuildError
 from bob.utils import summonMagic, hashFile
 from collections import OrderedDict, namedtuple
-from bob.tty import colorize
+from bob.tty import colorize, WARNING
 from shlex import quote
 
 # helper to get linux or windows (MSYS2 support) cwd
@@ -339,8 +339,8 @@ def qtProjectGenerator(package, argv, extra, bobRoot):
                 if _kit.search(name):
                     kits.append([name, id])
     except FileNotFoundError:
-        raise BuildError("Qt Creator settings could not be found.",
-            help="Make sure Qt Creator is installed and works properly.")
+        print(colorize("Qt Creator settings could not be found! " \
+            "Make sure Qt Creator is installed and works properly.", WARNING))
 
     if (len(kits) == 0):
         if (args.kit is None):
