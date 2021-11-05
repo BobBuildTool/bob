@@ -141,7 +141,15 @@ to be passed on the command line *after* the package name.
     Additional include directories. (added recursive starting from this directory)
 
 ``--kit KIT``
-    Kit to use for this project
+    Name of the kit to use for this project.
+
+    Qt Creator usually auto-detects your installed compilers on the system and
+    creates one or more "kits" based on the detected settings. Bob will use the
+    "Desktop" kit by default. The generator cannot create a project if
+    QtCreator is not installed. If the "Desktop" kit is missing you have to
+    create one or specify an existing one with the ``--kit`` option.
+
+    See the online documentation [#l1]_ for more information.
 
 ``--name NAME``
     Name of project. Default is complete_path_to_package
@@ -157,3 +165,9 @@ to be passed on the command line *after* the package name.
 
 ``-C CONFIG_DEF``
     Add line to .config file. Can be used to specify preprocessor defines used by the QTCreator.
+
+
+External links
+--------------
+
+.. [#l1] https://doc.qt.io/qtcreator/creator-configuring.html#checking-build-and-run-settings

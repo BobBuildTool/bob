@@ -318,6 +318,7 @@ def qtProjectGenerator(package, argv, extra, bobRoot):
     id = None
     name = None
     kits = []
+    allKits = []
     try:
         if isWindows():
             profiles = xml.etree.ElementTree.parse(os.path.join(os.getenv('APPDATA'), "QtProject/qtcreator/profiles.xml")).getroot()
@@ -332,17 +333,24 @@ def qtProjectGenerator(package, argv, extra, bobRoot):
                         id = str(value.text)
                     if (value.attrib.get('key') == 'PE.Profile.Name'):
                         name = str(value.text)
-                    if (id is not None) and (name is not None) and (_kit.search(name)):
-                        kits.append([name, id])
-                        break
+                if not id or not name:
+                    continue
+                allKits.append(name)
+                if _kit.search(name):
+                    kits.append([name, id])
     except FileNotFoundError:
-        # if kits are generared using sdk tool they are stored somewhere else... (/usr/share...)
-        pass
+        raise BuildError("Qt Creator settings could not be found.",
+            help="Make sure Qt Creator is installed and works properly.")
 
     if (len(kits) == 0):
         if (args.kit is None):
-            raise BuildError("No kit found!",
-                help = "Run again with '--kit' and specify a kit or generate a Desktop kit, which is used by default.")
+            if allKits:
+                allKits = "The following kits were found: " + ", ".join(["'"+k+"'" for k in allKits])
+            else:
+                allKits = "No kits could be found!"
+            raise BuildError("No default kit found!",
+                help = "Run again with '--kit' to manually specify a kit. " \
+                       "See the bob-project manpage for more information.\n" + allKits)
         kitName = args.kit
         kitId = args.kit
     else:
