@@ -13,8 +13,8 @@ Synopsis
 
 ::
 
-    bob ls [-h] [-a] [-o] [-r] [-u] [-p | -d] [-D DEFINES] [-c CONFIGFILE]
-           [--sandbox | --no-sandbox]
+    bob ls [-h] [-a] [-A] [-o] [-r] [-u] [-p | -d] [-D DEFINES]
+           [-c CONFIGFILE] [--sandbox | --no-sandbox]
            [package]
 
 
@@ -49,12 +49,21 @@ print the path of all *unique* packages that were selected by the query. This
 cannot be used in conjunction with the ``-p`` option and ignores further ``-a``,
 ``-o`` and ``-r`` options.
 
+To see *every* package selected by the query, add ``-A``. This will print all
+alternate paths to identical packages. This affects only the ``d`` and ``-p``
+options, because the path leading to the selected packages is significant.
+
 Options
 -------
 
 ``-a, --all``
     Show indirect dependencies too. By default only direct dependencies (i.e.
     dependencies explicitly specified in the recipe) are displayed.
+
+``-A, --alternates``
+    For listings that print the full path of packages (``-d``, ``-p``), display
+    all packages, including identical ones. By default only unique packages,
+    that were selected by the query, are displayed.
 
 ``-c CONFIGFILE``
     Use config File
