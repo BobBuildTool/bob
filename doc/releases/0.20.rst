@@ -52,6 +52,14 @@ User configuration (default.yaml)
 * Most SCM default values can now be adjusted with the new
   :ref:`configuration-config-scmDefaults` key.
 
+Bob ls
+~~~~~~
+
+* Added an option to show identical packages too.
+
+  By default only unique packages of a query are displayed. The ``-A`` option
+  shows all identical packages too, instead of only the first one.
+
 Bob build / bob dev
 ~~~~~~~~~~~~~~~~~~~
 
