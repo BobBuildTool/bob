@@ -70,6 +70,8 @@ def doLS(argv, bobRoot):
                         help="Sub-package to start listing from")
     parser.add_argument('-a', '--all', default=False, action='store_true',
                         help="Show indirect dependencies too")
+    parser.add_argument('-A', '--alternates', default=False, action='store_true',
+                        help="Show all alternate paths to identical packages too")
     parser.add_argument('-o', '--origin', default=False, action='store_true',
                         help="Show origin of indirect dependencies")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
@@ -102,7 +104,8 @@ def doLS(argv, bobRoot):
     showAliases = packages.getAliases() if args.package == "" else []
 
     printer = PackagePrinter(args.all, args.origin, args.recursive, args.unsorted)
-    for (stack, root) in packages.queryTreePath(args.package):
+    showAlternates = args.alternates and (args.prefixed or args.direct)
+    for (stack, root) in packages.queryTreePath(args.package, showAlternates):
         if args.prefixed:
             printer.showPrefixed(root, showAliases, stack)
         elif args.direct:
