@@ -19,15 +19,14 @@ Build release
 To see the packages that you can build type::
 
     $ bob ls -r
-    vexpress
-        sandbox::debian-8.2-x86
-        toolchain::x86
-        toolchain::arm-linux-gnueabihf
-        initramfs
-            busybox
-                toolchain::make
-        linux-image
-            toolchain::make
+    /
+    └── vexpress
+        ├── initramfs
+        │   ├── busybox
+        │   └── toolchain::arm-linux-gnueabihf-rootfs
+        ├── linux-image
+        ├── sandbox::debian-x86_64
+        └── toolchain::arm-linux-gnueabihf-toolchain
 
 As you can see there is a single top-level package called ``vexpress``. This
 demo project builds a QEMU image for the ARM Versatile Express machine. To
@@ -36,7 +35,9 @@ build the project simply do the following::
     $ bob build vexpress
 
 This will fetch the toolchains and sources and will build the image locally in
-the ``work`` directory. Grab a coffee and after some time the build should
+the ``work`` directory. To speed up the build you can optionally add ``-j`` to
+build packages in parallel. See the :ref:`bob build <manpage-build>` manpage
+for all available options. Grab a coffee and after some time the build should
 finish::
 
     ...
@@ -83,8 +84,9 @@ employs a sandbox so that no host tools or paths are used. Though this is great
 for binary reproducible builds it is inconvenient to debug and incrementally
 change parts of the project.
 
-For this purpose you can build the project in *development mode*. This mode
-basically does the same things but with some important differences:
+For this purpose you can build the project in *development mode* via
+:ref:`bob dev <manpage-dev>`. This mode basically does the same things but with
+some important differences:
 
 * Sandboxes are not used by default. The host should have the required
   development tools installed, for example make, gcc, perl and so on. You may
@@ -101,15 +103,18 @@ possible to debug the created binaries. So let's build the kernel in
 development mode::
 
     $ bob dev vexpress/linux-image
+    >> vexpress/toolchain::arm-linux-gnueabihf-toolchain
+       CHECKOUT  dev/src/toolchain/arm-linux-gnueabihf/1/workspace 
     >> vexpress/linux-image
-    >> vexpress/toolchain::arm-linux-gnueabihf
-       CHECKOUT  dev/src/toolchain/arm-linux-gnueabihf/1/workspace
-    ...
+       CHECKOUT  dev/src/linux/1/workspace 
+    >> vexpress/toolchain::arm-linux-gnueabihf-toolchain
+       BUILD     dev/build/toolchain/arm-linux-gnueabihf-toolchain/1/workspace
+       PACKAGE   dev/dist/toolchain/arm-linux-gnueabihf-toolchain/1/workspace
     >> vexpress/linux-image
-       CHECKOUT  dev/src/linux-image/1/workspace
        BUILD     dev/build/linux-image/1/workspace
        PACKAGE   dev/dist/linux-image/1/workspace
     Build result is in dev/dist/linux-image/1/workspace
+    Duration: 0:04:40.737003, 2 checkouts (0 overrides active), 2 packages built, 0 downloaded.
 
 Notice that the development mode builds in a separate directory: ``dev``. The
 numbering beneath the package name directory is kept stable. The numbers
@@ -118,10 +123,10 @@ If the ``checkoutSCM`` in the recipe is changed the old checkout will be moved
 aside instead of using a new directory like in the release mode.
 
 Suppose we want to make a patch to the kernel. This is as simple as to go to
-``dev/src/linux-image/1/workspace``, edit some files and call Bob again to
-rebuild::
+``dev/src/linux/1/workspace``, edit some files and call Bob again to
+rebuild, e.g.::
 
-    $ vi dev/src/linux-image/1/workspace/linux-4.3.3/...
+    $ vi dev/src/linux/1/workspace/init/main.c
     $ bob dev vexpress/linux-image
 
 Bob will detect that there are changes in the sources of the kernel and make an
@@ -155,11 +160,21 @@ Now make and save your changes. Then rebuild the kernel::
     *** Execute 'make' to start the build or try 'make help'.
 
     $ make -j $(nproc) bzImage
+    $ exit
 
 If you know how grab the kernel image directly out of the build tree and test
-it. Alternatively you can rebuild the top-level package ::
+it. Alternatively you can rebuild the top-level package. ::
 
     $ bob dev vexpress
+    ...
+    >> vexpress/linux-image
+       BUILD     skipped (unchanged input for dev/build/linux-image/1/workspace)
+       PACKAGE   dev/dist/linux-image/1/workspace
+    >> vexpress
+       BUILD     dev/build/vexpress/1/workspace
+       PACKAGE   dev/dist/vexpress/1/workspace
+    Build result is in dev/dist/vexpress/1/workspace
+    Duration: 0:00:01.643519, 0 checkouts (0 overrides active), 2 packages built, 0 downloaded.
 
 and test the whole QEMU image. The choice is yours.
 
@@ -186,10 +201,11 @@ overrides the defaults of the project.
 Query SCM status
 ================
 
-After you have developed a great new feature you may want to know which sources you
-have touched to commit them to a SCM. Bob offers ``bob status <options> <package>``
-to show a list of SCM which are unclean. SCMs are unclean in case they have modified files,
-unpushed commits, switched URLs or non matching tags or commit ids.
+After you have developed a great new feature you may want to know which sources
+you have touched to commit them to a SCM. Bob offers the :ref:`bob status
+<manpage-bob-status>` command to show a list of SCM which are unclean. SCMs are
+unclean in case they have modified files, unpushed commits, switched URLs or
+non matching tags or commit ids.
 
 The output looks like the following line::
 
@@ -266,7 +282,7 @@ artifacts and run them locally.
 Using IDEs with Bob
 ===================
 
-You may want to use a IDE with Bob. At the moment QTCreator and Eclipse are
+You may want to use an IDE with Bob. At the moment Qt Creator and Eclipse are
 supported. You can add more IDE's using :ref:`extending-generators` extension.
 To generate project files the basic call is::
 
@@ -291,6 +307,25 @@ generator to generator (see below).
 
 QTCreator
 ---------
+
+Because we have already built the sandbox tutorial it is very fast to generate
+a Qt Creator project and open it::
+
+    $ bob project qt-creator vexpress
+    ...
+    >> vexpress
+       BUILD     skipped (unchanged input for dev/build/vexpress/1/workspace)
+       PACKAGE   skipped (unchanged input for dev/dist/vexpress/1/workspace)
+    Build result is in dev/dist/vexpress/1/workspace
+    Duration: 0:00:00.847041, 0 checkouts (0 overrides active), 0 packages built, 0 downloaded.
+    >> vexpress
+       PROJECT   vexpress (qt-creator)
+    $ qtcreator projects/vexpress/vexpress.creator
+
+After loading the project Qt Creator will need quite some time to scan the
+sources of the Linux kernel. You could add an ``--exclude linux-image`` to hide
+this big package from Qt Creator if you do not intend to work on it from the
+IDE.
 
 QtCreator specific Arguments:
 
@@ -325,7 +360,7 @@ sandbox-tutorial and the included arm-toolchain: ::
             --toolchain "ProjectExplorer.ToolChain.Gcc:arm" \
             --sysroot <toolchain-dist>/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux/arm-linux-gnueabihf/libc/ \
             --debuggerid "gdb:ARM32"
-        $ bob project qtcreator vexpress --kit ARM_LINUX
+        $ bob project qt-creator vexpress --kit ARM_LINUX
 
 EclipseCdt
 ----------
