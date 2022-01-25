@@ -324,9 +324,7 @@ class CommonIDEGenerator:
         for i in self.args.additional_includes:
             for e in parseArgumentLine(i):
                 if os.path.exists(e):
-                    for root, directories, filenames in os.walk(e):
-                        filterDirs(directories)
-                        self.appendIncludeDirectories.append(os.path.join(e,root))
+                    self.appendIncludeDirectories.append(e)
 
     def generate(self):
         if self.args.overwrite:

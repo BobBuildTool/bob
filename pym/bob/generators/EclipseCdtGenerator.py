@@ -231,8 +231,7 @@ def eclipseCdtGenerator(package, argv, extra, bobRoot):
         # find additional include dirs
         for i in args.additional_includes:
             if os.path.exists(i):
-                for root, directories, filenames in os.walk(i):
-                    includeDirs.append(os.path.join(i,root))
+                includeDirs.append(i)
     except re.error as e:
         raise ParseError("Invalid regular expression '{}': {}".format(e.pattern), e)
 
