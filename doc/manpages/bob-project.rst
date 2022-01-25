@@ -89,7 +89,7 @@ passed on the command line *after* the package name.
     Packages will be marked as 'exclude from build' in eclipse. Usefull if indexer runs OOM.
 
 ``-I ADDITIONAL_INCLUDES``
-    Additional include directories. (added recursive starting from this directory)
+    Additional include directories.
 
 ``--name NAME``
     Name of project. Default is complete_path_to_package
@@ -138,7 +138,7 @@ to be passed on the command line *after* the package name.
     wtih foobar-* but excludes the foobar-baz package.
 
 ``-I ADDITIONAL_INCLUDES``
-    Additional include directories. (added recursive starting from this directory)
+    Additional include directories.
 
 ``--kit KIT``
     Name of the kit to use for this project.

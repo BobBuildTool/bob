@@ -301,8 +301,7 @@ def qtProjectGenerator(package, argv, extra, bobRoot):
     for i in args.additional_includes:
         for e in parseArgumentLine(i):
             if os.path.exists(e):
-                for root, directories, filenames in os.walk(e):
-                    hList.append(os.path.join(e,root))
+                hList.append(e)
 
     # compose start includes
     for i in args.start_includes:
