@@ -528,6 +528,16 @@ a script for the same step are joined in front of this script in the order the
 inheritance is specified. The inheritance graph is traversed depth first and
 every class is included exactly once.
 
+Dependencies of the recipe are by default only available to the
+``buildScript``. The path to the previous step (checkout workspace for
+``buildScript``, build workspace for ``packageScript``) is always passed in
+``$1``. Other dependencies are available in the order in which they were
+declared at the :ref:`configuration-recipes-depends` section of the recipe. If
+a dependencies ``checkoutDep`` flag is set to ``True`` it will also be
+available to the ``checkoutScript``. This should be used carefully as it makes
+the checkout of the recipe sources dependent on the result of another
+dependency.
+
 During execution of the script only the environment variables SHELL, USER,
 TERM, HOME and anything that was declared via {checkout,build,package}Vars
 are set. The PATH is reset to "/usr/local/bin:/bin:/usr/bin" or whatever was declared
@@ -1151,6 +1161,13 @@ The following settings are supported:
 |             |                 |                                                     |
 |             |                 | Default: Use the result and dependencies            |
 |             |                 | (``[deps, result]``).                               |
++-------------+-----------------+-----------------------------------------------------+
+| checkoutDep | Boolean         | If true, the dependency is available as argument to |
+|             |                 | the checkout step. The build step will still have   |
+|             |                 | access to this dependency.                          |
+|             |                 |                                                     |
+|             |                 | Defaults to false. Only relevant if ``result`` is   |
+|             |                 | included in these ``use`` list.                     |
 +-------------+-----------------+-----------------------------------------------------+
 | forward     | Boolean         | If true, the imported environment, tools and        |
 |             |                 | sandbox will be forwarded to the dependencies       |
