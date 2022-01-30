@@ -3,15 +3,15 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from .. import BOB_VERSION
-from ..archive import getArchiver
-from ..errors import ParseError, BuildError
-from ..input import RecipeSet
-from ..languages import StepSpec
-from ..state import BobState
-from ..stringparser import isTrue
-from ..tty import WarnOnce
-from ..utils import asHexStr, processDefines, runInEventLoop, sslNoVerifyContext
+from ... import BOB_VERSION
+from ...archive import getArchiver
+from ...errors import ParseError, BuildError
+from ...input import RecipeSet
+from ...languages import StepSpec
+from ...state import BobState
+from ...stringparser import isTrue
+from ...tty import WarnOnce
+from ...utils import asHexStr, processDefines, runInEventLoop, sslNoVerifyContext
 from shlex import quote
 import argparse
 import ast

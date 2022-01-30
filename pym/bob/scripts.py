@@ -50,7 +50,7 @@ def __init(*args, **kwargs):
     return 0
 
 def __jenkins(*args, **kwargs):
-     from .cmds.jenkins import doJenkins
+     from .cmds.jenkins.jenkins import doJenkins
      doJenkins(*args, **kwargs)
      return 0
 
