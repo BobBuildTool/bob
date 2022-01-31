@@ -110,3 +110,11 @@ expect_exist dev/src/root/1/workspace/canary.txt
 run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c1" root
 expect_not_exist dev/src/root/1/workspace/canary.txt
 expect_output "hello world" cat dev/src/root/1/workspace/test.txt
+
+# Trying to trigger an inline upgrade for dirty data will fail attic without moving to attic
+echo canary > dev/src/root/1/workspace/canary.txt
+echo taint > dev/src/root/1/workspace/test.txt
+expect_exist dev/src/root/1/workspace/canary.txt
+expect_fail run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c2" root --no-attic
+expect_exist dev/src/root/1/workspace/canary.txt
+expect_output "taint" cat dev/src/root/1/workspace/test.txt

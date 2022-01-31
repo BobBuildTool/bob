@@ -2241,6 +2241,7 @@ The following table lists possible arguments and their type:
 Key             Command line switch    Type
 =============== ====================== ===============================================
 always_checkout ``--always-checkout``  List of strings (regular expression patterns)
+attic           ``--[no]-attic``       Boolean
 audit           ``--[no]-audit``       Boolean
 build_mode      ``-b`` | ``-B`` |      String (``normal``, ``build-only`` or
                 ``--normal``           ``checkout-only``)
