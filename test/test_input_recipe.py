@@ -10,7 +10,8 @@ from bob.stringparser import Env
 
 class TestDependencies(TestCase):
 
-    def cmpEntry(self, entry, name, env={}, fwd=False, use=["result", "deps"], cond=None):
+    def cmpEntry(self, entry, name, env={}, fwd=False, use=["result", "deps"],
+                 cond=None, checkoutDep=False):
         self.assertEqual(entry.recipe, name)
         self.assertEqual(entry.envOverride, env)
         self.assertEqual(entry.provideGlobal, fwd)
@@ -20,6 +21,7 @@ class TestDependencies(TestCase):
         self.assertEqual(entry.useDeps, "deps" in use)
         self.assertEqual(entry.useSandbox, "sandbox" in use)
         self.assertEqual(entry.condition, cond)
+        self.assertEqual(entry.checkoutDep, checkoutDep)
 
     def testSimpleList(self):
         deps = [ "a", "b" ]
@@ -151,6 +153,36 @@ class TestDependencies(TestCase):
         self.cmpEntry(res[2], "c",)
         self.cmpEntry(res[3], "d", fwd=True)
         self.cmpEntry(res[4], "e")
+
+    def testNestedCheckoutDep(self):
+        deps = [
+            "a",
+            {
+                "checkoutDep" : True,
+                "depends" : [
+                    "b",
+                    {
+                        "checkoutDep" : False,
+                        "depends" : [ "c" ]
+                    },
+                    "d"
+                ]
+            },
+            "e",
+            {
+                "name" : "f",
+                "checkoutDep" : True,
+            }
+        ]
+        res = list(Recipe.Dependency.parseEntries(deps))
+
+        self.assertEqual(len(res), 6)
+        self.cmpEntry(res[0], "a")
+        self.cmpEntry(res[1], "b", checkoutDep=True)
+        self.cmpEntry(res[2], "c")
+        self.cmpEntry(res[3], "d", checkoutDep=True)
+        self.cmpEntry(res[4], "e")
+        self.cmpEntry(res[5], "f", checkoutDep=True)
 
 
 class TestRelocatable(TestCase):

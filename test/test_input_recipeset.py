@@ -447,6 +447,70 @@ class TestDependencies(RecipesTmp, TestCase):
         packages = recipes.generatePackages(lambda x,y: "unused")
         self.assertRaises(ParseError, packages.getRootPackage)
 
+    def testCheckoutDep(self):
+        """Test that checkout dependencies are available in checkout step"""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: lib1
+                  checkoutDep: True
+                - name: lib2
+                  checkoutDep: False
+            checkoutScript: "true"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("lib1", "")
+        self.writeRecipe("lib2", "")
+
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda x,y: "unused")
+        p = packages.walkPackagePath("root")
+        self.assertEqual(len(p.getCheckoutStep().getArguments()), 1)
+        self.assertEqual(p.getCheckoutStep().getArguments()[0].getPackage().getName(),
+                         "lib1")
+
+        self.assertEqual(len(p.getBuildStep().getArguments()), 3)
+        self.assertEqual(p.getCheckoutStep().getArguments()[0],
+                         p.getBuildStep().getArguments()[1],
+                         "lib1 is available at build step too")
+
+    def testCheckoutDepVariants(self):
+        """Checkout dependencies contribute to variant management of checkoutStep"""
+        self.writeRecipe("root", """\
+            root: True
+            checkoutScript: "true"
+            buildScript: "true"
+            packageScript: "true"
+            multiPackage:
+                a:
+                    depends:
+                        - name: lib1
+                          checkoutDep: True
+                b:
+                    depends:
+                        - name: lib2
+                          checkoutDep: True
+            """)
+        self.writeRecipe("lib1", "packageScript: foo")
+        self.writeRecipe("lib2", "packageScript: bar")
+
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda x,y: "unused")
+
+        pa = packages.walkPackagePath("root-a")
+        self.assertEqual(len(pa.getCheckoutStep().getArguments()), 1)
+        paVId = pa.getCheckoutStep().getVariantId()
+
+        pb = packages.walkPackagePath("root-b")
+        self.assertEqual(len(pb.getCheckoutStep().getArguments()), 1)
+        pbVId = pb.getCheckoutStep().getVariantId()
+
+        self.assertNotEqual(paVId, pbVId, "checkout steps are different")
+
 
 class TestDependencyEnv(RecipesTmp, TestCase):
     """Tests related to "environment" block in dependencies"""

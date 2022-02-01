@@ -1390,7 +1390,8 @@ class Step:
 class CoreCheckoutStep(CoreStep):
     __slots__ = ( "scmList" )
 
-    def __init__(self, corePackage, checkout=None, checkoutSCMs=[], fullEnv=Env(), digestEnv=Env(), env=Env()):
+    def __init__(self, corePackage, checkout=None, checkoutSCMs=[],
+                 fullEnv=Env(), digestEnv=Env(), env=Env(), args=[]):
         if checkout:
             recipeSet = corePackage.recipe.getRecipeSet()
             overrides = recipeSet.scmOverrides()
@@ -1415,7 +1416,7 @@ class CoreCheckoutStep(CoreStep):
             self.scmList = []
 
         deterministic = corePackage.recipe.checkoutDeterministic
-        super().__init__(corePackage, isValid, deterministic, digestEnv, env, [])
+        super().__init__(corePackage, isValid, deterministic, digestEnv, env, args)
 
     def _getToolKeys(self):
         return self.corePackage.recipe.toolDepCheckout
@@ -1680,8 +1681,8 @@ class CorePackage:
         tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathFormatter)
         return Package(self, stack, pathFormatter, inputTools, tools, inputSandbox, sandbox)
 
-    def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv, env):
-        ret = self.checkoutStep = CoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv, env)
+    def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv, env, args):
+        ret = self.checkoutStep = CoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv, env, args)
         return ret
 
     def createInvalidCoreCheckoutStep(self):
@@ -2014,7 +2015,7 @@ class Recipe(object):
     """
 
     class Dependency(object):
-        def __init__(self, recipe, env, fwd, use, cond, tools):
+        def __init__(self, recipe, env, fwd, use, cond, tools, checkoutDep):
             self.recipe = recipe
             self.envOverride = env
             self.provideGlobal = fwd
@@ -2026,11 +2027,12 @@ class Recipe(object):
             self.useSandbox = "sandbox" in self.use
             self.condition = cond
             self.toolOverride = tools
+            self.checkoutDep = checkoutDep
 
         @staticmethod
-        def __parseEntry(dep, env, fwd, use, cond, tools):
+        def __parseEntry(dep, env, fwd, use, cond, tools, checkoutDep):
             if isinstance(dep, str):
-                return [ Recipe.Dependency(dep, env, fwd, use, cond, tools) ]
+                return [ Recipe.Dependency(dep, env, fwd, use, cond, tools, checkoutDep) ]
             else:
                 envOverride = dep.get("environment")
                 if envOverride:
@@ -2045,22 +2047,27 @@ class Recipe(object):
                 newCond = dep.get("if")
                 if newCond is not None:
                     cond = cond + [newCond] if cond is not None else [ newCond ]
+                checkoutDep = dep.get("checkoutDep", checkoutDep)
                 name = dep.get("name")
                 if name:
                     if "depends" in dep:
                         raise ParseError("A dependency must not use 'name' and 'depends' at the same time!")
-                    return [ Recipe.Dependency(name, env, fwd, use, cond, tools) ]
+                    return [ Recipe.Dependency(name, env, fwd, use, cond, tools, checkoutDep) ]
                 dependencies = dep.get("depends")
                 if dependencies is None:
                     raise ParseError("Either 'name' or 'depends' required for dependencies!")
-                return Recipe.Dependency.parseEntries(dependencies, env, fwd, use, cond, tools)
+                return Recipe.Dependency.parseEntries(dependencies, env, fwd,
+                                                      use, cond, tools,
+                                                      checkoutDep)
 
         @staticmethod
-        def parseEntries(deps, env={}, fwd=False, use=["result", "deps"], cond=None, tools={}):
+        def parseEntries(deps, env={}, fwd=False, use=["result", "deps"],
+                         cond=None, tools={}, checkoutDep=False):
             """Returns an iterator yielding all dependencies as flat list"""
             # return flattened list of dependencies
             return chain.from_iterable(
-                Recipe.Dependency.__parseEntry(dep, env, fwd, use, cond, tools)
+                Recipe.Dependency.__parseEntry(dep, env, fwd, use, cond, tools,
+                                               checkoutDep)
                 for dep in deps )
 
     @staticmethod
@@ -2471,6 +2478,7 @@ class Recipe(object):
         directPackages = []
         indirectPackages = []
         provideDeps = UniquePackageList(stack, self.__raiseIncompatibleProvided)
+        checkoutDeps = []
         results = []
         depEnv = env.derive()
         depTools = tools.derive()
@@ -2550,6 +2558,7 @@ class Recipe(object):
                     for d in depCoreStep.providedDeps)
             if dep.useBuildResult and depTrack.useResultOnce():
                 results.append(depRef)
+                if dep.checkoutDep: checkoutDeps.append(depRef)
             if dep.useTools:
                 tools.update(depCoreStep.providedTools)
                 diffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox))
@@ -2671,7 +2680,8 @@ class Recipe(object):
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
             srcCoreStep = p.createCoreCheckoutStep(self.__checkout,
-                self.__checkoutSCMs, env, checkoutDigestEnv, checkoutEnv)
+                self.__checkoutSCMs, env, checkoutDigestEnv, checkoutEnv,
+                checkoutDeps)
         else:
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
@@ -3684,6 +3694,7 @@ class RecipeSet:
             schema.Optional('environment') : VarDefineValidator("depends::environment"),
             schema.Optional('if') : schema.Or(str, IfExpression),
             schema.Optional('tools') : { toolNameSchema : toolNameSchema },
+            schema.Optional('checkoutDep') : bool,
         }
         dependsClause = schema.Schema([
             schema.Or(
