@@ -484,6 +484,7 @@ class TestDummyArchive(TestCase):
     def testDownloadLocal(self):
         run(DummyArchive().downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         self.assertEqual(run(DummyArchive().downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
+        self.assertEqual(run(DummyArchive().downloadLocalFingerprint(DummyStep(), b'\x00'*20)), None)
 
     def testUploadJenkins(self):
         ret = DummyArchive().upload(b'\x00'*20, "unused", "unused")
@@ -494,6 +495,7 @@ class TestDummyArchive(TestCase):
     def testUploadLocal(self):
         run(DummyArchive().uploadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         run(DummyArchive().uploadLocalLiveBuildId(DummyStep(), b'\x00'*20, b'\x00'*20))
+        run(DummyArchive().uploadLocalFingerprint(DummyStep(), b'\x00'*20, b'\x00'*20))
 
 
 def createHttpHandler(repoPath, username=None, password=None):
