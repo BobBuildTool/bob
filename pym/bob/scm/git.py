@@ -28,6 +28,33 @@ def dirIsEmpty(p):
         return False
     return os.listdir(p) == []
 
+def getBranchTagCommit(spec):
+    branch = None
+    tag = None
+    commit = None
+    if "rev" in spec:
+        rev = spec["rev"]
+        if rev.startswith("refs/heads/"):
+            branch = rev[11:]
+        elif rev.startswith("refs/tags/"):
+            tag = rev[10:]
+        elif len(rev) == 40:
+            commit = rev
+        else:
+            raise ParseError("Invalid rev format: " + rev)
+    branch = spec.get("branch", branch)
+    tag = spec.get("tag", tag)
+    commit = spec.get("commit", commit)
+    if commit:
+        # validate commit
+        if re.match("^[0-9a-f]{40}$", commit) is None:
+            raise ParseError("Invalid commit id: " + str(commit))
+    elif not branch and not tag:
+        # nothing secified at all -> master branch
+        branch = "master"
+
+    return (branch, tag, commit)
+
 class GitScm(Scm):
 
     DEFAULTS = {
@@ -64,31 +91,9 @@ class GitScm(Scm):
     def __init__(self, spec, overrides=[], secureSSL=None, stripUser=None):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
-        self.__branch = None
-        self.__tag = None
-        self.__commit = None
-        self.__remotes = {}
-        if "rev" in spec:
-            rev = spec["rev"]
-            if rev.startswith("refs/heads/"):
-                self.__branch = rev[11:]
-            elif rev.startswith("refs/tags/"):
-                self.__tag = rev[10:]
-            elif len(rev) == 40:
-                self.__commit = rev
-            else:
-                raise ParseError("Invalid rev format: " + rev)
-        self.__branch = spec.get("branch", self.__branch)
-        self.__tag = spec.get("tag", self.__tag)
-        self.__commit = spec.get("commit", self.__commit)
-        if self.__commit:
-            # validate commit
-            if re.match("^[0-9a-f]{40}$", self.__commit) is None:
-                raise ParseError("Invalid commit id: " + str(self.__commit))
-        elif not self.__branch and not self.__tag:
-            # nothing secified at all -> master branch
-            self.__branch = "master"
         self.__dir = spec.get("dir", ".")
+        self.__branch, self.__tag, self.__commit = getBranchTagCommit(spec)
+        self.__remotes = {}
         # convert remotes into separate dictionary
         for key, val in spec.items():
             if key.startswith(GitScm.REMOTE_PREFIX):
@@ -445,6 +450,32 @@ class GitScm(Scm):
         return True
 
     async def switch(self, invoker, oldSpec):
+        # Special handling for repositories that are in a detached HEAD state.
+        # While it is technically ok to make an inline switch, the user can
+        # only recover his old commit(s) from the reflog. This is confusing and
+        # after gc.reflogExpire (90 days by default) the commit might be
+        # deleted forever. Play safe and move to attic in this case.
+        detached = await invoker.callCommand(["git", "symbolic-ref", "-q", "HEAD"],
+            cwd=self.__dir, stdout=False, stderr=False)
+        if detached:
+            # The only exception to the above rule is when a tag or commit
+            # was checked out and the repo is still at this commit.
+            _, oldTag, oldCommit = getBranchTagCommit(oldSpec)
+            if oldCommit:
+                pass # just compare this commit
+            elif oldTag:
+                # Convert tag to commit. Beware of annotated commits!
+                oldCommit = await invoker.checkOutputCommand(["git",
+                    "rev-parse", "tags/"+oldTag+"^0"], cwd=self.__dir)
+            else:
+                # User moved from branch to detached HEAD
+                invoker.fail("Cannot switch: detached HEAD state")
+
+            curCommit = await invoker.checkOutputCommand(["git", "rev-parse",
+                "HEAD"], cwd=self.__dir)
+            if curCommit != oldCommit:
+                invoker.fail("Cannot switch: user moved to different commit: {} vs. {}".format(curCommit, oldCommit))
+
         # Try to checkout new state in old workspace. If something fails the
         # old attic logic will take over.
         await self.invoke(invoker, True)
