@@ -508,7 +508,9 @@ class CoreRef:
         elif self.__diffSandbox in cache:
             sandbox = cache[self.__diffSandbox]
         else:
-            sandbox = self.__diffSandbox.refDeref(stack, inputTools, inputSandbox, pathFormatter, cache)
+            sandbox = self.__diffSandbox.refDeref(stack, inputTools, inputSandbox,
+                    pathFormatter, cache)
+            cache[self.__diffSandbox] = sandbox
 
         return self.__destination.refDeref(stack + self.__stackAdd, tools, sandbox, pathFormatter)
 
