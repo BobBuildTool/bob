@@ -5,13 +5,29 @@
 
 import sys
 
+def filterDirs(dirs, exclude):
+    i = 0
+    while i < len(dirs):
+        if dirs[i] in exclude:
+            del dirs[i]
+        else:
+            i += 1
+
 def getBobInputHash():
-    from .utils import hashDirectory
-    import os
+    import hashlib
+    import os, os.path
     # we need the source hash to invalidate the cache in case of source code changes.
     # therefore it's enough to hash the pym directory without the entries of cmds-Dir
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
-    return hashDirectory(root, ignoreDirs=['__pycache__', 'cmds'])
+    exclude = frozenset(['__pycache__', 'cmds'])
+    h = hashlib.sha1()
+    for root, dirs, files in os.walk(root):
+        filterDirs(dirs, exclude)
+        dirs.sort()
+        for fn in sorted(files):
+            with open(os.path.join(root, fn), "rb") as f:
+                h.update(f.read())
+    return h.digest()
 
 # First try to see if we're running a development version. If we do we take the
 # version from git and make sure everything is up-to-date. Otherwise Bob was
