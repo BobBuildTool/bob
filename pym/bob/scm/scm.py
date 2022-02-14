@@ -31,10 +31,14 @@ class ScmOverride:
                 .format(e.pattern, str(e)))
 
     def __getstate__(self):
-        return (self.__match, self.__del, self.__set, self.__replaceRaw, self.__if)
+        # We don't persis the if-condition because it has already been
+        # evaluated after the initial SCM instance was created. It's also not
+        # json-serializable becuase of the IfExpression object.
+        return (self.__match, self.__del, self.__set, self.__replaceRaw)
 
     def __setstate__(self, s):
-        (self.__match, self.__del, self.__set, self.__replaceRaw, self.__if) = s
+        (self.__match, self.__del, self.__set, self.__replaceRaw) = s
+        self.__if = None
         self.__init()
 
     def __doesMatch(self, scm, env):
