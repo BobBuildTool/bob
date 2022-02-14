@@ -1,3 +1,7 @@
+[run]
+parallel = True
+source = $COVERAGE_SOURCES
+
 [report]
 exclude_lines =
     pragma: no cover

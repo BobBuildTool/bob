@@ -150,10 +150,12 @@ fi
 if [[ -n $RUN_COVERAGE ]] ; then
     # make sure coverage is installed in the current environment
     if python3 -c "import coverage" 2>/dev/null; then
-        RUN_PYTHON3="$RUN_COVERAGE run --source $PWD/pym  --parallel-mode"
+        export COVERAGE_SOURCES="$PWD/pym"
+        RUN_PYTHON3="$RUN_COVERAGE run --rcfile=$PWD/.coveragerc"
 	# The multiprocessing module is incompatible with coverage.py. Enable
 	# the hack in pym/bob/utils.py to still get some data.
 	export ENABLE_COVERAGE_HACK=1
+	export COVERAGE_PROCESS_START="$PWD/.coveragerc"
     else
         echo "coverage3 is installed but not usable!" >&2
 	exit 1
@@ -224,7 +226,6 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 		: # No tests matched
 	elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
 		export -f run_blackbox_test
-		export RUN_PYTHON3
 		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_blackbox_test ::: \
 		  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
 	else

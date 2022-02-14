@@ -29,14 +29,14 @@ cleanup()
 # and "no global defaults" debug switches.
 run_bob()
 {
-	${RUN_PYTHON3} "$BOB_ROOT/bob" --debug=pkgck,ngd "$@"
+	"$BOB_ROOT/bob" --debug=pkgck,ngd "$@"
 }
 
 # Run bob only with the "no global defaults" debug switch. Used for black box
 # regression tests of the package calculation algorithm.
 run_bob_plain()
 {
-	${RUN_PYTHON3} "$BOB_ROOT/bob" --debug=ngd "$@"
+	"$BOB_ROOT/bob" --debug=ngd "$@"
 }
 
 exec_blackbox_test()
