@@ -288,6 +288,7 @@ cd {ROOT}
         self.__downloadDepthForce = 0xffff
         self.__downloadLayerModes = []
         self.__downloadPackages = None
+        self.__uploadDepth = 0xffff
         self.__bobRoot = bobRoot
         self.__cleanBuild = cleanBuild
         self.__cleanCheckout = False
@@ -953,7 +954,8 @@ cd {ROOT}
                                 depth, mayUpOrDownload, buildId)
                             self._setAlreadyRun(step, False, checkoutOnly)
 
-                if built and mayUpOrDownload and self.__archive.canUploadLocal():
+                if built and mayUpOrDownload and self.__archive.canUploadLocal() \
+                   and (depth <= self.__uploadDepth):
                     await self.__archive.uploadPackage(step, buildId,
                         audit, step.getStoragePath(), executor=self.__executor)
 
