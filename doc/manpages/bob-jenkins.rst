@@ -21,10 +21,11 @@ Available sub-commands:
 
 ::
 
-    bob jenkins add [-h] [-n NODES] [-o OPTIONS] [-w] [-p PREFIX] [-r ROOT]
-                    [-D DEFINES] [--keep] [--download] [--upload]
+    bob jenkins add [-h] [-n NODES] [-o OPTIONS]
+                    [--host-platform {linux,msys,win32}] [-w] [-p PREFIX]
+                    [-r ROOT] [-D DEFINES] [--keep] [--download] [--upload]
                     [--no-sandbox] [--credentials CREDENTIALS] [--clean]
-                    [--shortdescription] [--longdescription]
+                    [--shortdescription | --longdescription]
                     name url
     bob jenkins export [-h] name dir
     bob jenkins graph [-h] name
@@ -35,13 +36,18 @@ Available sub-commands:
     bob jenkins push [-h] [-f] [--no-ssl-verify] [--no-trigger] [-q] [-v]
                      name
     bob jenkins rm [-h] [-f] name
-    bob jenkins set-options [-h] [--reset] [-n NODES] [-o OPTIONS] [-p PREFIX]
-                            [--add-root ADD_ROOT] [--del-root DEL_ROOT]
-                            [-D DEFINES] [-U UNDEFINES] [--credentials CREDENTIALS]
-                            [--keep | --no-keep] [--download | --no-download]
-                            [--upload | --no-upload] [--sandbox | --no-sandbox]
-                            [--clean | --incremental] [--autotoken AUTHTOKEN]
-                            [--shortdescription]
+    bob jenkins set-options [-h] [--reset] [-n NODES] [-o OPTIONS]
+                            [--host-platform {linux,msys,win32}]
+                            [-p PREFIX] [--add-root ADD_ROOT]
+                            [--del-root DEL_ROOT] [-D DEFINES]
+                            [-U UNDEFINES] [--credentials CREDENTIALS]
+                            [--authtoken AUTHTOKEN]
+                            [--shortdescription | --longdescription]
+                            [--keep | --no-keep]
+                            [--download | --no-download]
+                            [--upload | --no-upload]
+                            [--sandbox | --no-sandbox]
+                            [--clean | --incremental]
                             name
     bob jenkins set-url [-h] name url
 
@@ -75,6 +81,13 @@ Options
 
 ``-f, --force``
     Overwrite existing jobs
+
+``--host-platform``
+    Jenkins host platform type. May be any of ``linux``, ``msys`` or ``win32``.
+
+    This specifies the host operating system where the Jenkins master and the
+    build slaves are running. By default this is the type of the current
+    operating system.
 
 ``--incremental``
     Reuse workspace for incremental builds
@@ -152,7 +165,8 @@ Options
     Show additional information
 
 ``-w, --windows``
-    Jenkins is running on Windows. Produce cygwin compatible scripts.
+    Jenkins is running on Windows. Produce MSYS2 compatible scripts. This
+    option has been deprecated in favour of ``--host-platform``.
 
 Commands
 --------
