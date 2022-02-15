@@ -1006,10 +1006,12 @@ cd {ROOT}
         # get directory into shape
         (prettySrcPath, created) = self._constructDir(checkoutStep, "src")
         oldCheckoutState = BobState().getDirectoryState(prettySrcPath, True)
+        isFreshCheckout = not BobState().hasDirectoryState(prettySrcPath)
         if created:
             # invalidate result if folder was created
             oldCheckoutState = {}
             BobState().resetWorkspaceState(prettySrcPath, oldCheckoutState)
+            isFreshCheckout = True
         oldCheckoutHash = BobState().getResultHash(prettySrcPath)
 
         checkoutExecuted = False
@@ -1133,7 +1135,7 @@ cd {ROOT}
             await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
         # upload live build-id cache in case of fresh checkout
-        if created and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
+        if isFreshCheckout and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
             liveBId = checkoutStep.calcLiveBuildId()
             if liveBId is not None:
                 await self.__archive.uploadLocalLiveBuildId(checkoutStep, liveBId, checkoutHash,

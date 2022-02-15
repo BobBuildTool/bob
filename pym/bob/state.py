@@ -520,6 +520,9 @@ class _BobState():
     def getDirectories(self):
         return list(self.__dirStates.keys())
 
+    def hasDirectoryState(self, path):
+        return path in self.__dirStates
+
     def getDirectoryState(self, path, isSourceDir):
         ret = copy.deepcopy(self.__dirStates.get(path, {} if isSourceDir else None))
         if isSourceDir:
