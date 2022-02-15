@@ -976,7 +976,9 @@ cd {ROOT}
                                 depth, mayUpOrDownload, buildId)
                             self._setAlreadyRun(step, False, checkoutOnly)
 
-                if built and mayUpOrDownload and self.__archive.canUploadLocal() \
+                # Upload package if it was built. On Jenkins we always upload
+                # because it is essential that the tgz/buildid exists.
+                if (built or step.JENKINS) and mayUpOrDownload and self.__archive.canUploadLocal() \
                    and (depth <= self.__uploadDepth):
                     await self.__archive.uploadPackage(step, buildId,
                         audit, step.getStoragePath(), executor=self.__executor)
