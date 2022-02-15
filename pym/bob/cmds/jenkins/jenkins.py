@@ -1283,8 +1283,13 @@ def jenkinsNameFormatter(step, props):
 def jenkinsNamePersister(jenkins, wrapFmt, uuid):
 
     def persist(step, props):
+        # We must never mix checkout steps and other steps. The checkout step
+        # workspace state is fundamentally different. If a checkoutStep and a
+        # packageStep have the same variant-id things will go south...
+        digest = getJenkinsVariantId(step)
+        digest += b'\1' if step.isCheckoutStep() else b'\0'
         ret = BobState().getJenkinsByNameDirectory(
-            jenkins, wrapFmt(step, props), getJenkinsVariantId(step))
+            jenkins, wrapFmt(step, props), digest)
         if uuid: ret = ret + "-" + uuid
         return ret
 
