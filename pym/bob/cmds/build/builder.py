@@ -1085,13 +1085,14 @@ cd {ROOT}
                 # Check that new checkouts do not collide with old stuff in
                 # workspace. Do it before we store the new SCM state to
                 # check again if the step is rerun.
-                for scmDir in checkoutState.keys():
-                    if scmDir is None or scmDir == ".": continue
-                    if scmDir in oldCheckoutState: continue
-                    scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
-                    if os.path.exists(scmPath):
-                        raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
-                                            .format(scmDir, prettySrcPath))
+                if not checkoutStep.JENKINS:
+                    for scmDir in checkoutState.keys():
+                        if scmDir is None or scmDir == ".": continue
+                        if scmDir in oldCheckoutState: continue
+                        scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                        if os.path.exists(scmPath):
+                            raise BuildError("New SCM checkout '{}' collides with existing file in workspace '{}'!"
+                                                .format(scmDir, prettySrcPath))
 
                 # Store new SCM checkout state. The script state is not stored
                 # so that this step will run again if it fails. OTOH we must
