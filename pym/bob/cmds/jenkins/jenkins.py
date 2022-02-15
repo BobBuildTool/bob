@@ -1918,14 +1918,15 @@ def doJenkinsPush(recipes, argv):
             # configure or create job
             if name in existingJobs:
                 # skip job if completely unchanged
-                if oldJobConfig == newJobConfig:
+                if oldJobConfig == newJobConfig and not args.force:
                     printInfo(name, "Unchanged. Skipping...")
                     continue
 
                 # Updated config.xml? Depending on the update mode not all
                 # changes are considered an acutal reconfiguration.
                 if (oldJobConfig['lazyHash'] != newJobConfig['lazyHash']) or \
-                   (updateAlways and (oldJobConfig.get('hash') != newJobConfig['hash'])):
+                   (updateAlways and (oldJobConfig.get('hash') != newJobConfig['hash'])) or \
+                   args.force:
                     printNormal(name, "Set new configuration...")
                     connection.updateConfig(name, jobXML)
                     oldJobConfig['hash'] = newJobConfig['hash']
