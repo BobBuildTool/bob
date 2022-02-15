@@ -683,7 +683,7 @@ cd {ROOT}
     async def _runLocalSCMs(self, step, logger):
         workspacePath = step.getWorkspacePath()
         logFile = os.path.join(workspacePath, "..", "log.txt")
-        spec = StepSpec.fromStep(step, logFile=logFile)
+        spec = StepSpec.fromStep(step, logFile=logFile, isJenkins=step.JENKINS)
         invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
             self.__verbose >= INFO, self.__verbose >= NORMAL,
             self.__verbose >= DEBUG, self.__bufferedStdIO,
@@ -1812,7 +1812,7 @@ cd {ROOT}
         return fingerprint
 
     async def __runFingerprintScript(self, step, logger):
-        spec = StepSpec.fromStep(step, None, self.__envWhiteList)
+        spec = StepSpec.fromStep(step, None, self.__envWhiteList, isJenkins=step.JENKINS)
         invoker = Invoker(spec, self.__preserveEnv, True, True, True, False, True,
                           executor=self.__executor)
         (ret, stdout, stderr) = await invoker.executeFingerprint()
@@ -1834,7 +1834,7 @@ cd {ROOT}
 
     async def __runScmSwitch(self, step, scmPath, scm, oldSpec):
         logFile = os.path.join(step.getWorkspacePath(), "..", "log.txt")
-        spec = StepSpec.fromStep(step, None, self.__envWhiteList, logFile)
+        spec = StepSpec.fromStep(step, None, self.__envWhiteList, logFile, isJenkins=step.JENKINS)
         invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
             self.__verbose >= INFO, self.__verbose >= NORMAL,
             self.__verbose >= DEBUG, self.__bufferedStdIO,
