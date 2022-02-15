@@ -913,9 +913,10 @@ cd {ROOT}
                     buildId = await self._getBuildId(step, depth)
 
                 # Try to use a shared location.
+                audit = None
                 shared = False
                 if not checkoutOnly:
-                    shared = self._useSharedPackage(step, buildId)
+                    shared, audit = self._useSharedPackage(step, buildId)
                     if shared:
                         self._setAlreadyRun(step, False, checkoutOnly)
 
@@ -926,7 +927,7 @@ cd {ROOT}
                 if not shared and mayUpOrDownload and not checkoutOnly:
                     async with self.__workspaceLock(step):
                         if not self._wasDownloadTried(step):
-                            downloaded = await self._downloadPackage(step, depth, buildId)
+                            downloaded, audit = await self._downloadPackage(step, depth, buildId)
                             self._setDownloadTried(step)
                             if downloaded:
                                 self._setAlreadyRun(step, False, checkoutOnly)
@@ -937,9 +938,13 @@ cd {ROOT}
                     await self._cook(step.getAllDepSteps(), step.getPackage(), checkoutOnly, depth+1)
                     async with self.__workspaceLock(step):
                         if not self._wasAlreadyRun(step, checkoutOnly):
-                            built = await self._cookPackageStep(step, checkoutOnly,
+                            built, audit = await self._cookPackageStep(step, checkoutOnly,
                                 depth, mayUpOrDownload, buildId)
                             self._setAlreadyRun(step, False, checkoutOnly)
+
+                if built and mayUpOrDownload and self.__archive.canUploadLocal():
+                    await self.__archive.uploadPackage(step, buildId,
+                        audit, step.getStoragePath(), executor=self.__executor)
 
                 # If the package can be shared and was built/downloaded it must
                 # be moved to the final location.
@@ -1241,7 +1246,7 @@ cd {ROOT}
                 stepMessage(packageStep, "PACKAGE", "skipped (already shared in {})".format(prettyPackagePath),
                     SKIPPED, IMPORTANT)
                 BobState().setStoragePath(prettyPackagePath, sharedWorkspace)
-                return True
+                return True, sharedAudit
             elif oldWasShared:
                 stepMessage(packageStep, "PRUNE", "{} (shared location changed)".format(prettyPackagePath),
                     WARNING)
@@ -1267,7 +1272,7 @@ cd {ROOT}
             BobState().setInputHashes(prettyPackagePath,
                                       packageInputShared(packageBuildId, sharedPath))
             BobState().setStoragePath(prettyPackagePath, sharedWorkspace)
-            return True
+            return True, sharedAudit
 
         # Whatever happens we will first use the regular workspace path as
         # storage location. At the end we might move to the shared location.
@@ -1283,7 +1288,7 @@ cd {ROOT}
             removePath(auditPath)
             BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
 
-        return False
+        return False, None
 
     async def _downloadPackage(self, packageStep, depth, packageBuildId):
         """If possible try to download the package.
@@ -1313,7 +1318,7 @@ cd {ROOT}
             (self.__downloadPackages and self.__downloadPackages.search(packageStep.getPackage().getName())) or
             layerDownloadMode)
         if not tryDownload:
-            return False
+            return False, None
 
         # Dissect input parameters that lead to current workspace the last time
         (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
@@ -1321,6 +1326,7 @@ cd {ROOT}
             dissectPackageInputState(BobState().getInputHashes(prettyPackagePath))
         workspaceChanged = False
         wasDownloaded = False
+        audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
         packageDigest = packageStep.getVariantId()
 
         # prune directory if we previously downloaded/built something different
@@ -1346,7 +1352,6 @@ cd {ROOT}
         # empty. If the directory holds a result and was downloaded it
         # we're done.
         if BobState().getResultHash(prettyPackagePath) is None:
-            audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
             wasDownloaded = await self.__archive.downloadPackage(packageStep,
                 packageBuildId, audit, prettyPackagePath, executor=self.__executor)
             if wasDownloaded:
@@ -1373,7 +1378,7 @@ cd {ROOT}
                 BobState().setInputHashes(prettyPackagePath,
                     packageInputDownloaded(packageBuildId))
 
-        return wasDownloaded
+        return wasDownloaded, audit
 
     async def _cookPackageStep(self, packageStep, checkoutOnly, depth, mayUpOrDownload, packageBuildId):
         # Dissect input parameters that lead to current workspace the last time
@@ -1385,6 +1390,7 @@ cd {ROOT}
         # be available and the build step might reference it (think of
         # "make -C" or cross-workspace symlinks.
         workspaceChanged = False
+        audit = None
         packageInputs = [ packageStep.getPackage().getCheckoutStep() ]
         packageInputs.extend(packageStep.getAllDepSteps())
         packageInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
@@ -1402,6 +1408,7 @@ cd {ROOT}
         elif (not self.__force) and (oldInputHashes == packageInputHashes):
             stepMessage(packageStep, "PACKAGE", "skipped (unchanged input for {})".format(prettyPackagePath),
                 SKIPPED, IMPORTANT)
+            audit = os.path.join(os.path.dirname(prettyPackagePath), "audit.json.gz")
         else:
             with stepExec(packageStep, "PACKAGE", prettyPackagePath) as a:
                 # invalidate result because folder will be cleared
@@ -1413,9 +1420,6 @@ cd {ROOT}
                 workspaceChanged = True
                 self.__statistic.packagesBuilt += 1
             audit = await self._generateAudit(packageStep, depth, packageHash)
-            if mayUpOrDownload and self.__archive.canUploadLocal():
-                await self.__archive.uploadPackage(packageStep, packageBuildId,
-                    audit, prettyPackagePath, executor=self.__executor)
 
         # Rehash directory if content was changed
         if workspaceChanged:
@@ -1424,7 +1428,7 @@ cd {ROOT}
             BobState().setInputHashes(prettyPackagePath,
                 packageInputBuilt(packageBuildId, packageInputHashes))
 
-        return workspaceChanged
+        return workspaceChanged, audit
 
     def _installSharedPackage(self, packageStep, buildId):
         """Try to install shared package
