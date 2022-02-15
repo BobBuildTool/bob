@@ -283,7 +283,7 @@ class Scm(metaclass=ABCMeta):
         """
         return ""
 
-    def asJenkins(self, workPath, credentials, options):
+    def asJenkins(self, workPath, config):
         """Return Jenkins xml.etree.ElementTree fragment that does the checkout.
 
         This is only called if hasJenkinsPlugin() returns True. In this case

@@ -560,7 +560,7 @@ class GitScm(Scm):
 
         return ret
 
-    def asJenkins(self, workPath, credentials, options):
+    def asJenkins(self, workPath, config):
         scm = ElementTree.Element("scm", attrib={
             "class" : "hudson.plugins.git.GitSCM",
             "plugin" : "git@2.2.7",
@@ -575,10 +575,10 @@ class GitScm(Scm):
             "url")
         url.text = self.__url
 
-        if credentials:
+        if config.credentials:
             credentialsId = ElementTree.SubElement(userconfigs,
                          "credentialsId")
-            credentialsId.text = credentials
+            credentialsId.text = config.credentials
 
         branch = ElementTree.SubElement(
             ElementTree.SubElement(
@@ -609,17 +609,13 @@ class GitScm(Scm):
         if isinstance(self.__shallow, int):
             shallow = str(self.__shallow)
         else:
-            shallow = options.get("scm.git.shallow")
-        timeout = options.get("scm.git.timeout")
+            shallow = config.scmGitShallow
+        timeout = config.scmGitTimeout
         if shallow is not None or timeout is not None:
             co = ElementTree.SubElement(extensions,
                     "hudson.plugins.git.extensions.impl.CloneOption")
             if shallow is not None:
-                try:
-                    shallow = int(shallow)
-                    if shallow < 0: raise ValueError()
-                except ValueError:
-                    raise BuildError("Invalid 'git.shallow' option: " + str(shallow))
+                shallow = int(shallow)
                 if shallow > 0:
                     ElementTree.SubElement(co, "shallow").text = "true"
                     ElementTree.SubElement(co, "noTags").text = "false"
@@ -648,7 +644,7 @@ class GitScm(Scm):
             if timeout is not None:
                 ElementTree.SubElement(sub, "timeout").text = str(timeout)
 
-        if isTrue(options.get("scm.ignore-hooks", "0")):
+        if config.scmIgnoreHooks:
             ElementTree.SubElement(extensions,
                 "hudson.plugins.git.extensions.impl.IgnoreNotifyCommit")
 

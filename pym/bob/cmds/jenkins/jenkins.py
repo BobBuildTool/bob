@@ -8,7 +8,7 @@ from ...archive import getArchiver
 from ...errors import ParseError, BuildError
 from ...input import RecipeSet
 from ...languages import StepSpec
-from ...state import BobState
+from ...state import BobState, JenkinsConfig
 from ...stringparser import isTrue
 from ...tty import WarnOnce
 from ...utils import asHexStr, processDefines, runInEventLoop, sslNoVerifyContext
@@ -115,18 +115,6 @@ def wrapCommandArguments(cmd, arguments):
     ret.append(line)
     return ret
 
-def getGcNum(options, root, key):
-    key = "jobs.gc." + ("root" if root else "deps") + "." + key
-    try:
-        val = options.get(key, "1" if key == "jobs.gc.deps.artifacts" else "0")
-        num = int(val)
-    except ValueError:
-        raise ParseError("Invalid option '{}': '{}'".format(key, val))
-    if num <= 0:
-        return "-1"
-    else:
-        return str(num)
-
 class SpecHasher:
     """Track digest calculation and output as spec for bob-hash-engine.
 
@@ -167,16 +155,6 @@ class SpecHasher:
 def genUuid():
     ret = "".join(random.sample("0123456789abcdef", 8))
     return ret[:4] + '-' + ret[4:]
-
-def getAuditMeta(options):
-    return {
-        k[len("audit.meta."):] : v for k, v in sorted(options.items())
-        if k.startswith("audit.meta.")
-    }
-
-def verifyAuditMeta(meta):
-    valid = re.compile(r"[0-9A-Za-z._-]+")
-    return all(valid.fullmatch(k) for k in meta.keys())
 
 def getJenkinsVariantId(step):
     """Get the variant-id of a step with it's sandbox dependency.
@@ -587,7 +565,7 @@ class JenkinsJob:
         xml.etree.ElementTree.SubElement(
             cp, "doNotFingerprintArtifacts").text = "true"
 
-    def dumpXML(self, orig, nodes, windows, credentials, clean, options, date, authtoken):
+    def dumpXML(self, orig, config, date):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
             builders = root.find("builders")
@@ -612,12 +590,12 @@ class JenkinsJob:
                     "buildWrappers")
             auth = root.find("authToken")
             if auth:
-                if not authtoken:
+                if not config.authtoken:
                     xml.etree.ElementTree.remove(auth)
                 else:
                     auth.clear()
             else:
-                if authtoken:
+                if config.authtoken:
                     xml.etree.ElementTree.SubElement(root, "authToken")
         else:
             root = xml.etree.ElementTree.Element("project")
@@ -642,21 +620,20 @@ class JenkinsJob:
             archiver = xml.etree.ElementTree.SubElement(
                 publishers, "hudson.tasks.ArtifactArchiver")
             buildWrappers = xml.etree.ElementTree.SubElement(root, "buildWrappers")
-            if authtoken:
+            if config.authtoken:
                 auth = xml.etree.ElementTree.SubElement(root, "authToken")
             else:
                 auth = None
 
-        root.find("description").text = self.getDescription(date,
-            options.get('jobs.update', "always") == "lazy")
+        root.find("description").text = self.getDescription(date, config.jobsUpdate == "lazy")
         scmTrigger = xml.etree.ElementTree.SubElement(
             triggers, "hudson.triggers.SCMTrigger")
-        xml.etree.ElementTree.SubElement(scmTrigger, "spec").text = options.get("scm.poll")
+        xml.etree.ElementTree.SubElement(scmTrigger, "spec").text = config.scmPoll
         xml.etree.ElementTree.SubElement(
-            scmTrigger, "ignorePostCommitHooks").text = ("true" if isTrue(options.get("scm.ignore-hooks", "false")) else "false")
+            scmTrigger, "ignorePostCommitHooks").text = ("true" if config.scmIgnoreHooks else "false")
 
-        numToKeep = getGcNum(options, self.__isRoot, "builds")
-        artifactNumToKeep = getGcNum(options, self.__isRoot, "artifacts")
+        numToKeep = config.getGcNum(self.__isRoot, "builds")
+        artifactNumToKeep = config.getGcNum(self.__isRoot, "artifacts")
         discard = root.find("./properties/jenkins.model.BuildDiscarderProperty/strategy[@class='hudson.tasks.LogRotator']")
         if numToKeep != "-1" or artifactNumToKeep != "-1":
             if discard is None:
@@ -691,33 +668,33 @@ class JenkinsJob:
             properties = root.find("properties")
             properties.remove(properties.find("hudson.plugins.copyartifact.CopyArtifactPermissionProperty"))
 
-        if (nodes != ''):
+        if config.nodes:
             assignedNode = root.find("assignedNode")
             if assignedNode is None:
                 assignedNode = xml.etree.ElementTree.SubElement(root, "assignedNode")
-            assignedNode.text = nodes
+            assignedNode.text = config.nodes
             root.find("canRoam").text = "false"
         else:
             root.find("canRoam").text = "true"
 
-        sharedDir = options.get("shared.dir", "${JENKINS_HOME}/bob")
+        sharedDir = config.sharedDir
 
         specCmds = []
-        specCmds.append(self.getShebang(windows))
+        specCmds.append(self.getShebang(config.windows))
 
         prepareCmds = []
-        prepareCmds.append(self.getShebang(windows))
+        prepareCmds.append(self.getShebang(config.windows))
         prepareCmds.append("mkdir -p .state")
-        if not windows:
+        if not config.windows:
             # Verify umask for predictable file modes. Can be set outside of
             # Jenkins but Bob requires that umask is everywhere the same for
             # stable Build-IDs. Mask 0022 is enforced on local builds and in
             # the sandbox. Check it and bail out if different.
             prepareCmds.append("[[ $(umask) == 0022 ]] || exit 1")
 
-        if not clean:
+        if not config.clean:
             cleanupCmds = []
-            cleanupCmds.append(self.getShebang(windows))
+            cleanupCmds.append(self.getShebang(config.windows))
             cleanupCmds.append("")
             cleanupCmds.append("# delete unused files and directories from workspace")
             cleanupCmds.append("pruneUnused()")
@@ -773,7 +750,7 @@ class JenkinsJob:
 
         deps = sorted(self.__deps.values())
         if deps:
-            policy = options.get("jobs.policy", "stable")
+            policy = config.jobsPolicy
             revBuild = xml.etree.ElementTree.SubElement(
                 triggers, "jenkins.triggers.ReverseBuildTrigger")
             xml.etree.ElementTree.SubElement(revBuild, "spec").text = ""
@@ -806,12 +783,12 @@ class JenkinsJob:
                     JenkinsJob._buildIdName(d))
                 # Copy artifact if we rely on Jenkins directly. Do it
                 # conditionally if it is a shared artifact.
-                if options.get("artifacts.copy", "jenkins") == "jenkins":
+                if config.artifactsCopy == "jenkins":
                     self.__copyArtifact(builders, policy, self.__getJobName(d),
                         JenkinsJob._tgzName(d), sharedDir,
                         JenkinsJob._buildIdName(d) if d.isShared() else None,
-                        windows)
-                elif options.get("artifacts.copy", "jenkins") == "archive":
+                        config.windows)
+                elif config.artifactsCopy == "archive":
                     downloadCmd = self.__archive.download(d,
                             JenkinsJob._buildIdName(d),
                             JenkinsJob._tgzName(d))
@@ -881,8 +858,8 @@ class JenkinsJob:
             checkout = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(
-                checkout, "command").text = self.dumpStep(d, windows, [])
-            checkoutSCMs.extend(d.getJenkinsXml(credentials, options))
+                checkout, "command").text = self.dumpStep(d, config.windows, [])
+            checkoutSCMs.extend(d.getJenkinsXml(config))
 
         if len(checkoutSCMs) > 1:
             scm = xml.etree.ElementTree.SubElement(
@@ -903,14 +880,14 @@ class JenkinsJob:
 
         # calculate Build-ID
         buildIdCalc = [
-            self.getShebang(windows),
+            self.getShebang(config.windows),
             "# create build-ids"
         ]
         for d in sorted(self.__checkoutSteps.values()):
             ensureFingerprint(d)
             specCmds.extend(self.dumpStepSpec(d))
             buildIdCalc.extend(self.dumpStepBuildIdGen(d))
-            buildIdCalc.extend(self.dumpStepLiveBuildIdGen(d, windows))
+            buildIdCalc.extend(self.dumpStepLiveBuildIdGen(d, config.windows))
         for d in sorted(self.__buildSteps.values()):
             specCmds.extend(self.dumpStepSpec(d))
             ensureFingerprint(d)
@@ -925,12 +902,12 @@ class JenkinsJob:
             checkout, "command").text = "\n".join(buildIdCalc)
 
         # extra audit trail meta variables
-        auditMeta = getAuditMeta(options)
+        auditMeta = config.getAuditMeta()
 
         # generate audit trail of checkout steps
         if self.__checkoutSteps:
             checkoutAudit = [
-                self.getShebang(windows),
+                self.getShebang(config.windows),
                 "# generate audit trail of checkout step(s)"
             ]
             for d in sorted(self.__checkoutSteps.values()):
@@ -954,7 +931,7 @@ class JenkinsJob:
             if not cmd: continue
             downloadCmds.append(cmd)
         if downloadCmds:
-            downloadCmds.insert(0, self.getShebang(windows, False))
+            downloadCmds.insert(0, self.getShebang(config.windows, False))
             downloadCmds.append("true # don't let downloads fail the build")
             download = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
@@ -969,7 +946,7 @@ class JenkinsJob:
                 if d in pkgStep.getArguments() ]
             xml.etree.ElementTree.SubElement(
                 build, "command").text = "\n".join([
-                    self.dumpStep(d, windows, affectedPackageSteps),
+                    self.dumpStep(d, config.windows, affectedPackageSteps),
                     "", "# generate audit trail",
                     "cd \"$WORKSPACE\"",
                     self.dumpStepAuditGen(d, auditMeta)
@@ -981,7 +958,7 @@ class JenkinsJob:
             package = xml.etree.ElementTree.SubElement(
                 builders, "hudson.tasks.Shell")
             xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
-                self.dumpStep(d, windows, [d]),
+                self.dumpStep(d, config.windows, [d]),
                 "", "# generate audit trail",
                 "cd \"$WORKSPACE\"",
                 self.dumpStepAuditGen(d, auditMeta),
@@ -994,10 +971,10 @@ class JenkinsJob:
                 "" if not self.__recipe.getRecipeSet().getPolicy('allRelocatable') and \
                       not d.isRelocatable() and \
                       (d.getSandbox() is None) and \
-                      (options.get("artifacts.copy", "jenkins") == "jenkins")
+                      (config.artifactsCopy == "jenkins")
                     else self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
             ])
-            if options.get("artifacts.copy", "jenkins") == "jenkins":
+            if config.artifactsCopy == "jenkins":
                 publish.append(JenkinsJob._tgzName(d))
             publish.append(JenkinsJob._buildIdName(d))
 
@@ -1023,7 +1000,7 @@ class JenkinsJob:
                            SHARED=sharedDir,
                            PACKAGE="/".join(d.getPackage().getStack()))))
         if installCmds:
-            installCmds[0:0] = [ self.getShebang(windows), "",
+            installCmds[0:0] = [ self.getShebang(config.windows), "",
                 "# install shared package atomically",
                 "# =================================", ""]
             install = xml.etree.ElementTree.SubElement(
@@ -1039,7 +1016,7 @@ class JenkinsJob:
         # clean build wrapper
         preBuildClean = buildWrappers.find("hudson.plugins.ws__cleanup.PreBuildCleanup")
         if preBuildClean is not None: buildWrappers.remove(preBuildClean)
-        if clean:
+        if config.clean:
             preBuildClean = xml.etree.ElementTree.SubElement(buildWrappers,
                 "hudson.plugins.ws__cleanup.PreBuildCleanup",
                 attrib={"plugin" : "ws-cleanup@0.30"})
@@ -1049,7 +1026,7 @@ class JenkinsJob:
 
         # add authtoken if set in options
         if auth:
-            auth.text = authtoken
+            auth.text = config.authtoken
 
         # finally set prepare commands
         xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
@@ -1057,7 +1034,7 @@ class JenkinsJob:
         xml.etree.ElementTree.SubElement(specs, "command").text = "\n".join(
             specCmds)
         if fingerprintCmds:
-            fingerprintCmds[0:0] = [ self.getShebang(windows) ]
+            fingerprintCmds[0:0] = [ self.getShebang(config.windows) ]
             xml.etree.ElementTree.SubElement(fingerprintsShell, "command").text = "\n".join(
                 fingerprintCmds)
         else:
@@ -1322,33 +1299,30 @@ def jenkinsNamePersister(jenkins, wrapFmt, uuid):
 def genJenkinsJobs(recipes, jenkins):
     jobs = {}
     config = BobState().getJenkinsConfig(jenkins)
-    recipes.parse(config.get('defines', {}),
-                  "msys" if config.get("windows", False) else "linux")
+    recipes.parse(config.defines, "msys" if config.windows else "linux")
 
-    prefix = config["prefix"]
-    options = config.get("options", {})
+    prefix = config.prefix
     archiveHandler = getArchiver(recipes)
-    archiveHandler.wantUpload(config.get("upload", False))
-    archiveHandler.wantDownload(config.get("download", False))
-    options = config.get("options")
-    if options.get("artifacts.copy", "jenkins") == "archive":
+    archiveHandler.wantUpload(config.upload)
+    archiveHandler.wantDownload(config.download)
+    if config.artifactsCopy == "archive":
         if not archiveHandler.canUploadJenkins() or not archiveHandler.canDownloadJenkins():
             raise ParseError("No archive for up and download found but artifacts.copy using archive enabled!")
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
 
     packages = recipes.generatePackages(
-        jenkinsNamePersister(jenkins, nameFormatter, config.get('uuid')),
-        config.get('sandbox', False))
-    nameCalculator = JobNameCalculator(prefix)
+        jenkinsNamePersister(jenkins, nameFormatter, config.uuid),
+        config.sandbox)
+    nameCalculator = JobNameCalculator(config.prefix)
     rootPackages = []
-    for r in config["roots"]: rootPackages.extend(packages.queryPackagePath(r))
+    for r in config.roots: rootPackages.extend(packages.queryPackagePath(r))
     for root in rootPackages:
         nameCalculator.addPackage(root)
-    nameCalculator.isolate(options.get("jobs.isolate"))
+    nameCalculator.isolate(config.jobsIsolate)
     nameCalculator.sanitize()
     for root in sorted(rootPackages, key=lambda root: root.getName()):
         rootJenkinsJob = _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler, set(), set(),
-                        config.get('shortdescription', False))
+                        config.shortdescription)
         rootJenkinsJob.makeRoot()
 
     packages.close()
@@ -1413,58 +1387,36 @@ def doJenkinsAdd(recipes, argv):
                         help='Calculate all paths for description')
     args = parser.parse_args(argv)
 
-    defines = processDefines(args.defines)
-
-    options = {}
-    for i in args.options:
-        (opt, sep, val) = i.partition("=")
-        if sep != "=":
-            parser.error("Malformed plugin option: "+i)
-        if val != "":
-            options[opt] = val
-
-    if options.get("artifacts.copy") not in [None, "archive", "jenkins"]:
-        parser.error("Invalid option for artifacts.copy. Only 'archive' and 'jenkins' are allowed!")
-    if options.get("artifacts.copy", "jenkins") == "archive":
-        if not args.upload:
-            parser.error("Archive sharing can not be used without upload enabled! Exiting..", file=sys.stderr)
-        if not args.download:
-            parser.error("Archive sharing can not be used without download enabled! Exiting..", file=sys.stderr)
-    if not verifyAuditMeta(getAuditMeta(options)):
-        parser.error("Invalid audit meta variable name")
-
     if args.name in BobState().getAllJenkins():
         print("Jenkins '{}' already added.".format(args.name), file=sys.stderr)
         sys.exit(1)
 
-    url = urllib.parse.urlparse(args.url)
-    urlPath = url.path
-    if not urlPath.endswith("/"): urlPath = urlPath + "/"
+    config = JenkinsConfig(args.url, genUuid())
+    config.roots = args.root
+    config.prefix = args.prefix
+    config.nodes = args.nodes
+    config.defines = processDefines(args.defines)
+    config.download = args.download
+    config.upload = args.upload
+    config.sandbox = args.sandbox
+    config.windows = args.windows
+    config.credentials = args.credentials
+    config.clean = args.clean
+    config.keep = args.keep
+    config.shortdescription = args.shortdescription
+    for i in args.options:
+        (opt, sep, val) = i.partition("=")
+        if sep != "=":
+            parser.error("Malformed extended option: "+i)
+        if val != "":
+            config.setOption(opt, val, parser.error)
 
-    config = {
-        "url" : {
-            "scheme" : url.scheme,
-            "server" : url.hostname,
-            "port" : url.port,
-            "path" : urlPath,
-            "username" : url.username,
-            "password" : url.password,
-        },
-        "roots" : args.root,
-        "prefix" : args.prefix,
-        "nodes" : args.nodes,
-        "defines" : defines,
-        "download" : args.download,
-        "upload" : args.upload,
-        "sandbox" : args.sandbox,
-        "windows" : args.windows,
-        "credentials" : args.credentials,
-        "clean" : args.clean,
-        "keep" : args.keep,
-        "options" : options,
-        "shortdescription" : args.shortdescription,
-        "uuid" : genUuid()
-    }
+    if config.artifactsCopy == "archive":
+        if not config.upload:
+            parser.error("Archive sharing can not be used without upload enabled! Exiting..")
+        if not config.download:
+            parser.error("Archive sharing can not be used without download enabled! Exiting..")
+
     BobState().addJenkins(args.name, config)
 
 def doJenkinsExport(recipes, argv):
@@ -1485,12 +1437,6 @@ def doJenkinsExport(recipes, argv):
     jobs = genJenkinsJobs(recipes, args.name)
     buildOrder = genJenkinsBuildOrder(jobs)
     config = BobState().getJenkinsConfig(args.name)
-    windows = config.get("windows", False)
-    nodes = config.get("nodes", "")
-    credentials = config.get("credentials")
-    clean = config.get("clean", False)
-    options = config.get("options", {})
-    authtoken = config.get("authtoken")
 
     jenkinsJobCreate = recipes.getHookStack('jenkinsJobCreate')
     for j in buildOrder:
@@ -1498,17 +1444,16 @@ def doJenkinsExport(recipes, argv):
         info = {
             'alias' : args.name,
             'name' : job.getName(),
-            'url' : getUrl(config),
-            'prefix' : config.get('prefix'),
-            'nodes' : nodes,
-            'sandbox' : config['sandbox'],
-            'windows' : windows,
+            'url' : config.url,
+            'prefix' : config.prefix,
+            'nodes' : config.nodes,
+            'sandbox' : config.sandbox,
+            'windows' : config.windows,
             'checkoutSteps' : job.getCheckoutSteps(),
             'buildSteps' : job.getBuildSteps(),
             'packageSteps' : job.getPackageSteps()
         }
-        xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, nodes, windows,
-            credentials, clean, options, "now", authtoken), info)
+        xml = applyHooks(jenkinsJobCreate, job.dumpXML(None, config, "now"), info)
         with open(os.path.join(args.dir, job.getName()+".xml"), "wb") as f:
             f.write(xml)
 
@@ -1538,48 +1483,33 @@ def doJenkinsLs(recipes, argv):
         print(j)
         cfg = BobState().getJenkinsConfig(j)
         if args.verbose >= 1:
-            print("    URL:", getUrl(cfg))
-            print("    Roots:", ", ".join(cfg['roots']))
-            if cfg.get('prefix'):
-                print("    Prefix:", cfg['prefix'])
-            if cfg.get('nodes'):
-                print("    Nodes:", cfg['nodes'])
-            if cfg.get('defines'):
-                print("    Defines:", ", ".join([ k+"="+v for (k,v) in cfg['defines'].items() ]))
-            print("    Obsolete jobs:", "keep" if cfg.get('keep', False) else "delete")
-            print("    Download:", "enabled" if cfg.get('download', False) else "disabled")
-            print("    Upload:", "enabled" if cfg.get('upload', False) else "disabled")
-            print("    Clean builds:", "enabled" if cfg.get('clean', False) else "disabled")
-            print("    Sandbox:", "enabled" if cfg.get("sandbox", False) else "disabled")
-            if cfg.get('credentials'):
-                print("    Credentials:", cfg['credentials'])
-            options = cfg.get('options')
+            print("    URL:", cfg.url)
+            print("    Roots:", ", ".join(cfg.roots))
+            if cfg.prefix:
+                print("    Prefix:", cfg.prefix)
+            if cfg.nodes:
+                print("    Nodes:", cfg.nodes)
+            if cfg.defines:
+                print("    Defines:", ", ".join([ k+"="+v for (k,v) in cfg.defines.items() ]))
+            print("    Obsolete jobs:", "keep" if cfg.keep else "delete")
+            print("    Download:", "enabled" if cfg.download else "disabled")
+            print("    Upload:", "enabled" if cfg.upload else "disabled")
+            print("    Clean builds:", "enabled" if cfg.clean else "disabled")
+            print("    Sandbox:", "enabled" if cfg.sandbox else "disabled")
+            if cfg.credentials:
+                print("    Credentials:", cfg.credentials)
+            options = cfg.getOptions()
             if options:
                 print("    Extended options:", ", ".join([ k+"="+v for (k,v) in options.items() ]))
         if args.verbose >= 2:
             print("    Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
 
-def getUrl(config):
-    url = config["url"]
-    if url.get('username'):
-        userPass = url['username']
-        if url.get('password'):
-            userPass += ":" + url['password']
-        userPass += "@"
-    else:
-        userPass = ""
-    return "{}://{}{}{}{}".format(url['scheme'], userPass, url['server'],
-        ":{}".format(url['port']) if url.get('port') else "", url['path'])
-
 class JenkinsConnection:
     """Connection to a Jenkins server abstracting the REST API"""
 
     def __init__(self, config, sslVerify):
-        self.__config = config
-        url = self.__config["url"]
         self.__headers = { "Content-Type": "application/xml" }
-        self.__root = "{}://{}{}{}".format(url['scheme'], url['server'],
-            ":{}".format(url['port']) if url.get('port') else "", url['path'])
+        self.__root = config.urlWithoutCredentials
 
         handlers = []
 
@@ -1593,10 +1523,9 @@ class JenkinsConnection:
                 context=sslNoVerifyContext()))
 
         # handle authorization
-        username = url.get("username")
-        if username is not None:
-            username = urllib.parse.unquote(username)
-            passwd = url.get("password")
+        if config.urlUsername is not None:
+            username = urllib.parse.unquote(config.urlUsername)
+            passwd = config.urlPassword
             if passwd is None:
                 passwd = getpass.getpass()
             else:
@@ -1873,13 +1802,6 @@ def doJenkinsPush(recipes, argv):
     jenkinsJobPreUpdate = recipes.getHookStack('jenkinsJobPreUpdate')
     jenkinsJobPostUpdate = recipes.getHookStack('jenkinsJobPostUpdate')
 
-    windows = config.get("windows", False)
-    nodes = config.get("nodes", "")
-    credentials = config.get("credentials")
-    clean = config.get("clean", False)
-    keep = config.get("keep", False)
-    options = config.get("options", {})
-    authtoken = config.get("authtoken")
     updatedJobs = {}
     verbose = args.verbose - args.quiet
     date = str(datetime.datetime.now())
@@ -1895,9 +1817,7 @@ def doJenkinsPush(recipes, argv):
     def printInfo(job, *args): printLine(1, job, *args)
     def printDebug(job, *args): printLine(2, job, *args)
 
-    updatePolicy = options.get('jobs.update', "always")
-    if updatePolicy not in ("always", "description", "lazy"):
-        raise BuildError("'jobs.update' extended option has unsupported value!");
+    updatePolicy = config.jobsUpdate
     updateAlways = updatePolicy == "always"
     updateDescription = updatePolicy in ("always", "description")
 
@@ -1912,15 +1832,15 @@ def doJenkinsPush(recipes, argv):
             info = {
                 'alias' : args.name,
                 'name' : name,
-                'url' : getUrl(config),
-                'prefix' : config.get('prefix'),
-                'nodes' : nodes,
-                'sandbox' : config['sandbox'],
-                'windows' : windows,
+                'url' : config.url,
+                'prefix' : config.prefix,
+                'nodes' : config.nodes,
+                'sandbox' : config.sandbox,
+                'windows' : config.windows,
                 'checkoutSteps' : job.getCheckoutSteps(),
                 'buildSteps' : job.getBuildSteps(),
                 'packageSteps' : job.getPackageSteps(),
-                'authtoken': authtoken
+                'authtoken': config.authtoken
             }
 
             # get original XML if it exists
@@ -1947,13 +1867,13 @@ def doJenkinsPush(recipes, argv):
                 else:
                     jobXML = None
 
-                jobXML = job.dumpXML(jobXML, nodes, windows, credentials, clean, options, date, authtoken)
+                jobXML = job.dumpXML(jobXML, config, date)
 
                 if origXML is not None:
                     jobXML = applyHooks(jenkinsJobPostUpdate, jobXML, info)
                     # job hash is based on unmerged config to detect just our changes
                     hashXML = applyHooks(jenkinsJobCreate,
-                        job.dumpXML(None, nodes, windows, credentials, clean, options, date, authtoken),
+                        job.dumpXML(None, config, date),
                         info)
                 else:
                     jobXML = applyHooks(jenkinsJobCreate, jobXML, info)
@@ -2030,7 +1950,7 @@ def doJenkinsPush(recipes, argv):
 
         # process obsolete jobs
         for name in BobState().getJenkinsAllJobs(args.name) - set(jobs.keys()):
-            if keep:
+            if config.keep:
                 oldJobConfig = BobState().getJenkinsJobConfig(args.name, name)
                 if oldJobConfig.get('enabled', True):
                     # disable obsolete jobs
@@ -2080,19 +2000,8 @@ def doJenkinsSetUrl(recipes, argv):
         print("Jenkins '{}' not known.".format(args.name), file=sys.stderr)
         sys.exit(1)
 
-    url = urllib.parse.urlparse(args.url)
-    urlPath = url.path
-    if not urlPath.endswith("/"): urlPath = urlPath + "/"
-
     config = BobState().getJenkinsConfig(args.name)
-    config["url"] = {
-        "scheme" : url.scheme,
-        "server" : url.hostname,
-        "port" : url.port,
-        "path" : urlPath,
-        "username" : url.username,
-        "password" : url.password,
-    }
+    config.url = args.url
     BobState().setJenkinsConfig(args.name, config)
 
 def doJenkinsSetOptions(recipes, argv):
@@ -2154,80 +2063,60 @@ def doJenkinsSetOptions(recipes, argv):
     config = BobState().getJenkinsConfig(args.name)
 
     if args.reset:
-        config.update({
-            "roots" : [],
-            "prefix" : "",
-            "nodes" : "",
-            "defines" : {},
-            "download" : False,
-            "upload" : False,
-            "sandbox" : True,
-            "windows" : False,
-            "credentials" : None,
-            "clean" : False,
-            "keep" : False,
-            "options" : {},
-            "authtoken": None,
-            "shortdescription": False,
-        })
+        config.reset()
 
     if args.nodes is not None:
-        config["nodes"] = args.nodes
+        config.nodes = args.nodes
     if args.prefix is not None:
-        config["prefix"] = args.prefix
+        config.prefix = args.prefix
     for r in args.add_root:
-        if r not in config["roots"]:
-            config["roots"].append(r)
+        if r not in config.roots:
+            config.roots.append(r)
         else:
             print("Not adding root '{}': already configured".format(r), file=sys.stderr)
     for r in args.del_root:
         try:
-            config["roots"].remove(r)
+            config.roots.remove(r)
         except ValueError:
             print("Cannot remove root '{}': not found".format(r), file=sys.stderr)
     if args.download is not None:
-        config["download"] = args.download
+        config.download = args.download
     if args.upload is not None:
-        config["upload"] = args.upload
+        config.upload = args.upload
     if args.sandbox is not None:
-        config["sandbox"] = args.sandbox
+        config.sandbox = args.sandbox
     if defines:
-        config["defines"].update(defines)
+        config.defines.update(defines)
     for d in args.undefines:
         try:
-            del config["defines"][d]
+            del config.defines[d]
         except KeyError:
             print("Cannot undefine '{}': not defined".format(d), file=sys.stderr)
     if args.credentials is not None:
-        config['credentials'] = args.credentials
+        config.credentials = args.credentials
     if args.authtoken is not None:
-        config['authtoken'] = args.authtoken
+        config.authtoken = args.authtoken
     if args.shortdescription is not None:
-        config['shortdescription'] = args.shortdescription
+        config.shortdescription = args.shortdescription
     if args.clean is not None:
-        config['clean'] = args.clean
+        config.clean = args.clean
     if args.keep is not None:
-        config['keep'] = args.keep
+        config.keep = args.keep
 
-    options = config.setdefault('options', {})
     for i in args.options:
         (opt, sep, val) = i.partition("=")
         if sep != "=":
-            parser.error("Malformed plugin option: "+i)
+            parser.error("Malformed extended option: "+i)
         if val == "":
-            if opt in options: del options[opt]
+            config.delOption(opt)
         else:
-            options[opt] = val
+            config.setOption(opt, val, parser.error)
 
-    if options.get("artifacts.copy") not in [None, "archive", "jenkins"]:
-        parser.error("Invalid option for artifacts.copy. Only 'archive' and 'jenkins' are allowed!")
-    if options.get("artifacts.copy", "jenkins") == "archive":
-        if not config.get('upload', False):
+    if config.artifactsCopy == "archive":
+        if not config.upload:
             parser.error("Archive sharing can not be used without upload enabled! Exiting..")
-        if not config.get('download', False):
+        if not config.download:
             parser.error("Archive sharing can not be used without download enabled! Exiting..")
-    if not verifyAuditMeta(getAuditMeta(options)):
-        parser.error("Invalid audit meta variable name")
 
     BobState().setJenkinsConfig(args.name, config)
 

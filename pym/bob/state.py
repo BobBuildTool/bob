@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .errors import ParseError
+from .stringparser import isTrue
 from .tty import colorize, WarnOnce, WARNING
 from .utils import replacePath
 import copy
@@ -35,6 +36,220 @@ class DigestAdder:
     def __exit__(self, exc_type, exc_value, traceback):
         self.fd.write(struct.pack("=L", self.csum))
         return False
+
+class JenkinsConfig:
+    def __init__(self, url="", uuid=None):
+        self.reset()
+        self.url = url
+        self.uuid = uuid
+
+    @classmethod
+    def load(cls, config):
+        self = cls()
+        self.roots = config.get("roots", []).copy()
+        self.prefix = config.get("prefix", "")
+        self.nodes = config.get("nodes", "")
+        self.defines = config.get("defines", {}).copy()
+        self.download = config.get("download", False)
+        self.upload = config.get("upload", False)
+        self.sandbox = config.get("sandbox", True)
+        self.credentials = config.get("credentials", None)
+        self.clean = config.get("clean", False)
+        self.keep = config.get("keep", False)
+        self.authtoken = config.get("authtoken", None)
+        self.shortdescription = config.get("shortdescription", False)
+        self.uuid = config.get("uuid")
+        self.windows = config.get("windows", False)
+
+        self.__url = config.get("url").copy()
+        self.__options = config.get("options", {}).copy()
+        return self
+
+    def dump(self):
+        return {
+                "authtoken" : self.authtoken,
+                "clean" : self.clean,
+                "credentials" : self.credentials,
+                "defines" : self.defines,
+                "download" : self.download,
+                "windows" : self.windows,
+                "keep" : self.keep,
+                "nodes" : self.nodes,
+                "options" : self.__options,
+                "prefix" : self.prefix,
+                "roots" : self.roots,
+                "sandbox" : self.sandbox,
+                "shortdescription" : self.shortdescription,
+                "upload" : self.upload,
+                "url" : self.__url,
+                "uuid" : self.uuid,
+            }
+
+    def reset(self):
+        self.roots = []
+        self.prefix = ""
+        self.nodes = ""
+        self.defines = {}
+        self.download = False
+        self.upload = False
+        self.sandbox = True
+        self.credentials = None
+        self.clean = False
+        self.keep = False
+        self.authtoken = None
+        self.shortdescription = False
+        self.__options = {}
+
+    @property
+    def url(self):
+        url = self.__url
+        if url.get('username'):
+            userPass = url['username']
+            if url.get('password'):
+                userPass += ":" + url['password']
+            userPass += "@"
+        else:
+            userPass = ""
+        return "{}://{}{}{}{}".format(url['scheme'], userPass, url['server'],
+            ":{}".format(url['port']) if url.get('port') else "", url['path'])
+
+    @url.setter
+    def url(self, url):
+        import urllib
+        url = urllib.parse.urlparse(url)
+        urlPath = url.path
+        if not urlPath.endswith("/"): urlPath = urlPath + "/"
+
+        self.__url = {
+            "scheme" : url.scheme,
+            "server" : url.hostname,
+            "port" : url.port,
+            "path" : urlPath,
+            "username" : url.username,
+            "password" : url.password,
+        }
+
+    def setOption(self, key, value, errorHandler):
+        if key == "artifacts.copy":
+            if value not in ("jenkins", "archive"):
+                errorHandler("Invalid option for artifacts.copy. Only 'archive' and 'jenkins' are allowed!")
+        elif key.startswith("audit.meta."):
+            import re
+            if not re.fullmatch(r"[0-9A-Za-z._-]+", key):
+                errorHandler("Invalid audit meta variable name: " + key)
+        elif key in ("jobs.gc.deps.artifacts", "jobs.gc.deps.builds",
+                     "jobs.gc.root.artifacts", "jobs.gc.root.builds"):
+            try:
+                int(value)
+            except ValueError:
+                errorHandler("Invalid option '{}': '{}'".format(key, val))
+        elif key == "jobs.isolate":
+            import re
+            try:
+                re.compile(value)
+            except re.error as e:
+                errorHandler("Invalid jobs.isolate regex '{}': {}".format(e.pattern, e))
+        elif key == "jobs.policy":
+            if value not in ("stable", "unstable", "always"):
+                errorHandler("'jobs.policy' extended option has unsupported value!");
+        elif key == "jobs.update":
+            if value not in ("always", "description", "lazy"):
+                errorHandler("'jobs.update' extended option has unsupported value!");
+        elif key == "scm.git.shallow":
+            try:
+                num = int(value)
+            except ValueError:
+                errorHandler("scm.git.shallow must be an integer")
+            if num < 0:
+                errorHandler("scm.git.shallow must not be a negative integer")
+        elif key == "scm.git.timeout":
+            try:
+                num = int(value)
+            except ValueError:
+                errorHandler("scm.git.timeout must be an integer")
+            if num <= 0:
+                errorHandler("scm.git.timeout must be a positive integer")
+        elif key == "scm.ignore-hooks":
+            if value.lower() not in ("0", "false", "1", "true"):
+                errorHandler("scm.ignore-hooks must be any of: 0/false/1/true")
+        elif key in ("scm.poll", "shared.dir"):
+            pass
+        else:
+            errorHandler("Unknown extended option" + key)
+
+        self.__options[key] = value
+
+    def delOption(self, opt):
+        if opt in self.__options:
+            del self.__options[opt]
+
+    def getOptions(self):
+        return self.__options
+
+    @property
+    def urlWithoutCredentials(self):
+        url = self.__url
+        return "{}://{}{}{}".format(url['scheme'], url['server'],
+            ":{}".format(url['port']) if url.get('port') else "", url['path'])
+
+    @property
+    def urlUsername(self):
+        return self.__url.get("username")
+
+    @property
+    def urlPassword(self):
+        return self.__url.get("password")
+
+    @property
+    def artifactsCopy(self):
+        return self.__options.get("artifacts.copy", "jenkins")
+
+    @property
+    def jobsIsolate(self):
+        return self.__options.get("jobs.isolate")
+
+    @property
+    def jobsPolicy(self):
+        return self.__options.get("jobs.policy", "stable")
+
+    @property
+    def jobsUpdate(self):
+        return self.__options.get('jobs.update', "always")
+
+    @property
+    def scmGitShallow(self):
+        return self.__options.get("scm.git.shallow")
+
+    @property
+    def scmGitTimeout(self):
+        return self.__options.get("scm.git.timeout")
+
+    @property
+    def scmIgnoreHooks(self):
+        return isTrue(self.__options.get("scm.ignore-hooks", "0"))
+
+    @property
+    def scmPoll(self):
+        return self.__options.get("scm.poll")
+
+    @property
+    def sharedDir(self):
+        return self.__options.get("shared.dir", "${JENKINS_HOME}/bob")
+
+    def getGcNum(self, root, key):
+        key = "jobs.gc." + ("root" if root else "deps") + "." + key
+        val = self.__options.get(key, "1" if key == "jobs.gc.deps.artifacts" else "0")
+        num = int(val)
+        if num <= 0:
+            num = -1
+        return str(num)
+
+    def getAuditMeta(self):
+        return {
+            k[len("audit.meta."):] : v for k, v in sorted(self.__options.items())
+            if k.startswith("audit.meta.")
+        }
+
 
 class _BobState():
     # Bump CUR_VERSION if internal state is made backwards incompatible, that is
@@ -389,7 +604,7 @@ class _BobState():
 
     def addJenkins(self, name, config):
         self.__jenkins[name] = {
-            "config" : copy.deepcopy(config),
+            "config" : config.dump(),
             "jobs" : {},
             "byNameDirs" : {},
         }
@@ -413,10 +628,10 @@ class _BobState():
             return res
 
     def getJenkinsConfig(self, name):
-        return copy.deepcopy(self.__jenkins[name]["config"])
+        return JenkinsConfig.load(self.__jenkins[name]["config"])
 
     def setJenkinsConfig(self, name, config):
-        self.__jenkins[name]["config"] = copy.deepcopy(config)
+        self.__jenkins[name]["config"] = config.dump()
         self.__save()
 
     def getJenkinsAllJobs(self, name):

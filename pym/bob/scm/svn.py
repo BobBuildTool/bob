@@ -70,7 +70,7 @@ class SvnScm(Scm):
         return (self.__url + ( ("@"+str(self.__revision)) if self.__revision else "" ) + " > "
                 + self.__dir)
 
-    def asJenkins(self, workPath, credentials, options):
+    def asJenkins(self, workPath, config):
         scm = ElementTree.Element("scm", attrib={
             "class" : "hudson.scm.SubversionSCM",
             "plugin" : "subversion@2.4.5",
@@ -86,7 +86,7 @@ class SvnScm(Scm):
 
         ElementTree.SubElement(location, "remote").text = url
         credentialsId = ElementTree.SubElement(location, "credentialsId")
-        if credentials: credentialsId.text = credentials
+        if config.credentials: credentialsId.text = config.credentials
         ElementTree.SubElement(location, "local").text = (
             os.path.normpath(os.path.join(workPath, self.__dir)) )
         ElementTree.SubElement(location, "depthOption").text = "infinity"

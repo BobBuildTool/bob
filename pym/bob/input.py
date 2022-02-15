@@ -1474,8 +1474,8 @@ class CoreCheckoutStep(CoreStep):
         return 0
 
 class CheckoutStep(Step):
-    def getJenkinsXml(self, credentials, options):
-        return [ s.asJenkins(self.getWorkspacePath(), credentials, options)
+    def getJenkinsXml(self, config):
+        return [ s.asJenkins(self.getWorkspacePath(), config)
                  for s in self._coreStep.scmList if s.hasJenkinsPlugin() ]
 
     def getScmList(self):

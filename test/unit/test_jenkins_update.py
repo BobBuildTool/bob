@@ -1,5 +1,5 @@
 from mocks.jenkins_tests import JenkinsTests
-from unittest import TestCase, expectedFailure
+from unittest import TestCase
 import time
 import xml.etree.ElementTree as ET
 import subprocess
@@ -109,7 +109,6 @@ class JenkinsUpdates(JenkinsTests, TestCase):
         self.assertNotEqual(x2, self.jenkinsMock.getJobConfig("lib1"))
         self.assertEqual(x3, self.jenkinsMock.getJobConfig("lib2"))
 
-    @expectedFailure
     def testInvalid(self):
         """Invalid update mode is rejected"""
         with self.assertRaises(SystemExit):

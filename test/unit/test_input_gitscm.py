@@ -26,6 +26,13 @@ class DummyStep:
     def getPackage(self):
         return DummyPackage()
 
+class DummyConfig:
+    def __init__(self):
+        self.credentials = None
+        self.scmGitShallow = False
+        self.scmGitTimeout = None
+        self.scmIgnoreHooks = False
+
 def createGitScm(spec = {}):
     s = { 'scm' : "git", 'url' : "MyURL", 'recipe' : "foo.yaml#0",
         '__source' : "Recipe foo" }
@@ -148,21 +155,34 @@ class TestGitScm(TestCase):
 
     def testJenkinsXML(self):
         """Test Jenins XML generation"""
+        c = DummyConfig()
+
         # TODO: validate XML
         s = createGitScm()
-        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s.asJenkins("workspace/sub/dir", c)
+        c.credentials = "uuid"
+        s.asJenkins("workspace/sub/dir", c)
+        c.shallow = "42"
+        s.asJenkins("workspace/sub/dir", c)
+        c.scmGitTimeout = "42"
+        s.asJenkins("workspace/sub/dir", c)
+        c.scmIgnoreHooks = True
+        s.asJenkins("workspace/sub/dir", c)
+
+        c = DummyConfig()
+
         s = createGitScm({'branch' : "foobar", 'dir' : "sub/dir"})
-        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s.asJenkins("workspace/sub/dir", c)
         s = createGitScm({'tag' : "asdf"})
-        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s.asJenkins("workspace/sub/dir", c)
         s = createGitScm({'commit' : "0123456789abcdef0123456789abcdef01234567"})
-        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s.asJenkins("workspace/sub/dir", c)
         s = createGitScm({'shallow' : 1})
-        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s.asJenkins("workspace/sub/dir", c)
         s = createGitScm({'submodules' : True})
-        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s.asJenkins("workspace/sub/dir", c)
         s = createGitScm({'submodules' : True, 'recurseSubmodules' : True})
-        s.asJenkins("workspace/sub/dir", "uuid", {})
+        s.asJenkins("workspace/sub/dir", c)
 
     def testMisc(self):
         s1 = createGitScm()
