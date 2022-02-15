@@ -484,6 +484,22 @@ cd {ROOT}
         if not os.path.isdir(workDir):
             os.makedirs(workDir)
             created = True
+
+        # On Jenkins we check a canary. In rare circumstances it is possible
+        # that the path formatter chose an existing path and the Job was not
+        # built clean in an old workspace.
+        if step.JENKINS:
+            canary = os.path.join(os.path.dirname(workDir), "canary.txt")
+            content = asHexStr(step.getVariantId())
+            try:
+                with open(canary, "r") as f:
+                    if f.read() != content:
+                        raise BuildError("Workspace contains stale data! Delete it and restart job.")
+            except FileNotFoundError:
+                with open(canary, "w") as f: f.write(content)
+            except OSError as e:
+                raise BuildError("Error reading canary: " + str(e))
+
         return (workDir, created)
 
     def __workspaceLock(self, step):
