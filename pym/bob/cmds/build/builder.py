@@ -1400,7 +1400,6 @@ cd {ROOT}
                     packageInputDownloaded(packageBuildId))
                 packageHash = hashWorkspace(packageStep)
                 workspaceChanged = True
-                wasDownloaded = True
             elif layerDownloadMode == 'forced':
                 raise BuildError("Downloading artifact of layer %s failed" % layer)
             elif depth >= self.__downloadDepthForce:
