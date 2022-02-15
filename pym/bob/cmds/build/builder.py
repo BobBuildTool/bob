@@ -628,33 +628,39 @@ cd {ROOT}
         logFile = os.path.join(workspacePath, "..", "log.txt")
         scriptHint = os.path.join(workspacePath, "..", "script")
         spec = StepSpec.fromStep(step, envFile, self.__envWhiteList, logFile,
-            scriptHint=scriptHint)
-        with open(specFile, "w") as f:
-            spec.toFile(f)
+            scriptHint=scriptHint, isJenkins=step.JENKINS)
 
-        # write invocation wrapper
-        if sys.platform == "win32":
-            runFile = os.path.join("..", scriptName + ".cmd")
-            runFileContent = self.RUN_TEMPLATE_WINDOWS.format(
-                    ROOT=quoteCmdExe(os.getcwd()),
-                    BOB=quoteCmdExe(self.__bobRoot),
-                    SPEC=quoteCmdExe(specFile),
-                    CLEAN="-c" if cleanWorkspace else "",
-                )
+        # Write invocation wrapper except on Jenkins. There will be nobody
+        # around to actually execute it...
+        if not step.JENKINS:
+            with open(specFile, "w") as f:
+                spec.toFile(f)
+
+            if sys.platform == "win32":
+                runFile = os.path.join("..", scriptName + ".cmd")
+                runFileContent = self.RUN_TEMPLATE_WINDOWS.format(
+                        ROOT=quoteCmdExe(os.getcwd()),
+                        BOB=quoteCmdExe(self.__bobRoot),
+                        SPEC=quoteCmdExe(specFile),
+                        CLEAN="-c" if cleanWorkspace else "",
+                    )
+            else:
+                runFile = os.path.join("..", scriptName + ".sh")
+                runFileContent = self.RUN_TEMPLATE_POSIX.format(
+                        ROOT=quote(os.getcwd()),
+                        BOB=quote(self.__bobRoot),
+                        SPEC=quote(specFile),
+                        CLEAN="-c" if cleanWorkspace else "",
+                    )
+            absRunFile = os.path.normpath(os.path.join(workspacePath, runFile))
+            absRunFile = os.path.join(".", absRunFile)
+
+            with open(absRunFile, "w") as f:
+                print(runFileContent, file=f)
+            os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
+                stat.S_IROTH | stat.S_IWOTH)
         else:
-            runFile = os.path.join("..", scriptName + ".sh")
-            runFileContent = self.RUN_TEMPLATE_POSIX.format(
-                    ROOT=quote(os.getcwd()),
-                    BOB=quote(self.__bobRoot),
-                    SPEC=quote(specFile),
-                    CLEAN="-c" if cleanWorkspace else "",
-                )
-        absRunFile = os.path.normpath(os.path.join(workspacePath, runFile))
-        absRunFile = os.path.join(".", absRunFile)
-        with open(absRunFile, "w") as f:
-            print(runFileContent, file=f)
-        os.chmod(absRunFile, stat.S_IRWXU | stat.S_IRGRP | stat.S_IWGRP |
-            stat.S_IROTH | stat.S_IWOTH)
+            absRunFile = "Job"
 
         invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
             self.__verbose >= INFO, self.__verbose >= NORMAL,
@@ -670,7 +676,7 @@ cd {ROOT}
         elif ret != 0:
             if self.__bufferedStdIO:
                 logger.setError(invoker.getStdio().strip())
-            raise BuildError("Build script {} returned with {}"
+            raise BuildError("{} returned with {}"
                                 .format(absRunFile, ret),
                              help="You may resume at this point with '--resume' after fixing the error.")
 
