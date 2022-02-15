@@ -6,7 +6,7 @@
 from .errors import ParseError
 from .stringparser import isTrue
 from .tty import colorize, WarnOnce, WARNING
-from .utils import replacePath
+from .utils import replacePath, getPlatformString
 import copy
 import errno
 import os
@@ -59,7 +59,11 @@ class JenkinsConfig:
         self.authtoken = config.get("authtoken", None)
         self.shortdescription = config.get("shortdescription", False)
         self.uuid = config.get("uuid")
-        self.windows = config.get("windows", False)
+
+        if "hostPlatform" in config:
+            self.hostPlatform = config["hostPlatform"]
+        else:
+            self.hostPlatform = "msys" if config.get("windows", False) else "linux"
 
         self.__url = config.get("url").copy()
         self.__options = config.get("options", {}).copy()
@@ -73,6 +77,7 @@ class JenkinsConfig:
                 "defines" : self.defines,
                 "download" : self.download,
                 "windows" : self.windows,
+                "hostPlatform" : self.hostPlatform,
                 "keep" : self.keep,
                 "nodes" : self.nodes,
                 "options" : self.__options,
@@ -98,6 +103,7 @@ class JenkinsConfig:
         self.keep = False
         self.authtoken = None
         self.shortdescription = False
+        self.hostPlatform = getPlatformString()
         self.__options = {}
 
     @property
@@ -235,6 +241,10 @@ class JenkinsConfig:
     @property
     def sharedDir(self):
         return self.__options.get("shared.dir", "${JENKINS_HOME}/bob")
+
+    @property
+    def windows(self):
+        return self.hostPlatform in ("cygwin", "msys", "win32")
 
     def getGcNum(self, root, key):
         key = "jobs.gc." + ("root" if root else "deps") + "." + key

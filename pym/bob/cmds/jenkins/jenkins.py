@@ -11,7 +11,8 @@ from ...languages import StepSpec
 from ...state import BobState, JenkinsConfig
 from ...stringparser import isTrue
 from ...tty import WarnOnce
-from ...utils import asHexStr, processDefines, runInEventLoop, sslNoVerifyContext
+from ...utils import asHexStr, processDefines, runInEventLoop, sslNoVerifyContext, \
+    getPlatformString
 from shlex import quote
 import argparse
 import ast
@@ -1299,7 +1300,7 @@ def jenkinsNamePersister(jenkins, wrapFmt, uuid):
 def genJenkinsJobs(recipes, jenkins):
     jobs = {}
     config = BobState().getJenkinsConfig(jenkins)
-    recipes.parse(config.defines, "msys" if config.windows else "linux")
+    recipes.parse(config.defines, config.hostPlatform)
 
     prefix = config.prefix
     archiveHandler = getArchiver(recipes)
@@ -1361,7 +1362,11 @@ def doJenkinsAdd(recipes, argv):
     parser.add_argument("-n", "--nodes", default="", help="Label for Jenkins Slave")
     parser.add_argument("-o", default=[], action='append', dest='options',
                         help="Set extended Jenkins options")
-    parser.add_argument("-w", "--windows", default=False, action='store_true', help="Jenkins is running on Windows. Produce cygwin compatible scripts.")
+    parser.add_argument("--host-platform", default=getPlatformString(),
+            choices=["linux", "msys", "win32"],
+            help="Jenkins host platform type. (default: current platform)")
+    parser.add_argument("-w", "--windows", action='store_const', const='msys',
+                        dest='host_platform', help="Jenkins is running on Windows.")
     parser.add_argument("-p", "--prefix", default="", help="Prefix for jobs")
     parser.add_argument("-r", "--root", default=[], action='append',
                         help="Root package (may be specified multiple times)")
@@ -1392,6 +1397,7 @@ def doJenkinsAdd(recipes, argv):
         sys.exit(1)
 
     config = JenkinsConfig(args.url, genUuid())
+    config.hostPlatform = args.host_platform
     config.roots = args.root
     config.prefix = args.prefix
     config.nodes = args.nodes
@@ -1399,7 +1405,6 @@ def doJenkinsAdd(recipes, argv):
     config.download = args.download
     config.upload = args.upload
     config.sandbox = args.sandbox
-    config.windows = args.windows
     config.credentials = args.credentials
     config.clean = args.clean
     config.keep = args.keep
@@ -1449,6 +1454,7 @@ def doJenkinsExport(recipes, argv):
             'nodes' : config.nodes,
             'sandbox' : config.sandbox,
             'windows' : config.windows,
+            'hostPlatform' : config.hostPlatform,
             'checkoutSteps' : job.getCheckoutSteps(),
             'buildSteps' : job.getBuildSteps(),
             'packageSteps' : job.getPackageSteps()
@@ -1501,6 +1507,7 @@ def doJenkinsLs(recipes, argv):
             options = cfg.getOptions()
             if options:
                 print("    Extended options:", ", ".join([ k+"="+v for (k,v) in options.items() ]))
+            print("    Host platform:", cfg.hostPlatform)
         if args.verbose >= 2:
             print("    Jobs:", ", ".join(sorted(BobState().getJenkinsAllJobs(j))))
 
@@ -1837,6 +1844,7 @@ def doJenkinsPush(recipes, argv):
                 'nodes' : config.nodes,
                 'sandbox' : config.sandbox,
                 'windows' : config.windows,
+                'hostPlatform' : config.hostPlatform,
                 'checkoutSteps' : job.getCheckoutSteps(),
                 'buildSteps' : job.getBuildSteps(),
                 'packageSteps' : job.getPackageSteps(),
@@ -2012,6 +2020,8 @@ def doJenkinsSetOptions(recipes, argv):
     parser.add_argument("-n", "--nodes", help="Set label for Jenkins Slave")
     parser.add_argument("-o", default=[], action='append', dest='options',
                         help="Set extended Jenkins options")
+    parser.add_argument("--host-platform", choices=["linux", "msys", "win32"],
+            help="Jenkins host platform type.")
     parser.add_argument("-p", "--prefix", help="Set prefix for jobs")
     parser.add_argument("--add-root", default=[], action='append',
                         help="Add new root package")
@@ -2069,6 +2079,8 @@ def doJenkinsSetOptions(recipes, argv):
         config.nodes = args.nodes
     if args.prefix is not None:
         config.prefix = args.prefix
+    if args.host_platform is not None:
+        config.hostPlatform = args.host_platform
     for r in args.add_root:
         if r not in config.roots:
             config.roots.append(r)
