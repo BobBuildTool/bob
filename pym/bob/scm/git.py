@@ -561,6 +561,8 @@ class GitScm(Scm):
         return ret
 
     def asJenkins(self, workPath, config):
+        from pathlib import PurePosixPath
+
         scm = ElementTree.Element("scm", attrib={
             "class" : "hudson.plugins.git.GitSCM",
             "plugin" : "git@2.2.7",
@@ -599,7 +601,7 @@ class GitScm(Scm):
         ElementTree.SubElement(
             ElementTree.SubElement(extensions,
                 "hudson.plugins.git.extensions.impl.RelativeTargetDirectory"),
-            "relativeTargetDir").text = os.path.normpath(os.path.join(workPath, self.__dir))
+            "relativeTargetDir").text = str(PurePosixPath(workPath, self.__dir))
         # remove untracked files and stale branches
         ElementTree.SubElement(extensions,
             "hudson.plugins.git.extensions.impl.CleanCheckout")
