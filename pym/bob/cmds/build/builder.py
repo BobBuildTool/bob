@@ -293,6 +293,7 @@ cd {ROOT}
         self.__cleanCheckout = False
         self.__srcBuildIds = {}
         self.__buildDistBuildIds = {}
+        self.__buildDistBuildIdsPreset = {}
         self.__statistic = LocalBuilderStatistic()
         self.__alwaysCheckout = []
         self.__linkDeps = True
@@ -405,6 +406,16 @@ cd {ROOT}
     def setShareMode(self, useShared, installShared):
         self.__useSharedPackages = useShared
         self.__installSharedPackages = installShared
+
+    def setBuildDistBuildIds(self, buildIds):
+        """Set build-ids of known dependencies.
+
+        Used on Jenkins to let the build logic know the build-ids of all
+        dependencies. Prevents the builder from calulating them which would
+        require the whole dependency graph to be available.
+        """
+        self.__buildDistBuildIds = buildIds.copy()
+        self.__buildDistBuildIdsPreset = buildIds
 
     def saveBuildState(self):
         state = {}
@@ -1636,7 +1647,7 @@ cd {ROOT}
 
         # Invalidate (possibly) derived build-ids
         self.__srcBuildIds[key] = (checkoutHash, False)
-        self.__buildDistBuildIds = {}
+        self.__buildDistBuildIds = self.__buildDistBuildIdsPreset.copy()
 
         # Forget all executed build- and package-steps
         self._clearWasRun()
