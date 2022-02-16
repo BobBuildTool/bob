@@ -157,7 +157,6 @@ setup(
     entry_points = {
         'console_scripts' : [
             'bob = bob.scripts:bob',
-            'bob-hash-engine = bob.scripts:hashEngine',
         ]
     },
 
