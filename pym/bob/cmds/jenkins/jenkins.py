@@ -3,32 +3,32 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ... import BOB_VERSION
-from ...archive import getArchiver
+from ... import BOB_VERSION, BOB_INPUT_HASH
+from ...archive import getArchiver, JenkinsArchive
 from ...errors import ParseError, BuildError
 from ...input import RecipeSet
 from ...languages import StepSpec
 from ...state import BobState, JenkinsConfig
-from ...stringparser import isTrue
 from ...tty import WarnOnce
-from ...utils import asHexStr, processDefines, runInEventLoop, sslNoVerifyContext, \
+from ...utils import processDefines, runInEventLoop, sslNoVerifyContext, quoteCmdExe, \
     getPlatformString
+from .intermediate import getJenkinsVariantId, PartialIR
+from pathlib import PurePosixPath
 from shlex import quote
 import argparse
 import ast
-import asyncio
 import base64
 import datetime
 import getpass
 import hashlib
 import http.cookiejar
 import json
+import lzma
 import os.path
 import random
 import re
 import ssl
 import sys
-import textwrap
 import urllib
 import urllib.parse
 import urllib.request
@@ -48,140 +48,39 @@ requiredPlugins = {
     "ws-cleanup" : "Jenkins Workspace Cleanup Plugin",
 }
 
-JENKINS_SCRIPT_START = "cat >$_specFile <<'BOB_JENKINS_SANDBOXED_SCRIPT'"
-JENKINS_SCRIPT_END = "BOB_JENKINS_SANDBOXED_SCRIPT"
-
-# Template for fingerprint script execution. Run the script in a dedicated
-# temporary directory. Use a sub-shell to reliaby remove the temporary
-# directory even if script fails.
-FINGERPRINT_SCRIPT_TEMPLATE = """\
-(
-    trap 'rm -rf "$T"' EXIT
-    T=$(mktemp -d -p "$WORKSPACE")
-    {SETUP}
-    cat <<'BOB_JENKINS_FINGERPRINT_SCRIPT' | {INVOKE}
-cd $BOB_CWD
-{SCRIPT}
-BOB_JENKINS_FINGERPRINT_SCRIPT
-) > {OUTPUT}
-"""
-
-SHARED_GENERATION = '-2'
-
 class Wiper:
+    """Remove the [audit] and [recipes-audit] sections from specs"""
     def __init__(self):
-        self.mode = 0
-
+        self.keep = True
+ 
     def check(self, l):
-        if self.mode == 0:
-            if l.startswith('#'):
-                return False
-            elif l == JENKINS_SCRIPT_START:
-                self.mode = 1
-                return True
-            elif l.startswith("bob-audit-engine"):
-                if l.endswith("\\"): self.mode = 2
-                return False
-            else:
-                return True
-        elif self.mode == 1:
-            if l == JENKINS_SCRIPT_END: self.mode = 0
-            return True
-        else:
-            if not l.endswith("\\"): self.mode = 0
-            return False
+        if l in ("[audit]", "[recipes-audit]"):
+            self.keep = False
+        elif l.startswith('[') and l.endswith(']'):
+            self.keep = True
+
+        return self.keep
 
 def cleanJobConfig(tree):
-    """Remove comments and audit-engine calls from shell steps"""
+    """Remove audit related information from shell steps"""
     for node in tree.findall(".//hudson.tasks.Shell/command"):
         lines = node.text.splitlines()
         mrproper = Wiper()
         node.text = "\n".join(l for l in lines if mrproper.check(l))
 
-def genHexSlice(data, i = 0):
-    r = data[i:i+96]
-    while len(r) > 0:
-        yield ("=" + r)
-        i += 96
-        r = data[i:i+96]
-
-def wrapCommandArguments(cmd, arguments):
-    ret = []
-    line = cmd
-    for arg in arguments:
-        if len(line) + len(arg) > 96:
-            ret.append(line + " \\")
-            line = "  "
-        line = line + " " + arg
-    ret.append(line)
-    return ret
-
-class SpecHasher:
-    """Track digest calculation and output as spec for bob-hash-engine.
-
-    Re-implements bob.input.DigestHasher as bob-hash-engine script.
-    """
-
-    def __init__(self):
-        self.selfLines = []
-        self.hostLines = []
-
-    def update(self, data):
-        if isinstance(data, bytes):
-            self.selfLines.extend(iter(genHexSlice(asHexStr(data))))
-        else:
-            self.selfLines.append(data)
-
-    def fingerprint(self, data):
-        if isinstance(data, bytes):
-            self.hostLines.extend(iter(genHexSlice(asHexStr(data))))
-        else:
-            self.hostLines.append(data)
-
-    def digest(self):
-        ret = ["{sha1"] + self.selfLines + ["}"]
-        if self.hostLines:
-            ret += ["{?sha1"] + self.hostLines + ["}"]
-        return ret
-
-    @staticmethod
-    def sliceRecipes(depBuildId):
-        return "[:20]<" + depBuildId
-
-    @staticmethod
-    def sliceHost(depBuildId):
-        return "[20:]<" + depBuildId
-
-
 def genUuid():
     ret = "".join(random.sample("0123456789abcdef", 8))
     return ret[:4] + '-' + ret[4:]
 
-def getJenkinsVariantId(step):
-    """Get the variant-id of a step with it's sandbox dependency.
-
-    Even though the sandbox is considered an invariant of the build
-    (sandboxInvariant policy) it still needs to be respected when building the
-    packages. Because the Jenkins logic cannot rely on lazy evaluation like the
-    local builds we need to regard the sandbox as real dependency.
-
-    This is only relevant when calculating the job graph. The actual build
-    result still uses the original variant- and build-id.
-    """
-    vid = step.getVariantId()
-    sandbox = step.getSandbox()
-    if sandbox:
-        vid += sandbox.getStep().getVariantId()
-    return vid
-
 class JenkinsJob:
-    def __init__(self, name, displayName, nameCalculator, recipe, archiveBackend):
+    def __init__(self, name, displayName, nameCalculator, recipe, upload, download):
         self.__name = name
         self.__displayName = displayName
         self.__nameCalculator = nameCalculator
         self.__recipe = recipe
         self.__isRoot = False
-        self.__archive = archiveBackend
+        self.__upload = upload
+        self.__download = download
         self.__checkoutSteps = {}
         self.__buildSteps = {}
         self.__packageSteps = {}
@@ -190,6 +89,7 @@ class JenkinsJob:
         self.__namesPerVariant = {}
         self.__packagesPerVariant = {}
         self.__downstreamJobs = set()
+        self.__partialGraph = PartialIR()
 
     def __getJobName(self, step):
         return self.__nameCalculator.getJobInternalName(step)
@@ -243,6 +143,7 @@ class JenkinsJob:
             self.__buildSteps.setdefault(vid, step)
         else:
             assert step.isPackageStep()
+            self.__partialGraph.add(step)
             package = step.getPackage()
             self.__packageSteps.setdefault(vid, step)
             self.__namesPerVariant.setdefault(vid, set()).add(package.getName())
@@ -278,239 +179,12 @@ class JenkinsJob:
             deps.add(self.__getJobName(d))
         return deps
 
-    def getShebang(self, windows, errexit=True):
-        if windows:
-            ret = "#!bash -x"
-        else:
-            ret = "#!/bin/bash -x"
-        if errexit:
-            ret += "e"
-        return ret
-
-    def dumpStep(self, d, windows, checkIfSkip):
-        cmds = []
-        cmds.append(self.getShebang(windows))
-        headline = "# {} step of {}".format(d.getLabel(), "/".join(d.getPackage().getStack()))
-        cmds.extend(["", headline, "# " + "="*(len(headline)-2), ""])
-
-        # sanity check for stale workspaces
-        cmds.append(textwrap.dedent("""\
-            if [ -e {CANARY} ] ; then
-                if [[ $(cat {CANARY}) != {VID} ]] ; then
-                    echo "Workspace contains stale data! Delete it and restart job." ; exit 1
-                fi
-            else
-                echo {VID} > {CANARY}
-            fi
-            """.format(CANARY=JenkinsJob._canaryName(d), VID=asHexStr(d.getVariantId()))
-        ))
-
-        if checkIfSkip:
-            checkIfSkip = " && ".join(sorted(
-                ("-e " + JenkinsJob._tgzName(s)) for s in checkIfSkip))
-            cmds.append("# check if artifact was already downloaded")
-            cmds.append("if [[ {} ]] ; then".format(checkIfSkip))
-            cmds.append("    echo \"Skip {} step. Artifact(s) already downloaded...\""
-                            .format(d.getLabel()))
-            cmds.append("    exit 0")
-            cmds.append("fi")
-            cmds.append("")
-
-        cmds.append("bob _invoke {} -vv".format(self._specName(d)))
-
-        return "\n".join(cmds)
-
-    def dumpStepSpec(self, d):
-        cmds = []
-        if d.isValid():
-            spec = StepSpec.fromStep(d, JenkinsJob._envName(d),
-                d.getPackage().getRecipe().getRecipeSet().envWhiteList(),
-                isJenkins=True).toString()
-
-            cmds.append("_specFile=" + quote(self._specName(d)))
-            cmds.append(JENKINS_SCRIPT_START)
-            cmds.append(spec)
-            cmds.append(JENKINS_SCRIPT_END)
-        return cmds
-
-    def dumpStepBuildIdGen(self, step):
-        """Return bob-hash-engine call to calculate build-id of step"""
-
-        ret = [ "bob-hash-engine --state .state -o {} <<'EOF'".format(JenkinsJob._buildIdName(step)) ]
-
-        if step.isCheckoutStep():
-            ret.append("#" + step.getWorkspacePath())
-        else:
-            fingerprint = self._fingerprintName(step)
-            if fingerprint: fingerprint = "{sha1\n<" + fingerprint + "\n}"
-            ret.extend(step.getDigest(lambda s: JenkinsJob._buildIdName(s), True,
-                SpecHasher, fingerprint=fingerprint, platform='p',
-                relaxTools=True))
-
-        ret.append("EOF")
-        return ret
-
-    def dumpStepAuditGen(self, step, auditMeta):
-        cmd = []
-        for k, v in sorted(auditMeta.items()):
-            cmd += ["-D", quote(k), quote(v)]
-        cmd += [
-            "-D", "bob", BOB_VERSION,
-            "-D", "recipe", step.getPackage().getRecipe().getName(),
-            "-D", "package", "/".join(step.getPackage().getStack()),
-            "-D", "step", step.getLabel(),
-            "-D", "language", step.getPackage().getRecipe().scriptLanguage.index.value,
-            "-D", "jenkins-build-tag", '"$BUILD_TAG"',
-            "-D", "jenkins-node", '"$NODE_NAME"',
-            "-D", "jenkins-build-url", '"$BUILD_URL"'
-        ]
-        for (var, val) in sorted(step.getPackage().getMetaEnv().items()):
-            cmd.extend(["-E", var, quote(val)])
-        recipesAudit = runInEventLoop(step.getPackage().getRecipe().getRecipeSet().getScmAudit())
-        if recipesAudit is not None:
-            cmd.extend(["--recipes",
-                quote(json.dumps(recipesAudit.dump(), sort_keys=True))])
-        cmd.extend(["--env", JenkinsJob._envName(step)])
-        if step.isCheckoutStep():
-            for scm in step.getScmList():
-                auditSpec = scm.getAuditSpec()
-                if auditSpec is not None:
-                    (typ, dir, extra) = auditSpec
-                    cmd.extend(["--scmEx", typ, step.getWorkspacePath(), quote(dir),
-                                quote(json.dumps(extra, sort_keys=True))])
-        for (name, tool) in sorted(step.getTools().items()):
-            cmd.extend(["--tool", name, JenkinsJob._auditName(tool.getStep())])
-        sandbox = step.getSandbox()
-        if sandbox is not None:
-            cmd.extend(["--sandbox", JenkinsJob._auditName(sandbox.getStep())])
-        for dep in step.getArguments():
-            if dep.isValid():
-                cmd.extend(["--arg", JenkinsJob._auditName(dep)])
-        cmd.extend(["-o", JenkinsJob._auditName(step)])
-        cmd.append(asHexStr(step.getVariantId()))
-        cmd.append("$(hexdump -v -e '/1 \"%02x\"' " + JenkinsJob._buildIdName(step) + ")")
-        cmd.append("$(echo \"#{}\" | bob-hash-engine --state .state | hexdump -v -e '/1 \"%02x\"')"
-                    .format(step.getWorkspacePath()))
-
-        # wrap lines
-        ret = []
-        line = "bob-audit-engine"
-        for c in cmd:
-            if len(line) + len(c) > 96:
-                ret.append(line + " \\")
-                line = "  "
-            line = line + " " + c
-        ret.append(line)
-        return "\n".join(ret)
-
-    def dumpStepLiveBuildIdGen(self, step, isWin):
-        # This makes only sense if we can upload the result. OTOH the live
-        # build-id file acts as an indicator of a first-time/clean checkout. We
-        # have to still create it so that we don't accidentally upload rogue
-        # results if the user enables uploads later.
-        liveBuildId = JenkinsJob._liveBuildIdName(step)
-        ret = [ "touch " + liveBuildId ]
-
-        # Get calculation spec if upload is enabled. May be None if step is
-        # indeterministic or some SCM does not support live build-ids.
-        spec = self.__archive.canUploadJenkins() and step.getLiveBuildIdSpec()
-        if spec:
-            buildId = JenkinsJob._buildIdName(step)
-            ret = [ "bob-hash-engine --state .state -o {} <<'EOF'".format(liveBuildId),
-                    spec, "EOF" ]
-            ret.append(self.__archive.uploadJenkinsLiveBuildId(step, liveBuildId, buildId, isWin))
-
-        # Without sandbox we only upload the live build-id on the initial
-        # checkout. Otherwise accidental modifications of the sources can
-        # happen in later build steps.
-        if step.getSandbox() is None:
-            ret = [ "if [[ ! -e {} ]] ; then".format(liveBuildId) ] + ret + [ "fi" ]
-
-        return ret
-
-    @staticmethod
-    def _tgzName(d):
-        return d.getWorkspacePath().replace('/', '_') + ".tgz"
-
-    @staticmethod
-    def _buildIdName(d):
-        return d.getWorkspacePath().replace('/', '_') + ".buildid"
-
-    @staticmethod
-    def _liveBuildIdName(d):
-        return d.getWorkspacePath().replace('/', '_') + ".live-buildid"
-
-    @staticmethod
-    def _envName(d):
-        return d.getWorkspacePath().replace('/', '_') + ".env"
-
-    @staticmethod
-    def _auditName(d):
-        return d.getWorkspacePath().replace('/', '_') + ".json.gz"
-
-    @staticmethod
-    def _canaryName(d):
-        return ".state/" + d.getWorkspacePath().replace('/', '_') + ".canary"
-
-    @staticmethod
-    def _specName(d):
-        return d.getWorkspacePath().replace('/', '_') + ".spec.json"
-
-    def _fingerprintName(self, step):
-        """Return fingerprint file name if one is required.
-
-        Depending on the fingerprint state returns the following values:
-
-          * None if no fingerprint is needed
-          * str() with the name of the file where the fingerprint is stored
-
-        See bob.cmds.build.builder.LocalBuilder._getFingerprint() for the master
-        algorithm.
-        """
-        if (step.getSandbox() is not None) and \
-                not self.__recipe.getRecipeSet().getPolicy('sandboxFingerprints'):
-            return None
-
-        isFingerprinted = step._isFingerprinted()
-        trackRelocation = step.isPackageStep() and not step.isRelocatable() and \
-            self.__recipe.getRecipeSet().getPolicy('allRelocatable')
-        if not isFingerprinted and not trackRelocation:
-            return None
-
-        return step.getWorkspacePath().replace('/', '_') + ".fingerprint"
-
-    def _fingerprintCommands(self, step, fingerprint):
-        # run fingerprint
-        ret = [ "" ]
-        ret.append("# calculate fingerprint of step")
-        ret.append("bob _invoke {} fingerprint > {}".format(self._specName(step),
-            fingerprint))
-
-        # optionally upload
-        if (step.getSandbox() is not None) and self.__archive.canUploadJenkins():
-            scriptKey = asHexStr(hashlib.sha1(step._getFingerprintScript().encode('utf8')).digest())
-            sandbox = self._buildIdName(step.getSandbox().getStep())
-            keyFile = fingerprint + ".key"
-            ret.append(textwrap.dedent("""\
-                bob-hash-engine >{NAME} <<EOF
-                {{sha1
-                ={SCRIPT}
-                <{SANDBOX}
-                }}
-                EOF""".format(NAME=keyFile, SCRIPT=scriptKey,
-                              SANDBOX=sandbox)))
-            ret.append(self.__archive.uploadJenkinsFingerprint(step,
-                keyFile, fingerprint))
-
-        # an optional relocation information is not uploaded with the
-        # precomputed fingerprint
-        if step.isPackageStep() and not step.isRelocatable() and \
-           self.__recipe.getRecipeSet().getPolicy('allRelocatable'):
-            ret.append("\n# non-relocatable package")
-            ret.append("\necho -n {} >> {}".format(step.getExecPath(),
-                quote(fingerprint)))
-
-        return ret
+    def dumpJobSpec(self):
+        spec = self.__partialGraph.toData()
+        spec = json.dumps(self.__partialGraph.toData(), sort_keys=True).encode('ascii')
+        spec = lzma.compress(spec)
+        spec = base64.a85encode(spec, wrapcol=120).decode('ascii')
+        return spec
 
     def __copyArtifact(self, builders, policy, project, artifact, sharedDir=None,
                        condition=None, windows=False):
@@ -520,22 +194,22 @@ class JenkinsJob:
                     "plugin" : "copyartifact@1.32.1"
                 })
         else:
+            cmd = "bob _jexec --version " + BOB_INPUT_HASH.hex() +  " check-shared "
+            if windows:
+                cmd += quoteCmdExe(sharedDir) + " " + quoteCmdExe(condition)
+            else:
+                cmd += quote(sharedDir) + " " + quote(condition)
+
             guard = xml.etree.ElementTree.SubElement(
                 builders, "org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder", attrib={
                     "plugin" : "conditional-buildstep@1.3.3",
                 })
             shellCond = xml.etree.ElementTree.SubElement(
                 guard, "condition", attrib={
-                    "class" : "org.jenkins_ci.plugins.run_condition.contributed.ShellCondition"
+                    "class" : ("org.jenkins_ci.plugins.run_condition.contributed.BatchFileCondition"
+                               if windows else "org.jenkins_ci.plugins.run_condition.contributed.ShellCondition")
                 })
-            xml.etree.ElementTree.SubElement(
-                shellCond, "command").text = textwrap.dedent("""\
-                    {SHEBANG}
-                    BOB_SHARED_BID="$(hexdump -ve '/1 "%02x"' {CONDITION}){GEN}"
-                    test ! -d {BASE_DIR}"/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}"
-                    """).format(SHEBANG=self.getShebang(windows, False),
-                        CONDITION=condition, GEN=SHARED_GENERATION,
-                        BASE_DIR=sharedDir)
+            xml.etree.ElementTree.SubElement(shellCond, "command").text = cmd
             cp = xml.etree.ElementTree.SubElement(
                 guard, "buildStep", attrib={
                     "class" : "hudson.plugins.copyartifact.CopyArtifact",
@@ -566,7 +240,7 @@ class JenkinsJob:
         xml.etree.ElementTree.SubElement(
             cp, "doNotFingerprintArtifacts").text = "true"
 
-    def dumpXML(self, orig, config, date):
+    def dumpXML(self, orig, config, date, recipesAudit=None):
         if orig:
             root = xml.etree.ElementTree.fromstring(orig)
             builders = root.find("builders")
@@ -678,77 +352,6 @@ class JenkinsJob:
         else:
             root.find("canRoam").text = "true"
 
-        sharedDir = config.sharedDir
-
-        specCmds = []
-        specCmds.append(self.getShebang(config.windows))
-
-        prepareCmds = []
-        prepareCmds.append(self.getShebang(config.windows))
-        prepareCmds.append("mkdir -p .state")
-        if not config.windows:
-            # Verify umask for predictable file modes. Can be set outside of
-            # Jenkins but Bob requires that umask is everywhere the same for
-            # stable Build-IDs. Mask 0022 is enforced on local builds and in
-            # the sandbox. Check it and bail out if different.
-            prepareCmds.append("[[ $(umask) == 0022 ]] || exit 1")
-
-        if not config.clean:
-            cleanupCmds = []
-            cleanupCmds.append(self.getShebang(config.windows))
-            cleanupCmds.append("")
-            cleanupCmds.append("# delete unused files and directories from workspace")
-            cleanupCmds.append("pruneUnused()")
-            cleanupCmds.append("{")
-            cleanupCmds.append("   set +x")
-            cleanupCmds.append("   local i key value")
-            cleanupCmds.append("   declare -A allowed")
-            cleanupCmds.append("")
-            cleanupCmds.append("   for i in \"$@\" ; do")
-            cleanupCmds.append("          key=\"${i%%/*}\"")
-            cleanupCmds.append("          value=\"${i:$((${#key} + 1))}\"")
-            cleanupCmds.append("          allowed[\"$key\"]=\"${allowed[\"$key\"]+${allowed[\"$key\"]} }${value}\"")
-            cleanupCmds.append("   done")
-            cleanupCmds.append("")
-            cleanupCmds.append("   for i in * ; do")
-            cleanupCmds.append("          if [[ ${allowed[\"$i\"]+true} ]] ; then")
-            cleanupCmds.append("              if [[ ! -z ${allowed[\"$i\"]} && -d $i ]] ; then")
-            cleanupCmds.append("                  pushd \"$i\" > /dev/null")
-            cleanupCmds.append("                  pruneUnused ${allowed[\"$i\"]}")
-            cleanupCmds.append("                  popd > /dev/null")
-            cleanupCmds.append("              fi")
-            cleanupCmds.append("          elif [[ -L \"$i\" ]] ; then")
-            cleanupCmds.append("              echo \"Remove $PWD/$i\"")
-            cleanupCmds.append("              rm \"$i\"")
-            cleanupCmds.append("          elif [[ -e \"$i\" ]] ; then")
-            cleanupCmds.append("              echo \"Remove $PWD/$i\"")
-            cleanupCmds.append("              chmod -R u+rw \"$i\"")
-            cleanupCmds.append("              rm -rf \"$i\"")
-            cleanupCmds.append("          fi")
-            cleanupCmds.append("   done")
-            cleanupCmds.append("}")
-            cleanupCmds.append("")
-            whiteList = []
-            whiteList.extend([ d.getWorkspacePath() for d in self.__checkoutSteps.values() ])
-            whiteList.extend([ JenkinsJob._liveBuildIdName(d) for d in self.__checkoutSteps.values() ])
-            whiteList.extend([ d.getWorkspacePath() for d in self.__buildSteps.values() ])
-            cleanupCmds.extend(wrapCommandArguments("pruneUnused", sorted(whiteList)))
-            cleanupCmds.append("set -x")
-            xml.etree.ElementTree.SubElement(
-                xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell"),
-                "command").text = "\n".join(cleanupCmds)
-
-        fingerprintCmds = []
-        fingerprints = set()
-        def ensureFingerprint(step):
-            fingerprint = self._fingerprintName(step)
-            if (fingerprint is not None) and (fingerprint not in fingerprints):
-                # ok, we really have to compute it
-                fingerprintCmds.extend(self._fingerprintCommands(step, fingerprint))
-                fingerprints.add(fingerprint)
-
-            return fingerprint
-
         deps = sorted(self.__deps.values())
         if deps:
             policy = config.jobsPolicy
@@ -781,85 +384,18 @@ class JenkinsJob:
                     warnNonRelocatable.warn(d.getPackage().getName())
                 # always copy build-id
                 self.__copyArtifact(builders, policy, self.__getJobName(d),
-                    JenkinsJob._buildIdName(d))
-                # Copy artifact if we rely on Jenkins directly. Do it
-                # conditionally if it is a shared artifact.
+                    JenkinsArchive.buildIdName(d))
+                # Copy artifact only if we rely on Jenkins directly. Otherwise
+                # the regular up-/download will take care of the transfer.
                 if config.artifactsCopy == "jenkins":
                     self.__copyArtifact(builders, policy, self.__getJobName(d),
-                        JenkinsJob._tgzName(d), sharedDir,
-                        JenkinsJob._buildIdName(d) if d.isShared() else None,
-                        config.windows)
-                elif config.artifactsCopy == "archive":
-                    downloadCmd = self.__archive.download(d,
-                            JenkinsJob._buildIdName(d),
-                            JenkinsJob._tgzName(d))
-                    if d.isShared():
-                        prepareCmds.append(textwrap.dedent("""\
-                            BOB_SHARED_BID="$(hexdump -ve '/1 "%02x"' {BID}){GEN}"
-                            BOB_SHARED_DIR={BASE_DIR}"/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}"
-                            if  [[ ! -d "${{BOB_SHARED_DIR}}" ]] ; then
-                                {DOWNLOAD_CMD}
-                            fi""").format(BID=JenkinsJob._buildIdName(d),
-                                GEN=SHARED_GENERATION, BASE_DIR=sharedDir,
-                                DOWNLOAD_CMD=downloadCmd))
-                    else:
-                        prepareCmds.append(downloadCmd)
+                        JenkinsArchive.tgzName(d), config.sharedDir,
+                        JenkinsArchive.buildIdName(d) if d.isShared() else None,
+                        config.hostPlatform in ("msys", "win32"))
 
-            # extract deps
-            prepareCmds.append("\n# extract deps\n# ============")
-            for d in deps:
-                if d.isShared():
-                    prepareCmds.append("")
-                    prepareCmds.append(textwrap.dedent("""\
-                        # {PACKAGE}
-                        BOB_SHARED_BID="$(hexdump -ve '/1 "%02x"' {BID}){GEN}"
-                        if [ ! -d {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}} ] ; then
-                            mkdir -p {SHARED}
-                            T=$(mktemp -d -p {SHARED})
-                            tar xpf {TGZ} -C $T meta/audit.json.gz content/
-                            cp {BUILDID} $T/meta/buildid.bin
-                            mkdir -p {SHARED}/${{BOB_SHARED_BID:0:2}}
-                            mv -T $T {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}} || rm -rf $T
-                        fi
-                        mkdir -p {WSP_DIR}
-                        ln -sfT {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}/content {WSP_PATH}
-                        ln -sfT {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}/meta/audit.json.gz {AUDIT}
-                        ln -sfT {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}}/meta/buildid.bin {BUILDID}
-                        """.format(BID=JenkinsJob._buildIdName(d),
-                                   GEN=SHARED_GENERATION,
-                                   TGZ=JenkinsJob._tgzName(d),
-                                   WSP_DIR=os.path.dirname(d.getWorkspacePath()),
-                                   WSP_PATH=d.getWorkspacePath(),
-                                   SHARED=sharedDir,
-                                   AUDIT=JenkinsJob._auditName(d),
-                                   BUILDID=JenkinsJob._buildIdName(d),
-                                   PACKAGE="/".join(d.getPackage().getStack()))))
-                else:
-                    prepareCmds.append("mkdir -p " + d.getWorkspacePath())
-                    prepareCmds.append(
-                        "tar xpf {TGZ} --transform='s|^meta/audit.json.gz|{AUDIT}|' --transform=\"s|^content|{WSP_PATH}|\" meta/audit.json.gz content/".format(
-                        TGZ=JenkinsJob._tgzName(d),
-                        AUDIT=JenkinsJob._auditName(d),
-                        WSP_PATH=d.getWorkspacePath()))
-
-        prepareCmds.append("# remove @tmp directories created by some jenkins plugins")
-        for d in sorted(self.__checkoutSteps.values()):
-            prepareCmds.append("rm -rf {}".format(" ".join(quote(d.getWorkspacePath() + "/" + s + "@tmp") for s in d.getScmDirectories())))
-
-        # Create first "prepare" and "specs" shell actions. Their actual
-        # command is set at the end because the prepare/specs commands are
-        # generated throughout the generating process.
-        prepare = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
-        specs = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
-        fingerprintsShell = xml.etree.ElementTree.SubElement(builders, "hudson.tasks.Shell")
-
-        # checkout steps
+        # checkout SCMs supported by Jenkins
         checkoutSCMs = []
         for d in sorted(self.__checkoutSteps.values()):
-            checkout = xml.etree.ElementTree.SubElement(
-                builders, "hudson.tasks.Shell")
-            xml.etree.ElementTree.SubElement(
-                checkout, "command").text = self.dumpStep(d, config.windows, [])
             checkoutSCMs.extend(d.getJenkinsXml(config))
 
         if len(checkoutSCMs) > 1:
@@ -879,140 +415,44 @@ class JenkinsJob:
             scm = xml.etree.ElementTree.SubElement(
                 root, "scm", attrib={"class" : "hudson.scm.NullSCM"})
 
-        # calculate Build-ID
-        buildIdCalc = [
-            self.getShebang(config.windows),
-            "# create build-ids"
-        ]
-        for d in sorted(self.__checkoutSteps.values()):
-            ensureFingerprint(d)
-            specCmds.extend(self.dumpStepSpec(d))
-            buildIdCalc.extend(self.dumpStepBuildIdGen(d))
-            buildIdCalc.extend(self.dumpStepLiveBuildIdGen(d, config.windows))
-        for d in sorted(self.__buildSteps.values()):
-            specCmds.extend(self.dumpStepSpec(d))
-            ensureFingerprint(d)
-            buildIdCalc.extend(self.dumpStepBuildIdGen(d))
-        for d in sorted(self.__packageSteps.values()):
-            specCmds.extend(self.dumpStepSpec(d))
-            ensureFingerprint(d)
-            buildIdCalc.extend(self.dumpStepBuildIdGen(d))
-        checkout = xml.etree.ElementTree.SubElement(
-            builders, "hudson.tasks.Shell")
-        xml.etree.ElementTree.SubElement(
-            checkout, "command").text = "\n".join(buildIdCalc)
-
-        # extra audit trail meta variables
-        auditMeta = config.getAuditMeta()
-
-        # generate audit trail of checkout steps
-        if self.__checkoutSteps:
-            checkoutAudit = [
-                self.getShebang(config.windows),
-                "# generate audit trail of checkout step(s)"
-            ]
-            for d in sorted(self.__checkoutSteps.values()):
-                checkoutAudit.append(self.dumpStepAuditGen(d, auditMeta))
-            audit = xml.etree.ElementTree.SubElement(
-                builders, "hudson.tasks.Shell")
-            xml.etree.ElementTree.SubElement(
-                audit, "command").text = "\n".join(checkoutAudit)
-
-        # download if possible
-        downloadCmds = []
-        for d in sorted(self.__packageSteps.values()):
-            # Prohibit up-/download if we are on the old allRelocatable policy
-            # and the package is not explicitly relocatable and built outside
-            # the sandbox.
-            if not self.__recipe.getRecipeSet().getPolicy('allRelocatable') and \
-               not d.isRelocatable() and (d.getSandbox() is None):
-                continue
-            cmd = self.__archive.download(d, JenkinsJob._buildIdName(d),
-                JenkinsJob._tgzName(d))
-            if not cmd: continue
-            downloadCmds.append(cmd)
-        if downloadCmds:
-            downloadCmds.insert(0, self.getShebang(config.windows, False))
-            downloadCmds.append("true # don't let downloads fail the build")
-            download = xml.etree.ElementTree.SubElement(
-                builders, "hudson.tasks.Shell")
-            xml.etree.ElementTree.SubElement(
-                download, "command").text = "\n".join(downloadCmds)
-
-        # build steps
-        for d in sorted(self.__buildSteps.values()):
-            build = xml.etree.ElementTree.SubElement(
-                builders, "hudson.tasks.Shell")
-            affectedPackageSteps = [ pkgStep for pkgStep in self.__packageSteps.values()
-                if d in pkgStep.getArguments() ]
-            xml.etree.ElementTree.SubElement(
-                build, "command").text = "\n".join([
-                    self.dumpStep(d, config.windows, affectedPackageSteps),
-                    "", "# generate audit trail",
-                    "cd \"$WORKSPACE\"",
-                    self.dumpStepAuditGen(d, auditMeta)
-                ])
-
-        # package steps
+        # publish built artifacts
         publish = []
         for d in sorted(self.__packageSteps.values()):
-            package = xml.etree.ElementTree.SubElement(
-                builders, "hudson.tasks.Shell")
-            xml.etree.ElementTree.SubElement(package, "command").text = "\n".join([
-                self.dumpStep(d, config.windows, [d]),
-                "", "# generate audit trail",
-                "cd \"$WORKSPACE\"",
-                self.dumpStepAuditGen(d, auditMeta),
-                "", "# pack result for archive and inter-job exchange",
-                "cd \"$WORKSPACE\"",
-                "tar zcfv {TGZ} -H pax --pax-option=\"bob-archive-vsn=1\" --transform='s|^{AUDIT}|meta/audit.json.gz|' --transform='s|^{WSP_PATH}|content|' {AUDIT} {WSP_PATH}".format(
-                    TGZ=JenkinsJob._tgzName(d),
-                    AUDIT=JenkinsJob._auditName(d),
-                    WSP_PATH=d.getWorkspacePath()),
-                "" if not self.__recipe.getRecipeSet().getPolicy('allRelocatable') and \
-                      not d.isRelocatable() and \
-                      (d.getSandbox() is None) and \
-                      (config.artifactsCopy == "jenkins")
-                    else self.__archive.upload(d, JenkinsJob._buildIdName(d), JenkinsJob._tgzName(d))
-            ])
             if config.artifactsCopy == "jenkins":
-                publish.append(JenkinsJob._tgzName(d))
-            publish.append(JenkinsJob._buildIdName(d))
-
-        # install shared packages
-        installCmds = []
-        for d in sorted(self.__packageSteps.values()):
-            if d.isShared():
-                installCmds.append(textwrap.dedent("""\
-                # {PACKAGE}
-                BOB_SHARED_BID="$(hexdump -ve '/1 "%02x"' {BID}){GEN}"
-                if [ ! -d {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}} ] ; then
-                    mkdir -p {SHARED}
-                    T=$(mktemp -d -p {SHARED})
-                    tar xpf {TGZ} -C $T meta/audit.json.gz content/
-                    cp {BUILDID} $T/meta/buildid.bin
-                    mkdir -p {SHARED}/${{BOB_SHARED_BID:0:2}}
-                    mv -T $T {SHARED}/${{BOB_SHARED_BID:0:2}}/${{BOB_SHARED_BID:2}} || rm -rf $T
-                fi
-                """.format(TGZ=JenkinsJob._tgzName(d),
-                           BID=JenkinsJob._buildIdName(d),
-                           GEN=SHARED_GENERATION,
-                           BUILDID=JenkinsJob._buildIdName(d),
-                           SHARED=sharedDir,
-                           PACKAGE="/".join(d.getPackage().getStack()))))
-        if installCmds:
-            installCmds[0:0] = [ self.getShebang(config.windows), "",
-                "# install shared package atomically",
-                "# =================================", ""]
-            install = xml.etree.ElementTree.SubElement(
-                builders, "hudson.tasks.Shell")
-            xml.etree.ElementTree.SubElement(
-                install, "command").text = "\n".join(installCmds)
+                publish.append(JenkinsArchive.tgzName(d))
+            publish.append(JenkinsArchive.buildIdName(d))
 
         xml.etree.ElementTree.SubElement(
             archiver, "artifacts").text = ",".join(publish)
         xml.etree.ElementTree.SubElement(
             archiver, "allowEmptyArchive").text = "false"
+
+        # Dump partial graph and synthesize execute command
+        if config.hostPlatform in ("msys", "win32"):
+            cmdTemplate = "#!cmd /c bob {}"
+        else:
+            cmdTemplate = "#!bob {}"
+
+        execCmds = [ cmdTemplate.format("_jexec --version "
+                                        + BOB_INPUT_HASH.hex() + " run") ]
+        execCmds.extend([
+            "[cfg]",
+            "platform=" + config.hostPlatform,
+            "download=" + ("1" if self.__download else "0"),
+            "upload=" + ("1" if self.__upload else "0"),
+            "copy=" + config.artifactsCopy,
+            "share=" + config.sharedDir,
+        ])
+        if recipesAudit:
+            execCmds.extend(["[recipes-audit]", recipesAudit])
+        auditMeta = config.getAuditMeta()
+        if auditMeta:
+            execCmds.append("[audit]")
+            execCmds.extend("{}={}".format(k, v) for k, v in auditMeta.items())
+        execCmds.extend(["[exec]", self.dumpJobSpec()])
+        execute = xml.etree.ElementTree.SubElement(
+            builders, "hudson.tasks.Shell")
+        xml.etree.ElementTree.SubElement(execute, "command").text = "\n".join(execCmds)
 
         # clean build wrapper
         preBuildClean = buildWrappers.find("hudson.plugins.ws__cleanup.PreBuildCleanup")
@@ -1028,18 +468,6 @@ class JenkinsJob:
         # add authtoken if set in options
         if auth:
             auth.text = config.authtoken
-
-        # finally set prepare commands
-        xml.etree.ElementTree.SubElement(prepare, "command").text = "\n".join(
-            prepareCmds)
-        xml.etree.ElementTree.SubElement(specs, "command").text = "\n".join(
-            specCmds)
-        if fingerprintCmds:
-            fingerprintCmds[0:0] = [ self.getShebang(config.windows) ]
-            xml.etree.ElementTree.SubElement(fingerprintsShell, "command").text = "\n".join(
-                fingerprintCmds)
-        else:
-            builders.remove(fingerprintsShell)
 
         return xml.etree.ElementTree.tostring(root, encoding="UTF-8")
 
@@ -1227,7 +655,7 @@ class JobNameCalculator:
         return self.__regexJobName.sub('_', self.getJobDisplayName(step)).lower()
 
 
-def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, allVariantIds,
+def _genJenkinsJobs(step, jobs, nameCalculator, upload, download, seenPackages, allVariantIds,
                     shortdescription):
 
     if step.isPackageStep() and shortdescription:
@@ -1243,7 +671,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, al
     else:
         recipe = step.getPackage().getRecipe()
         jj = JenkinsJob(name, nameCalculator.getJobDisplayName(step), nameCalculator,
-                        recipe, archiveBackend)
+                        recipe, upload, download)
         jobs[name] = jj
 
     # add step to job
@@ -1251,7 +679,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, al
 
     # always recurse on arguments
     for d in sorted(step.getArguments(), key=lambda d: d.getPackage().getName()):
-        if d.isValid(): _genJenkinsJobs(d, jobs, nameCalculator, archiveBackend,
+        if d.isValid(): _genJenkinsJobs(d, jobs, nameCalculator, upload, download,
                                             seenPackages, allVariantIds, shortdescription)
 
     # Recurse on tools and sandbox only for package steps. Also do an early
@@ -1263,7 +691,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, al
             stack = "/".join(toolStep.getPackage().getStack())
             if stack not in seenPackages:
                 seenPackages.add(stack)
-                _genJenkinsJobs(toolStep, jobs, nameCalculator, archiveBackend,
+                _genJenkinsJobs(toolStep, jobs, nameCalculator, upload, download,
                                 seenPackages, allVariantIds, shortdescription)
 
         sandbox = step.getSandbox(True)
@@ -1272,7 +700,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, archiveBackend, seenPackages, al
             stack = "/".join(sandboxStep.getPackage().getStack())
             if stack not in seenPackages:
                 seenPackages.add(stack)
-                _genJenkinsJobs(sandboxStep, jobs, nameCalculator, archiveBackend,
+                _genJenkinsJobs(sandboxStep, jobs, nameCalculator, upload, download,
                                 seenPackages, allVariantIds, shortdescription)
 
     return jj
@@ -1291,6 +719,7 @@ def jenkinsNamePersister(jenkins, wrapFmt, uuid):
         ret = BobState().getJenkinsByNameDirectory(
             jenkins, wrapFmt(step, props), digest)
         if uuid: ret = ret + "-" + uuid
+        ret += "/workspace"
         return ret
 
     def fmt(step, mode, props):
@@ -1307,12 +736,11 @@ def genJenkinsJobs(recipes, jenkins):
     config = BobState().getJenkinsConfig(jenkins)
     recipes.parse(config.defines, config.hostPlatform)
 
-    prefix = config.prefix
-    archiveHandler = getArchiver(recipes)
-    archiveHandler.wantUpload(config.upload)
-    archiveHandler.wantDownload(config.download)
     if config.artifactsCopy == "archive":
-        if not archiveHandler.canUploadJenkins() or not archiveHandler.canDownloadJenkins():
+        archiveHandler = getArchiver(recipes)
+        archiveHandler.wantUploadJenkins(config.upload)
+        archiveHandler.wantDownloadJenkins(config.download)
+        if not archiveHandler.canUpload() or not archiveHandler.canDownload():
             raise ParseError("No archive for up and download found but artifacts.copy using archive enabled!")
     nameFormatter = recipes.getHook('jenkinsNameFormatter')
 
@@ -1327,8 +755,8 @@ def genJenkinsJobs(recipes, jenkins):
     nameCalculator.isolate(config.jobsIsolate)
     nameCalculator.sanitize()
     for root in sorted(rootPackages, key=lambda root: root.getName()):
-        rootJenkinsJob = _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator, archiveHandler, set(), set(),
-                        config.shortdescription)
+        rootJenkinsJob = _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator,
+                config.upload, config.download, set(), set(), config.shortdescription)
         rootJenkinsJob.makeRoot()
 
     packages.close()
@@ -1818,6 +1246,10 @@ def doJenkinsPush(recipes, argv):
     verbose = args.verbose - args.quiet
     date = str(datetime.datetime.now())
 
+    recipesAudit = runInEventLoop(recipes.getScmAudit())
+    if recipesAudit is not None:
+        recipesAudit = json.dumps(recipesAudit.dump(), sort_keys=True)
+
     def printLine(level, job, *args):
         if level <= verbose:
             if job:
@@ -1880,13 +1312,13 @@ def doJenkinsPush(recipes, argv):
                 else:
                     jobXML = None
 
-                jobXML = job.dumpXML(jobXML, config, date)
+                jobXML = job.dumpXML(jobXML, config, date, recipesAudit)
 
                 if origXML is not None:
                     jobXML = applyHooks(jenkinsJobPostUpdate, jobXML, info)
                     # job hash is based on unmerged config to detect just our changes
                     hashXML = applyHooks(jenkinsJobCreate,
-                        job.dumpXML(None, config, date),
+                        job.dumpXML(None, config, date, recipesAudit),
                         info)
                 else:
                     jobXML = applyHooks(jenkinsJobCreate, jobXML, info)
@@ -2152,7 +1584,9 @@ availableJenkinsCmds = {
 
 def doJenkins(argv, bobRoot):
     subHelp = "\n             ... ".join(sorted(
-        [ "{} {}".format(c, d[1]) for (c, d) in availableJenkinsCmds.items() ]))
+        [ "{} {}".format(c, d[1]) for (c, d) in availableJenkinsCmds.items()
+                                   if not c.startswith("_")
+        ]))
     parser = argparse.ArgumentParser(prog="bob jenkins",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""Configure jenkins. The following subcommands are available:

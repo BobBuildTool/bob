@@ -266,7 +266,6 @@ class JenkinsSharedPackage(JenkinsTests, TestCase):
         self.assertEqual(self.findSharedRecord(self.getJobAudit("test-root")),
                          self.findSharedRecord(self.getJobAudit("try-root")))
 
-    @expectedFailure
     def testRebuildShared(self):
         """Rebuild will use shared location"""
         self.writeRecipe("root", """\

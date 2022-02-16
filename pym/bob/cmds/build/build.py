@@ -305,9 +305,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
         builder.setExecutor(executor)
         builder.setArchiveHandler(getArchiver(recipes))
-        builder.setUploadMode(args.upload)
-        builder.setDownloadMode(args.download)
-        builder.setDownloadLayerMode(args.download_layer)
+        builder.setLocalUploadMode(args.upload)
+        builder.setLocalDownloadMode(args.download)
+        builder.setLocalDownloadLayerMode(args.download_layer)
         builder.setCleanCheckout(args.clean_checkout)
         builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
         builder.setLinkDependencies(args.link_deps)

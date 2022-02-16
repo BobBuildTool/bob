@@ -318,39 +318,42 @@ cd {ROOT}
     def setArchiveHandler(self, archive):
         self.__archive = archive
 
-    def setDownloadMode(self, mode):
+    def setLocalDownloadMode(self, mode):
+        self.__archive.wantDownloadLocal(mode != 'no')
+        self.__setDownloadMode(mode)
+
+    def setJenkinsDownloadMode(self, mode):
+        self.__archive.wantDownloadJenkins(mode)
+        self.__setDownloadMode('forced-fallback')
+
+    def __setDownloadMode(self, mode):
         self.__downloadDepth = 0xffff
         if mode in ('yes', 'forced'):
-            self.__archive.wantDownload(True)
             if mode == 'forced':
                 self.__downloadDepth = 0
                 self.__downloadDepthForce = 0
-            elif self.__archive.canDownloadLocal():
+            elif self.__archive.canDownload():
                 self.__downloadDepth = 0
         elif mode in ('deps', 'forced-deps'):
-            self.__archive.wantDownload(True)
             if mode == 'forced-deps':
                 self.__downloadDepth = 1
                 self.__downloadDepthForce = 1
-            elif self.__archive.canDownloadLocal():
+            elif self.__archive.canDownload():
                 self.__downloadDepth = 1
         elif mode == 'forced-fallback':
-            self.__archive.wantDownload(True)
             self.__downloadDepth = 0
             self.__downloadDepthForce = 1
         elif mode.startswith('packages='):
-            self.__archive.wantDownload(True)
             try:
                 self.__downloadPackages = re.compile(mode[9:])
             except re.error as e:
                 raise BuildError("Invalid download regex '{}': {}".format(e.pattern, e))
         else:
             assert mode == 'no'
-            self.__archive.wantDownload(False)
 
-    def setDownloadLayerMode(self, modes):
+    def setLocalDownloadLayerMode(self, modes):
         self.__downloadLayerModes = []
-        self.__archive.wantDownload(True)
+        self.__archive.wantDownloadLocal(True)
         for mode in modes:
             regex = ""
             modeKey, _, modeLayer = mode.partition("=")
@@ -360,8 +363,13 @@ cd {ROOT}
                 raise BuildError("Invalid download layer regex '{}': {}".format(e.pattern, e))
             self.__downloadLayerModes.append((regex, modeKey))
 
-    def setUploadMode(self, mode):
-        self.__archive.wantUpload(mode)
+    def setLocalUploadMode(self, mode):
+        self.__archive.wantUploadLocal(mode)
+        self.__uploadDepth = 0xffff # upload everything
+
+    def setJenkinsUploadMode(self, mode):
+        self.__archive.wantUploadJenkins(mode)
+        self.__uploadDepth = 0 # upload only top level packages
 
     def setCleanCheckout(self, clean):
         self.__cleanCheckout = clean
@@ -978,7 +986,7 @@ cd {ROOT}
 
                 # Upload package if it was built. On Jenkins we always upload
                 # because it is essential that the tgz/buildid exists.
-                if (built or step.JENKINS) and mayUpOrDownload and self.__archive.canUploadLocal() \
+                if (built or step.JENKINS) and mayUpOrDownload and self.__archive.canUpload() \
                    and (depth <= self.__uploadDepth):
                     await self.__archive.uploadPackage(step, buildId,
                         audit, step.getStoragePath(), executor=self.__executor)
@@ -1135,7 +1143,7 @@ cd {ROOT}
             await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
 
         # upload live build-id cache in case of fresh checkout
-        if isFreshCheckout and self.__archive.canUploadLocal() and checkoutStep.hasLiveBuildId():
+        if isFreshCheckout and self.__archive.canUpload() and checkoutStep.hasLiveBuildId():
             liveBId = checkoutStep.calcLiveBuildId()
             if liveBId is not None:
                 await self.__archive.uploadLocalLiveBuildId(checkoutStep, liveBId, checkoutHash,
@@ -1574,7 +1582,7 @@ cd {ROOT}
         path = step.getWorkspacePath()
         if not os.path.exists(step.getWorkspacePath()) and \
            not any(pat.search(name) for pat in self.__alwaysCheckout) and \
-           step.hasLiveBuildId() and self.__archive.canDownloadLocal():
+           step.hasLiveBuildId() and self.__archive.canDownload():
             with stepAction(step, "QUERY", step.getPackage().getName(), (IMPORTANT, NORMAL)) as a:
                 liveBId = await self.__queryLiveBuildId(step)
                 if liveBId:

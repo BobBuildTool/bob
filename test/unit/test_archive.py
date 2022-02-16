@@ -41,16 +41,12 @@ class DummyPackage:
 class DummyStep:
     def getPackage(self):
         return DummyPackage()
+    def getWorkspacePath(self):
+        return "unused"
 
 def run(coro):
     with patch('bob.archive.signal.signal'):
         return runInEventLoop(coro)
-
-def callJenkinsScript(script, workspace):
-    env = os.environ.copy()
-    env["WORKSPACE"] = workspace
-    subprocess.check_call(['/bin/bash', '-eEx', '-c', script],
-        universal_newlines=True, stderr=subprocess.STDOUT, cwd=workspace, env=env)
 
 class BaseTester:
 
@@ -192,83 +188,111 @@ class BaseTester:
         """Test that wantDownload/wantUpload options work"""
 
         a = self.__getArchiveInstance({})
-        self.assertFalse(a.canDownloadLocal())
-        self.assertFalse(a.canUploadLocal())
-        self.assertFalse(a.canDownloadJenkins())
-        self.assertFalse(a.canUploadJenkins())
+        self.assertFalse(a.canDownload())
+        self.assertFalse(a.canUpload())
 
         a = self.__getArchiveInstance({})
-        a.wantDownload(True)
-        self.assertTrue(a.canDownloadLocal())
-        self.assertFalse(a.canUploadLocal())
-        self.assertTrue(a.canDownloadJenkins())
-        self.assertFalse(a.canUploadJenkins())
+        a.wantDownloadLocal(True)
+        self.assertTrue(a.canDownload())
+        self.assertFalse(a.canUpload())
 
         a = self.__getArchiveInstance({})
-        a.wantUpload(True)
-        self.assertFalse(a.canDownloadLocal())
-        self.assertTrue(a.canUploadLocal())
-        self.assertFalse(a.canDownloadJenkins())
-        self.assertTrue(a.canUploadJenkins())
+        a.wantUploadLocal(True)
+        self.assertFalse(a.canDownload())
+        self.assertTrue(a.canUpload())
 
         a = self.__getArchiveInstance({})
-        a.wantDownload(True)
-        a.wantUpload(True)
-        self.assertTrue(a.canDownloadLocal())
-        self.assertTrue(a.canUploadLocal())
-        self.assertTrue(a.canDownloadJenkins())
-        self.assertTrue(a.canUploadJenkins())
+        a.wantDownloadLocal(True)
+        a.wantUploadLocal(True)
+        self.assertTrue(a.canDownload())
+        self.assertTrue(a.canUpload())
+
+        a = self.__getArchiveInstance({})
+        a.wantDownloadJenkins(True)
+        self.assertTrue(a.canDownload())
+        self.assertFalse(a.canUpload())
+
+        a = self.__getArchiveInstance({})
+        a.wantUploadJenkins(True)
+        self.assertFalse(a.canDownload())
+        self.assertTrue(a.canUpload())
+
+        a = self.__getArchiveInstance({})
+        a.wantDownloadJenkins(True)
+        a.wantUploadJenkins(True)
+        self.assertTrue(a.canDownload())
+        self.assertTrue(a.canUpload())
 
     def testFlags(self):
         """Test that standard flags work"""
 
-        a = self.__getArchiveInstance({"flags":[]})
-        a.wantDownload(True)
-        a.wantUpload(True)
-        self.assertFalse(a.canDownloadLocal())
-        self.assertFalse(a.canUploadLocal())
-        self.assertFalse(a.canDownloadJenkins())
-        self.assertFalse(a.canUploadJenkins())
+        # Local up/download
 
         a = self.__getArchiveInstance({"flags":["download"]})
-        a.wantDownload(True)
-        a.wantUpload(True)
-        self.assertTrue(a.canDownloadLocal())
-        self.assertTrue(a.canDownloadJenkins())
-        self.assertFalse(a.canUploadLocal())
-        self.assertFalse(a.canUploadJenkins())
+        a.wantDownloadLocal(True)
+        a.wantUploadLocal(True)
+        self.assertTrue(a.canDownload())
+        self.assertFalse(a.canUpload())
 
         a = self.__getArchiveInstance({"flags":["upload"]})
-        a.wantDownload(True)
-        a.wantUpload(True)
-        self.assertFalse(a.canDownloadLocal())
-        self.assertFalse(a.canDownloadJenkins())
-        self.assertTrue(a.canUploadLocal())
-        self.assertTrue(a.canUploadJenkins())
+        a.wantDownloadLocal(True)
+        a.wantUploadLocal(True)
+        self.assertFalse(a.canDownload())
+        self.assertTrue(a.canUpload())
+
+        a = self.__getArchiveInstance({"flags":["download", "upload"]})
+        a.wantDownloadLocal(True)
+        a.wantUploadLocal(True)
+        self.assertTrue(a.canDownload())
+        self.assertTrue(a.canUpload())
+
+        # Jenkins up/download
+
+        a = self.__getArchiveInstance({"flags":["download"]})
+        a.wantDownloadJenkins(True)
+        a.wantUploadJenkins(True)
+        self.assertTrue(a.canDownload())
+        self.assertFalse(a.canUpload())
 
         a = self.__getArchiveInstance({"flags":["upload"]})
-        a.wantDownload(True)
-        a.wantUpload(True)
-        self.assertFalse(a.canDownloadLocal())
-        self.assertFalse(a.canDownloadJenkins())
-        self.assertTrue(a.canUploadLocal())
-        self.assertTrue(a.canUploadJenkins())
+        a.wantDownloadJenkins(True)
+        a.wantUploadJenkins(True)
+        self.assertFalse(a.canDownload())
+        self.assertTrue(a.canUpload())
+
+        a = self.__getArchiveInstance({"flags":["download", "upload"]})
+        a.wantDownloadJenkins(True)
+        a.wantUploadJenkins(True)
+        self.assertTrue(a.canDownload())
+        self.assertTrue(a.canUpload())
+
+        # No local up/download
 
         a = self.__getArchiveInstance({"flags":["download", "upload", "nolocal"]})
-        a.wantDownload(True)
-        a.wantUpload(True)
-        self.assertFalse(a.canDownloadLocal())
-        self.assertFalse(a.canUploadLocal())
-        self.assertTrue(a.canDownloadJenkins())
-        self.assertTrue(a.canUploadJenkins())
+        a.wantDownloadLocal(True)
+        a.wantUploadLocal(True)
+        self.assertFalse(a.canDownload())
+        self.assertFalse(a.canUpload())
+
+        a = self.__getArchiveInstance({"flags":["download", "upload", "nolocal"]})
+        a.wantDownloadJenkins(True)
+        a.wantUploadJenkins(True)
+        self.assertTrue(a.canDownload())
+        self.assertTrue(a.canUpload())
+
+        # No Jenkins up/download
 
         a = self.__getArchiveInstance({"flags":["download", "upload", "nojenkins"]})
-        a.wantDownload(True)
-        a.wantUpload(True)
-        self.assertTrue(a.canDownloadLocal())
-        self.assertTrue(a.canUploadLocal())
-        self.assertFalse(a.canDownloadJenkins())
-        self.assertFalse(a.canUploadJenkins())
+        a.wantDownloadLocal(True)
+        a.wantUploadLocal(True)
+        self.assertTrue(a.canDownload())
+        self.assertTrue(a.canUpload())
+
+        a = self.__getArchiveInstance({"flags":["download", "upload", "nojenkins"]})
+        a.wantDownloadJenkins(True)
+        a.wantUploadJenkins(True)
+        self.assertFalse(a.canDownload())
+        self.assertFalse(a.canUpload())
 
     def testDisabledLocal(self):
         """Disabled local must not do anything"""
@@ -278,20 +302,8 @@ class BaseTester:
         self.assertEqual(run(a.downloadLocalLiveBuildId(DummyStep(), b'\xcc'*20)), None)
         run(a.uploadLocalLiveBuildId(DummyStep(), b'\xcc'*20, b'\xcc'))
 
-    def testDisabledJenkins(self):
-        """Disabled Jenkins must produce empty strings"""
-        a = self.__getArchiveInstance({})
-        ret = a.download(None, "unused", "unused")
-        self.assertEqual(ret, "")
-        ret = a.upload(None, "unused", "unused")
-        self.assertEqual(ret, "")
-
-    def testdoDownloadPackage(self):
-        """Local download tests"""
-
-        archive = self.__getArchiveInstance({})
-        archive.wantDownload(True)
-        self.assertTrue(archive.canDownloadLocal())
+    def __testDownload(self, archive):
+        self.assertTrue(archive.canDownload())
 
         with TemporaryDirectory() as tmp:
             audit = os.path.join(tmp, "audit.json.gz")
@@ -315,10 +327,9 @@ class BaseTester:
             with self.assertRaises(BuildError):
                 run(archive.downloadPackage(DummyStep(), WRONG_VERSION_ARTIFACT, audit, content))
 
-    def testUploadPackageNormal(self):
-        """Local upload tests"""
+    def __testUploadNormal(self, archive):
+        self.assertTrue(archive.canUpload())
 
-        archive = self.__getArchiveInstance({})
         with TemporaryDirectory() as tmp:
             # create simple workspace
             audit = os.path.join(tmp, "audit.json.gz")
@@ -330,9 +341,6 @@ class BaseTester:
                 f.write(b"DATA")
 
             # upload
-            archive.wantUpload(True)
-            self.assertTrue(archive.canUploadLocal())
-
             run(archive.uploadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content)) # exists alread
 
             bid = UPLOAD1_ARTIFACT
@@ -358,11 +366,9 @@ class BaseTester:
         with self.assertRaises(BuildError):
             run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00'))
 
-    def testUploadPackageNoFail(self):
-        """The nofail option must prevent fatal error on upload failures"""
+    def __testUploadNoFail(self, archive):
+        self.assertTrue(archive.canUpload())
 
-        archive = self.__getArchiveInstance({"flags" : ["upload", "download", "nofail"]})
-        archive.wantUpload(True)
         with TemporaryDirectory() as tmp:
             # create simple workspace
             audit = os.path.join(tmp, "audit.json.gz")
@@ -379,85 +385,52 @@ class BaseTester:
         # also live-build-id upload errors must not throw with nofail
         run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00'))
 
+    def testDownloadLocal(self):
+        """Local download tests"""
+
+        archive = self.__getArchiveInstance({})
+        archive.wantDownloadLocal(True)
+        self.__testDownload(archive)
+
+    def testUploadLocalNormal(self):
+        """Local upload tests"""
+
+        archive = self.__getArchiveInstance({})
+        archive.wantUploadLocal(True)
+        self.__testUploadNormal(archive)
+
+    def testUploadPackageNoFail(self):
+        """The nofail option must prevent fatal error on upload failures"""
+
+        archive = self.__getArchiveInstance({"flags" : ["upload", "download", "nofail"]})
+        archive.wantUploadLocal(True)
+        self.__testUploadNoFail(archive)
+
     def testDownloadJenkins(self):
         """Jenkins download tests"""
 
         archive = self.__getArchiveInstance({})
-        archive.wantDownload(True)
-        self.assertTrue(archive.canDownloadJenkins())
-
-        with TemporaryDirectory() as workspace:
-            with open(os.path.join(workspace, "test.buildid"), "wb") as f:
-                f.write(b'\x00'*20)
-            script = archive.download(DummyStep(), "test.buildid", "result.tgz")
-            callJenkinsScript(script, workspace)
-            with open(self.dummyFileName, "rb") as f:
-                with open(os.path.join(workspace, "result.tgz"), "rb") as g:
-                    self.assertEqual(f.read(), g.read())
+        archive.wantDownloadJenkins(True)
+        self.__testDownload(archive)
 
     def testUploadJenkinsNormal(self):
         """Jenkins upload tests"""
 
         archive = self.__getArchiveInstance({})
-        archive.wantUpload(True)
-        self.assertTrue(archive.canUploadLocal())
-
-        with TemporaryDirectory() as tmp:
-            bid = b'\x01'*20
-            with open(os.path.join(tmp, "test.buildid"), "wb") as f:
-                f.write(bid)
-            self.__createArtifactByName(os.path.join(tmp, "result.tgz"))
-
-            # upload artifact
-            script = archive.upload(DummyStep(), "test.buildid", "result.tgz")
-            callJenkinsScript(script, tmp)
-
-            # test that artifact was uploaded correctly
-            self.__testArtifact(bid)
-
-            # upload live build-id
-            script = archive.uploadJenkinsLiveBuildId(None, "test.buildid", "test.buildid", False)
-            callJenkinsScript(script, tmp)
-
-            # test that live-build-id is uploaded
-            self.__testBuildId(bid, bid)
-
-            # Provoke artifact upload error. Uploads must fail.
-            with open(os.path.join(tmp, "error.buildid"), "wb") as f:
-                f.write(ERROR_UPLOAD_ARTIFACT)
-            with self.assertRaises(subprocess.CalledProcessError):
-                script = archive.upload(DummyStep(), "error.buildid", "result.tgz")
-                callJenkinsScript(script, tmp)
-            with self.assertRaises(subprocess.CalledProcessError):
-                script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid", False)
-                callJenkinsScript(script, tmp)
+        archive.wantUploadJenkins(True)
+        self.__testUploadNormal(archive)
 
     def testUploadJenkinsNoFail(self):
         """The nofail option must prevent fatal error on upload failures"""
 
         archive = self.__getArchiveInstance({"flags" : ["upload", "download", "nofail"]})
-        archive.wantUpload(True)
-
-        with TemporaryDirectory() as tmp:
-            with open(os.path.join(tmp, "error.buildid"), "wb") as f:
-                f.write(ERROR_UPLOAD_ARTIFACT)
-            self.__createArtifactByName(os.path.join(tmp, "result.tgz"))
-
-            # these uploads must not fail even though they do not succeed
-            script = archive.upload(DummyStep(), "error.buildid", "result.tgz")
-            callJenkinsScript(script, tmp)
-            script = archive.uploadJenkinsLiveBuildId(None, "error.buildid", "test.buildid", False)
-            callJenkinsScript(script, tmp)
+        archive.wantUploadJenkins(True)
+        self.__testUploadNoFail(archive)
 
     def testDisabled(self):
         """Test that nothing is done if up/download is disabled"""
 
         archive = self.__getSingleArchiveInstance({})
-
-        self.assertEqual(archive.download(DummyStep(), "unused", "unused"), "")
-
-        self.assertEqual(archive.upload(DummyStep(), "unused", "unused"), "")
-        self.assertEqual(archive.uploadJenkinsLiveBuildId(DummyStep(), "unused", "unused", False), "")
 
         run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
@@ -467,30 +440,24 @@ class BaseTester:
 
 class TestDummyArchive(TestCase):
 
-    def testOptions(self):
+    def testOptionsLocal(self):
         a = DummyArchive()
-        a.wantDownload(True)
-        a.wantUpload(True)
+        a.wantDownloadLocal(True)
+        a.wantUploadLocal(True)
+        self.assertFalse(a.canDownload())
+        self.assertFalse(a.canUpload())
 
-        self.assertFalse(a.canDownloadLocal())
-        self.assertFalse(a.canUploadLocal())
-        self.assertFalse(a.canDownloadJenkins())
-        self.assertFalse(a.canUploadJenkins())
-
-    def testDownloadJenkins(self):
-        ret = DummyArchive().download(b'\x00'*20, "unused", "unused")
-        self.assertEqual(ret, "")
+    def testOptionsJenkins(self):
+        a = DummyArchive()
+        a.wantDownloadJenkins(True)
+        a.wantUploadJenkins(True)
+        self.assertFalse(a.canDownload())
+        self.assertFalse(a.canUpload())
 
     def testDownloadLocal(self):
         run(DummyArchive().downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         self.assertEqual(run(DummyArchive().downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
         self.assertEqual(run(DummyArchive().downloadLocalFingerprint(DummyStep(), b'\x00'*20)), None)
-
-    def testUploadJenkins(self):
-        ret = DummyArchive().upload(b'\x00'*20, "unused", "unused")
-        self.assertEqual(ret, "")
-        ret = DummyArchive().uploadJenkinsLiveBuildId(None, "unused", "unused", False)
-        self.assertEqual(ret, "")
 
     def testUploadLocal(self):
         run(DummyArchive().uploadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
@@ -593,19 +560,12 @@ class TestHttpArchive(BaseTester, TestCase):
 
         spec = { 'url' : "https://127.1.2.3:7257" }
         archive = SimpleHttpArchive(spec, None)
-        archive.wantDownload(True)
-        archive.wantUpload(True)
+        archive.wantDownloadLocal(True)
+        archive.wantUploadLocal(True)
 
         # Local
         run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
-
-        # Jenkins
-        with TemporaryDirectory() as workspace:
-            with open(os.path.join(workspace, "test.buildid"), "wb") as f:
-                f.write(b'\x00'*20)
-            script = archive.download(DummyStep(), "test.buildid", "result.tgz")
-            callJenkinsScript(script, workspace)
 
 class TestHttpBasicAuthArchive(BaseTester, TestCase):
 
@@ -637,19 +597,11 @@ class TestHttpBasicAuthArchive(BaseTester, TestCase):
         spec = { }
         self._setArchiveSpec(spec, "wrong_password")
         archive = SimpleHttpArchive(spec, None)
-        archive.wantDownload(True)
-        archive.wantUpload(True)
+        archive.wantDownloadLocal(True)
+        archive.wantUploadLocal(True)
 
-        # Local
         run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
-
-        # Jenkins
-        with TemporaryDirectory() as workspace:
-            with open(os.path.join(workspace, "test.buildid"), "wb") as f:
-                f.write(b'\x00'*20)
-            script = archive.download(DummyStep(), "test.buildid", "result.tgz")
-            callJenkinsScript(script, workspace)
 
 class TestCustomArchive(BaseTester, TestCase):
 

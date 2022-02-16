@@ -100,6 +100,9 @@ class NullShare:
         warnNoShareConfigured.warn()
         return None
 
+    def contains(self, buildId):
+        return False
+
 
 class LocalShare:
     UNITS = [("KiB", 1024**1), ("MiB", 1024**2), ("GiB", 1024**3), ("TiB", 1024**4),
@@ -305,6 +308,10 @@ class LocalShare:
                         json.dump(repoMeta, rf)
 
         return repoSize
+
+    def contains(self, buildId):
+        sharedPath = self.__buildPath(buildId)
+        return os.path.isdir(sharedPath)
 
     @property
     def quota(self):
