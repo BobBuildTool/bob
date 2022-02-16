@@ -342,17 +342,6 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
             self.invokeGit(workspace, scm)
             return scm.calcLiveBuildId(workspace)
 
-    def processHashEngine(self, scm, expected):
-        with tempfile.TemporaryDirectory() as workspace:
-            self.invokeGit(workspace, scm)
-            spec = scm.getLiveBuildIdSpec(workspace)
-            if spec.startswith('='):
-                self.assertEqual(bytes.fromhex(spec[1:]), expected)
-            else:
-                self.assertTrue(spec.startswith('g'))
-                self.assertEqual(bytes.fromhex(GitScm.processLiveBuildIdSpec(spec[1:])),
-                    expected)
-
     def testHasLiveBuildId(self):
         """GitScm's always support live-build-ids"""
         s = self.createGitScm()
@@ -414,19 +403,6 @@ class TestLiveBuildId(RealGitRepositoryTestCase):
         """Clone commit and calculate live-build-id"""
         s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
         self.assertEqual(self.callCalcLiveBuildId(s), self.commit_foobar)
-
-    def testHashEngine(self):
-        """Calculate live-build-id via bob-hash-engine spec"""
-        s = self.createGitScm()
-        self.processHashEngine(s, self.commit_master)
-        s = self.createGitScm({ 'branch' : 'foobar' })
-        self.processHashEngine(s, self.commit_foobar)
-        s = self.createGitScm({ 'tag' : 'annotated' })
-        self.processHashEngine(s, self.commit_annotated)
-        s = self.createGitScm({ 'tag' : 'lightweight' })
-        self.processHashEngine(s, self.commit_lightweight)
-        s = self.createGitScm({ 'commit' : asHexStr(self.commit_foobar) })
-        self.processHashEngine(s, self.commit_foobar)
 
 
 class TestShallow(TestCase):

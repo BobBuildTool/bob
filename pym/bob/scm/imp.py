@@ -156,9 +156,6 @@ class ImportScm(Scm):
     def getAuditSpec(self):
         return ("import", self.__dir, {"url" : self.__url})
 
-    def getLiveBuildIdSpec(self, workspacePath):
-        return "#" + os.path.join(workspacePath, self.__dir)
-
 
 class ImportAudit(ScmAudit):
 

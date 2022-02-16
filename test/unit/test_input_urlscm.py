@@ -94,16 +94,6 @@ class TestLiveBuildId(UrlScmTest, TestCase):
             self.invokeScm(workspace, scm)
             return scm.calcLiveBuildId(workspace)
 
-    def processHashEngine(self, scm, expected):
-        with tempfile.TemporaryDirectory() as workspace:
-            self.invokeScm(workspace, scm)
-            spec = scm.getLiveBuildIdSpec(workspace)
-            if spec is None:
-                self.assertEqual(None, expected)
-            else:
-                self.assertTrue(spec.startswith('='))
-                self.assertEqual(bytes.fromhex(spec[1:]), expected)
-
     def testHasLiveBuildId(self):
         """Only with digest we have live-build-ids"""
         s = self.createUrlScm()
@@ -135,16 +125,6 @@ class TestLiveBuildId(UrlScmTest, TestCase):
         self.assertEqual(self.callCalcLiveBuildId(s), bytes.fromhex(self.urlSha256))
         s = self.createUrlScm({'digestSHA512' : self.urlSha512})
         self.assertEqual(self.callCalcLiveBuildId(s), bytes.fromhex(self.urlSha512))
-
-    def testHashEngine(self):
-        s = self.createUrlScm()
-        self.processHashEngine(s, None)
-        s = self.createUrlScm({'digestSHA1' : self.urlSha1})
-        self.processHashEngine(s, bytes.fromhex(self.urlSha1))
-        s = self.createUrlScm({'digestSHA256' : self.urlSha256})
-        self.processHashEngine(s, bytes.fromhex(self.urlSha256))
-        s = self.createUrlScm({'digestSHA512' : self.urlSha512})
-        self.processHashEngine(s, bytes.fromhex(self.urlSha512))
 
 def fakeWindows():
     return True

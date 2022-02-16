@@ -357,10 +357,6 @@ class Scm(metaclass=ABCMeta):
         """Calculate live build-id from workspace."""
         return None
 
-    def getLiveBuildIdSpec(self, workspacePath):
-        """Generate spec lines for bob-hash-engine."""
-        return None
-
 class ScmAudit(metaclass=ABCMeta):
     @classmethod
     async def fromDir(cls, workspace, dir, extra):

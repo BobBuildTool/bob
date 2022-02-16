@@ -73,7 +73,6 @@ class TestImportScm(TestCase):
         self.assertEqual(s.getDirectory(), "subdir")
         self.assertEqual(s.isDeterministic(), False)
         self.assertEqual(s.hasLiveBuildId(), True)
-        self.assertEqual(s.getLiveBuildIdSpec("foo"), "#" + os.path.join("foo", "subdir"))
 
     def testLiveBuildId(self):
         """Test prediction and calculation of live-build-id"""

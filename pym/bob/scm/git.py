@@ -896,22 +896,6 @@ class GitScm(Scm):
             output = self.callGit(workspacePath, 'rev-parse', 'HEAD').strip()
             return bytes.fromhex(output)
 
-    def getLiveBuildIdSpec(self, workspacePath):
-        if self.__commit:
-            return "=" + self.__commit
-        else:
-            return "g" + os.path.join(workspacePath, self.__dir)
-
-    @staticmethod
-    def processLiveBuildIdSpec(dir):
-        try:
-            return subprocess.check_output(["git", "rev-parse", "HEAD"],
-                cwd=dir, universal_newlines=True, errors='replace').strip()
-        except subprocess.CalledProcessError as e:
-            raise BuildError("Git audit failed: " + str(e))
-        except OSError as e:
-            raise BuildError("Error calling git: " + str(e))
-
 class GitAudit(ScmAudit):
 
     SCHEMA = schema.Schema({

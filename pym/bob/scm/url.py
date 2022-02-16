@@ -395,16 +395,6 @@ class UrlScm(Scm):
         else:
             return None
 
-    def getLiveBuildIdSpec(self, workspacePath):
-        if self.__digestSha512:
-            return "=" + self.__digestSha512
-        elif self.__digestSha256:
-            return "=" + self.__digestSha256
-        elif self.__digestSha1:
-            return "=" + self.__digestSha1
-        else:
-            return None
-
     def __getExtractors(self):
         extractors = None
         if self.__extract in ["yes", "auto", True]:
