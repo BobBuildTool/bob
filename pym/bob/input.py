@@ -1086,109 +1086,6 @@ class Step:
         """Get Package object that is the parent of this Step."""
         return self.__package
 
-    def getDigest(self, calculate, forceSandbox=False, hasher=DigestHasher,
-                  fingerprint=None, platform=b'', relaxTools=False):
-        h = hasher()
-        h.update(platform)
-        if self._coreStep.isFingerprinted() and self.getSandbox() \
-                and not self.__package.getRecipe().getRecipeSet().sandboxFingerprints:
-            h.fingerprint(hasher.sliceRecipes(calculate(self.getSandbox().getStep())))
-        elif fingerprint:
-            h.fingerprint(fingerprint)
-        sandbox = not self.__package.getRecipe().getRecipeSet().sandboxInvariant and \
-            self.getSandbox(forceSandbox)
-        if sandbox:
-            h.update(hasher.sliceRecipes(calculate(sandbox.getStep())))
-            h.update(struct.pack("<I", len(sandbox.getPaths())))
-            for p in sandbox.getPaths():
-                h.update(struct.pack("<I", len(p)))
-                h.update(p.encode('utf8'))
-        else:
-            h.update(b'\x00' * 20)
-        script = self.getDigestScript()
-        if script:
-            h.update(struct.pack("<I", len(script)))
-            h.update(script.encode("utf8"))
-        else:
-            h.update(b'\x00\x00\x00\x00')
-        tools = self.getTools()
-        weakTools = self._coreStep._getToolKeysWeak() if relaxTools else []
-        h.update(struct.pack("<I", len(tools)))
-        for (name, tool) in sorted(tools.items(), key=lambda t: t[0]):
-            if name in weakTools:
-                h.update(name.encode('utf8'))
-            else:
-                h.update(hasher.sliceRecipes(calculate(tool.step)))
-                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
-                h.update(tool.path.encode("utf8"))
-                for l in tool.libs:
-                    h.update(struct.pack("<I", len(l)))
-                    h.update(l.encode('utf8'))
-        h.update(struct.pack("<I", len(self._coreStep.digestEnv)))
-        for (key, val) in sorted(self._coreStep.digestEnv.items()):
-            h.update(struct.pack("<II", len(key), len(val)))
-            h.update((key+val).encode('utf8'))
-        args = [ calculate(a) for a in self.getArguments() if a.isValid() ]
-        h.update(struct.pack("<I", len(args)))
-        for arg in args:
-            h.update(hasher.sliceRecipes(arg))
-            h.fingerprint(hasher.sliceHost(arg))
-        return h.digest()
-
-    async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher,
-                            fingerprint=None, platform=b'', relaxTools=False):
-        h = hasher()
-        h.update(platform)
-        if self._coreStep.isFingerprinted() and self.getSandbox() \
-                and not self.__package.getRecipe().getRecipeSet().sandboxFingerprints:
-            [d] = await calculate([self.getSandbox().getStep()])
-            h.fingerprint(hasher.sliceRecipes(d))
-        elif fingerprint:
-            h.fingerprint(fingerprint)
-        sandbox = not self.__package.getRecipe().getRecipeSet().sandboxInvariant and \
-            self.getSandbox(forceSandbox)
-        if sandbox:
-            [d] = await calculate([sandbox.getStep()])
-            h.update(hasher.sliceRecipes(d))
-            h.update(struct.pack("<I", len(sandbox.getPaths())))
-            for p in sandbox.getPaths():
-                h.update(struct.pack("<I", len(p)))
-                h.update(p.encode('utf8'))
-        else:
-            h.update(b'\x00' * 20)
-        script = self.getDigestScript()
-        if script:
-            h.update(struct.pack("<I", len(script)))
-            h.update(script.encode("utf8"))
-        else:
-            h.update(b'\x00\x00\x00\x00')
-        tools = self.getTools()
-        weakTools = self._coreStep._getToolKeysWeak() if relaxTools else []
-        h.update(struct.pack("<I", len(tools)))
-        tools = sorted(tools.items(), key=lambda t: t[0])
-        toolsDigests = await calculate([ tool.step for name,tool in tools ])
-        for ((name, tool), d) in zip(tools, toolsDigests):
-            if name in weakTools:
-                h.update(name.encode('utf8'))
-            else:
-                h.update(hasher.sliceRecipes(d))
-                h.update(struct.pack("<II", len(tool.path), len(tool.libs)))
-                h.update(tool.path.encode("utf8"))
-                for l in tool.libs:
-                    h.update(struct.pack("<I", len(l)))
-                    h.update(l.encode('utf8'))
-        h.update(struct.pack("<I", len(self._coreStep.digestEnv)))
-        for (key, val) in sorted(self._coreStep.digestEnv.items()):
-            h.update(struct.pack("<II", len(key), len(val)))
-            h.update((key+val).encode('utf8'))
-        args = [ a for a in self.getArguments() if a.isValid() ]
-        argsDigests = await calculate(args)
-        h.update(struct.pack("<I", len(args)))
-        for d in argsDigests:
-            h.update(hasher.sliceRecipes(d))
-            h.fingerprint(hasher.sliceHost(d))
-        return h.digest()
-
     def getVariantId(self):
         """Return Variant-Id of this Step.
 
@@ -1224,36 +1121,6 @@ class Step:
         """
         return self._coreStep.getLabel()
 
-    def getExecPath(self, referrer=None):
-        """Return the execution path of the step.
-
-        The execution path is where the step is actually run. It may be distinct
-        from the workspace path if the build is performed in a sandbox. The
-        ``referrer`` is an optional parameter that represents a step that refers
-        to this step while building.
-        """
-        if self.isValid():
-            if (referrer or self).getSandbox() is None:
-                return self.getStoragePath()
-            else:
-                return os.path.join("/bob", asHexStr(self.getVariantId()), "workspace")
-        else:
-            return "/invalid/exec/path/of/{}".format(self.__package.getName())
-
-    def getStoragePath(self):
-        """Return the storage path of the step.
-
-        The storage path is where the files of the step are stored. For
-        checkout and build steps this is always the workspace path. But package
-        steps can be shared globally and thus the directory may lie outside of
-        the project directoy. The storage path may also change between
-        invocations if the shared location changes.
-        """
-        if self.isPackageStep() and self.isShared():
-            return self.__pathFormatter(self, 'storage', self.__package._getStates())
-        else:
-            return self.getWorkspacePath()
-
     def getWorkspacePath(self):
         """Return the workspace path of the step.
 
@@ -1265,27 +1132,6 @@ class Step:
             return self.__pathFormatter(self, 'workspace', self.__package._getStates())
         else:
             return "/invalid/workspace/path/of/{}".format(self.__package.getName())
-
-    def getPaths(self):
-        """Get sorted list of execution paths to used tools.
-
-        The returned list is intended to be passed as PATH environment variable.
-        The paths are sorted by name.
-        """
-        return sorted([ os.path.join(tool.step.getExecPath(self), tool.path)
-            for tool in self.getTools().values() ])
-
-    def getLibraryPaths(self):
-        """Get sorted list of library paths of used tools.
-
-        The returned list is intended to be passed as LD_LIBRARY_PATH environment
-        variable. The paths are first sorted by tool name. The order of paths of
-        a single tool is kept.
-        """
-        paths = []
-        for (name, tool) in sorted(self.getTools().items()):
-            paths.extend([ os.path.join(tool.step.getExecPath(self), l) for l in tool.libs ])
-        return paths
 
     def getTools(self):
         """Get dictionary of tools.
@@ -1494,52 +1340,6 @@ class CheckoutStep(Step):
         must be deterministic.
         """
         return self._coreStep.hasLiveBuildId()
-
-    async def predictLiveBuildId(self):
-        """Query server to predict live build-id.
-
-        Returns the live-build-id or None if an SCM query failed.
-        """
-        if not self.hasLiveBuildId():
-            return None
-        h = hashlib.sha1()
-        h.update(getPlatformTag())
-        h.update(self._getSandboxVariantId())
-        for s in self._coreStep.scmList:
-            liveBId = await s.predictLiveBuildId(self)
-            if liveBId is None: return None
-            h.update(liveBId)
-        return h.digest()
-
-    def calcLiveBuildId(self):
-        """Calculate live build-id from workspace."""
-        if not self.hasLiveBuildId():
-            return None
-        workspacePath = self.getWorkspacePath()
-        h = hashlib.sha1()
-        h.update(getPlatformTag())
-        h.update(self._getSandboxVariantId())
-        for s in self._coreStep.scmList:
-            liveBId = s.calcLiveBuildId(workspacePath)
-            if liveBId is None: return None
-            h.update(liveBId)
-        return h.digest()
-
-    def getLiveBuildIdSpec(self):
-        """Generate spec lines for bob-hash-engine.
-
-        May return None if an SCM does not support live-build-ids on Jenkins.
-        """
-        if not self.hasLiveBuildId():
-            return None
-        workspacePath = self.getWorkspacePath()
-        lines = [ "{sha1", "p", "=" + asHexStr(self._getSandboxVariantId()) ]
-        for s in self._coreStep.scmList:
-            liveBIdSpec = s.getLiveBuildIdSpec(workspacePath)
-            if liveBIdSpec is None: return None
-            lines.append(liveBIdSpec)
-        lines.append("}")
-        return "\n".join(lines)
 
     def hasNetAccess(self):
         return True
