@@ -1025,64 +1025,6 @@ class AzureArchive(BaseArchive):
         os.close(tmpFd)
         return AzureUploader(self.__service, self.__container, tmpName, blobName)
 
-    @staticmethod
-    def scriptDownload(args):
-        service, container, remoteBlob, localFile = AzureArchive.scriptGetService(args)
-        from azure.common import AzureException
-
-        # Download into temporary file and rename if downloaded successfully
-        tmpName = None
-        try:
-            (tmpFd, tmpName) = mkstemp(dir=".")
-            os.close(tmpFd)
-            service.get_blob_to_path(container, remoteBlob, tmpName)
-            os.rename(tmpName, localFile)
-            tmpName = None
-        except (OSError, AzureException) as e:
-            raise BuildError("Download failed: " + str(e))
-        finally:
-            if tmpName is not None: os.unlink(tmpName)
-
-    @staticmethod
-    def scriptUpload(args):
-        service, container, remoteBlob, localFile = AzureArchive.scriptGetService(args)
-        from azure.common import AzureException, AzureConflictHttpError
-        try:
-            service.create_blob_from_path(container, remoteBlob, localFile, if_none_match="*")
-            print("OK")
-        except AzureConflictHttpError:
-            print("skipped")
-        except (OSError, AzureException) as e:
-            raise BuildError("Upload failed: " + str(e))
-
-    @staticmethod
-    def scriptGetService(args):
-        parser = argparse.ArgumentParser()
-        parser.add_argument('account')
-        parser.add_argument('container')
-        parser.add_argument('buildid')
-        parser.add_argument('suffix')
-        parser.add_argument('file')
-        parser.add_argument('--key')
-        parser.add_argument('--sas-token')
-        args = parser.parse_args(args)
-
-        try:
-            from azure.storage.blob import BlockBlobService
-        except ImportError:
-            raise BuildError("azure-storage-blob Python3 library not installed!")
-
-        service = BlockBlobService(account_name=args.account, account_key=args.key,
-            sas_token=args.sas_token, socket_timeout=6000)
-
-        try:
-            with open(args.buildid, 'rb') as f:
-                remoteBlob = AzureArchive.__makeBlobName(f.read(), args.suffix)
-        except OSError as e:
-            raise BuildError(str(e))
-
-        return (service, args.container, remoteBlob, args.file)
-
 class AzureDownloader:
     def __init__(self, name):
         self.name = name
@@ -1213,17 +1155,3 @@ def getArchiver(recipes, jenkins=None):
         return MultiArchive([ getSingleArchiver(recipes, i) for i in archiveSpec ])
     else:
         return getSingleArchiver(recipes, archiveSpec)
-
-def doDownload(args, bobRoot):
-    archiveBackend = args[0]
-    if archiveBackend == "azure":
-        AzureArchive.scriptDownload(args[1:])
-    else:
-        raise BuildError("Invalid archive backend: "+archiveBackend)
-
-def doUpload(args, bobRoot):
-    archiveBackend = args[0]
-    if archiveBackend == "azure":
-        AzureArchive.scriptUpload(args[1:])
-    else:
-        raise BuildError("Invalid archive backend: "+archiveBackend)

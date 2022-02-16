@@ -94,16 +94,6 @@ def __querypath(*args, **kwargs):
      doQueryPath(*args, **kwargs)
      return 0
 
-def __download(*args, **kwargs):
-    from .archive import doDownload
-    doDownload(*args, **kwargs)
-    return 0
-
-def __upload(*args, **kwargs):
-    from .archive import doUpload
-    doUpload(*args, **kwargs)
-    return 0
-
 def __invoke(*args, **kwargs):
     from .cmds.invoke import doInvoke
     return doInvoke(*args, **kwargs)
@@ -131,8 +121,6 @@ availableCommands = {
     "query-path"    : ('ll', __querypath, "Query path information"),
     "query-meta"    : ('ll', __querymeta, "Query Package meta information"),
 
-    "_download"     : (None, __download, ""),
-    "_upload"       : (None, __upload, ""),
     "_invoke"       : (None, __invoke, ""),
     "_jexec"        : (None, __jenkinsExecute, "")
 }
