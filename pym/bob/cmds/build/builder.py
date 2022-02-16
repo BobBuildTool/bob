@@ -259,14 +259,12 @@ cd {ROOT}
     @staticmethod
     def makeRunnable(wrapFmt):
 
-        def fmt(step, mode, props):
-            if mode == 'workspace':
-                ret = wrapFmt(step, props)
-                return os.path.join(ret, "workspace") if ret is not None else None
-            elif mode == 'storage':
-                return BobState().getStoragePath(step.getWorkspacePath())
+        def fmt(step, props):
+            ret = wrapFmt(step, props)
+            if ret is not None:
+                return os.path.join(ret, "workspace")
             else:
-                assert False, "invalid mode {}".format(mode)
+                return None
 
         return fmt
 

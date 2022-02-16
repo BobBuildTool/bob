@@ -722,14 +722,7 @@ def jenkinsNamePersister(jenkins, wrapFmt, uuid):
         ret += "/workspace"
         return ret
 
-    def fmt(step, mode, props):
-        if mode == 'workspace':
-            return persist(step, props)
-        else:
-            assert mode == 'storage'
-            return step.getWorkspacePath()
-
-    return fmt
+    return persist
 
 def genJenkinsJobs(recipes, jenkins):
     jobs = {}

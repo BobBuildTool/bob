@@ -1129,7 +1129,7 @@ class Step:
         script but the one from getExecPath() instead.
         """
         if self.isValid():
-            return self.__pathFormatter(self, 'workspace', self.__package._getStates())
+            return self.__pathFormatter(self, self.__package._getStates())
         else:
             return "/invalid/workspace/path/of/{}".format(self.__package.getName())
 

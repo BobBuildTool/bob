@@ -65,7 +65,7 @@ class RecipesTmp:
     def generate(self, sandboxEnabled=False):
         recipes = RecipeSet()
         recipes.parse()
-        return recipes.generatePackages(lambda x,y,z: "unused", sandboxEnabled)
+        return recipes.generatePackages(lambda x,y: "unused", sandboxEnabled)
 
 
 class TestUserConfig(TestCase):
