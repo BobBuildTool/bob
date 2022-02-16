@@ -13,6 +13,9 @@ import yaml
 from bob import DEBUG
 from bob.input import RecipeSet
 from bob.errors import ParseError, BobError
+from bob.utils import runInEventLoop
+
+from mocks.intermediate import MockIR, MockIRStep
 
 DEBUG['ngd'] = True
 
@@ -62,7 +65,7 @@ class RecipesTmp:
     def generate(self, sandboxEnabled=False):
         recipes = RecipeSet()
         recipes.parse()
-        return recipes.generatePackages(lambda x,y: "unused", sandboxEnabled)
+        return recipes.generatePackages(lambda x,y,z: "unused", sandboxEnabled)
 
 
 class TestUserConfig(TestCase):
@@ -1310,10 +1313,14 @@ class TestToolsWeak(RecipesTmp, TestCase):
         packages = self.generate()
         r1 = packages.walkPackagePath("r1").getPackageStep()
         r2 = packages.walkPackagePath("r2").getPackageStep()
-        def buildId(step):
-            # not the right definition but close enough for the test
-            return step.getDigest(buildId, relaxTools=True)
-        self.assertEqual(buildId(r1), buildId(r2))
+        async def buildId(steps):
+            ret = []
+            for step in steps:
+                ret.append(await step.getDigestCoro(buildId, relaxTools=True))
+            return ret
+        self.assertEqual(runInEventLoop(buildId([MockIRStep.fromStep(r1, MockIR)])),
+                         runInEventLoop(buildId([MockIRStep.fromStep(r2, MockIR)])),
+                         "Weak tool does not influence build-id")
         self.assertNotEqual(r1.getVariantId(), r2.getVariantId())
         self.assertNotEqual(r1.getTools()["tool"].getStep().getVariantId(),
                             r2.getTools()["tool"].getStep().getVariantId())
