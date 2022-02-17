@@ -3,16 +3,16 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ...builder import LocalBuilder
 from ...input import RecipeSet
 from ...scm import getScm, ScmTaint, ScmStatus
+from ...share import getShare
 from ...state import BobState
 from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT, Warn
 from ...utils import removePath, processDefines
 import argparse
 import os
 
-from .builder import LocalBuilder
-from .share import getShare
 from .state import DevelopDirOracle
 
 __all__ = ['doClean']

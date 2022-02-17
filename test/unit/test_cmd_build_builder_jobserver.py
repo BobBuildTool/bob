@@ -1,6 +1,6 @@
 
 from unittest import TestCase
-from bob.cmds.build.builder import InternalJobServer, JobServerSemaphore
+from bob.builder import InternalJobServer, JobServerSemaphore
 from bob.utils import runInEventLoop
 import asyncio
 

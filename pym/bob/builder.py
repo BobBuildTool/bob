@@ -3,19 +3,19 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ... import BOB_VERSION
-from ...archive import DummyArchive
-from ...audit import Audit
-from ...errors import BobError, BuildError, MultiBobError
-from ...input import RecipeSet
-from ...invoker import Invoker, InvocationMode
-from ...languages import StepSpec
-from ...state import BobState
-from ...stringparser import Env
-from ...tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit, \
+from . import BOB_VERSION
+from .archive import DummyArchive
+from .audit import Audit
+from .errors import BobError, BuildError, MultiBobError
+from .input import RecipeSet
+from .invoker import Invoker, InvocationMode
+from .languages import StepSpec
+from .state import BobState
+from .stringparser import Env
+from .tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit, \
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
-from ...utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
+from .utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
     isWindows, INVALID_CHAR_TRANS, quoteCmdExe, getPlatformTag, canSymlink
 from .share import NullShare
 from shlex import quote

@@ -4,10 +4,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ...archive import getArchiver
+from ...builder import LocalBuilder
 from ...errors import BuildError
 from ...input import RecipeSet
 from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
     RecipeSetIR
+from ...share import getShare
 from ...tty import setVerbosity, setTui
 from ...utils import copyTree, processDefines, EventLoopWrapper
 import argparse
@@ -20,8 +22,6 @@ import sys
 import time
 
 from .state import DevelopDirOracle
-from .builder import LocalBuilder
-from .share import getShare
 
 class LazyIR:
     @staticmethod

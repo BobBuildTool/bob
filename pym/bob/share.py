@@ -3,9 +3,9 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ...errors import BuildError
-from ...tty import Warn, WarnOnce
-from ...utils import asHexStr, hashDirectoryWithSize, isWindows
+from .errors import BuildError
+from .tty import Warn, WarnOnce
+from .utils import asHexStr, hashDirectoryWithSize, isWindows
 import errno
 import os, os.path
 import json

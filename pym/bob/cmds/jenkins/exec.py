@@ -5,13 +5,13 @@
 
 from ... import BOB_INPUT_HASH
 from ...archive import getArchiver, JenkinsArchive
+from ...builder import LocalBuilder
 from ...errors import BuildError
+from ...share import getShare
 from ...stringparser import Env, isTrue
 from ...tty import setVerbosity, TRACE
 from ...utils import asHexStr, EventLoopWrapper, removePath, isWindows, \
         getPlatformString
-from ..build.builder import LocalBuilder
-from ..build.share import getShare
 from .intermediate import PartialIR
 import argparse
 import base64
