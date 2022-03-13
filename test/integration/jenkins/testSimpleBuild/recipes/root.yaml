@@ -1,0 +1,14 @@
+root: true
+
+depends:
+    - lib
+
+buildScriptBash: |
+    cp $2/result.txt .
+packageScriptBash: |
+    cp $1/result.txt .
+
+buildScriptPwsh: |
+    Copy-Item ($args[1] + "/result.txt")
+packageScriptPwsh: |
+    Copy-Item ($args[0] + "/result.txt")

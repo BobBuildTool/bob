@@ -1,0 +1,15 @@
+root: true
+
+checkoutSCM:
+  scm: git
+  url: "$GITDIR"
+
+buildScriptBash: |
+  cp $1/result.txt .
+packageScriptBash: |
+  cp $1/result.txt .
+
+buildScriptPwsh: |
+    Copy-Item ($args[0] + "/result.txt")
+packageScriptPwsh: |
+    Copy-Item ($args[0] + "/result.txt")

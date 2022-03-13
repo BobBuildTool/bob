@@ -1,0 +1,5 @@
+packageScriptBash: |
+    echo -n "ok" > result.txt
+
+packageScriptPwsh: |
+    echo ok | Out-File -FilePath result.txt -Encoding ASCII -NoNewline

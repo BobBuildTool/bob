@@ -1,0 +1,20 @@
+jenkins:
+  quietPeriod: 1
+
+  disabledAdministrativeMonitors:
+    - hudson.model.UpdateCenter$CoreUpdateMonitor
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: bob
+          password: test
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  subversionSCM:
+    workspaceFormat: 31
