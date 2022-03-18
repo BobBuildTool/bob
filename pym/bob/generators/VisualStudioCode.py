@@ -99,7 +99,7 @@ class Project:
 
 class VsCodeGenerator(CommonIDEGenerator):
     def __init__(self):
-        super().__init__("vsCode", "Generate Visual Studio Code workspace")
+        super().__init__("vscode", "Generate Visual Studio Code workspace")
         self.parser.add_argument('--sort', action='store_true', help="Sort the dependencies by name (default: unsorted)")
 
     def configure(self, package, argv):
