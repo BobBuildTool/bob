@@ -212,8 +212,11 @@ class LocalShare:
                 os.mkdir(tmpSharedPath)
                 shutil.copyfile(os.path.join(workspace, "..", "audit.json.gz"),
                                 os.path.join(tmpSharedPath, "audit.json.gz"))
-                shutil.copyfile(os.path.join(workspace, "..", "cache.bin"),
-                                os.path.join(tmpDir, "cache.bin"))
+                cacheBinSrc = os.path.join(workspace, "..", "cache.bin")
+                cacheBinDst = os.path.join(tmpDir, "cache.bin")
+                # Might not exist if workspace was emtpy
+                if os.path.exists(cacheBinSrc):
+                    shutil.copyfile(cacheBinSrc, cacheBinDst)
                 if mayMove:
                     shutil.move(workspace, tmpSharedPath)
                 else:
@@ -225,7 +228,7 @@ class LocalShare:
                 # The storage size is used for garbage collection later...
                 actualHash, actualSize = hashDirectoryWithSize(
                     os.path.join(tmpSharedPath, "workspace"),
-                    os.path.join(tmpDir, "cache.bin"))
+                    cacheBinDst)
                 if actualHash != sharedHash:
                     raise BuildError("The shared package hash changed at destination. Incompatible file system?")
                 with open(os.path.join(tmpSharedPath, "pkg.json"), "w") as f:
