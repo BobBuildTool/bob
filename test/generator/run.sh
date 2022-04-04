@@ -16,5 +16,10 @@ run_bob project eclipseCdt root > log-cmd.txt
 RES=$(sed -ne '/^Build result is in/s/.* //p' log-cmd.txt)
 diff -Nurp $RES output
 
+# run and generate for vscode
+run_bob project vscode root > log-cmd.txt
+RES=$(sed -ne '/^Build result is in/s/.* //p' log-cmd.txt)
+diff -Nurp $RES output
+
 # Just generate a Visual Studio project. It wont's work anyway on unix.
 run_bob project -n __vs2019 root --name vs2019

@@ -167,6 +167,47 @@ to be passed on the command line *after* the package name.
     Add line to .config file. Can be used to specify preprocessor defines used by the QTCreator.
 
 
+Visual Studio Code project generator
+------------------------------------
+
+::
+
+    bob project vscode <package> [-h] [--name NAME] [--destination DEST]
+                       [--exclude EXCLUDES]
+                       [--include INCLUDE] [-I ADDITIONAL_INCLUDES]
+                       [-S START_INCLUDES] [--sort]
+
+The Visual Studio Code generator will generate a single .code-workspace file which could be opened in the Visual Studio Code. 
+
+The Visual Studio Code generator has the following specific options. They have to be
+passed on the command line *after* the package name.
+
+``--name NAME``
+    Name of project. Default is package_name
+
+``--destination DEST``
+    Destination of project files.
+
+``--exclude EXCLUDES``
+    Package filter. A regex for excluding packages in VSCode.
+
+``--include INCLUDE``
+    Include package filter. A regex for including only the specified packages in VSCode.
+    Use single quotes to specify your regex. For exmaple: --include 'foobar-.*'
+    You can also mix the Includes with the Excludes. In this case always use the Includes option beforehand.
+    For example: --include 'foobar-.*' --exclude 'foobar-baz' This will ensure you only include packages
+    wtih foobar-* but excludes the foobar-baz package.
+
+``-I ADDITIONAL_INCLUDES``
+    Additional include directories.
+
+``-S START_INCLUDES``
+    Additional include directories, will be placed at the beginning of the include list.
+
+``--sort``
+    Sort the dependend packages by name (default: unsorted)
+
+
 External links
 --------------
 
