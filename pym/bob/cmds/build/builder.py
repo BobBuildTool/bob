@@ -1116,6 +1116,10 @@ cd {ROOT}
 
         # get directory into shape
         (prettyBuildPath, created) = self._constructDir(buildStep, "build")
+        if checkoutOnly:
+            stepMessage(buildStep, "BUILD", "skipped due to --checkout-only ({})".format(prettyBuildPath),
+                    SKIPPED, IMPORTANT)
+            return
         oldBuildDigest = BobState().getDirectoryState(prettyBuildPath, False)
         if created or (buildDigest != oldBuildDigest):
             # not created but exists -> something different -> prune workspace
@@ -1131,10 +1135,7 @@ cd {ROOT}
             for i in buildStep.getAllDepSteps() if i.isValid() ]
         buildFingerprint = await self._getFingerprint(buildStep, depth)
         if buildFingerprint: buildInputHashes.append(buildFingerprint)
-        if checkoutOnly:
-            stepMessage(buildStep, "BUILD", "skipped due to --checkout-only ({})".format(prettyBuildPath),
-                    SKIPPED, IMPORTANT)
-        elif (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
+        if (not self.__force) and (BobState().getInputHashes(prettyBuildPath) == buildInputHashes):
             stepMessage(buildStep, "BUILD", "skipped (unchanged input for {})".format(prettyBuildPath),
                     SKIPPED, IMPORTANT)
             # We always rehash the directory in development mode as the
