@@ -1,0 +1,9 @@
+# set property for special checkout subdirectory
+checkoutDir: "special"
+checkoutVars: [PLATFORM]
+checkoutScript: |
+  echo "lib1 $PLATFORM"
+buildScript: |
+  true
+packageScript: |
+  true
