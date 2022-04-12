@@ -34,7 +34,7 @@ class PathFmtState(PluginState):
         self.__checkoutDir = None
         self.__platformDir = None
 
-    def onEnter(self, env, tools, properties):
+    def onEnter(self, env, properties):
         # checkoutDir is always taken from current recipe
         self.__checkoutDir = properties['checkoutDir'].getValue()
         if self.__checkoutDir is not None:
@@ -59,7 +59,7 @@ class StringProperty(PluginProperty):
 
 
 manifest = {
-    'apiVersion' : "0.3",
+    'apiVersion' : "0.20",
     'hooks' : {
         'releaseNameFormatter' : releaseFormatter,
         'developNameFormatter' : developFormatter,
