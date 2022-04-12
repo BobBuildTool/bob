@@ -1,0 +1,7 @@
+checkoutVars: [PLATFORM]
+checkoutScript: |
+  echo "lib2 $PLATFORM"
+buildScript: |
+  true
+packageScript: |
+  true

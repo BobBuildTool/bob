@@ -1,0 +1,22 @@
+root: True
+
+depends:
+  - lib1
+  - lib2
+
+buildScript: |
+  true
+
+packageScript: |
+  true
+
+# set two different "platform" properties that are inherited
+multiPackage:
+  alpha:
+    platform: "alpha"
+    environment:
+      PLATFORM: "alpha"
+  bravo:
+    platform: "bravo"
+    environment:
+      PLATFORM: "bravo"

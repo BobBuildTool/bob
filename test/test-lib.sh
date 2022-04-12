@@ -82,20 +82,26 @@ expect_output()
 
 expect_exist()
 {
-	if [[ ! -e "$1" ]] ; then
-		echo "Missing expected file: $1" >&2
-		return 1
-	fi
+	local i
+	for i in "$@" ; do
+		if [[ ! -e "$i" ]] ; then
+			echo "Missing expected file: $i" >&2
+			return 1
+		fi
+	done
 
 	return 0
 }
 
 expect_not_exist()
 {
-	if [[ -e "$1" ]] ; then
-		echo "Unexpected file: $1" >&2
-		return 1
-	fi
+	local i
+	for i in "$@" ; do
+		if [[ -e "$i" ]] ; then
+			echo "Unexpected file: $i" >&2
+			return 1
+		fi
+	done
 
 	return 0
 }
