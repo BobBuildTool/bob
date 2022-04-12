@@ -3309,6 +3309,7 @@ class RecipeSet:
             spec = spec_from_loader(mangledName, loader)
             mod = module_from_spec(spec)
             loader.exec_module(mod)
+            sys.modules[spec.name] = mod
         except SyntaxError as e:
             import traceback
             raise ParseError("Error loading plugin "+fileName+": "+str(e),
