@@ -374,8 +374,19 @@ class BuiltinSetting(PluginSetting):
 
 def Scm(spec, env, overrides, recipeSet):
     # resolve with environment
-    spec = { k : ( env.substitute(v, "checkoutSCM::"+k) if isinstance(v, str) else v)
-        for (k, v) in spec.items() }
+    for (k, v) in spec.items():
+        if isinstance(v, str):
+            spec[k] = env.substitute(v, "checkoutSCM::"+k)
+        elif isinstance(v, list):
+            spec[k] = []
+            for l in v:
+                x = env.substitute(l, "checkoutSCM::"+k)
+                if isinstance(x, list):
+                    spec[k].extend(x)
+                else:
+                    spec[k].append(x)
+        else:
+            spec[k] = v
 
     # apply overrides before creating scm instances. It's possible to switch the Scm type with an override..
     matchedOverrides = []

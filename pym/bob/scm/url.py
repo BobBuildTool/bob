@@ -125,7 +125,7 @@ class UrlScm(Scm):
 
     __SCHEMA = {
         'scm' : 'url',
-        'url' : str,
+        'url' : schema.Or(str, [str]),
         schema.Optional('dir') : str,
         schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('digestSHA1') : str,
@@ -190,7 +190,7 @@ class UrlScm(Scm):
         self.__dir = spec.get("dir", ".")
         self.__fn = spec.get("fileName")
         if not self.__fn:
-            url = self.__url
+            url = self.__url[0] if isinstance(self.__url, list) else self.__url
             if isWindows():
                 # On Windows we're allowed to provide native paths with
                 # backslashes.
@@ -291,31 +291,47 @@ class UrlScm(Scm):
 
         # Download only if necessary
         if not self.isDeterministic() or not os.path.isfile(destination):
-            try:
-                url = parseUrl(self.__url)
-            except ValueError as e:
-                invoker.fail(str(e))
-
-            if url.scheme in ['', 'file']:
-                # Verify that host name is empty or "localhost"
-                if url.netloc not in ['', 'localhost']:
-                    invoker.fail("Bad/unsupported URL: invalid host name: " + url.netloc)
-                # Local files: copy only if newer (u), target never is a directory (T)
-                if isYounger(url.path, destination):
-                    if os.path.isdir(destination):
-                        invoker.fail("Destination", destination, "is an existing directory!")
-                    invoker.trace("<cp>", url.path, workspaceFile)
-                    shutil.copy(url.path, destination)
-            elif url.scheme in ["http", "https", "ftp"]:
-                invoker.trace("<wget>", self.__url, ">", workspaceFile)
+            urlSafe = self.__url
+            urls = [self.__url] if not isinstance(self.__url, list) else self.__url
+            for index, url in enumerate(urls):
+                self.__url = url
                 try:
-                    err = await invoker.runInExecutor(UrlScm._download, self, destination)
-                    if err:
-                        invoker.fail(err)
-                except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                    invoker.fail("Download interrupted!")
-            else:
-                invoker.fail("Unsupported URL scheme: " + url.scheme)
+                    url = parseUrl(self.__url)
+                except ValueError as e:
+                    invoker.fail(str(e))
+
+                if url.scheme in ['', 'file']:
+                    # Verify that host name is empty or "localhost"
+                    if url.netloc not in ['', 'localhost']:
+                        invoker.fail("Bad/unsupported URL: invalid host name: " + url.netloc)
+                    # Local files: copy only if newer (u), target never is a directory (T)
+                    if isYounger(url.path, destination):
+                        if os.path.isdir(destination):
+                            invoker.fail("Destination", destination, "is an existing directory!")
+                        invoker.trace("<cp>", url.path, workspaceFile)
+                        shutil.copy(url.path, destination)
+                elif url.scheme in ["http", "https", "ftp"]:
+                    invoker.trace("<wget>", self.__url, ">", workspaceFile)
+                    try:
+                        err = await invoker.runInExecutor(UrlScm._download, self, destination)
+                        if err:
+                            if index != len(urls)-1:
+                                invoker.trace(err + " Try next mirror.")
+                                continue
+                            else:
+                                invoker.fail(err)
+                    except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                        invoker.fail("Download interrupted!")
+                    except:
+                        if index != len(urls)-1:
+                            invoker.trace("Something went wrong! Try next mirror.")
+                            continue
+                        else:
+                            invoker.fail("Something went wrong!")
+                else:
+                    invoker.fail("Unsupported URL scheme: " + url.scheme)
+                break
+            self.__url = urlSafe
 
 
         # Always verify file hashes
@@ -446,7 +462,7 @@ class UrlAudit(ScmAudit):
             'algorithm' : 'sha1',
             'value' : str
         },
-        schema.Optional('url') : str, # Added in Bob 0.16
+        schema.Optional('url') : schema.Or(str, [str]), # Added in Bob 0.16
     })
 
     async def _scanDir(self, workspace, dir, extra):

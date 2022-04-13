@@ -211,7 +211,7 @@ class Scm(metaclass=ABCMeta):
     def __init__(self, spec, overrides):
         # Recipe foobar, checkoutSCM dir:., url:asdf
         self.__source = spec.get("__source", "<unknown>") + " in checkoutSCM: dir:" + \
-            spec.get("dir", ".") + ", url:" + spec.get("url", "?")
+            spec.get("dir", ".") + ", url:" + str(spec.get("url", "?"))
         self.__recipe = spec["recipe"]
         self.__overrides = overrides
 

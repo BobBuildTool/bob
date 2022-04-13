@@ -8,6 +8,7 @@ from .tty import WarnOnce
 from .utils import infixBinaryOp
 from collections.abc import MutableMapping
 from types import MappingProxyType
+from ast import literal_eval
 import fnmatch
 import pyparsing
 import re
@@ -136,7 +137,11 @@ class StringParser:
             tok = self.nextToken(delim)
         else:
             if keep: self.index -= 1
-        return "".join(s)
+        # return a list of urls
+        if len(s) > 0 and isinstance(s[0], list):
+            return s[0]
+        else:
+            return "".join(s)
 
     def getVariable(self):
         # get variable name
@@ -619,6 +624,16 @@ def funMatchScm(args, **options):
 
     return "false"
 
+def funMirrors(args, **options):
+    if len(args) != 2: raise ParseError("mirrors expects two arguments")
+
+    mirrors = literal_eval(args[0])
+
+    return [v + args[1] for v in mirrors]
+
+def funList(args, **options):
+    return str(args)
+
 DEFAULT_STRING_FUNS = {
     "eq" : funEqual,
     "or" : funOr,
@@ -632,4 +647,6 @@ DEFAULT_STRING_FUNS = {
     "subst" : funSubst,
     "match" : funMatch,
     "matchScm" : funMatchScm,
+    "mirrors" : funMirrors,
+    "list" : funList,
 }
