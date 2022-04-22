@@ -536,7 +536,7 @@ def hashPath(path, index=None, ignoreDirs=None):
 
 def binStat(path):
     st = os.stat(path)
-    return struct.pack('=qqLqLQ', st.st_ctime_ns, st.st_mtime_ns,
+    return struct.pack('=qqLQLQ', st.st_ctime_ns, st.st_mtime_ns,
                        st.st_dev, st.st_ino, st.st_mode, st.st_size)
 
 
