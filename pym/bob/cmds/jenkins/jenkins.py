@@ -1115,6 +1115,8 @@ will disable the root jobs because they cannot run anyawy without failing.
         help="Delete everything except root jobs")
     parser.add_argument('--no-ssl-verify', dest='ssl_verify', default=True,
         action='store_false', help="Disable SSL certificate verification.")
+    parser.add_argument('--user', help="Set username for server authentication")
+    parser.add_argument('--password', help="Set password for server authorization")
     parser.add_argument('-q', '--quiet', default=0, action='count',
         help="Decrease verbosity (may be specified multiple times)")
     parser.add_argument('-v', '--verbose', default=0, action='count',
@@ -1136,6 +1138,9 @@ will disable the root jobs because they cannot run anyawy without failing.
 
     config = BobState().getJenkinsConfig(args.name)
     existingJobs = BobState().getJenkinsAllJobs(args.name)
+
+    if args.user is not None: config.urlUsername = args.user
+    if args.password is not None: config.urlPassword = args.password
 
     # connect to server
     with JenkinsConnection(config, args.ssl_verify) as connection:
@@ -1208,6 +1213,8 @@ def doJenkinsPush(recipes, argv):
         action='store_false', help="Disable SSL certificate verification.")
     parser.add_argument("--no-trigger", action="store_true", default=False,
                         help="Do not trigger build for updated jobs")
+    parser.add_argument('--user', help="Set username for server authentication")
+    parser.add_argument('--password', help="Set password for server authorization")
     parser.add_argument('-q', '--quiet', default=0, action='count',
         help="Decrease verbosity (may be specified multiple times)")
     parser.add_argument('-v', '--verbose', default=0, action='count',
@@ -1229,6 +1236,9 @@ def doJenkinsPush(recipes, argv):
     existingJobs = BobState().getJenkinsAllJobs(args.name)
     jobs = genJenkinsJobs(recipes, args.name)
     buildOrder = genJenkinsBuildOrder(jobs)
+
+    if args.user is not None: config.urlUsername = args.user
+    if args.password is not None: config.urlPassword = args.password
 
     # get hooks
     jenkinsJobCreate = recipes.getHookStack('jenkinsJobCreate')

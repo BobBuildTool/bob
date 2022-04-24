@@ -202,9 +202,17 @@ class JenkinsConfig:
     def urlUsername(self):
         return self.__url.get("username")
 
+    @urlUsername.setter
+    def urlUsername(self, username):
+        self.__url["username"] = username
+
     @property
     def urlPassword(self):
         return self.__url.get("password")
+
+    @urlPassword.setter
+    def urlPassword(self, password):
+        self.__url["password"] = password
 
     @property
     def artifactsCopy(self):
