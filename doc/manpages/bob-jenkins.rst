@@ -31,9 +31,10 @@ Available sub-commands:
     bob jenkins graph [-h] name
     bob jenkins ls [-h] [-v]
     bob jenkins prune [-h] [--obsolete | --intermediate] [--no-ssl-verify]
-                      [-q] [-v]
+                      [--user USER] [--password PASSWORD] [-q] [-v]
                       name
-    bob jenkins push [-h] [-f] [--no-ssl-verify] [--no-trigger] [-q] [-v]
+    bob jenkins push [-h] [-f] [--no-ssl-verify] [--no-trigger]
+                     [--user USER] [--password PASSWORD] [-q] [-v]
                      name
     bob jenkins rm [-h] [-f] name
     bob jenkins set-options [-h] [--reset] [-n NODES] [-o OPTIONS]
@@ -139,6 +140,19 @@ Options
 ``-p PREFIX, --prefix PREFIX``
     Prefix for jobs
 
+``--password``
+    Set password for Jenkins authentication.
+
+    You can also set the user name and password persistently by encoding it
+    into the Jenkins url directly, e.g. *https:://user:password@host/*.
+
+    .. attention::
+       On Linux users can usually see the program arguments of processes from
+       other users. By using the ``--password`` you could inadvertently reveal
+       the password to untrusted other users that have access to the same
+       machine.  It is safer to either enter the password manually or to pipe
+       it through stdin.
+
 ``-q, --quiet``
     Decrease verbosity (may be specified multiple times)
 
@@ -160,6 +174,12 @@ Options
 
 ``--upload``
     Upload to binary archive
+
+``--user``
+    Set user name for Jenkins authentication.
+
+    You can also set the user name persistently by encoding it into the Jenkins
+    url directly, e.g. *https:://user@host/*.
 
 ``-v, --verbose``
     Show additional information
