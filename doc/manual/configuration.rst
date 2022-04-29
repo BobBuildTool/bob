@@ -299,13 +299,6 @@ the host. Bob adds any consumed tools to the front of ``$PATH`` and controls
 the available environment variables. Apart from this, the build result is pretty
 much dependent on the installed applications of the host.
 
-By utilizing `user namespaces`_ on Linux, Bob is able to execute the package
-steps in a tightly controlled and reproducible environment. This is key to
-enable binary reproducible builds. The sandbox image itself is also represented
-by a recipe in the project.
-
-.. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
-
 Initially no sandbox is defined. An upstream recipe might offer its built
 package as sandbox through ``provideSandbox``. The downstream recipe must define
 ``sandbox`` in the ``use`` attribute of this dependency to pick it up as
@@ -313,13 +306,8 @@ sandbox. This sandbox is effective only for the current recipe. If ``forward``
 is additionally set to ``True`` the following dependencies will inherit this
 sandbox for their execution.
 
-Inside the sandbox, the result of the consumed or inherited sandbox image is
-used as root file system. Only direct inputs of the executed step are visible.
-Everything except the working directory and ``/tmp`` is mounted read only to
-restrict side effects. The only component used from the host is the Linux
-kernel and indirectly Python because Bob is written in this language. The
-sandbox image must provide everything to execute the steps. In particular, the
-following things must be provided by the sandbox image:
+The sandbox image must provide everything to execute the steps. In particular,
+the following things must be provided by the sandbox image:
 
 * There must be an ``etc/passwd`` file containing the "nobody" user with uid
   65534.

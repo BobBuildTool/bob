@@ -176,3 +176,103 @@ from a recipe:
 Under the above assumptions Bob is able to reliably reuse build results from
 other build servers.
 
+Sandboxing
+----------
+
+By utilizing `user namespaces`_ on Linux, Bob is able to execute the package
+steps in a tightly controlled and reproducible environment. This is key to
+enable binary reproducible builds. The sandbox image itself is also represented
+by a recipe in the project. This allows to define different sandbox images as
+required and even build the sandbox image itself by multiple recipes. It
+provides full control about which packages are built in the sandbox.
+
+.. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
+
+Inside the sandbox, the result of the consumed or inherited sandbox image is
+used as root file system. Only direct inputs of the executed step are visible.
+Everything except the working directory and ``/tmp`` is mounted read only to
+restrict side effects. The only component used from the host is the Linux
+kernel and indirectly Python because Bob is written in this language.
+
+Jenkins support
+---------------
+
+Bob natively supports building projects on Jenkins servers through the
+:ref:`manpage-bob-jenkins` command. In contrast to
+local builds, the recipes do not need to be present on the Jenkins server.
+Instead, Bob configures the Jenkins server based on a project and some
+user settings by creating the jobs through the REST-API and storing all
+required information in the jobs themselves.
+
+Principle operation
+~~~~~~~~~~~~~~~~~~~
+
+For each project the user creates the configuration that consists at least of the
+Jenkins server URL and the packages that shall be built. Bob then configures
+the Jenkins through its REST-API, creating and updating the Jobs required to build
+the project.
+
+.. image:: /images/jenkins.png
+
+By default Bob will create one job per recipe. If required, multiple jobs per
+recipe will be created if the job dependency graph would be cyclic. All jobs
+can be executed on different build nodes to leverage the performance of a build
+cluster. As the project evolves, updates to recipes can be regularly synced to
+the Jenkins server. This will only update the affected jobs.
+
+Bob makes no assumption about how many build nodes are used and where the jobs
+are built as long as the build nodes are identical. The chosen nodes can be
+controlled with standard Jenkins node expressions.
+
+Natively supported SCMs
+~~~~~~~~~~~~~~~~~~~~~~~
+
+For git and Subversion repositories Bob will use the respective plugins that
+are available on Jenkins. This enables to trigger builds of jobs where the
+source code was changed. Either this is done by polling the SCM server or by
+installing commit hooks that inform the Jenkins server about potential changes.
+
+The principle mode of operation is the same for all natively supported SCMs on
+Jenkins:
+
+1. Bob configures the job to use the git/svn plugin to checkout the sources.
+2. Initial build of the job. Jenkins stores which revision was built.
+3. Some changes are pushed to a branch that was built in this Jenkins project.
+4. Jenkins polls the SCM server. Either by schedule or because a commit hook
+   informed the Jenkins server about the change immediately.
+5. The affected job(s) are built. Once finished, all dependent jobs will be
+   automatically triggered.
+
+Because cvs and url SCMs do not use Jenkins plugins to fetch the sources,
+there is currently no automatic CI build possible with these SCMs. Such jobs
+need to be triggered by other means if the sources are changed.
+
+Artifact handling
+~~~~~~~~~~~~~~~~~
+
+By default Bob will use the built-in artifact handling of Jenkins. This has the
+advantage that the build results will be available in each build directly on
+the Jenkins UI. For larger projects this is not optimal, though, because
+Jenkins is struggling with large artifacts and if many jobs are built in
+parallel. To relieve the Jenkins master from handling the artifacts, it is
+possible to exchange the artifacts exclusively through one or more dedicated
+artifact servers.
+
+For very large and mostly static packages, e.g. toolchains, there exists a
+special handling for :ref:`configuration-recipes-shared` packages. These shared
+packages are not copied into every job workspace independently but only once
+onto each Jenkins build node. The installation is done outside of the job
+workspaces and the jobs will use the package directly from there.
+
+Limitations
+~~~~~~~~~~~
+
+* The same version of Bob must be used on all build nodes and also on the
+  machine that configured the Jenkins jobs.
+* All build nodes are assumed to be identical as far as the project is
+  concerned, e.g. the OS or required host tools.
+* Built packages must be reusable. Most importantly this requires that build
+  result must be :ref:`configuration-recipes-relocatable` and must not contain
+  references to the build machine or any dependency. E.g. if the build result
+  contains symlinks that point outside of the workspace the result will not be
+  usable on another build node.
