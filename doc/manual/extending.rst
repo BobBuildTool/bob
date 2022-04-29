@@ -179,6 +179,8 @@ could look like this::
         }
     }
 
+.. _extending-plugins-jenkins:
+
 Jenkins job mangling
 ~~~~~~~~~~~~~~~~~~~~
 

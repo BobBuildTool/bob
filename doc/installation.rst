@@ -166,6 +166,8 @@ not permitted" error when building. Add the line ::
 
 to your ``/etc/sysctl.conf`` (or wherever your distro stores that).
 
+.. _installation-windows:
+
 Windows platform notes
 ======================
 
@@ -194,6 +196,10 @@ invoked which does not work.
    ``HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem@LongPathsEnabled``
    registry key to ``1``. Either option is sufficient to remove the path length
    limitation.
+
+If you want to install Bob for all users, make sure you have installed Python
+for all users and that you run ``pip`` with administrative rights. Otherwise
+the installation will only be done for the current user!
 
 MSYS2
 -----

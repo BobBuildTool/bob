@@ -221,64 +221,6 @@ Status codes:
   (:ref:`configuration-config-scmOverrides`). Depends on ``--show-overrides``.
 
 
-Firing up a Jenkins
-===================
-
-You might let Bob configure a Jenkins server for you to build a project. Bob
-requires that the following plugins are available:
-
-* `Conditional BuildStep Plugin`_: used to efficiently support shared packages
-* `Copy Artifact plugin`_: used to carry results between the different jobs
-* `Git plugin`_: to clone git repositores
-* `Multiple SCMs plugin`_: used to support recipes that have multiple checkouts
-* `Subversion plugin`_: to checkout SVN modules
-* `Workspace Cleanup Plugin`_: to make clean builds if requested
-
-.. _Copy Artifact plugin: https://wiki.jenkins-ci.org/display/JENKINS/Copy+Artifact+Plugin
-.. _Subversion plugin: https://wiki.jenkins-ci.org/display/JENKINS/Subversion+Plugin
-.. _Git plugin: https://wiki.jenkins-ci.org/display/JENKINS/Git+Plugin
-.. _Multiple SCMs plugin: https://wiki.jenkins-ci.org/display/JENKINS/Multiple+SCMs+Plugin
-.. _Conditional BuildStep Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Conditional+BuildStep+Plugin
-.. _Workspace Cleanup Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Workspace+Cleanup+Plugin
-
-Additionally Bob must be installed on the Jenkins server and be available in
-the PATH. It is required to install the same version of Bob on the server and
-the build nodes that is used to configure the Jenkins. Otherwise the build will
-fail.
-
-Suppose you have a suitable Jenkins server located at
-http://jenkins.intranet.local:8080. Go to the project root directory and tell Bob
-about your server and what you want to build there (substitute ``<user>`` and
-``<pass>`` with your actual credentials)::
-
-    $ bob jenkins add intranet http://<user>:<pass>@jenkins.intranet.local:8080 -p sandbox- -r vexpress
-
-This adds a synonym ("intranet") for your Jenkins server. The ``-p`` adds the
-``sandbox-`` prefix to every job. At least one ``-r`` option must be given to
-specify what should be built. To view the settings type::
-
-    $ bob jenkins ls -vv
-    intranet
-     URL: http://<user>:<pass>@jenkins.intranet.local:8080/
-     Prefix: sandbox-
-     Upload: disabled
-     Sandbox: disabled
-     Roots: vexpress
-     Jobs: 
-
-As you can see there is no job configured yet on the server. This is done by ::
-
-    $ bob jenkins push intranet
-
-which pushes the local state of the recipes as Jenkins jobs to the server. Note
-that Bob does not need to be available on the server. The content of the
-recipes is inserted as shell steps into the jobs with special prologues to
-accommodate for the special environment.
-
-If all required tools and plugins have been installed on Jenkins the build
-should succeed. Go into the "sandbox-vexpress" job, download the archived
-artifacts and run them locally.
-
 Using IDEs with Bob
 ===================
 
