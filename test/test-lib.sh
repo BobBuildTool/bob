@@ -8,8 +8,8 @@ fi
 
 if [[ -d "pym/bob" ]] ; then
 	BOB_ROOT="${PWD}"
-elif [[ -d "../../pym/bob" ]] ; then
-	BOB_ROOT="${PWD}/../.."
+elif [[ -d "../../../pym/bob" ]] ; then
+	BOB_ROOT="${PWD}/../../.."
 else
 	echo "From where are you calling me?" >&2
 	exit 1

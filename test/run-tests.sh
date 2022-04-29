@@ -177,17 +177,11 @@ pushd test > /dev/null
 # remove stale coverage data
 [[ -z $COVERAGE ]] || find -type f -name '.coverage.*' -delete || true
 
-# add marker to log.txt
-{
-	echo "######################################################################"
-	echo -n "Started: "
-	date
-	echo "Options: $*"
-} >> log.txt
-
 # run unit tests
 if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 	echo "Run unit tests..."
+	pushd unit > /dev/null
+
 	RUN_TEST_NAMES=( )
 	for i in test_*.py ; do
 		if [[ "${i%%.py}" == $RUN_UNITTEST_PAT ]] ; then
@@ -209,11 +203,15 @@ if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 			fi
 		done
 	fi
+
+	popd > /dev/null
 fi
 
 # run blackbox tests
 if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 	echo "Run black box tests..."
+	pushd black-box > /dev/null
+
 	RUN_TEST_NAMES=( )
 	for i in * ; do
 		if [[ -d $i && -e "$i/run.sh" && "$i" == $RUN_BLACKBOX_PAT ]] ; then
@@ -236,6 +234,8 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 			fi
 		done
 	fi
+
+	popd > /dev/null
 fi
 
 popd > /dev/null
