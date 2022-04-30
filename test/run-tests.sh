@@ -5,12 +5,13 @@ set -o pipefail
 usage()
 {
 	cat <<EOF
-usage: ${0##*/} [-h] [-b PATTERN] [-c] [-j JOBS] [-n] [-u PATTERN]
+usage: ${0##*/} [-h] [-b PATTERN] [-c] [-i PATTERN] [-j JOBS] [-n] [-u PATTERN]
 
 optional arguments:
   -h              show this help message and exit
   -b PATTERN      Only execute black box tests matching PATTERN
   -c TYPE         Create coverage report (html, xml)
+  -i PATTERN      Only execute integration tests matching PATTERN
   -j JOBS         Run JOBS tests in parallel (requires GNU parallel)
   -u PATTERN      Only execute unit tests matching PATTERN
 EOF
@@ -29,7 +30,7 @@ run_test()
 	case "${1%%:*}" in
 		unit)
 			pushd unit > /dev/null
-			echo -n "  [unit]     ${test_name%%.py} ... "
+			echo -n "  [unit]        ${test_name%%.py} ... "
 			if $RUN_PYTHON3 -m unittest -v $test_name >>"$LOGFILE" 2>&1 ; then
 				echo "ok"
 				ret=0
@@ -42,7 +43,7 @@ run_test()
 			;;
 		black-box)
 			pushd black-box > /dev/null
-			echo -n "  [blackbox] $test_name ... "
+			echo -n "  [blackbox]    $test_name ... "
 			(
 				set -o pipefail
 				set -ex
@@ -63,6 +64,19 @@ run_test()
 			fi
 			popd > /dev/null
 			;;
+		integration)
+			pushd integration/$test_name > /dev/null
+			echo -n "  [integration] $test_name ... "
+			if $RUN_PYTHON3 run.py >>"$LOGFILE" 2>&1 ; then
+				echo "ok"
+				ret=0
+			else
+				echo "FAIL (log follows...)"
+				ret=1
+				cat -n "$LOGFILE"
+			fi
+			popd > /dev/null
+			;;
 		*)
 			echo "INTERNAL ERROR!"
 			;;
@@ -80,12 +94,14 @@ unset "${!GIT_@}"
 # move to root directory
 cd "${0%/*}/.."
 . ./test/test-lib.sh
+export PATH="$PWD:$PATH"
 
 COVERAGE=
 FAILED=0
 RUN_JOBS=
 unset RUN_UNITTEST_PAT
 unset RUN_BLACKBOX_PAT
+unset RUN_INTEGRATION_PAT
 export PYTHONDEVMODE=1
 export PYTHONASYNCIODEBUG=1
 export PYTHONWARNINGS=error
@@ -98,7 +114,7 @@ if [[ $(python3 --version) = "Python 3.9.7" ]] ; then
 fi
 
 # option processing
-while getopts ":hb:c:j:u:" opt; do
+while getopts ":hb:c:i:j:u:" opt; do
 	case $opt in
 		h)
 			usage
@@ -117,6 +133,9 @@ while getopts ":hb:c:j:u:" opt; do
 					exit 1
 					;;
 			esac
+			;;
+		i)
+			RUN_INTEGRATION_PAT="$OPTARG"
 			;;
 		j)
 			RUN_JOBS="$OPTARG"
@@ -160,12 +179,15 @@ else
 fi
 
 # execute everything if nothing was specified
-if [[ -z ${RUN_UNITTEST_PAT+isset} && -z ${RUN_BLACKBOX_PAT+isset} ]] ; then
+if [[ -z ${RUN_UNITTEST_PAT+isset} && -z ${RUN_BLACKBOX_PAT+isset} &&
+      -z ${RUN_INTEGRATION_PAT+isset} ]] ; then
 	RUN_BLACKBOX_PAT='*'
 	RUN_UNITTEST_PAT='*'
+	RUN_INTEGRATION_PAT='*'
 else
 	: "${RUN_BLACKBOX_PAT=}"
 	: "${RUN_UNITTEST_PAT=}"
+	: "${RUN_INTEGRATION_PAT=}"
 fi
 
 # go to tests directory
@@ -190,6 +212,15 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 	for i in * ; do
 		if [[ -d $i && -e "$i/run.sh" && "$i" == $RUN_BLACKBOX_PAT ]] ; then
 			RUN_TEST_NAMES+=( "black-box:$i" )
+		fi
+	done
+	popd > /dev/null
+fi
+if [[ -n "$RUN_INTEGRATION_PAT" ]] ; then
+	pushd integration > /dev/null
+	for i in * ; do
+		if [[ -d $i && -e "$i/run.py" && "$i" == $RUN_INTEGRATION_PAT ]] ; then
+			RUN_TEST_NAMES+=( "integration:$i" )
 		fi
 	done
 	popd > /dev/null
