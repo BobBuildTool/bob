@@ -1,6 +1,6 @@
 .bob-*
 .coverage.*
-/*/log.txt
+/log.txt
 /black-box/*/dev
 /black-box/*/work
 /black-box/*/log.txt

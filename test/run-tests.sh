@@ -16,55 +16,57 @@ optional arguments:
 EOF
 }
 
-run_unit_test()
+run_test()
 {
 	local ret LOGFILE=$(mktemp)
+	local test_name="${1#*:}"
 
-	echo -n "   ${1%%.py} ... "
 	{
 		echo "======================================================================"
 		echo "Test: $1"
 	} > "$LOGFILE"
-	if $RUN_PYTHON3 -m unittest -v $1 >>"$LOGFILE" 2>&1 ; then
-		echo "ok"
-		ret=0
-	else
-		echo "FAIL (log follows...)"
-		ret=1
-		cat -n "$LOGFILE"
-	fi
 
-	cat "$LOGFILE" >> log.txt
-	rm "$LOGFILE"
-	return $ret
-}
+	case "${1%%:*}" in
+		unit)
+			pushd unit > /dev/null
+			echo -n "  [unit]     ${test_name%%.py} ... "
+			if $RUN_PYTHON3 -m unittest -v $test_name >>"$LOGFILE" 2>&1 ; then
+				echo "ok"
+				ret=0
+			else
+				echo "FAIL (log follows...)"
+				ret=1
+				cat -n "$LOGFILE"
+			fi
+			popd > /dev/null
+			;;
+		black-box)
+			pushd black-box > /dev/null
+			echo -n "  [blackbox] $test_name ... "
+			(
+				set -o pipefail
+				set -ex
+				cd "$test_name"
+				. run.sh 2>&1 | tee log.txt
+			) >>"$LOGFILE" 2>&1
 
-run_blackbox_test()
-{
-	local ret LOGFILE=$(mktemp)
-
-	echo -n "   $1 ... "
-	{
-		echo "======================================================================"
-		echo "Test: $1"
-	} > "$LOGFILE"
-	(
-		set -o pipefail
-		set -ex
-		cd "$1"
-		. run.sh 2>&1 | tee log.txt
-	) >>"$LOGFILE" 2>&1
-
-	ret=$?
-	if [[ $ret -eq 240 ]] ; then
-		echo "skipped"
-		ret=0
-	elif [[ $ret -ne 0 ]] ; then
-		echo "FAIL (exit $ret, log follows...)"
-		cat -n "$LOGFILE"
-	else
-		echo "ok"
-	fi
+			ret=$?
+			if [[ $ret -eq 240 ]] ; then
+				echo "skipped"
+				ret=0
+			elif [[ $ret -ne 0 ]] ; then
+				echo "FAIL (exit $ret, log follows...)"
+				cat -n "$LOGFILE"
+				ret=1
+			else
+				echo "ok"
+			fi
+			popd > /dev/null
+			;;
+		*)
+			echo "INTERNAL ERROR!"
+			;;
+	esac
 
 	cat "$LOGFILE" >> log.txt
 	rm "$LOGFILE"
@@ -81,7 +83,6 @@ cd "${0%/*}/.."
 
 COVERAGE=
 FAILED=0
-RUN_TEST_DIRS=( )
 RUN_JOBS=
 unset RUN_UNITTEST_PAT
 unset RUN_BLACKBOX_PAT
@@ -119,10 +120,6 @@ while getopts ":hb:c:j:u:" opt; do
 			;;
 		j)
 			RUN_JOBS="$OPTARG"
-			;;
-		n)
-			RUN_PYTHON3=python3
-			COVERAGE=
 			;;
 		u)
 			RUN_UNITTEST_PAT="$OPTARG"
@@ -179,64 +176,41 @@ pushd test > /dev/null
 # remove stale coverage data
 [[ -z $COVERAGE ]] || find -type f -name '.coverage.*' -delete || true
 
-# run unit tests
+# gather tests
+RUN_TEST_NAMES=( )
 if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
-	echo "Run unit tests..."
 	pushd unit > /dev/null
-
-	RUN_TEST_NAMES=( )
 	for i in test_*.py ; do
 		if [[ "${i%%.py}" == $RUN_UNITTEST_PAT ]] ; then
-			RUN_TEST_NAMES+=( "$i" )
+			RUN_TEST_NAMES+=( "unit:$i" )
 		fi
 	done
-
-	if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
-		: # No tests matched
-	elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
-		export -f run_unit_test
-		export RUN_PYTHON3
-		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_unit_test ::: \
-		  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
-	else
-		for i in "${RUN_TEST_NAMES[@]}" ; do
-			if ! run_unit_test "$i" ; then
-				: $((FAILED++))
-			fi
-		done
-	fi
-
+	popd > /dev/null
+fi
+if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
+	pushd black-box > /dev/null
+	for i in * ; do
+		if [[ -d $i && -e "$i/run.sh" && "$i" == $RUN_BLACKBOX_PAT ]] ; then
+			RUN_TEST_NAMES+=( "black-box:$i" )
+		fi
+	done
 	popd > /dev/null
 fi
 
-# run blackbox tests
-if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
-	echo "Run black box tests..."
-	pushd black-box > /dev/null
-
-	RUN_TEST_NAMES=( )
-	for i in * ; do
-		if [[ -d $i && -e "$i/run.sh" && "$i" == $RUN_BLACKBOX_PAT ]] ; then
-			RUN_TEST_DIRS+=( "test/$i" )
-			RUN_TEST_NAMES+=( "$i" )
+# execute all tests, possibly in parallel
+if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
+	: # No tests matched
+elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
+	export -f run_test
+	export RUN_PYTHON3
+	parallel ${RUN_JOBS:+-j $RUN_JOBS} run_test ::: \
+	  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
+else
+	for i in "${RUN_TEST_NAMES[@]}" ; do
+		if ! run_test "$i" ; then
+			: $((FAILED++))
 		fi
 	done
-
-	if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
-		: # No tests matched
-	elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
-		export -f run_blackbox_test
-		parallel ${RUN_JOBS:+-j $RUN_JOBS} run_blackbox_test ::: \
-		  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
-	else
-		for i in "${RUN_TEST_NAMES[@]}" ; do
-			if ! run_blackbox_test "$i" ; then
-				: $((FAILED++))
-			fi
-		done
-	fi
-
-	popd > /dev/null
 fi
 
 popd > /dev/null
