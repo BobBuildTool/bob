@@ -210,6 +210,7 @@ class JenkinsJob:
         self.__deps = {}
         self.__namesPerVariant = {}
         self.__packagesPerVariant = {}
+        self.__downstreamJobs = set()
 
     def __getJobName(self, step):
         return self.__nameCalculator.getJobInternalName(step)
@@ -280,6 +281,9 @@ class JenkinsJob:
                 if vid in self.__steps: continue
                 self.__deps.setdefault(vid, dep)
 
+    def addDownstreamJob(self, job):
+        self.__downstreamJobs.add(job)
+
     def getCheckoutSteps(self):
         return self.__checkoutSteps.values()
 
@@ -289,7 +293,7 @@ class JenkinsJob:
     def getPackageSteps(self):
         return self.__packageSteps.values()
 
-    def getDependentJobs(self):
+    def getUpstreamJobs(self):
         deps = set()
         for d in self.__deps.values():
             deps.add(self.__getJobName(d))
@@ -671,6 +675,21 @@ class JenkinsJob:
         elif discard is not None:
             properties = root.find("properties")
             properties.remove(properties.find("jenkins.model.BuildDiscarderProperty"))
+
+        copyartifact = root.find("./properties/hudson.plugins.copyartifact.CopyArtifactPermissionProperty/projectNameList")
+        if self.__downstreamJobs:
+            if copyartifact is None:
+                copyartifact = xml.etree.ElementTree.SubElement(
+                    xml.etree.ElementTree.SubElement(
+                        root.find("properties"),
+                        "hudson.plugins.copyartifact.CopyArtifactPermissionProperty"),
+                    "projectNameList")
+            copyartifact.clear()
+            for d in sorted(self.__downstreamJobs):
+                xml.etree.ElementTree.SubElement(copyartifact, "string").text = d
+        elif copyartifact is not None:
+            properties = root.find("properties")
+            properties.remove(properties.find("hudson.plugins.copyartifact.CopyArtifactPermissionProperty"))
 
         if (nodes != ''):
             assignedNode = root.find("assignedNode")
@@ -1333,6 +1352,12 @@ def genJenkinsJobs(recipes, jenkins):
         rootJenkinsJob.makeRoot()
 
     packages.close()
+
+    # Add reverse dependencies
+    for (name, job) in jobs.items():
+        for dep in job.getUpstreamJobs():
+            jobs[dep].addDownstreamJob(name)
+
     return jobs
 
 def genJenkinsBuildOrder(jobs):
@@ -1341,7 +1366,7 @@ def genJenkinsBuildOrder(jobs):
             raise ParseError("Jobs are cyclic: " + " -> ".join(stack))
         if j in pending:
             processing.add(j)
-            for d in jobs[j].getDependentJobs():
+            for d in jobs[j].getUpstreamJobs():
                 visit(d, pending, processing, order, stack + [d])
             pending.remove(j)
             processing.remove(j)
