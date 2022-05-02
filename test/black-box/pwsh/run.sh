@@ -6,14 +6,14 @@
 # sandbox. There is also a bash recipe that overrides the script language back
 # to bash.
 
+type -p pwsh >/dev/null || skip
+
 cleanup
 run_bob dev root
 RES=$(run_bob query-path -f '{dist}' --develop root)
 diff -u "$RES/file.txt" recipes/file.txt
 
 cleanup
-type -p pwsh >/dev/null || skip
-
 run_bob dev root
 RES=$(run_bob query-path -f '{dist}' --develop root)
 diff -u "$RES/file.txt" recipes/file.txt
