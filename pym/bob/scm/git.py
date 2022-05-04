@@ -250,7 +250,7 @@ class GitScm(Scm):
                     ok = await invoker.callCommand(fetchCmd + [self.__commit],
                         cwd=self.__dir)
                     if ok != 0:
-                        self.fail("Plain git-fetch in", self.__dir,
+                        invoker.fail("Plain git-fetch in", self.__dir,
                             "did not download the requested commit and the explicit fetch failed!",
                             returncode=ok)
             await invoker.checkCommand(["git", "checkout", "-q", "--no-recurse-submodules",
