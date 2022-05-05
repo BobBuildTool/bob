@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 from bob.input import GitScm
-from bob.invoker import Invoker, CmdFailedError
+from bob.invoker import Invoker, CmdFailedError, InvocationError
 from bob.errors import ParseError
 from bob.utils import asHexStr, runInEventLoop
 
@@ -465,6 +465,12 @@ class TestShallow(TestCase):
 
         return (len(log), branches)
 
+    def testShallowFail(self):
+        scm = self.createGitScm({ 'shallow' : 1,
+            'commit' : 'aabfa2e71de48ce8ed4dc51816572935593e6f04'})
+        with tempfile.TemporaryDirectory() as workspace:
+            with self.assertRaises(InvocationError):
+                commits, branches = self.invokeGit(workspace, scm)
 
     def testShallowNum(self):
         """Verify that shallow clones the right number of commits.
