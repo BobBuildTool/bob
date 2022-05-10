@@ -34,6 +34,11 @@ def makeDeleteable(p):
             os.chmod(entry.path, stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)
             makeDeleteable(entry.path)
 
+def partialDump(obj, f):
+    b = pickle.dumps(obj)
+    f.write(b[:len(b)//2]) # write only half
+    raise OSError()
+
 class EmptyDir:
     def setUp(self):
         self._oldCwd = os.getcwd()
@@ -198,3 +203,16 @@ class TestErrors(EmptyDir, TestCase):
 
         with BobStateWrap() as s2:
             self.assertEqual(None, s2.getInputHashes("path"))
+
+    def testLastStateRetained(self):
+        """The last successfully saved state is retained even if update fails"""
+        with BobStateWrap() as s1:
+            s1.setInputHashes("path", b"hash")
+
+        with self.assertRaises(BobError):
+            with BobStateWrap() as s2:
+                with patch('pickle.dump', partialDump):
+                    s2.setInputHashes("path", b"lost")
+
+        with BobStateWrap() as s3:
+            self.assertEqual(b"hash", s3.getInputHashes("path"))
