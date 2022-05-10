@@ -163,9 +163,12 @@ class _BobState():
                 "storagePath" : self.__storagePath,
             }
             try:
-                with open(self.__uncommittedPath, "wb") as f:
+                # Atomically replace the last uncommitted state.
+                dirtyPath = self.__uncommittedPath + ".dirty"
+                with open(dirtyPath, "wb") as f:
                     with DigestAdder(f) as df:
                         pickle.dump(state, df)
+                os.replace(dirtyPath, self.__uncommittedPath)
             except OSError as e:
                 raise ParseError("Error saving workspace state: " + str(e))
             self.__dirty = False
