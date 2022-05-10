@@ -216,3 +216,19 @@ class TestErrors(EmptyDir, TestCase):
 
         with BobStateWrap() as s3:
             self.assertEqual(b"hash", s3.getInputHashes("path"))
+
+    def testAsyncStateUpdateFails(self):
+        """Failures in asynchronous updates are handled gracefully"""
+        with BobStateWrap() as s1:
+            s1.setInputHashes("path", b"hash")
+
+        with self.assertRaises(BobError):
+            with BobStateWrap() as s2:
+                with patch('pickle.dump', partialDump):
+                    s2.setAsynchronous()
+                    s2.setInputHashes("path", b"lost1")
+                    s2.setInputHashes("path", b"lost2")
+                    s2.setSynchronous()
+
+        with BobStateWrap() as s3:
+            self.assertEqual(b"hash", s3.getInputHashes("path"))
