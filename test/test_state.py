@@ -14,6 +14,20 @@ import sys
 from bob.state import _BobState as BobState
 from bob.errors import BobError
 
+class BobStateWrap:
+    """Small wrapper around _BobState that makes sure finalize() is always
+    called"""
+    def __init__(self):
+        self.state = None
+
+    def __enter__(self):
+        self.state = BobState()
+        return self.state
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.state.finalize()
+        return False
+
 def makeDeleteable(p):
     for entry in os.scandir(p):
         if entry.is_dir():
@@ -56,11 +70,12 @@ class TestLock(EmptyDir, TestCase):
 
     def testLocking(self):
         """Make sure lock is deleted after cleanup"""
-        s1 = BobState()
-        with self.assertRaises(BobError):
-            s2 = BobState()
-        s1.finalize()
-        s2 = BobState()
+        with BobStateWrap():
+            with self.assertRaises(BobError):
+                with BobStateWrap():
+                    pass
+        with BobStateWrap():
+            pass
 
     def testCannotLock(self):
         """It's ok to be not able to create a lock file"""
@@ -68,23 +83,22 @@ class TestLock(EmptyDir, TestCase):
         os.chmod("ro", stat.S_IRUSR|stat.S_IXUSR)
         os.chdir("ro")
 
-        s1 = BobState()
+        with BobStateWrap():
+            pass
         self.assertFalse(os.path.exists(".bob-state.lock"))
 
     def testVanishedLock(self):
         """Test that we do not crash if lock file vanished"""
-        s1 = BobState()
-        self.unlock()
-        s1.finalize()
+        with BobStateWrap():
+            self.unlock()
 
     def testStickyLock(self):
         """Test that we do not crash if lock file cannot be removed"""
         os.mkdir("ro")
         os.chdir("ro")
 
-        s1 = BobState()
-        os.chmod(".", stat.S_IRUSR|stat.S_IXUSR)
-        s1.finalize()
+        with BobStateWrap():
+            os.chmod(".", stat.S_IRUSR|stat.S_IXUSR)
 
 
 class TestPersistence(EmptyDir, TestCase):
@@ -92,13 +106,11 @@ class TestPersistence(EmptyDir, TestCase):
 
     def testPersistence(self):
         """Smoke test that tings are persisted"""
-        s1 = BobState()
-        s1.setInputHashes("path", b"hash")
-        s1.finalize()
+        with BobStateWrap() as s1:
+            s1.setInputHashes("path", b"hash")
 
-        s2 = BobState()
-        self.assertEqual(b"hash", s2.getInputHashes("path"))
-        s2.finalize()
+        with BobStateWrap() as s2:
+            self.assertEqual(b"hash", s2.getInputHashes("path"))
 
     def testUncommitted(self):
         """Uncommitted state must be picked up on next run"""
@@ -109,15 +121,13 @@ class TestPersistence(EmptyDir, TestCase):
         self.unlock()
         del s1
 
-        s2 = BobState()
-        self.assertEqual(b"hash", s2.getInputHashes("path"))
-        s2.finalize()
+        with BobStateWrap() as s2:
+            self.assertEqual(b"hash", s2.getInputHashes("path"))
 
     def testCorrupt(self):
         """A corrupted uncommitted state must be discarded"""
-        s1 = BobState()
-        s1.setInputHashes("path", b"hash")
-        s1.finalize()
+        with BobStateWrap() as s1:
+            s1.setInputHashes("path", b"hash")
 
         s2 = BobState()
         s2.setInputHashes("path", b"must-be-discarded")
@@ -127,9 +137,8 @@ class TestPersistence(EmptyDir, TestCase):
         with open(".bob-state.pickle.new", "r+b") as f:
             f.write(b"garbabe")
 
-        s3 = BobState()
-        self.assertEqual(b"hash", s3.getInputHashes("path"))
-        s3.finalize()
+        with BobStateWrap() as s3:
+            self.assertEqual(b"hash", s3.getInputHashes("path"))
 
 
 class TestErrors(EmptyDir, TestCase):
@@ -179,14 +188,13 @@ class TestErrors(EmptyDir, TestCase):
         os.mkdir("ro")
         os.chdir("ro")
 
-        s1 = BobState()
-        s1.setInputHashes("path", b"hash")
-        os.chmod(".", stat.S_IRUSR|stat.S_IXUSR)
-        s1.finalize()
+        with BobStateWrap() as s1:
+            s1.setInputHashes("path", b"hash")
+            os.chmod(".", stat.S_IRUSR|stat.S_IXUSR)
+
         os.chmod(".", stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)
         self.unlock()
         os.unlink(".bob-state.pickle.new")
 
-        s2 = BobState()
-        self.assertEqual(None, s2.getInputHashes("path"))
-        s2.finalize()
+        with BobStateWrap() as s2:
+            self.assertEqual(None, s2.getInputHashes("path"))
