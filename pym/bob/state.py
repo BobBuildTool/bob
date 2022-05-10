@@ -162,6 +162,7 @@ class _BobState():
                 "createdWithVersion" : self.__createdWithVersion,
                 "storagePath" : self.__storagePath,
             }
+            self.__dirty = False
             try:
                 # Atomically replace the last uncommitted state.
                 dirtyPath = self.__uncommittedPath + ".dirty"
@@ -171,7 +172,6 @@ class _BobState():
                 os.replace(dirtyPath, self.__uncommittedPath)
             except OSError as e:
                 raise ParseError("Error saving workspace state: " + str(e))
-            self.__dirty = False
         else:
             self.__dirty = True
 
