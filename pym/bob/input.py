@@ -3516,14 +3516,21 @@ class RecipeSet:
             raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
         self.__whiteList = set()
-        if platform in ('cygwin', 'msys', 'win32'):
+        if platform == 'win32':
             self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
                 "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "COMSPEC",
                 "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
                 "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
                 "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
-        if platform != 'win32':
+        else:
             self.__whiteList |= set(["PATH", "TERM", "SHELL", "USER", "HOME"])
+
+        if platform in ('cygwin', 'msys'):
+            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
+                "COMMONPROGRAMFILES", "CommonProgramFiles(x86)", "COMSPEC",
+                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
+                "ProgramData", "PROGRAMFILES", "ProgramFiles(x86)", "SYSTEMDRIVE",
+                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
 
         self.__pluginPropDeps = b''
         self.__pluginSettingsDeps = b''
