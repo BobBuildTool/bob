@@ -150,9 +150,6 @@ if [[ -n $RUN_COVERAGE ]] ; then
         export COVERAGE_SOURCES="$PWD/pym"
 	export COVERAGE_OUTPUT="$PWD/test/.coverage"
         RUN_PYTHON3="$RUN_COVERAGE run --rcfile=$PWD/.coveragerc"
-	# The multiprocessing module is incompatible with coverage.py. Enable
-	# the hack in pym/bob/utils.py to still get some data.
-	export ENABLE_COVERAGE_HACK=1
 	export COVERAGE_PROCESS_START="$PWD/.coveragerc"
     else
         echo "coverage3 is installed but not usable!" >&2
