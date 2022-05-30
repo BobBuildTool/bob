@@ -143,7 +143,7 @@ class CvsScm(Scm):
                                                  stdin=subprocess.DEVNULL)
             except subprocess.CalledProcessError as e:
                 return ScmStatus(ScmTaint.error,
-                    description="cvs error: '{}' '{}'".format(" ".join(cmdLine), e.output))
+                    description="cvs error: '{}' '{}'".format(" ".join(commandLine), e.output))
             except OSError as e:
                 return ScmStatus(ScmTaint.error, description="Error calling cvs:" + str(e))
 
