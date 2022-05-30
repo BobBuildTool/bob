@@ -27,6 +27,7 @@ def copyTree(src, dst, invoker):
 
     changed = False
     try:
+        todo = []
         for name in os.listdir(src):
             srcName = os.path.join(src, name)
             dstName = os.path.join(dst, name)
@@ -41,15 +42,14 @@ def copyTree(src, dst, invoker):
                 if stat.S_IFMT(srcStat.st_mode ^ dstStat.st_mode) != 0:
                     invoker.fail("Copy failed: destination has different type:", srcName)
 
+            todo.append((srcName, srcStat, dstName, dstStat))
+
+        # First handle everything *except* symlinks. On MSYS the destination
+        # must exist when creating the symlink, probably because the target
+        # type must be determined on creation.
+        for srcName, srcStat, dstName, dstStat in todo:
             if stat.S_ISLNK(srcStat.st_mode):
-                linkTo = os.readlink(srcName)
-                if dstStat is not None:
-                    oldLink = os.readlink(dstName)
-                    if linkTo == oldLink:
-                        continue
-                    os.unlink(dstName)
-                os.symlink(linkTo, dstName)
-                changed = True
+                pass
             elif stat.S_ISDIR(srcStat.st_mode):
                 if dstStat is None:
                     os.mkdir(dstName)
@@ -60,6 +60,18 @@ def copyTree(src, dst, invoker):
                 if (dstStat is not None) and (srcStat.st_mtime_ns <= dstStat.st_mtime_ns):
                     continue
                 shutil.copy2(srcName, dstName)
+                changed = True
+
+        # Now handle all symlinks.
+        for srcName, srcStat, dstName, dstStat in todo:
+            if stat.S_ISLNK(srcStat.st_mode):
+                linkTo = os.readlink(srcName)
+                if dstStat is not None:
+                    oldLink = os.readlink(dstName)
+                    if linkTo == oldLink:
+                        continue
+                    os.unlink(dstName)
+                os.symlink(linkTo, dstName)
                 changed = True
     except OSError as e:
         invoker.fail("Copy failed", str(e))
@@ -73,7 +85,21 @@ def packTree(src):
     try:
         f = io.BytesIO()
         with tarfile.open(fileobj=f, mode="w:xz") as tar:
-            tar.add(src, arcname=".")
+            # Special handling for MSYS. Symlinks fail if the target does not
+            # exist and Python will fall back to create a copy on extraction.
+            # To prevent this first everything *except* symlinks is archived
+            # and then the symlinks are added.
+            symlinks = []
+            def filterSymlinks(ti):
+                if ti.issym():
+                    symlinks.append(ti)
+                    return None
+                else:
+                    return ti
+
+            tar.add(src, arcname=".", filter=filterSymlinks)
+            for ti in symlinks:
+                tar.addfile(ti)
     except OSError as e:
         raise BuildError("Error gathering files: {}".format(str(e)))
     return base64.b85encode(f.getvalue()).decode('ascii')
