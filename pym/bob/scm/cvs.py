@@ -129,7 +129,7 @@ class CvsScm(Scm):
             # We therefore just call 'cvs update' in "don't modify" mode and look what it would change.
             # This will contain switched files, local and remote modifications.
             try:
-                commandLine = ['cvs', '-Rnq', 'update', '-dP']
+                commandLine = ['cvs', '-nq', 'update', '-dP']
                 if self.__rev is None:
                     commandLine += ['-A']
                 else:
