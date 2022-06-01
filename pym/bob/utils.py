@@ -748,10 +748,11 @@ def runInEventLoop(coro):
     """Backwards compatibility stub for asyncio.run()"""
     import asyncio
 
-    if sys.version_info.minor >= 7:
-        return asyncio.run(coro)
+    if sys.platform == 'win32':
+        loop = asyncio.ProactorEventLoop()
+    else:
+        loop = asyncio.new_event_loop()
 
-    loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
         return loop.run_until_complete(coro)
