@@ -3512,6 +3512,8 @@ class RecipeSet:
         self.__projectRoot = recipesRoot or os.getcwd()
 
     def __parse(self, envOverrides, platform, recipesRoot=""):
+        if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
+            raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
         self.__whiteList = set()
         if platform in ('cygwin', 'msys', 'win32'):
