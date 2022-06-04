@@ -13,7 +13,7 @@ from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
-    updateDicRecursive, hashString, getPlatformTag, isWindows, getPlatformString
+    updateDicRecursive, hashString, getPlatformTag, getPlatformString
 from itertools import chain
 from os.path import expanduser
 from string import Template
@@ -3090,15 +3090,6 @@ class RecipeSet:
         self.__aliases = {}
         self.__recipes = {}
         self.__classes = {}
-        self.__whiteList = set()
-        if isWindows():
-            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
-                "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "COMSPEC",
-                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
-                "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
-                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
-        if os.name == 'posix':
-            self.__whiteList |= set(["PATH", "TERM", "SHELL", "USER", "HOME"])
         self.__archive = { "backend" : "none" }
         self.__rootFilter = []
         self.__scmOverrides = []
@@ -3190,13 +3181,12 @@ class RecipeSet:
         self.__scmDefaults = {}
         def updateArchive(x): self.__archive = x
 
-        if sys.platform == "win32":
-            # Convert to upper case on Windows. The Python interpreter does that
-            # too and the variables are considered case insensitive by Windows.
-            def updateWhiteList(x):
+        def updateWhiteList(x):
+            if self.__platform == "win32":
+                # Convert to upper case on Windows. The Python interpreter does that
+                # too and the variables are considered case insensitive by Windows.
                 self.__whiteList.update(i.upper() for i in x)
-        else:
-            def updateWhiteList(x):
+            else:
                 self.__whiteList.update(x)
 
         self.__settings = {
@@ -3522,6 +3512,26 @@ class RecipeSet:
         self.__projectRoot = recipesRoot or os.getcwd()
 
     def __parse(self, envOverrides, platform, recipesRoot=""):
+        if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
+            raise ParseError("Invalid platform: " + platform)
+        self.__platform = platform
+        self.__whiteList = set()
+        if platform == 'win32':
+            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
+                "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "COMSPEC",
+                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
+                "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
+                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
+        else:
+            self.__whiteList |= set(["PATH", "TERM", "SHELL", "USER", "HOME"])
+
+        if platform in ('cygwin', 'msys'):
+            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
+                "COMMONPROGRAMFILES", "CommonProgramFiles(x86)", "COMSPEC",
+                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
+                "ProgramData", "PROGRAMFILES", "ProgramFiles(x86)", "SYSTEMDRIVE",
+                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
+
         self.__pluginPropDeps = b''
         self.__pluginSettingsDeps = b''
         self.__createSchemas()
