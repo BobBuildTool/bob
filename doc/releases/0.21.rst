@@ -1,0 +1,87 @@
+Bob 0.21 Release Notes
+======================
+
+Changes made since Bob 0.20.0 include the following.
+
+New features
+------------
+
+Recipes
+~~~~~~~
+
+* Added support for dependencies in checkout steps via the ``checkoutDep`` flag.
+
+  Normally dependencies are only available to the ``buildScript``. But
+  sometimes it is necessary to access dependencies in the ``checkoutScript``
+  already. Currently this requires to copy the sources in the ``buildScript``
+  where access to all dependencies is possible.
+
+  The newly added ``checkoutDep`` flag of dependencies allows to make
+  selected dependencies available for the ``checkoutScript``. The ``buildScript``
+  will still retain access to the dependency as always. Provided
+  dependencies of such packages are *not* implicitly made available. The
+  number of checkout dependencies should be kept as small as possible to
+  prevent accidental creation of checkout variants, which are usually
+  confusing to users.
+
+Bob Jenkins
+~~~~~~~~~~~
+
+*  Improved copyartifact plugin compatibility.
+
+   Since version 1.44, the Copy Artifact plugin checks permissions more
+   thoroughly in its default "Production mode". If the anonymous user has
+   no right to read jobs and its artifacts, the copy will fail. In such a
+   configuration Bob required to use "Migration mode" which opens some
+   security loopholes.
+
+   Because we known which jobs require access to the artifacts, Bob will
+   now whitelist these jobs explicitly. This works now regardless of the user
+   configuration.
+
+Bob project
+~~~~~~~~~~~
+
+* Gained support for generating :ref:`Visual Studio Code projects <manpage-project-vscode>`.
+
+Performance improvements
+------------------------
+
+* Improved performance for projects with complex sandbox recipes.
+
+Bug fixes
+---------
+
+Backwards incompatible fixes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Fixed :ref:`configuration-config-whitelist` case sensitivity for MSYS2
+  (`#473 <https://github.com/BobBuildTool/bob/issues/473>`_).
+
+  On MSYS2, environment variables are handled case sensitive. Some of the
+  inherited environment variables are not in all upper case and were not
+  whitelisted correctly. This has been rectified and might result in more
+  variables being available to the executed scripts. Note that native Windows
+  builds are not affected because there environment variables are case
+  insensitive.
+
+* Fixed scanning of additional include directories when generating projects
+  (``-I`` project generator option, `#451 <https://github.com/BobBuildTool/bob/issues/451>`_).
+
+  Additional include directories are added last to the IDE search paths.
+  These directories were previously scanned recursively but the code to do
+  that was broken. Now these paths are forwarded literally to the IDE. If
+  multiple sub-directories need to be added it is now required to give
+  additional ``-I`` options for each directory.
+
+Other fixes
+~~~~~~~~~~~
+
+* Fixed crash when plugins used the ``PluginsState`` class (`#459 <https://github.com/BobBuildTool/bob/issues/459>`_)
+* Avoid rebuilds of packages after using ``--checkout-only``. This could
+  happen e.g. after an update of the sources was done using ``--checkout-only``
+  without ``--sandbox`` and then rebuilding with ``--sandbox`` for example.
+* Fixed potential crashes on Windows related to large inode numbers  (`#464 <https://github.com/BobBuildTool/bob/issues/464>`_)
+* Fixed crash in git SCM if shallow clone is active and the commit can't be reached.
+* Fixed state corruption if no space is left in file system (`#470 <https://github.com/BobBuildTool/bob/issues/470>`_)
+* Improved handling of errors if internal worker pool cannot be initialized  (`#467 <https://github.com/BobBuildTool/bob/issues/467>`_)

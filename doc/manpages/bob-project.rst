@@ -167,6 +167,8 @@ to be passed on the command line *after* the package name.
     Add line to .config file. Can be used to specify preprocessor defines used by the QTCreator.
 
 
+.. _manpage-project-vscode:
+
 Visual Studio Code project generator
 ------------------------------------
 
