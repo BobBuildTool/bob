@@ -211,10 +211,25 @@ if os.name == 'posix':
 else:
     __isWindows = True
 
+def _replacePathWin32(src, dst):
+    # Workaround for spurious PermissionError's on Windows.
+    i = 0
+    while True:
+        try:
+            os.replace(src, dst)
+            break
+        except PermissionError:
+            if i >= 10: raise
+            import time
+            time.sleep(0.1 * i)
+            i += 1
+
 if __isWindows:
     INVALID_CHAR_TRANS = str.maketrans(':*?<>"|', '_______')
+    replacePath = _replacePathWin32
 else:
     INVALID_CHAR_TRANS = str.maketrans('', '')
+    replacePath = os.replace
 
 
 __canSymlink = None
@@ -352,7 +367,7 @@ class DirHasher:
                     self.__inFile.close()
                 if self.__outFile:
                     self.__outFile.close()
-                    os.replace(self.__outFile.name, self.__cachePath)
+                    replacePath(self.__outFile.name, self.__cachePath)
             except OSError as e:
                 raise BuildError("Error closing hash cache: " + str(e))
 

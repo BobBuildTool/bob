@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import BuildError
-from ..utils import removePath, isWindows, summonMagic
+from ..utils import removePath, isWindows, summonMagic, replacePath
 import argparse
 import os
 import re
@@ -346,7 +346,7 @@ class CommonIDEGenerator:
             oldContent = None
 
         if oldContent != newContent:
-            os.replace(newName, name)
+            replacePath(newName, name)
             with open(oldName, "wb") as f:
                 f.write(newContent)
         else:

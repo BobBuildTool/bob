@@ -5,6 +5,7 @@
 
 from .errors import ParseError
 from .tty import colorize, WarnOnce, WARNING
+from .utils import replacePath
 import copy
 import errno
 import os
@@ -169,7 +170,7 @@ class _BobState():
                 with open(dirtyPath, "wb") as f:
                     with DigestAdder(f) as df:
                         pickle.dump(state, df)
-                os.replace(dirtyPath, self.__uncommittedPath)
+                replacePath(dirtyPath, self.__uncommittedPath)
             except OSError as e:
                 raise ParseError("Error saving workspace state: " + str(e))
         else:
@@ -188,7 +189,7 @@ class _BobState():
                     commit = (csum == data[-4:])
                 os.fsync(f.fileno())
             if commit:
-                os.replace(self.__uncommittedPath, self.__path)
+                replacePath(self.__uncommittedPath, self.__path)
                 return
             else:
                 print(colorize("Warning: discarding corrupted workspace state!", WARNING),
