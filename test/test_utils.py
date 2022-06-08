@@ -5,12 +5,13 @@
 
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import os, stat
 import asyncio
 
 from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion, \
-    getPlatformTag, run, check_output, removeUserFromUrl, runInEventLoop
+    getPlatformTag, run, check_output, removeUserFromUrl, runInEventLoop, \
+    _replacePathWin32
 from bob.errors import BuildError, ParseError
 
 class TestJoinScripts(TestCase):
@@ -295,3 +296,25 @@ class TestRemoveUserFromUrl(TestCase):
         self.assertEqual(removeUserFromUrl(r"file:///\\server\path"),
             r"file:///\\server\path")
 
+class TestReplacePath(TestCase):
+    def testWin32Ok(self):
+        m = MagicMock(return_value=None)
+        with patch('os.replace', m):
+            _replacePathWin32("foo", "bar")
+        m.assert_called_with("foo", "bar")
+
+    def testWin32Spurious(self):
+        """One PermissionError is discarded"""
+        m = MagicMock(side_effect=[PermissionError(42), None])
+        with patch('os.replace', m):
+            _replacePathWin32("foo", "bar")
+        m.assert_called_with("foo", "bar")
+
+    @patch('time.sleep', MagicMock())
+    def testWin32Fail(self):
+        """Sticky PermissionError is still raised"""
+        m = MagicMock(side_effect=PermissionError(42))
+        with self.assertRaises(PermissionError):
+            with patch('os.replace', m):
+                _replacePathWin32("foo", "bar")
+        m.assert_called_with("foo", "bar")

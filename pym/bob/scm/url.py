@@ -6,7 +6,8 @@
 from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile, isWindows, removeUserFromUrl, sslNoVerifyContext
+from ..utils import asHexStr, hashFile, isWindows, removeUserFromUrl, sslNoVerifyContext, \
+        replacePath
 from .scm import Scm, ScmAudit
 from http.client import HTTPException
 import asyncio
@@ -252,7 +253,7 @@ class UrlScm(Scm):
                 # Atomically move file to destination. Set explicit mode to
                 # retain Bob 0.15 behaviour.
                 os.chmod(tmpFileName, stat.S_IREAD|stat.S_IWRITE)
-                os.replace(tmpFileName, destination)
+                replacePath(tmpFileName, destination)
                 tmpFileName = None
 
         except urllib.error.HTTPError as e:

@@ -13,7 +13,8 @@ from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
-    updateDicRecursive, hashString, getPlatformTag, getPlatformString
+    updateDicRecursive, hashString, getPlatformTag, getPlatformString, \
+    replacePath
 from itertools import chain
 from os.path import expanduser
 from string import Template
@@ -3859,7 +3860,7 @@ class RecipeSet:
             with open(newCacheName, "wb") as f:
                 f.write(cacheKey)
                 PackagePickler(f, nameFormatter).dump(result)
-            os.replace(newCacheName, cacheName)
+            replacePath(newCacheName, cacheName)
         except OSError as e:
             print("Error saving internal state:", str(e), file=sys.stderr)
 
