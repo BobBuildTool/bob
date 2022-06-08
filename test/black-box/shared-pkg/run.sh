@@ -53,9 +53,6 @@ expect_not_exist dev/build/root/1/workspace
 test -L dev/dist/root/1/workspace
 popd
 
-# Copy coverage data from "other" project
-cp $tmpDir/project2/.coverage* . 2>/dev/null || true
-
 # Clean build using the shared package.
 cleanup
 run_bob dev -c $cfg root --download no

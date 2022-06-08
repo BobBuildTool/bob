@@ -1,6 +1,7 @@
 [run]
 parallel = True
 source = $COVERAGE_SOURCES
+data_file = $COVERAGE_OUTPUT
 
 [report]
 exclude_lines =

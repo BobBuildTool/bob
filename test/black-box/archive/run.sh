@@ -107,6 +107,3 @@ popd
 
 # Make sure invalid audit meta keys are rejected
 expect_fail run_bob build -M "!nv@l1d=key" root-alpha
-
-# Copy coverage data from archive directory (if any).
-cp $archiveDir/.coverage* . 2>/dev/null || true

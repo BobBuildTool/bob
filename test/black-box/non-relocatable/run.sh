@@ -47,6 +47,5 @@ pushd $i;
 run_bob build -c $cfg --upload root;
 checkPath root;
 popd;
-mv $i/.coverage* . 2>/dev/null || true
 done
 

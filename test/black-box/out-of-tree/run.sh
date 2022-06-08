@@ -48,6 +48,3 @@ expect_not_exist "$buildDir/three"
 mkdir "$buildDir/three"
 chmod 500 "$buildDir/three"
 expect_fail run_bob init . "$buildDir/three"
-
-# Copy coverage data from archive directory (if any).
-cp $buildDir/*/.coverage* . 2>/dev/null || true

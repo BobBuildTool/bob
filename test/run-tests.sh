@@ -148,6 +148,7 @@ if [[ -n $RUN_COVERAGE ]] ; then
     # make sure coverage is installed in the current environment
     if python3 -c "import coverage" 2>/dev/null; then
         export COVERAGE_SOURCES="$PWD/pym"
+	export COVERAGE_OUTPUT="$PWD/test/.coverage"
         RUN_PYTHON3="$RUN_COVERAGE run --rcfile=$PWD/.coveragerc"
 	# The multiprocessing module is incompatible with coverage.py. Enable
 	# the hack in pym/bob/utils.py to still get some data.
@@ -174,7 +175,7 @@ fi
 pushd test > /dev/null
 
 # remove stale coverage data
-[[ -z $COVERAGE ]] || find -type f -name '.coverage.*' -delete || true
+[[ -z $COVERAGE ]] || rm .coverage.* || true
 
 # gather tests
 RUN_TEST_NAMES=( )
@@ -217,8 +218,7 @@ popd > /dev/null
 
 # collect coverage
 if [[ -n $RUN_COVERAGE ]]; then
-	$RUN_COVERAGE combine $(find test/ -type f -name '.coverage.*' \
-	                        -printf '%h\n' | sort -u)
+	$RUN_COVERAGE combine
 	$RUN_COVERAGE $COVERAGE
 fi
 
