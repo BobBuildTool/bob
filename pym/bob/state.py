@@ -489,7 +489,7 @@ class _BobState():
             return self.__byNameDirs[digest][0]
         else:
             num = self.__byNameDirs.setdefault(baseDir, 0) + 1
-            res = "{}/{}".format(baseDir, num)
+            res = os.path.join(baseDir, str(num))
             self.__byNameDirs[baseDir] = num
             self.__byNameDirs[digest] = (res, isSourceDir)
             self.__save()
