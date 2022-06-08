@@ -15,6 +15,7 @@ import concurrent.futures.process
 import contextlib
 import hashlib
 import os, os.path
+import posixpath
 import re
 import schema
 import shutil
@@ -365,7 +366,7 @@ class UrlScm(Scm):
             filt = lambda x: x
         return ( self.__digestSha512 or self.__digestSha256 or 
                  self.__digestSha1 or filt(self.__url)
-               ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
+               ) + " " + posixpath.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
                ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
 
     def getDirectory(self):
