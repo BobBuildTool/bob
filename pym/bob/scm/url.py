@@ -6,7 +6,7 @@
 from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile, isWindows, removeUserFromUrl, sslNoVerifyContext, \
+from ..utils import asHexStr, hashFile, removeUserFromUrl, sslNoVerifyContext, \
         replacePath
 from .scm import Scm, ScmAudit
 from http.client import HTTPException
@@ -21,6 +21,7 @@ import shutil
 import signal
 import ssl
 import stat
+import sys
 import tempfile
 import time
 import urllib.error
@@ -76,7 +77,7 @@ def parseUrl(url):
     """
 
     # Only require some special processing on Windows. Unix URLs just work...
-    if not isWindows():
+    if sys.platform != "win32":
         return urllib.parse.urlparse(url)
 
     # Does it start with a drive letter like "C:…"?
@@ -192,7 +193,7 @@ class UrlScm(Scm):
         self.__fn = spec.get("fileName")
         if not self.__fn:
             url = self.__url
-            if isWindows():
+            if sys.platform == "win32":
                 # On Windows we're allowed to provide native paths with
                 # backslashes.
                 url = url.replace('\\', '/')

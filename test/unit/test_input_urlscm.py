@@ -126,13 +126,10 @@ class TestLiveBuildId(UrlScmTest, TestCase):
         s = self.createUrlScm({'digestSHA512' : self.urlSha512})
         self.assertEqual(self.callCalcLiveBuildId(s), bytes.fromhex(self.urlSha512))
 
-def fakeWindows():
-    return True
-
 class TestWindowsPaths(TestCase):
     """The URL SCM supports fully qualified paths on Windows too."""
 
-    @patch('bob.scm.url.isWindows', fakeWindows)
+    @patch('sys.platform', "win32")
     def testValidDrive(self):
         from bob.scm.url import parseUrl
         self.assertEqual(parseUrl(r"C:\tmp.txt").path, r"C:\tmp.txt")
@@ -141,13 +138,13 @@ class TestWindowsPaths(TestCase):
         self.assertEqual(parseUrl(r"file:///C:\tmp.txt").path, r"C:\tmp.txt")
         self.assertEqual(parseUrl(r"file:///C:/tmp.txt").path, r"C:\tmp.txt")
 
-    @patch('bob.scm.url.isWindows', fakeWindows)
+    @patch('sys.platform', "win32")
     def testValidUNC(self):
         from bob.scm.url import parseUrl
         self.assertEqual(parseUrl(r"\\server\path").path, r"\\server\path")
         self.assertEqual(parseUrl(r"file:///\\server\path").path, r"\\server\path")
 
-    @patch('bob.scm.url.isWindows', fakeWindows)
+    @patch('sys.platform', "win32")
     def testInvalid(self):
         from bob.scm.url import parseUrl
         with self.assertRaises(ValueError):
@@ -165,7 +162,7 @@ class TestWindowsPaths(TestCase):
         with self.assertRaises(ValueError):
             parseUrl(r"file:///\tmp.txt") # absolute on current drive
 
-    @patch('bob.scm.url.isWindows', fakeWindows)
+    @patch('sys.platform', "win32")
     def testFileName(self):
         """fileName deduction on Windows must work with \\ too"""
         s = {
