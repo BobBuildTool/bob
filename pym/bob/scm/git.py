@@ -587,7 +587,7 @@ class GitScm(Scm):
         cwd = os.path.join(workspacePath, self.__dir)
         try:
             output = subprocess.check_output(cmdLine, cwd=cwd,
-                universal_newlines=True, stderr=subprocess.DEVNULL)
+                universal_newlines=True, stderr=subprocess.DEVNULL, errors='replace')
         except subprocess.CalledProcessError as e:
             if check:
                 raise BuildError("git error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
