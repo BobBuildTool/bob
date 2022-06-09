@@ -731,7 +731,7 @@ class EventLoopWrapper:
         asyncio.set_event_loop(None)
 
 
-async def run(args, universal_newlines=False, check=False, shell=False, **kwargs):
+async def run(args, universal_newlines=False, errors=None, check=False, shell=False, **kwargs):
     """Provide the subprocess.run() function as asyncio corouting.
 
     This takes care of the missing 'universal_newlines' and 'check' options.
@@ -750,9 +750,9 @@ async def run(args, universal_newlines=False, check=False, shell=False, **kwargs
     stdout, stderr = await proc.communicate()
 
     if universal_newlines and (stdout is not None):
-        stdout = io.TextIOWrapper(io.BytesIO(stdout)).read()
+        stdout = io.TextIOWrapper(io.BytesIO(stdout), errors=errors).read()
     if universal_newlines and (stderr is not None):
-        stderr = io.TextIOWrapper(io.BytesIO(stderr)).read()
+        stderr = io.TextIOWrapper(io.BytesIO(stderr), errors=errors).read()
 
     if check and (proc.returncode != 0):
         raise subprocess.CalledProcessError(proc.returncode, args,

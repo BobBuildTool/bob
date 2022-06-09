@@ -137,6 +137,7 @@ class CvsScm(Scm):
                 output = subprocess.check_output(commandLine,
                                                  cwd=workDir,
                                                  universal_newlines=True,
+                                                 errors='replace',
                                                  env=environment,
                                                  stderr=subprocess.DEVNULL,
                                                  stdin=subprocess.DEVNULL)

@@ -174,7 +174,7 @@ class Invoker:
 
     async def __runCommand(self, args, cwd, stdout=None, stderr=None,
                            check=False, env=None, universal_newlines=True,
-                           specEnv=True, **kwargs):
+                           errors='replace', specEnv=True, **kwargs):
         cmd = " ".join(quote(a) for a in args)
         self.trace(cmd)
 
@@ -249,7 +249,7 @@ class Invoker:
         if stdout == True:
             if universal_newlines:
                 stdoutStream.seek(0)
-                stdoutBuf = io.TextIOWrapper(stdoutStream).read()
+                stdoutBuf = io.TextIOWrapper(stdoutStream, errors=errors).read()
             else:
                 stdoutBuf = stdoutStream.getvalue()
         else:
@@ -258,7 +258,7 @@ class Invoker:
         if stderr == True:
             if universal_newlines:
                 stderrStream.seek(0)
-                stderrBuf = io.TextIOWrapper(stderrStream).read()
+                stderrBuf = io.TextIOWrapper(stderrStream, errors=errors).read()
             else:
                 stderrBuf = stderrStream.getvalue()
         else:
@@ -591,7 +591,7 @@ class Invoker:
 
     def getStdio(self):
         return self.__stdioBuffer.getvalue().decode(
-            locale.getpreferredencoding(), 'surrogateescape')
+            locale.getpreferredencoding(), 'replace')
 
     def setMakeParameters(self, fds, jobs):
         self.__makeFds = fds

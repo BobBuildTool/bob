@@ -119,7 +119,7 @@ class SvnScm(Scm):
         cwd = os.path.join(workspacePath, self.__dir)
         try:
             output = subprocess.check_output(cmdLine, cwd=cwd,
-                universal_newlines=True, stderr=subprocess.DEVNULL)
+                universal_newlines=True, errors='replace', stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             raise BuildError("svn error:\n Directory: '{}'\n Command: '{}'\n'{}'".format(
                 cwd, " ".join(cmdLine), e.output.rstrip()))
@@ -175,14 +175,14 @@ class SvnAudit(ScmAudit):
         try:
             info = ElementTree.fromstring(await check_output(
                 ["svn", "info", "--xml", dir],
-                cwd=workspace, universal_newlines=True))
+                cwd=workspace, universal_newlines=True, errors='replace'))
             self.__url = info.find('entry/url').text
             self.__revision = int(info.find('entry').get('revision'))
             self.__repoRoot = info.find('entry/repository/root').text
             self.__repoUuid = info.find('entry/repository/uuid').text
 
             status = await check_output(["svn", "status", dir],
-                cwd=workspace, universal_newlines=True)
+                cwd=workspace, universal_newlines=True, errors='replace')
             self.__dirty = status != ""
         except subprocess.CalledProcessError as e:
             raise BuildError("Svn audit failed: " + str(e))
