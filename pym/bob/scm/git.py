@@ -774,7 +774,7 @@ class GitScm(Scm):
             cmdLine = ['git', 'ls-remote', self.__url] + refs
             try:
                 stdout = await check_output(cmdLine, stderr=subprocess.DEVNULL,
-                    universal_newlines=True)
+                    universal_newlines=True, errors='replace')
                 output = stdout.strip()
             except subprocess.CalledProcessError as e:
                 a.fail("exit {}".format(e.returncode), WARNING)
@@ -824,7 +824,7 @@ class GitScm(Scm):
     def processLiveBuildIdSpec(dir):
         try:
             return subprocess.check_output(["git", "rev-parse", "HEAD"],
-                cwd=dir, universal_newlines=True).strip()
+                cwd=dir, universal_newlines=True, errors='replace').strip()
         except subprocess.CalledProcessError as e:
             raise BuildError("Git audit failed: " + str(e))
         except OSError as e:
@@ -850,15 +850,15 @@ class GitAudit(ScmAudit):
         dir = os.path.join(workspace, dir)
         try:
             remotes = (await check_output(["git", "remote", "-v"],
-                cwd=dir, universal_newlines=True)).split("\n")
+                cwd=dir, universal_newlines=True, errors='replace')).split("\n")
             remotes = (r[:-8].split("\t") for r in remotes if r.endswith("(fetch)"))
             self.__remotes = { remote:url for (remote,url) in remotes }
 
             self.__commit = (await check_output(["git", "rev-parse", "HEAD"],
-                cwd=dir, universal_newlines=True)).strip()
+                cwd=dir, universal_newlines=True, errors='replace')).strip()
             self.__description = (await check_output(
                 ["git", "describe", "--always", "--dirty=-dirty"],
-                cwd=dir, universal_newlines=True)).strip()
+                cwd=dir, universal_newlines=True, errors='replace')).strip()
             subDirty = await self.__scanSubmodules(dir, self.__submodules)
             self.__dirty = subDirty or self.__description.endswith("-dirty")
         except subprocess.CalledProcessError as e:
@@ -875,7 +875,7 @@ class GitAudit(ScmAudit):
         try:
             allPaths = await check_output(["git", "-C", base, "config", "-f",
                 ".gitmodules", "-z", "--get-regexp", "path"], cwd=dir,
-                universal_newlines=True)
+                universal_newlines=True, errors='replace')
         except subprocess.CalledProcessError:
             allPaths = "" # No key found in file. Probably empty
         allPaths = [ p.split("\n")[1] for p in allPaths.split("\0") if p ]
@@ -884,7 +884,7 @@ class GitAudit(ScmAudit):
 
         # Fetch the respecive commits as per git ls-tree
         allPaths = await check_output(["git", "-C", base, "ls-tree", "-z",
-            "HEAD"] + allPaths, cwd=dir, universal_newlines=True)
+            "HEAD"] + allPaths, cwd=dir, universal_newlines=True, errors='replace')
         allPaths = {
             path : attribs.split(' ')[2]
                 for attribs, path
@@ -918,7 +918,7 @@ class GitAudit(ScmAudit):
                 return True
 
             realCommit = (await check_output(["git", "-C", subPath, "rev-parse", "HEAD"],
-                cwd=dir, universal_newlines=True)).strip()
+                cwd=dir, universal_newlines=True, errors='replace')).strip()
             if commit != realCommit:
                 return True # different commit checked out
 
