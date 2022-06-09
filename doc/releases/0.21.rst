@@ -85,3 +85,8 @@ Other fixes
 * Fixed crash in git SCM if shallow clone is active and the commit can't be reached.
 * Fixed state corruption if no space is left in file system (`#470 <https://github.com/BobBuildTool/bob/issues/470>`_)
 * Improved handling of errors if internal worker pool cannot be initialized  (`#467 <https://github.com/BobBuildTool/bob/issues/467>`_)
+* Added mitigation for spurious permission errors on Windows when writing the
+  project state (`#475 <https://github.com/BobBuildTool/bob/pull/475>`_)
+* Fixed crashes when a SCM would write strings with invalid encoding to stdout
+  (`#476 <https://github.com/BobBuildTool/bob/pull/476>`_,
+  `#477 <https://github.com/BobBuildTool/bob/pull/477>`_)
