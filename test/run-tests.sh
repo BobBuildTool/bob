@@ -215,6 +215,9 @@ popd > /dev/null
 
 # collect coverage
 if [[ -n $RUN_COVERAGE ]]; then
+	unset PYTHONDEVMODE
+	unset PYTHONASYNCIODEBUG
+	unset PYTHONWARNINGS
 	$RUN_COVERAGE combine
 	$RUN_COVERAGE $COVERAGE
 fi
