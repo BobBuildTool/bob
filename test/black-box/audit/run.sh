@@ -20,13 +20,13 @@ EOF
 
 # Build dependency without audit trail first. Must not be uploaded.
 run_bob dev -v --upload --no-audit root/dep
-test -z "$(find "$archiveDir" -type f -name '*.tgz')"
+test -z "$(/usr/bin/find "$archiveDir" -type f -name '*.tgz')"
 
 # Build dependent package next with audit trail. Must not be uploaded either
 # because dependency audit trail is missing.
 run_bob dev -v --upload --audit -n root
-test -z "$(find "$archiveDir" -type f -name '*.tgz')"
+test -z "$(/usr/bin/find "$archiveDir" -type f -name '*.tgz')"
 
 # Rebuild forced and upload again. Now it must create artifcats in the archive.
 run_bob dev -v --upload -f root
-test -n "$(find "$archiveDir" -type f -name '*.tgz')"
+test -n "$(/usr/bin/find "$archiveDir" -type f -name '*.tgz')"

@@ -55,14 +55,14 @@ EOF
 
 # fill archive
 run_bob build -c "$upload" --download=no --upload root
-test -n "$(find "$archiveDir/source" -type f)"
+test -n "$(/usr/bin/find "$archiveDir/source" -type f)"
 
 # download with mirror
 run_bob dev -c "$mirror" --download=yes root
 
 # make sure all archives have the same content by now
-diff -u <(cd "$archiveDir/source" ; find -type f | sort) <(cd "$archiveDir/mirror1" ; find -type f | sort)
-diff -u <(cd "$archiveDir/source" ; find -type f | sort) <(cd "$archiveDir/mirror2" ; find -type f | sort)
+diff -u <(cd "$archiveDir/source" ; /usr/bin/find -type f | sort) <(cd "$archiveDir/mirror1" ; /usr/bin/find -type f | sort)
+diff -u <(cd "$archiveDir/source" ; /usr/bin/find -type f | sort) <(cd "$archiveDir/mirror2" ; /usr/bin/find -type f | sort)
 
 # failing mirrors must fail the build
 rm -rf dev

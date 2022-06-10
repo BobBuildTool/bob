@@ -22,9 +22,9 @@ pushd $archiveDir
 run_bob archive scan
 
 # first try to keep everything by using multiple expressions
-oldNum=$(find -name '*.tgz' | wc -l)
+oldNum=$(/usr/bin/find -name '*.tgz' | wc -l)
 run_bob archive clean -v 'metaEnv.TYPE == "alpha"' 'meta.package == "root-bravo"'
-newNum=$(find -name '*.tgz' | wc -l)
+newNum=$(/usr/bin/find -name '*.tgz' | wc -l)
 test $oldNum -eq $newNum
 
 # Find one of the artifacts
@@ -71,7 +71,7 @@ run_bob build --download no --upload -q 'many-*'
 pushd $archiveDir
 run_bob archive clean --fail -v 'meta.recipe == "many" LIMIT 3'
 popd
-test $(find $archiveDir -name '*.tgz' | wc -l) -eq 3
+test $(/usr/bin/find $archiveDir -name '*.tgz' | wc -l) -eq 3
 run_bob build --download forced --force many-07 many-06 many-05
 
 # Do the same again with ascending sorting and a different ordering key.  The
@@ -82,7 +82,7 @@ run_bob build --download no --force --upload -q 'many-*'
 pushd $archiveDir
 run_bob archive clean --fail -v 'meta.recipe == "many" LIMIT 2 OrDeR By metaEnv.FUZZ ASC'
 popd
-test $(find $archiveDir -name '*.tgz' | wc -l) -eq 2
+test $(/usr/bin/find $archiveDir -name '*.tgz' | wc -l) -eq 2
 run_bob build --download forced --force many-01 many-03
 
 # Must fail if LIMIT is zero, invalid or negative

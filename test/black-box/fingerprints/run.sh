@@ -27,7 +27,7 @@ FINGERPRINT_ROOT=r1 FINGERPRINT_TOOL=t4 expect_fail run_bob dev root --download 
 
 # Upload with other fingerprint -> check number of artifacts
 FINGERPRINT_ROOT=r2 FINGERPRINT_TOOL=t3 run_bob dev root --upload
-if [[ $(find output -name '*.tgz' | wc -l) -ne 2 ]] ; then
+if [[ $(/usr/bin/find -name '*.tgz' | wc -l) -ne 2 ]] ; then
 	echo "Expected two artifacts in repo!" >&2
 	exit 1
 fi
