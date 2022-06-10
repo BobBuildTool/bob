@@ -17,8 +17,82 @@ fi
 
 export PYTHONPATH="${BOB_ROOT}/pym"
 
+# Determine test environment if not already provided by run-tests.sh...
+if [[ -n $TEST_ENVIRONMENT ]] ; then
+	:
+elif [[ $(uname -o) == Msys ]] ; then
+	case "$(python -c "import sys; print(sys.platform)")" in
+		win32)
+			TEST_ENVIRONMENT=win32
+			;;
+		msys | cygwin)
+			TEST_ENVIRONMENT=msys
+			;;
+		*)
+			echo "Unknown MSYS environment!"
+			exit 1
+			;;
+	esac
+else
+	TEST_ENVIRONMENT=posix
+fi
+
 set -o errtrace
 trap 'err=$?; echo "ERROR: Command ${BASH_COMMAND} failed with code $err" >&2; exit $err' ERR
+
+is_win32()
+{
+	if [[ $TEST_ENVIRONMENT == win32 ]] ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+is_msys()
+{
+	if [[ $TEST_ENVIRONMENT == msys ]] ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+is_posix()
+{
+	if [[ $TEST_ENVIRONMENT == posix ]] ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+mangle_path()
+{
+	if [[ $TEST_ENVIRONMENT == win32 ]] ; then
+		cygpath -m "$1"
+	else
+		echo "$1"
+	fi
+}
+
+native_path()
+{
+	if [[ $TEST_ENVIRONMENT == win32 ]] ; then
+		cygpath -w "$1"
+	else
+		echo "$1"
+	fi
+}
+
+file_url()
+{
+	if is_win32 ; then
+		echo "file:///$(cygpath -m "$1")"
+	else
+		echo "file://$1"
+	fi
+}
 
 cleanup()
 {
@@ -29,14 +103,22 @@ cleanup()
 # and "no global defaults" debug switches.
 run_bob()
 {
-	"$BOB_ROOT/bob" --debug=pkgck,ngd "$@"
+	if is_win32 ; then
+		python "$BOB_ROOT/bob" --debug=pkgck,ngd "$@"
+	else
+		"$BOB_ROOT/bob" --debug=pkgck,ngd "$@"
+	fi
 }
 
 # Run bob only with the "no global defaults" debug switch. Used for black box
 # regression tests of the package calculation algorithm.
 run_bob_plain()
 {
-	"$BOB_ROOT/bob" --debug=ngd "$@"
+	if is_win32 ; then
+		python "$BOB_ROOT/bob" --debug=ngd "$@"
+	else
+		"$BOB_ROOT/bob" --debug=ngd "$@"
+	fi
 }
 
 exec_blackbox_test()

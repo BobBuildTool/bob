@@ -31,7 +31,7 @@ run_test()
 		unit)
 			pushd unit > /dev/null
 			echo -n "  [unit]        ${test_name%%.py} ... "
-			if $RUN_PYTHON3 -m unittest -v $test_name >>"$LOGFILE" 2>&1 ; then
+			if $RUN_PYTHON3_COV -m unittest -v $test_name >>"$LOGFILE" 2>&1 ; then
 				echo "ok"
 				ret=0
 			else
@@ -96,6 +96,26 @@ cd "${0%/*}/.."
 . ./test/test-lib.sh
 export PATH="$PWD:$PATH"
 
+# determine test environment
+if [[ $(uname -o) == Msys ]] ; then
+	RUN_PYTHON3=python
+	case "$(python -c "import sys; print(sys.platform)")" in
+		win32)
+			TEST_ENVIRONMENT=win32
+			;;
+		msys | cygwin)
+			TEST_ENVIRONMENT=msys
+			;;
+		*)
+			echo "Unknown MSYS environment!"
+			exit 1
+			;;
+	esac
+else
+	RUN_PYTHON3=python3
+	TEST_ENVIRONMENT=posix
+fi
+
 COVERAGE=
 FAILED=0
 RUN_JOBS=
@@ -105,7 +125,7 @@ unset RUN_INTEGRATION_PAT
 export PYTHONDEVMODE=1
 export PYTHONASYNCIODEBUG=1
 export PYTHONWARNINGS=error
-if [[ $(python3 --version) = "Python 3.9.7" ]] ; then
+if [[ $($RUN_PYTHON3 --version) = "Python 3.9.7" ]] ; then
 	# Stupid workaround for https://bugs.python.org/issue45097
 	# Just ignore all deprecation warnings. To add insult to injury we
 	# can't just ignore anything caused by asyncio because the full pacakge
@@ -163,19 +183,18 @@ else
 	exit 1
 fi
 
+RUN_PYTHON3_COV="$RUN_PYTHON3"
 if [[ -n $RUN_COVERAGE ]] ; then
     # make sure coverage is installed in the current environment
-    if python3 -c "import coverage" 2>/dev/null; then
+    if $RUN_PYTHON3 -c "import coverage" 2>/dev/null; then
         export COVERAGE_SOURCES="$PWD/pym"
 	export COVERAGE_OUTPUT="$PWD/test/.coverage"
-        RUN_PYTHON3="$RUN_COVERAGE run --rcfile=$PWD/test/unittest.coveragerc"
 	export COVERAGE_PROCESS_START="$PWD/test/subprocess.coveragerc"
+        RUN_PYTHON3_COV="$RUN_COVERAGE run --rcfile=$PWD/test/unittest.coveragerc"
     else
         echo "coverage3 is installed but not usable!" >&2
 	exit 1
     fi
-else
-	RUN_PYTHON3=python3
 fi
 
 # execute everything if nothing was specified
@@ -232,6 +251,8 @@ if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
 elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
 	export -f run_test
 	export RUN_PYTHON3
+	export RUN_PYTHON3_COV
+	export TEST_ENVIRONMENT
 	parallel ${RUN_JOBS:+-j $RUN_JOBS} run_test ::: \
 	  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
 else

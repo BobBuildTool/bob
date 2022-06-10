@@ -17,21 +17,27 @@ expect_fail run_bob show root --format=diff
 run_bob show --format diff root/dep/ root/sandbox/ | expect_fail grep -q scriptLanguage
 run_bob show --format diff --show-common root/dep/ root/sandbox/ | grep -q scriptLanguage
 
+if is_win32; then
+	PYTHON=python
+else
+	PYTHON=python3
+fi
+
 # Verify that empty properties are hidden by default but can be activated
-run_bob show root --no-indent | python3 -c '
+run_bob show root --no-indent | $PYTHON -c '
 import sys, yaml
 d = yaml.load(sys.stdin.read(), Loader=yaml.Loader)
 assert "checkoutTools" not in d
 '
 
-run_bob show root --show-empty | python3 -c '
+run_bob show root --show-empty | $PYTHON -c '
 import sys, yaml
 d = yaml.load(sys.stdin.read(), Loader=yaml.Loader)
 assert d["checkoutTools"] == {}
 '
 
 # Verify that filtering works as expected
-run_bob show root -f buildVars -f packageVars | python3 -c '
+run_bob show root -f buildVars -f packageVars | $PYTHON -c '
 import sys, yaml
 d = yaml.load(sys.stdin.read(), Loader=yaml.Loader)
 assert set(d.keys()) == {"buildVars", "packageVars"}
