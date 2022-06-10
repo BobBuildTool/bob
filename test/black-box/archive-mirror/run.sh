@@ -13,7 +13,7 @@ cat >"${upload}.yaml" <<EOF
 archive:
   -
     backend: file
-    path: "$archiveDir/source"
+    path: "$(mangle_path "$archiveDir/source")"
 EOF
 
 # Three different mirrors where the 3rd one silently fails.
@@ -23,11 +23,11 @@ archive:
   -
     flags: [download]
     backend: file
-    path: "$archiveDir/source"
+    path: "$(mangle_path "$archiveDir/source")"
   -
     flags: [download, cache]
     backend: file
-    path: "$archiveDir/mirror1"
+    path: "$(mangle_path "$archiveDir/mirror1")"
   -
     flags: [download, cache]
     backend: shell
@@ -46,7 +46,7 @@ archive:
   -
     flags: [download]
     backend: file
-    path: "$archiveDir/source"
+    path: "$(mangle_path "$archiveDir/source")"
   -
     flags: [cache]
     backend: shell

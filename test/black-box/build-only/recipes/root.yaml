@@ -2,7 +2,7 @@ root: True
 
 checkoutSCM:
    scm: url
-   url: "file://${SOURCE_FILE}"
+   url: "${SOURCE_FILE}"
    digestSHA1: "${SOURCE_HASH}"
    fileName: "result.txt"
 

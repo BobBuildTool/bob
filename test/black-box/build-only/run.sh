@@ -4,7 +4,7 @@ cleanup
 
 run_with_source()
 {
-   run_bob "$@" -DSOURCE_FILE="$SRC" -DSOURCE_HASH="$(sha1sum "$SRC" | cut -d ' ' -f1)"
+	run_bob "$@" -DSOURCE_FILE="$(file_url "$SRC")" -DSOURCE_HASH="$(sha1sum "$SRC" | cut -d ' ' -f1)"
 }
 
 compare_result()

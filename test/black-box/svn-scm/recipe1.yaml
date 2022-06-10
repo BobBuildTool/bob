@@ -2,7 +2,7 @@ root: true
 
 checkoutSCM:
   scm: svn
-  url: file://${SVNROOT}/trunk
+  url: ${SVNROOT}/trunk
 
 buildScript: |
   cp "$1/file.txt" .

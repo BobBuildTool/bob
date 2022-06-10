@@ -22,7 +22,7 @@ popd
 
 cat >default.yaml <<EOF
 environment:
-    REPODIR : "${gitDir}"
+    REPODIR : "$(mangle_path "${gitDir}")"
 EOF
 
 # build once

@@ -1,6 +1,6 @@
 checkoutSCM:
     scm: git
-    url: file:///${REPODIR}/
+    url: ${REPODIR}/
 
 buildScript: |
     cp $1/git/* .

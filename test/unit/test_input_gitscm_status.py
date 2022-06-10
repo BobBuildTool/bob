@@ -218,7 +218,7 @@ class TestSubmodulesStatus(TestCase):
     def createGitScm(self, spec = {}):
         s = {
             'scm' : "git",
-            'url' : "file://" + os.path.abspath(self.repodir) + "/main",
+            'url' : os.path.join(os.path.abspath(self.repodir), "main"),
             'recipe' : "foo.yaml#0",
             '__source' : "Recipe foo",
             'submodules' : True,

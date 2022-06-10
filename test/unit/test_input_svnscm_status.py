@@ -7,10 +7,18 @@ from unittest import TestCase
 
 import os
 import subprocess
+import sys
 import tempfile
 
 from bob.scm import SvnScm, ScmTaint
 from bob.utils import emptyDirectory
+
+if sys.platform == "win32":
+    def makeUrl(path):
+        return 'file:///' + path.replace("\\", "/")
+else:
+    def makeUrl(path):
+        return 'file://' + path
 
 class TestSvnScmStatus(TestCase):
 
@@ -28,8 +36,8 @@ class TestSvnScmStatus(TestCase):
                 cwd=cls.repodir_root.name)
             # import some files (bob's test director)
             subprocess.check_call(['svn', 'import', tmp,
-                'file://'+cls.repodir+'/trunk', '-m', "Initial Import"],
-                cwd='/tmp')
+                makeUrl(cls.repodir) + '/trunk', '-m', "Initial Import"],
+                cwd=tempfile.gettempdir())
 
     @classmethod
     def tearDownClass(cls):
@@ -40,14 +48,14 @@ class TestSvnScmStatus(TestCase):
         self.repodir_local = self.__repodir_local.name
 
         # clone the repo
-        subprocess.check_call(['svn', 'co', 'file://' + self.repodir + '/trunk',
-            self.repodir_local], cwd='/tmp')
+        subprocess.check_call(['svn', 'co', makeUrl(self.repodir) + '/trunk',
+            self.repodir_local], cwd=tempfile.gettempdir())
 
     def tearDown(self):
         self.__repodir_local.cleanup()
 
     def statusSvnScm(self, spec = {}):
-        s = { 'scm' : "svn", 'url' : 'file://'+self.repodir+'/trunk',
+        s = { 'scm' : "svn", 'url' : makeUrl(self.repodir) + '/trunk',
             'recipe' : "foo.yaml#0", '__source' : "Recipe foo" }
         s.update(spec)
         return SvnScm(s).status(self.repodir_local)
@@ -76,7 +84,7 @@ class TestSvnScmStatus(TestCase):
         self.assertTrue(s.dirty)
 
     def testUrl(self):
-        s = self.statusSvnScm({ 'url' : 'file://'+self.repodir+'/branches/abc' })
+        s = self.statusSvnScm({ 'url' : makeUrl(self.repodir) + '/branches/abc' })
         self.assertEqual(s.flags, {ScmTaint.switched})
         self.assertTrue(s.dirty)
 

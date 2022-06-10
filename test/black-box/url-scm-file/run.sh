@@ -11,6 +11,7 @@ file="$PWD/file.txt"
 test "${file:0:1}" = "/"
 
 # Build and fetch result path
+file="$(mangle_path "$file")"
 run_bob dev -DURL="$file" root
 path=$(run_bob query-path -DURL="$file" -f {dist} root)
 test -n "$path"

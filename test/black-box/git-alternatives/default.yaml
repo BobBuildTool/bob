@@ -5,6 +5,6 @@ scmDefaults:
            url: ".*"
            repo: "bar"
          -
-           url: "/tmp/.*/"
+           url: ".*/"
            repo: "<<GIT_REFERENCE>>/"
            optional: False

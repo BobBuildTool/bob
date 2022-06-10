@@ -15,7 +15,7 @@ cat >default.yaml <<EOF
 archive:
   -
     backend: file
-    path: "$archiveDir"
+    path: "$(mangle_path "$archiveDir")"
 EOF
 
 # Build dependency without audit trail first. Must not be uploaded.

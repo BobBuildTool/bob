@@ -11,7 +11,7 @@ writeCfg()
 {
 cat >"${cfg}.yaml" <<EOF
 share:
-    path: $shareDir
+    path: "$(mangle_path "$shareDir")"
     quota: $1
     autoClean: $2
 EOF

@@ -2,7 +2,7 @@ root: true
 
 checkoutSCM:
   scm: svn
-  url: file://${SVNROOT}/branches/awesome
+  url: ${SVNROOT}/branches/awesome
 
 buildScript: |
   cp "$1/file.txt" .

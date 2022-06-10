@@ -23,7 +23,7 @@ cat >"${cfg}.yaml" <<EOF
 archive:
    -
     backend: file
-    path: $uploadDir
+    path: "$(mangle_path "$uploadDir")"
 EOF
 }
 

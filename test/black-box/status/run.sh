@@ -28,16 +28,17 @@ pushd $svnDir
 mkdir -p trunk
 svnadmin create svnTest
 echo "svn" > test3.dat
-svn import test3.dat file://${svnDir}/svnTest/test3.dat -m "Initial import"
+svnUrl="$(file_url "$svnDir")"
+svn import test3.dat ${svnUrl}/svnTest/test3.dat -m "Initial import"
 popd
 
 # setup user.yaml to provide directories instead of passing them on the command
 # line
 cat >user.yaml <<EOF
 environment:
-    REPODIR : "${gitDir}"
-    URLDIR : "${urlDir}"
-    SVNDIR : "${svnDir}"
+    REPODIR : "$(file_url "${gitDir}")"
+    URLDIR : "$(file_url "${urlDir}")"
+    SVNDIR : "${svnUrl}"
 EOF
 
 # build once

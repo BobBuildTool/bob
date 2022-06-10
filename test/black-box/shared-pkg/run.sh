@@ -12,10 +12,10 @@ writeCfg()
 {
 cat >"${cfg}.yaml" <<EOF
 share:
-    path: $shareDir
+    path: "$(mangle_path "$shareDir")"
 archive:
     backend: file
-    path: $archiveDir
+    path: "$(mangle_path "$archiveDir")"
 EOF
 }
 

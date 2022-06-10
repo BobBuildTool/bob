@@ -1,6 +1,6 @@
 checkoutSCM:
     scm: svn
-    url: file://${SVNDIR}/svnTest
+    url: ${SVNDIR}/svnTest
 
 buildScript: |
     cp $1/svn/* .

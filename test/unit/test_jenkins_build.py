@@ -348,7 +348,8 @@ class JenkinsSharedPackage(JenkinsTests, TestCase):
             """)
 
         with tempfile.TemporaryDirectory() as tmp:
-            s = os.path.join(tmp, "canary")
+            # Mind that the backslash needs to be escaped
+            s = os.path.join(tmp, "canary").replace("\\", "\\\\")
             self.executeBobJenkinsCmd("set-options test -o shared.dir=" + quote(s))
             self.executeBobJenkinsCmd("push test")
             self.assertFalse(os.path.isdir(s))

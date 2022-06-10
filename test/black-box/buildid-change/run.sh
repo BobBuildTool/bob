@@ -29,11 +29,11 @@ rm -rf "$D"
 cat >repo.yaml <<EOF
 archive:
     backend: file
-    path: "$REPO/archive"
+    path: "$(mangle_path "$REPO/archive")"
 EOF
 
 # initial run to upload common package
-run_bob build -DREPO="$REPO" --download=yes --upload root/right/common
+run_bob build -DREPO="$(mangle_path "$REPO")" --download=yes --upload root/right/common
 
 # there should be exactly one artifact
 shopt -s nullglob
@@ -42,7 +42,7 @@ A=( "$REPO"/archive/*/*/*.tgz )
 shopt -u nullglob
 
 # next run to upload "right" package
-run_bob build -DREPO="$REPO" --download=yes --upload root/right
+run_bob build -DREPO="$(mangle_path "$REPO")" --download=yes --upload root/right
 
 # Remove workspace and delete "common" package artifact. Live-build-id
 # predictions are kept.
@@ -51,8 +51,8 @@ rm "${A[0]}"
 
 # Build-again, this time with different sources than predicted.
 export APPLY_CHANGE=1
-run_bob build -DREPO="$REPO" --download=yes root
+run_bob build -DREPO="$(mangle_path "$REPO")" --download=yes root
 unset APPLY_CHANGE
 
 # Validate result
-diff -Nurp $(run_bob query-path --release -f '{dist}'  -DREPO="$REPO" root) output
+diff -Nurp $(run_bob query-path --release -f '{dist}'  -DREPO="$(mangle_path "$REPO")" root) output

@@ -20,21 +20,21 @@ mkdir "$work"
 echo init > "$work/file.txt"
 
 # CVS repository: contains a single repository "mod" with our file
-cvsroot=$dir/cvsroot
-mkdir "$cvsroot"
-cvs -d "$cvsroot" init
+cvs_root=$dir/cvs_root
+mkdir "$cvs_root"
+cvs -d "$(native_path $cvs_root)" init
 (
   cd "$work"
-  cvs -d "$cvsroot" import -m "message" mod vendor release
-  cvs -d "$cvsroot" co -d . mod
+  cvs -d "$(native_path $cvs_root)" import -m "message" mod vendor release
+  cvs -d "$(native_path $cvs_root)" co -d . mod
 )
   
 
 ##
 ##  First check: check out initial state
 ##
-run_bob -C "$bob" dev -DCVSROOT="$cvsroot" t
-result=$(run_bob -C "$bob" query-path -DCVSROOT="$cvsroot" -f {dist} t)
+run_bob -C "$bob" dev -DCVSROOT="$(native_path $cvs_root)" t
+result=$(run_bob -C "$bob" query-path -DCVSROOT="$(native_path $cvs_root)" -f {dist} t)
 test -n "$result"
 diff -q "$bob/$result/file.txt" "$work/file.txt"
 
@@ -49,7 +49,7 @@ echo modif > "$work/file.txt"
   cvs ci -m "update message" file.txt
 )
 
-run_bob -C "$bob"  dev -DCVSROOT="$cvsroot" t
+run_bob -C "$bob"  dev -DCVSROOT="$(native_path $cvs_root)" t -vv
 diff -q "$bob/$result/file.txt" "$work/file.txt"
 
 
@@ -67,5 +67,5 @@ echo branch > "$work/file.txt"
 
 cp recipe2.yaml "$bob/recipes/t.yaml"
 
-run_bob -C "$bob" dev -DCVSROOT="$cvsroot" t
+run_bob -C "$bob" dev -DCVSROOT="$(native_path $cvs_root)" t
 diff -q "$bob/$result/file.txt" "$work/file.txt"

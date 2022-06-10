@@ -6,8 +6,8 @@
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 cleanup
 
-url="$(realpath file.txt)"
-url2="$(realpath file2.txt)"
+url="$(mangle_path "$(realpath file.txt)")"
+url2="$(mangle_path "$(realpath file2.txt)")"
 
 # Build and fetch result path
 run_bob dev root -DURL="$url"

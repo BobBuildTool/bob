@@ -11,7 +11,7 @@ cat >default.yaml <<EOF
 archive:
   -
     backend: file
-    path: "$archiveDir"
+    path: "$(mangle_path "$archiveDir")"
 EOF
 
 function cleanArchive() {

@@ -24,7 +24,7 @@ class TestCvsScmStatus(TestCase):
             with open(os.path.join(tmp, "test.txt"), "w") as f:
                 f.write("dummy")
             # setup repo
-            subprocess.check_call(['cvs', '-q', '-d', cls.cvsroot, 'init'], cwd="/tmp")
+            subprocess.check_call(['cvs', '-q', '-d', cls.cvsroot, 'init'], cwd=tempfile.gettempdir())
             # import some files
             subprocess.check_call(['cvs', '-q', '-d', cls.cvsroot, 'import', '-m',
                 "Initial Import", 'testmod', 'bob', 'start'], cwd=tmp)
@@ -39,7 +39,7 @@ class TestCvsScmStatus(TestCase):
 
         # clone the repo
         subprocess.check_call(['cvs', '-q', '-d', self.cvsroot, 'co', '-d',
-            self.repodir, 'testmod'], cwd='/tmp')
+            self.repodir, 'testmod'], cwd=tempfile.gettempdir())
 
     def tearDown(self):
         self.__repodir.cleanup()

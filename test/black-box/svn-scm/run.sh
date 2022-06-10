@@ -23,10 +23,15 @@ echo init > "$work/file.txt"
 svnroot=$dir/svnroot
 mkdir "$svnroot"
 svnadmin create "$svnroot"
-svn mkdir -m "init" "file://$svnroot/trunk" "file://$svnroot/branches"
+if is_win32 ; then
+	svnroot="file:///$(cygpath -m "$svnroot")"
+else
+	svnroot="file://$svnroot"
+fi
+svn mkdir -m "init" "$svnroot/trunk" "$svnroot/branches"
 (
   cd "$work"
-  svn co "file://$svnroot/trunk/" .
+  svn co "$svnroot/trunk/" .
   svn add file.txt
   svn commit -m "init"
 )
@@ -62,8 +67,8 @@ diff -q "$bob/$result/file.txt" "$work/file.txt"
 echo branch > "$work/file.txt"
 (
   cd "$work"
-  svn cp -m "branch message" "file://$svnroot/trunk" "file://$svnroot/branches/awesome"
-  svn switch "file://$svnroot/branches/awesome"
+  svn cp -m "branch message" "$svnroot/trunk" "$svnroot/branches/awesome"
+  svn switch "$svnroot/branches/awesome"
   svn commit -m "branch message" file.txt
 )
 

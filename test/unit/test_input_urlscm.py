@@ -12,6 +12,7 @@ import subprocess
 import shutil
 import tempfile
 import hashlib
+import sys
 
 from mocks.http_server import HttpServerMock
 
@@ -37,7 +38,10 @@ class UrlScmTest:
         cls.__repodir = tempfile.TemporaryDirectory()
         cls.dir = cls.__repodir.name
         fn = os.path.join(cls.__repodir.name, "test.txt")
-        cls.url = "file://" + fn
+        if sys.platform == "win32":
+            cls.url = "file:///" + fn
+        else:
+            cls.url = "file://" + fn
 
         with open(fn, "w") as f:
             f.write("Hello world!")

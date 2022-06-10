@@ -39,6 +39,7 @@ git -C "$alternate" clone --mirror "$repo"
 ##
 ## simple alternate in recipe
 ##
+alternate="$(mangle_path "$alternate")"
 sed -i "s#<<GIT_REFERENCE>>#$alternate\/repo.git#" $bob/recipes/t.yaml
 run_bob -C "$bob" dev -DURL="$repo" t -vv
 src=$(run_bob -C "$bob" query-path -DURL="$repo" -f {src} t)
