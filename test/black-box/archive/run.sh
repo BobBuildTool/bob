@@ -46,7 +46,7 @@ rm -rf work $archiveDir/*
 run_bob build --force --download=no --upload root-alpha root-bravo
 pushd $archiveDir
 mkdir -p 64/ad
-tar zcf 64/ad/6386bae45ebd6788e404758a247e26e5c778-1.tgz /dev/zero
+/usr/bin/tar zcf 64/ad/6386bae45ebd6788e404758a247e26e5c778-1.tgz /dev/zero
 touch 64/ad/aabbcc-too-short.tgz
 run_bob archive scan
 popd
