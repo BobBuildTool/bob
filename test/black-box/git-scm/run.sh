@@ -32,7 +32,7 @@ git -C "$work" commit -m "message"
 run_bob -C "$bob" dev -DURL="$work" t
 result=$(run_bob -C "$bob" query-path -DURL="$work" -f {dist} t)
 test -n "$result"
-diff -q "$bob/$result/file.txt" "$work/file.txt"
+diff -qZ "$bob/$result/file.txt" "$work/file.txt"
 
 
 ##
@@ -43,7 +43,7 @@ echo modif > "$work/file.txt"
 git -C "$work" commit -m "update message" file.txt
 
 run_bob -C "$bob"  dev -DURL="$work" t
-diff -q "$bob/$result/file.txt" "$work/file.txt"
+diff -qZ "$bob/$result/file.txt" "$work/file.txt"
 
 
 ##
@@ -57,4 +57,4 @@ git -C "$work" commit -m "branch message" file.txt
 cp recipe2.yaml "$bob/recipes/t.yaml"
 
 run_bob -C "$bob" dev -DURL="$work" t
-diff -q "$bob/$result/file.txt" "$work/file.txt"
+diff -qZ "$bob/$result/file.txt" "$work/file.txt"

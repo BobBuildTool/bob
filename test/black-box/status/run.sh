@@ -108,7 +108,7 @@ grep -q 'STATUS.\+M.\+/svn' log-status.txt
 
 # "bob dev --clean-checkout" must move modified repos to attic. Validate result!
 run_bob dev root --clean-checkout
-diff -Nurp $(run_bob query-path -f '{dist}' root) output
+diff -NurpZ $(run_bob query-path -f '{dist}' root) output
 expect_output "" run_bob status root -r
 
 # look for repositories in attic, they should be modified

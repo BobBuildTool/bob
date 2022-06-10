@@ -8,7 +8,7 @@ policies:
     mergeEnvironment: False
 EOF
 run_bob dev root
-diff -u output/disabled.txt "$(run_bob query-path -f '{dist}' root)/result.txt"
+diff -uZ output/disabled.txt "$(run_bob query-path -f '{dist}' root)/result.txt"
 
 # test enabled policy
 cat >config.yaml <<EOF
@@ -16,4 +16,4 @@ policies:
     mergeEnvironment: True
 EOF
 run_bob dev root
-diff -u output/enabled.txt "$(run_bob query-path -f '{dist}' root)/result.txt"
+diff -uZ output/enabled.txt "$(run_bob query-path -f '{dist}' root)/result.txt"

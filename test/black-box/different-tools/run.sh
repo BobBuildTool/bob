@@ -11,5 +11,5 @@ cleanup
 run_bob_plain dev root1
 run_bob_plain dev root2
 
-diff -Nurp $(run_bob_plain query-path -f {dist} root1) output/root1
-diff -Nurp $(run_bob_plain query-path -f {dist} root2) output/root2
+diff -NurpZ $(run_bob_plain query-path -f {dist} root1) output/root1
+diff -NurpZ $(run_bob_plain query-path -f {dist} root2) output/root2

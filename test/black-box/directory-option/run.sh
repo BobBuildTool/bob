@@ -8,9 +8,9 @@ popd
 
 # Test ls
 run_bob -C elsewhere ls > log-ls.txt
-diff -u output/log-ls.txt log-ls.txt
+diff -uZ output/log-ls.txt log-ls.txt
 rm -f log-ls.txt
 
 # Test build
 run_bob -C elsewhere build root
-diff -u output/result.txt elsewhere/work/root/dist/1/workspace/result.txt
+diff -uZ output/result.txt elsewhere/work/root/dist/1/workspace/result.txt

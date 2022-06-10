@@ -6,5 +6,5 @@
 mkdir -p output
 for i in checkouts env include sandbox tools ; do
 	run_bob project -n --sandbox dumper root-$i output/$i.txt
-	diff -u specs/$i.txt output/$i.txt
+	diff -uZ specs/$i.txt output/$i.txt
 done

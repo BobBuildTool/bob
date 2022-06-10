@@ -127,11 +127,11 @@ exec_blackbox_test()
 
 	run_bob dev root
 	RES=$(run_bob query-path -f '{dist}' --develop root)
-	diff -Nurp $RES output
+	diff -NurpZ $RES output
 
 	run_bob build root
 	RES=$(run_bob query-path -f '{dist}' --release root)
-	diff -Nurp $RES output
+	diff -NurpZ $RES output
 
 	run_bob clean
 }

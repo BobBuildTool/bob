@@ -55,4 +55,4 @@ run_bob build -DREPO="$(mangle_path "$REPO")" --download=yes root
 unset APPLY_CHANGE
 
 # Validate result
-diff -Nurp $(run_bob query-path --release -f '{dist}'  -DREPO="$(mangle_path "$REPO")" root) output
+diff -NurpZ $(run_bob query-path --release -f '{dist}'  -DREPO="$(mangle_path "$REPO")" root) output

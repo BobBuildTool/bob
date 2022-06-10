@@ -9,5 +9,5 @@ cleanup
 run_bob dev root --checkout-only
 
 # compare result
-diff -Nurp output/app "$(run_bob query-path -f '{src}' root/app)"
-diff -Nurp output/lib "$(run_bob query-path -f '{src}' root/app/lib)"
+diff -NurpZ output/app "$(run_bob query-path -f '{src}' root/app)"
+diff -NurpZ output/lib "$(run_bob query-path -f '{src}' root/app/lib)"

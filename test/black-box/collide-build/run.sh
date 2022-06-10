@@ -8,4 +8,4 @@ mkdir -p dev/dist/root/1/workspace
 echo "garbage" > dev/dist/root/1/workspace/garbage.txt
 run_bob dev root
 RES="$(run_bob query-path -f '{dist}' root)"
-diff -Nurp $RES output
+diff -NurpZ $RES output
