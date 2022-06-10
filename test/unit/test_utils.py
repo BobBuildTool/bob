@@ -4,14 +4,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from unittest import TestCase
+from unittest import TestCase, skipIf, skipUnless
 from unittest.mock import patch, MagicMock
 import os, stat
 import asyncio
 
 from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion, \
     getPlatformTag, run, check_output, removeUserFromUrl, runInEventLoop, \
-    _replacePathWin32
+    _replacePathWin32, isWindows
 from bob.errors import BuildError, ParseError
 
 class TestJoinScripts(TestCase):
@@ -51,7 +51,9 @@ class TestRemove(TestCase):
             removePath(d)
             assert not os.path.exists(d)
 
-    def testPermission(self):
+    @skipIf(isWindows(), "requires Unix platform")
+    def testPermissionUnix(self):
+        """Cleaning a read-only directory shall fail"""
         with TemporaryDirectory() as tmp:
             d = os.path.join(tmp, "dir")
             os.mkdir(d)
@@ -61,6 +63,20 @@ class TestRemove(TestCase):
             os.chmod(d, stat.S_IRUSR | stat.S_IXUSR)
             self.assertRaises(BuildError, removePath, tmp)
             os.chmod(d, stat.S_IRWXU)
+
+    @skipUnless(isWindows(), "requires Windows platform")
+    def testPermissionWindows(self):
+        """Cleaning a directory with read only files does not fail"""
+        with TemporaryDirectory() as tmp:
+            d = os.path.join(tmp, "dir")
+            os.mkdir(d)
+            fn = os.path.join(d, "file")
+            with open(fn, "w") as f:
+                f.write("data")
+
+            os.chmod(fn, 0)
+            removePath(tmp)
+            self.assertFalse(os.path.exists(fn))
 
 class TestEmpty(TestCase):
 
@@ -85,6 +101,7 @@ class TestEmpty(TestCase):
             assert os.path.exists(tmp)
             assert not os.path.exists(d)
 
+    @skipIf(isWindows(), "requires Unix platform")
     def testPermission(self):
         with TemporaryDirectory() as tmp:
             d = os.path.join(tmp, "dir")

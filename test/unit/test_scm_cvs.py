@@ -3,15 +3,17 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from unittest import TestCase
+from unittest import TestCase, skipIf
 
 import os
 import subprocess
+import sys
 import tempfile
 
 from bob.scm import CvsScm, ScmTaint
 from bob.utils import emptyDirectory
 
+@skipIf(sys.platform == "win32", "Requires POSIX platform")
 class TestCvsScmStatus(TestCase):
 
     @classmethod

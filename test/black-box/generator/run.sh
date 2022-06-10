@@ -2,6 +2,11 @@
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 cleanup
 
+# FIXME: does not yet run on plain Windows
+if is_win32 ; then
+	skip
+fi
+
 # just generate
 run_bob project -n g1 root > log-cmd.txt
 diff -uZ <(grep '^PLUGIN' log-cmd.txt) output-plugin.txt

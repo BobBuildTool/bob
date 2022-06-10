@@ -2,6 +2,10 @@
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 cleanup
 
+# FIXME: fails on native windows due to CRLF and qt-creator
+if is_win32 ; then
+	skip
+fi
 # Test that all commands working on packages accect arguments which can influence the
 # package stack. These are -D and -c at the moment.
 

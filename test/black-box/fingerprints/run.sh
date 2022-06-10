@@ -1,6 +1,11 @@
 #!/bin/bash -e
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
+# Uses a sandbox. Will not work on Windows.
+if [[ $(uname -o) == Msys ]] ; then
+	skip
+fi
+
 # Test the various direct properties of fingerprint scripts
 # =========================================================
 #

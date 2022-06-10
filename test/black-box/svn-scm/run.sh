@@ -4,6 +4,11 @@
 #
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
+if is_msys ; then
+	# svnadmin does not work on MSYS
+	skip
+fi
+
 dir=$(mktemp -d)
 echo "Using scratch dir: $dir"
 trap 'rm -rf "$dir"; cleanup' EXIT

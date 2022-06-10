@@ -1,6 +1,11 @@
 #!/bin/bash -e
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
+# Uses hard coded build-ids. Will not work on Windows.
+if [[ $(uname -o) == Msys ]] ; then
+	skip
+fi
+
 # Test the old and new behaviour of the fingerprintVars policy.
 
 cleanup

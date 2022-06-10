@@ -1,8 +1,9 @@
 
-from unittest import TestCase
+from unittest import TestCase, skipIf
 from bob.builder import InternalJobServer, JobServerSemaphore
 from bob.utils import runInEventLoop
 import asyncio
+import sys
 
 class TestJobServer:
     def __init__(self):
@@ -18,6 +19,7 @@ class TestJobServer:
         self.__jobServerSem.release()
 
 # Migrate to unittest.IsolatedAsyncioTestCase starting with Python 3.8
+@skipIf(sys.platform == "win32", "Requires POSIX platform")
 class TestJobserverTest (TestCase):
     def testAcquire(self):
         runInEventLoop(self._testAcquire())

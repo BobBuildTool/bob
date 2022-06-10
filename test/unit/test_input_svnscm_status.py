@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from unittest import TestCase
+from unittest import TestCase, skipIf
 
 import os
 import subprocess
@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 from bob.scm import SvnScm, ScmTaint
-from bob.utils import emptyDirectory
+from bob.utils import emptyDirectory, isMsys
 
 if sys.platform == "win32":
     def makeUrl(path):
@@ -20,6 +20,7 @@ else:
     def makeUrl(path):
         return 'file://' + path
 
+@skipIf(isMsys(), "svnadmin fails on MSYS")
 class TestSvnScmStatus(TestCase):
 
     @classmethod

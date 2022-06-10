@@ -5,7 +5,7 @@
 
 from binascii import hexlify
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from unittest import TestCase
+from unittest import TestCase, skipIf
 from unittest.mock import MagicMock, patch
 import asyncio
 import base64
@@ -17,6 +17,7 @@ import subprocess
 import tarfile
 import threading
 import urllib.parse
+import sys
 
 from bob.archive import DummyArchive, SimpleHttpArchive, getArchiver
 from bob.errors import BuildError
@@ -603,6 +604,7 @@ class TestHttpBasicAuthArchive(BaseTester, TestCase):
         run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
         self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
 
+@skipIf(sys.platform.startswith("win"), "requires POSIX platform")
 class TestCustomArchive(BaseTester, TestCase):
 
     def _setArchiveSpec(self, spec):

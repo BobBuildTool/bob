@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from unittest import TestCase
+from unittest import TestCase, skipIf
 from unittest.mock import MagicMock, mock_open, patch
 import os
 import pickle
@@ -13,6 +13,7 @@ import sys
 
 from bob.state import _BobState as BobState
 from bob.errors import BobError
+from bob.utils import isWindows
 
 class BobStateWrap:
     """Small wrapper around _BobState that makes sure finalize() is always
@@ -149,6 +150,7 @@ class TestPersistence(EmptyDir, TestCase):
 class TestErrors(EmptyDir, TestCase):
     """Trigger various abnormal conditions that are normally not experienced"""
 
+    @skipIf(isWindows(), "requires UNIX platform")
     def testUnreadable(self):
         """Test that unreadable state is handled gracefully"""
 
@@ -177,6 +179,7 @@ class TestErrors(EmptyDir, TestCase):
         with self.assertRaises(BobError):
             s1 = BobState()
 
+    @skipIf(isWindows(), "requires UNIX platform")
     def testCannotSave(self):
         """Failure to save state aborts"""
         os.mkdir("ro")
@@ -188,6 +191,7 @@ class TestErrors(EmptyDir, TestCase):
             os.chmod(".", stat.S_IRUSR|stat.S_IXUSR)
             s1.setInputHashes("path", b"hash")
 
+    @skipIf(isWindows(), "requires UNIX platform")
     def testCannotCommit(self):
         """Unability to commit state is handled gracefully"""
         os.mkdir("ro")
