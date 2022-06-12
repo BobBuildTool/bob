@@ -44,7 +44,6 @@ expect_not_exist .bob-project
 expect_fail run_bob init /does/not/exist "$buildDir/three"
 expect_not_exist "$buildDir/three"
 
-# Fail gracefully if the build directory is read-only
-mkdir "$buildDir/three"
-chmod 500 "$buildDir/three"
+# Fail gracefully if the build directory cannot be created
+touch "$buildDir/three"
 expect_fail run_bob init . "$buildDir/three"

@@ -101,7 +101,7 @@ class TestImportScm(TestCase):
         """Test that obstructed destination gracefully fails"""
         s = self.createImportScm()
         with tempfile.TemporaryDirectory() as workspace:
-            os.symlink("notexist", os.path.join(workspace, "test.txt"))
+            os.mkdir(os.path.join(workspace, "test.txt"))
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, s)
 

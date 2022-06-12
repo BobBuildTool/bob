@@ -158,18 +158,15 @@ class BaseTester:
         self.__createBuildId(DOWNLOAD_ARITFACT)
 
         # create ERROR_DOWNLOAD_ARTIFACT that is there but cannot be opened
-        self.ro_file = self.__createArtifact(ERROR_DOWNLOAD_ARTIFACT)
-        self.ro_file_mode = os.stat(self.ro_file).st_mode
-        os.chmod(self.ro_file, 0)
-        self.ro_bid = self.__createBuildId(ERROR_DOWNLOAD_ARTIFACT)
-        os.chmod(self.ro_bid, 0)
+        bid = hexlify(ERROR_DOWNLOAD_ARTIFACT).decode("ascii")
+        os.makedirs(os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.tgz"), exist_ok=True)
+        os.makedirs(os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.buildid"), exist_ok=True)
 
         # make sure ERROR_UPLOAD_ARTIFACT cannot be created
         bid = hexlify(ERROR_UPLOAD_ARTIFACT).decode("ascii")
-        self.ro_dir = os.path.join(self.repo.name, bid[0:2], bid[2:4])
-        os.makedirs(self.ro_dir, exist_ok=True)
-        self.ro_dir_mode = os.stat(self.ro_dir).st_mode
-        os.chmod(self.ro_dir, 0)
+        os.makedirs(os.path.join(self.repo.name, bid[0:2]), exist_ok=True)
+        with open(os.path.join(self.repo.name, bid[0:2], bid[2:4]), "wb") as f:
+            pass
 
         # create broken artifact
         bid = hexlify(BROKEN_ARTIFACT).decode("ascii")
@@ -179,9 +176,6 @@ class BaseTester:
             f.write(b'\x00')
 
     def tearDown(self):
-        os.chmod(self.ro_dir, self.ro_dir_mode)
-        os.chmod(self.ro_bid, self.ro_file_mode)
-        os.chmod(self.ro_file, self.ro_file_mode)
         self.repo.cleanup()
 
     # standard tests for options
