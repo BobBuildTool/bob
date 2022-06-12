@@ -17,9 +17,23 @@ share:
 EOF
 }
 
-smallBuildId="76/44/a9c2e7e8c3303374fcbf4da9b0a434f303ea"
-mediumBuildId="05/2a/4d70121ca8e44cd6a9ae77644318d380572a"
-bigBuildId="c7/d7/bc0b590dc216b9a25a525a4afe2de6c4815f"
+case $TEST_ENVIRONMENT in
+	posix)
+		smallBuildId="76/44/a9c2e7e8c3303374fcbf4da9b0a434f303ea"
+		mediumBuildId="05/2a/4d70121ca8e44cd6a9ae77644318d380572a"
+		bigBuildId="c7/d7/bc0b590dc216b9a25a525a4afe2de6c4815f"
+		;;
+	msys)
+		smallBuildId="1a/f9/efe8cb45cdcac23693376d7844be208a51c1"
+		mediumBuildId="db/a8/c02aaaa7b040c94b1273fc9e48638ba48ef8"
+		bigBuildId="13/56/0ebc3b7bce75006e539a584548f5acd9a011"
+		;;
+	win32)
+		smallBuildId="e6/3e/a95d69feee555aff8439a878bf8d0ee5df18"
+		mediumBuildId="d1/51/0e715963280cd98c5c61ca77cf27afcf139a"
+		bigBuildId="77/a1/99907bc7da53d70b20b1beccba78e99bb354"
+		;;
+esac
 
 # After installing a package the auto-gc will remove an unsed package if
 # installing a new one.

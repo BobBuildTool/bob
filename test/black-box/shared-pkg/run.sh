@@ -21,6 +21,18 @@ EOF
 
 writeCfg
 
+case $TEST_ENVIRONMENT in
+	posix)
+		buildId="1e/64/44e72b94e7306c8e1555f31cfec30ffe981d"
+		;;
+	msys)
+		buildId="77/47/be79f58546e789cfac25b52d52ef5920816d"
+		;;
+	win32)
+		buildId="db/95/d28f9eb51bb69e6312035fd7bb3a0f649940"
+		;;
+esac
+
 # Test the various aspects of shared packages
 
 # Prohibiting shared package install does what it sais
@@ -35,7 +47,7 @@ expect_not_exist "$shareDir"
 # Initial build, upload to binary artifact cache and install shared package
 cleanup
 run_bob dev -c $cfg root --upload --download no
-expect_exist "$shareDir/1e/64/44e72b94e7306c8e1555f31cfec30ffe981d-3/workspace/result.txt"
+expect_exist "$shareDir/$buildId-3/workspace/result.txt"
 test -L dev/dist/root/1/workspace
 oldLink="$(readlink dev/dist/root/1/workspace)"
 
@@ -87,7 +99,7 @@ test -d dev/build/root/1/workspace
 rm -rf "$shareDir"
 cleanup
 run_bob dev -c $cfg root --download yes
-expect_exist "$shareDir/1e/64/44e72b94e7306c8e1555f31cfec30ffe981d-3/workspace/result.txt"
+expect_exist "$shareDir/$buildId-3/workspace/result.txt"
 test -L dev/dist/root/1/workspace
 
 # One can still install shared packages without using them. The workspace will
@@ -95,7 +107,7 @@ test -L dev/dist/root/1/workspace
 rm -rf "$shareDir"
 cleanup
 run_bob dev -c $cfg root --download no --no-shared --install
-expect_exist "$shareDir/1e/64/44e72b94e7306c8e1555f31cfec30ffe981d-3/workspace/result.txt"
+expect_exist "$shareDir/$buildId-3/workspace/result.txt"
 test -d dev/dist/root/1/workspace
 
 # Re-building with shared packages will remove existing workspaces and use
@@ -111,15 +123,15 @@ test -L dev/dist/root/1/workspace
 cleanup
 
 # An invalid result hash is rejected
-echo '{"hash": "12345678", "size": 7}' > "$shareDir/1e/64/44e72b94e7306c8e1555f31cfec30ffe981d-3/pkg.json"
+echo '{"hash": "12345678", "size": 7}' > "$shareDir/$buildId-3/pkg.json"
 expect_fail run_bob dev -c $cfg root --download no --no-install
 
 # A broken meta info handled
-echo '{"size": 7}' > "$shareDir/1e/64/44e72b94e7306c8e1555f31cfec30ffe981d-3/pkg.json"
+echo '{"size": 7}' > "$shareDir/$buildId-3/pkg.json"
 expect_fail run_bob dev -c $cfg root --download no --no-install
 
 # An invalid meta info handled
-echo 'garbage' > "$shareDir/1e/64/44e72b94e7306c8e1555f31cfec30ffe981d-3/pkg.json"
+echo 'garbage' > "$shareDir/$buildId-3/pkg.json"
 expect_fail run_bob dev -c $cfg root --download no --no-install
 
 # Installing to invalid location fails gracefully

@@ -55,8 +55,13 @@ class TestHashDir(TestCase):
 
             sum1 = hashDirectory(tmp)
             assert len(sum1) == 20
-            assert sum1 == binascii.unhexlify(
-                "640f516de78fba0b6d2ddde4451000f142d06b0d")
+            # Result depends on path separator character ('/' vs. '\')
+            if sys.platform == "win32":
+                self.assertEqual(sum1, binascii.unhexlify(
+                    "4248c7223c9516dc2f7bafdf48591918d4d99ac8"))
+            else:
+                self.assertEqual(sum1, binascii.unhexlify(
+                    "640f516de78fba0b6d2ddde4451000f142d06b0d"))
             sum2 = hashDirectory(tmp)
             assert sum1 == sum2
 
