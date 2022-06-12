@@ -266,7 +266,7 @@ class RealGitRepositoryTestCase(TestCase):
 
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
-        invoker = Invoker(spec, False, True, True, True, True, False)
+        invoker = Invoker(spec, True, True, True, True, True, False)
         runInEventLoop(scm.invoke(invoker))
 
 
@@ -449,7 +449,7 @@ class TestShallow(TestCase):
 
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
-        invoker = Invoker(spec, False, True, True, True, True, False)
+        invoker = Invoker(spec, True, True, True, True, True, False)
         runInEventLoop(scm.invoke(invoker))
 
         log = subprocess.check_output(["git", "log", "--oneline"],
@@ -568,7 +568,7 @@ class TestSubmodules(TestCase):
 
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
-        invoker = Invoker(spec, False, True, True, True, True, False)
+        invoker = Invoker(spec, True, True, True, True, True, False)
         runInEventLoop(scm.invoke(invoker))
 
     def updateSub1(self):
