@@ -207,7 +207,7 @@ class TestAsyncSubprocess(TestCase):
         self.assertEqual(proc.stderr, "err\n")
 
     def testRunFail(self):
-        coro = run(["/bin/false"])
+        coro = run(["false"])
         proc = runInEventLoop(coro)
         self.assertNotEqual(proc.returncode, 0)
 
@@ -226,7 +226,7 @@ class TestAsyncSubprocess(TestCase):
 
     def testCheckOutputFail(self):
         from subprocess import CalledProcessError
-        coro = check_output(["/bin/false"])
+        coro = check_output(["false"])
         self.assertRaises(CalledProcessError,
             runInEventLoop, coro)
 
