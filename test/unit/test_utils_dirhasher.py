@@ -129,6 +129,12 @@ class TestHashDir(TestCase):
         s.st_ctime_ns=1452798827
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
+        entry = MagicMock()
+        entry.is_dir = MagicMock(return_value=False)
+        entry.name = b'ghost'
+        entry.stat = mock_lstat
+        entries = MagicMock()
+        entries.return_value = [ entry ]
 
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
@@ -136,7 +142,7 @@ class TestHashDir(TestCase):
                 with open(os.path.join(tmp, "ghost"), 'wb') as f:
                     f.write(b'abc')
 
-                with patch('os.lstat', mock_lstat):
+                with patch('os.scandir', entries):
                     hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
@@ -158,6 +164,12 @@ class TestHashDir(TestCase):
         s.st_ctime_ns=1601623698
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
+        entry = MagicMock()
+        entry.is_dir = MagicMock(return_value=False)
+        entry.name = b'McFly'
+        entry.stat = mock_lstat
+        entries = MagicMock()
+        entries.return_value = [ entry ]
 
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
@@ -165,7 +177,7 @@ class TestHashDir(TestCase):
                 with open(os.path.join(tmp, "McFly"), 'wb') as f:
                     pass
 
-                with patch('os.lstat', mock_lstat):
+                with patch('os.scandir', entries):
                     h = hashDirectory(tmp, index)
                 with patch('os.stat', mock_lstat):
                     b = binStat("whatever")
