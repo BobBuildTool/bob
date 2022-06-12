@@ -221,7 +221,7 @@ class RealGitRepositoryTestCase(TestCase):
         cls.__repodir = tempfile.TemporaryDirectory()
         cls.repodir = cls.__repodir.name
 
-        subprocess.check_call('git init --bare .', shell=True, cwd=cls.repodir)
+        subprocess.check_call(['git', 'init', '--bare', '.'], cwd=cls.repodir)
 
         with tempfile.TemporaryDirectory() as tmp:
             cmds = "\n".join([
@@ -239,11 +239,11 @@ class RealGitRepositoryTestCase(TestCase):
                 'git remote add origin ' + quote(cls.repodir),
                 'git push origin master foobar annotated lightweight',
             ])
-            subprocess.check_call(cmds, shell=True, cwd=tmp)
+            subprocess.check_call(["bash", "-c", cmds], cwd=tmp)
 
             def revParse(obj):
-                return bytes.fromhex(subprocess.check_output('git rev-parse ' + obj,
-                    universal_newlines=True, shell=True, cwd=tmp).strip())
+                return bytes.fromhex(subprocess.check_output(['git', 'rev-parse', obj],
+                    universal_newlines=True, cwd=tmp).strip())
 
             cls.commit_master = revParse('master')
             cls.commit_foobar = revParse('foobar')
@@ -431,7 +431,7 @@ class TestShallow(TestCase):
                 git commit -m "commit $i"
             done
         """
-        subprocess.check_call(cmds, shell=True, cwd=cls.repodir)
+        subprocess.check_call(["bash", "-c", cmds], cwd=cls.repodir)
 
     @classmethod
     def tearDownClass(cls):
@@ -551,7 +551,7 @@ class TestSubmodules(TestCase):
             git tag -a -m 'Tag 1' tag1
             cd ..
         """
-        subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+        subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
 
     def tearDown(self):
         self.__repodir.cleanup()
@@ -587,7 +587,7 @@ class TestSubmodules(TestCase):
             git commit -m "commit 2"
             cd ..
         """
-        subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+        subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
 
     def updateSub1Sub(self):
         # update sub-sub-, sub- and main-module
@@ -612,7 +612,7 @@ class TestSubmodules(TestCase):
             git commit -m update
             cd ..
         """
-        subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+        subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
 
     def addSub2(self):
         # Add 2nd submodule
@@ -631,7 +631,7 @@ class TestSubmodules(TestCase):
             git commit -m "commit 2"
             cd ..
         """
-        subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+        subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
 
     def testSubmoduleIgnoreDefault(self):
         """Test that submodules are ignored by default"""
@@ -687,7 +687,7 @@ class TestSubmodules(TestCase):
             self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
             self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test2.txt")))
 
-            subprocess.check_call("git -C sub1 checkout master", shell=True, cwd=workspace)
+            subprocess.check_call(["git", "-C", "sub1", "checkout", "master"], cwd=workspace)
             self.updateSub1()
 
             self.invokeGit(workspace, scm)
@@ -715,7 +715,7 @@ class TestSubmodules(TestCase):
                 git add canary.txt
                 git commit -m canary
             """
-            subprocess.check_call(cmds, shell=True, cwd=workspace)
+            subprocess.check_call(["bash", "-c", cmds], cwd=workspace)
             self.updateSub1()
 
             self.invokeGit(workspace, scm)
@@ -757,7 +757,7 @@ class TestSubmodules(TestCase):
                 git commit -m "commit 2"
                 cd ..
             """
-            subprocess.check_call(cmds, shell=True, cwd=self.repodir)
+            subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
 
             self.invokeGit(workspace, scm)
             self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test.txt")))
@@ -811,7 +811,7 @@ class TestSubmodules(TestCase):
             self.assertTrue(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/subsub.txt")))
             self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/some/deep/path/canary.txt")))
 
-            subprocess.check_call("git -C sub1/some/deep/path checkout master", shell=True, cwd=workspace)
+            subprocess.check_call(["git", "-C", "sub1/some/deep/path", "checkout", "master"], cwd=workspace)
             self.updateSub1Sub()
 
             self.invokeGit(workspace, scm)

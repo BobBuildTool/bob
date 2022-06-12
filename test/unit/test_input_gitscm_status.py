@@ -202,7 +202,7 @@ class TestSubmodulesStatus(TestCase):
             git commit -m import
             cd ..
         """
-        subprocess.check_call(cmds, shell=True, cwd=cls.repodir)
+        subprocess.check_call(["bash", "-c", cmds], cwd=cls.repodir)
 
     @classmethod
     def tearDownClass(cls):
@@ -263,7 +263,7 @@ class TestSubmodulesStatus(TestCase):
             cd sub
             echo modified > test.txt
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -279,7 +279,7 @@ class TestSubmodulesStatus(TestCase):
             cd sub
             echo created > some.txt
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -294,7 +294,7 @@ class TestSubmodulesStatus(TestCase):
             cd sub/some/deep/path
             echo modified > test.txt
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -313,7 +313,7 @@ class TestSubmodulesStatus(TestCase):
             git add test.txt
             git commit -m modified
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.switched, ScmTaint.unpushed_local})
@@ -336,7 +336,7 @@ class TestSubmodulesStatus(TestCase):
             git add test.txt
             git commit -m modified
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified, ScmTaint.switched, ScmTaint.unpushed_local})
@@ -350,7 +350,7 @@ class TestSubmodulesStatus(TestCase):
         cmd = """\
             git submodule deinit -f sub
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -365,7 +365,7 @@ class TestSubmodulesStatus(TestCase):
             cd sub
             git submodule deinit -f some/deep/path
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -381,7 +381,7 @@ class TestSubmodulesStatus(TestCase):
         cmd = """\
             git submodule update --init
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -398,7 +398,7 @@ class TestSubmodulesStatus(TestCase):
             cd sub
             git submodule update --init
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -424,7 +424,7 @@ class TestSubmodulesStatus(TestCase):
             cd sub2
             echo modified > test.txt
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -440,7 +440,7 @@ class TestSubmodulesStatus(TestCase):
             cd sub
             echo created > some.txt
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
@@ -456,7 +456,7 @@ class TestSubmodulesStatus(TestCase):
         cmd = """\
             git submodule update --init sub
         """
-        subprocess.check_call(cmd, shell=True, cwd=self.workspace)
+        subprocess.check_call(["bash", "-c", cmd], cwd=self.workspace)
 
         status, audit = self.statusGitScm(scm)
         self.assertEqual(status.flags, {ScmTaint.modified})
