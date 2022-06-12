@@ -6,7 +6,7 @@
 # sandbox. There is also a bash recipe that overrides the script language back
 # to bash.
 
-type -p pwsh >/dev/null || skip
+type -p pwsh >/dev/null || type -p powershell >/dev/null || skip
 
 cleanup
 run_bob dev root
