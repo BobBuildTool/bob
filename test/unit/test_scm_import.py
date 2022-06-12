@@ -131,7 +131,9 @@ class TestImportScm(TestCase):
         """Test that symlinks are updated"""
         s = self.createImportScm()
         with tempfile.TemporaryDirectory() as workspace:
-            os.symlink("notexist", os.path.join(workspace, "link.txt"))
+            with open(os.path.join(workspace, "foo.txt"), "w") as f:
+                pass
+            os.symlink("foo.txt", os.path.join(workspace, "link.txt"))
             self.invokeScm(workspace, s)
             self.assertEqual(os.readlink(os.path.join(workspace, "link.txt")), "test.txt")
 
