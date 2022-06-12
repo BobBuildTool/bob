@@ -62,17 +62,17 @@ checkDistDirExist 1 1 1 1 0
 
 # download yes
 cleanup
-run_bob build --download yes root/A::A
+MSYS2_ARG_CONV_EXCL=root run_bob build --download yes root/A::A
 checkBuildDirExist 0 0 0 0 0
 checkDistDirExist 1 0 0 0 0
 
 cleanup
-run_bob build --download yes --download-layer no=componentA root/A::A
+MSYS2_ARG_CONV_EXCL=root run_bob build --download yes --download-layer no=componentA root/A::A
 checkBuildDirExist 1 0 0 0 0
 checkDistDirExist 1 0 0 1 0
 
 cleanup
-run_bob build --download yes --download-layer no="component.*" root/A::A
+MSYS2_ARG_CONV_EXCL=root run_bob build --download yes --download-layer no="component.*" root/A::A
 checkBuildDirExist 1 0 0 0 0
 checkDistDirExist 1 0 0 1 0
 
@@ -90,12 +90,12 @@ checkDistDirExist 1 1 1 1 1
 # download forced and forced-deps
 cleanArchive
 cleanup
-run_bob build --download no root/B::B
+MSYS2_ARG_CONV_EXCL=root run_bob build --download no root/B::B
 run_bob build --upload root
 
 cleanup
-expect_fail run_bob build --download forced root/B::B
-run_bob build --download forced --download-layer no=componentB root/B::B
+MSYS2_ARG_CONV_EXCL=root expect_fail run_bob build --download forced root/B::B
+MSYS2_ARG_CONV_EXCL=root run_bob build --download forced --download-layer no=componentB root/B::B
 
 cleanup
 expect_fail run_bob build --download forced-deps root
