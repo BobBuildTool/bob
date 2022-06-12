@@ -20,19 +20,19 @@ class TestHashFile(TestCase):
                 for i in range(1000):
                     f.write(b'0123456789' * 1024)
 
-            hashFile(fn) == binascii.unhexlify(
-                "c94d8ee379dcbef70b3da8fb57df8020b76b0c70")
+            self.assertEqual(hashFile(fn), binascii.unhexlify(
+                "c94d8ee379dcbef70b3da8fb57df8020b76b0c70"))
 
     def testMissingFile(self):
         """Missing files should be treated as empty"""
         # assertLogs was introduced in python 3.4
         if sys.version_info < (3, 4):
-            assert hashFile("does-not-exist") == binascii.unhexlify(
-                "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+            self.assertEqual(hashFile("does-not-exist"), binascii.unhexlify(
+                "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
         else:
             with self.assertLogs(level='WARNING') as cm:
-                assert hashFile("does-not-exist") == binascii.unhexlify(
-                    "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+                self.assertEqual(hashFile("does-not-exist"), binascii.unhexlify(
+                    "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
                 self.assertEqual(cm.records[0].msg, "Cannot hash file: %s")
 
 class TestHashDir(TestCase):
@@ -55,7 +55,7 @@ class TestHashDir(TestCase):
                 f.write(b'abc')
 
             sum1 = hashDirectory(tmp)
-            assert len(sum1) == 20
+            self.assertEqual(len(sum1), 20)
             # Result depends on path separator character ('/' vs. '\')
             if sys.platform == "win32":
                 self.assertEqual(sum1, binascii.unhexlify(
@@ -64,7 +64,7 @@ class TestHashDir(TestCase):
                 self.assertEqual(sum1, binascii.unhexlify(
                     "640f516de78fba0b6d2ddde4451000f142d06b0d"))
             sum2 = hashDirectory(tmp)
-            assert sum1 == sum2
+            self.assertEqual(sum1, sum2)
 
     def testRenameDirectory(self):
         """Test that renaming directories has an influence on the checksum"""
@@ -77,7 +77,7 @@ class TestHashDir(TestCase):
             sum1 = hashDirectory(tmp)
             os.rename(os.path.join(tmp, "dir"), os.path.join(tmp, "foo"))
             sum2 = hashDirectory(tmp)
-            assert sum1 != sum2
+            self.assertNotEqual(sum1, sum2)
 
     def testRenameFile(self):
         """Test that renaming files has an influence on the checksum"""
@@ -89,7 +89,7 @@ class TestHashDir(TestCase):
             sum1 = hashDirectory(tmp)
             os.rename(os.path.join(tmp, "foo"), os.path.join(tmp, "bar"))
             sum2 = hashDirectory(tmp)
-            assert sum1 != sum2
+            self.assertNotEqual(sum1, sum2)
 
     def testRewriteFile(self):
         """Changing the file content should change the hash sum"""
@@ -102,16 +102,16 @@ class TestHashDir(TestCase):
                 sum1 = hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
-                    assert f.read(4) == b'BOB1'
+                    self.assertEqual(f.read(4), b'BOB1')
 
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'qwer')
                 sum2 = hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
-                    assert f.read(4) == b'BOB1'
+                    self.assertEqual(f.read(4), b'BOB1')
 
-                assert sum1 != sum2
+                self.assertNotEqual(sum1, sum2)
 
     def testBigIno(self):
         """Test that index handles big inode numbers as found on Windows"""
@@ -140,7 +140,7 @@ class TestHashDir(TestCase):
                     hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
-                    assert f.read(4) == b'BOB1'
+                    self.assertEqual(f.read(4), b'BOB1')
 
     def testOldFile(self):
         """Test negative time fields for files from the past"""
