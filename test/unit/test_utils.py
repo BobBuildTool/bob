@@ -8,6 +8,7 @@ from unittest import TestCase, skipIf, skipUnless
 from unittest.mock import patch, MagicMock
 import os, stat
 import asyncio
+import sys
 
 from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion, \
     getPlatformTag, run, check_output, removeUserFromUrl, runInEventLoop, \
@@ -197,7 +198,7 @@ class TestAsyncSubprocess(TestCase):
 
     def testRunCaptureStr(self):
         import subprocess
-        coro = run("echo ok; echo err >&2", shell=True,
+        coro = run("echo ok&& echo err>&2", shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             universal_newlines=True)
         proc = runInEventLoop(coro)
@@ -213,7 +214,10 @@ class TestAsyncSubprocess(TestCase):
     def testCheckOutputBin(self):
         coro = check_output("echo ok", shell=True)
         stdout = runInEventLoop(coro)
-        self.assertEqual(stdout, b'ok\n')
+        if sys.platform == "win32":
+            self.assertEqual(stdout, b'ok\r\n')
+        else:
+            self.assertEqual(stdout, b'ok\n')
 
     def testCheckOutputStr(self):
         coro = check_output("echo ok", shell=True, universal_newlines=True)
