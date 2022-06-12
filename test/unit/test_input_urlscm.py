@@ -259,7 +259,11 @@ class TestDownloads(UrlScmTest, TestCase):
                 fs1 = os.stat(fn)
                 self.invokeScm(workspace, scm)
                 fs2 = os.stat(fn)
-        self.assertEqual(fs1, fs2)
+
+        # Only compare mtime and ctime because atime is updated even by
+        # open()+fstat() on Windows.
+        self.assertEqual(fs1.st_mtime_ns, fs2.st_mtime_ns)
+        self.assertEqual(fs1.st_ctime_ns, fs2.st_ctime_ns)
 
     def testDownloadNotExisting(self):
         """Try to download an invalid file -> 404"""
