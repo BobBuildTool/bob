@@ -62,8 +62,8 @@ class BaseTester:
         with tarfile.open(name, "w|gz", format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
             with NamedTemporaryFile() as audit:
                 audit.write(b'AUDIT')
-                audit.flush()
-                tar.add(audit.name, "meta/audit.json.gz")
+                audit.seek(0)
+                tar.addfile(tar.gettarinfo(arcname="meta/audit.json.gz", fileobj=audit), audit)
             with TemporaryDirectory() as content:
                 with open(os.path.join(content, "data"), "wb") as f:
                     f.write(b'DATA')

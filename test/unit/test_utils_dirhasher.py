@@ -14,12 +14,13 @@ from bob.utils import hashFile, hashDirectory, binStat
 
 class TestHashFile(TestCase):
     def testBigFile(self):
-        with NamedTemporaryFile() as f:
-            for i in range(1000):
-                f.write(b'0123456789' * 1024)
-            f.flush()
+        with TemporaryDirectory() as tmp:
+            fn = os.path.join(tmp, "file")
+            with open(fn, "wb") as f:
+                for i in range(1000):
+                    f.write(b'0123456789' * 1024)
 
-            hashFile(f.name) == binascii.unhexlify(
+            hashFile(fn) == binascii.unhexlify(
                 "c94d8ee379dcbef70b3da8fb57df8020b76b0c70")
 
     def testMissingFile(self):
@@ -93,20 +94,21 @@ class TestHashDir(TestCase):
     def testRewriteFile(self):
         """Changing the file content should change the hash sum"""
 
-        with NamedTemporaryFile() as index:
+        with TemporaryDirectory() as indexDir:
+            index = os.path.join(indexDir, "index.bin")
             with TemporaryDirectory() as tmp:
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'abc')
-                sum1 = hashDirectory(tmp, index.name)
+                sum1 = hashDirectory(tmp, index)
 
-                with open(index.name, "rb") as f:
+                with open(index, "rb") as f:
                     assert f.read(4) == b'BOB1'
 
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'qwer')
-                sum2 = hashDirectory(tmp, index.name)
+                sum2 = hashDirectory(tmp, index)
 
-                with open(index.name, "rb") as f:
+                with open(index, "rb") as f:
                     assert f.read(4) == b'BOB1'
 
                 assert sum1 != sum2
@@ -128,15 +130,16 @@ class TestHashDir(TestCase):
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
 
-        with NamedTemporaryFile() as index:
+        with TemporaryDirectory() as indexDir:
+            index = os.path.join(indexDir, "index.bin")
             with TemporaryDirectory() as tmp:
                 with open(os.path.join(tmp, "ghost"), 'wb') as f:
                     f.write(b'abc')
 
                 with patch('os.lstat', mock_lstat):
-                    hashDirectory(tmp, index.name)
+                    hashDirectory(tmp, index)
 
-                with open(index.name, "rb") as f:
+                with open(index, "rb") as f:
                     assert f.read(4) == b'BOB1'
 
     def testOldFile(self):
@@ -156,13 +159,14 @@ class TestHashDir(TestCase):
         mock_lstat = MagicMock()
         mock_lstat.return_value = s
 
-        with NamedTemporaryFile() as index:
+        with TemporaryDirectory() as indexDir:
+            index = os.path.join(indexDir, "index.bin")
             with TemporaryDirectory() as tmp:
                 with open(os.path.join(tmp, "McFly"), 'wb') as f:
                     pass
 
                 with patch('os.lstat', mock_lstat):
-                    h = hashDirectory(tmp, index.name)
+                    h = hashDirectory(tmp, index)
                 with patch('os.stat', mock_lstat):
                     b = binStat("whatever")
 
@@ -193,9 +197,10 @@ class TestHashDir(TestCase):
         entries = MagicMock()
         entries.return_value = [ entry ]
 
-        with NamedTemporaryFile() as index:
+        with TemporaryDirectory() as indexDir:
+            index = os.path.join(indexDir, "index.bin")
             with patch('os.scandir', entries):
-                h = hashDirectory("whatever", index.name)
+                h = hashDirectory("whatever", index)
 
         self.assertEqual(h, b'\xe8\x8e\xad\x9bv\xcbt\xc4\xcd\xa7x\xdb\xde\x96\xab@\x18\xb1\xdcX')
 
@@ -223,9 +228,10 @@ class TestHashDir(TestCase):
         entries = MagicMock()
         entries.return_value = [ entry ]
 
-        with NamedTemporaryFile() as index:
+        with TemporaryDirectory() as indexDir:
+            index = os.path.join(indexDir, "index.bin")
             with patch('os.scandir', entries):
-                h = hashDirectory("whatever", index.name)
+                h = hashDirectory("whatever", index)
 
         self.assertEqual(h, b"\x9b\x98~\xa5\xd5\xc4\x1e\xe29'\x8d\x1e\xe1\x12\xdd\xf4\xa51\xf5d")
 
