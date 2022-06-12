@@ -36,8 +36,9 @@ test -z "$(run_bob query-path --release -q notpresent 2>&1 | grep 'Naptime')"
 expect_fail run_bob query-path --release --fail notpresent
 
 # Perform a full release build. Must report paths for everything.
+# Convert reported paths to unix format.
 run_bob build root
-set -- $(run_bob query-path --release --fail root)
+set -- $(run_bob query-path --release --fail root | sed -e 's|\\|/|g')
 test "$1" = "root"
 test "$2" = "work/root/dist/1/workspace"
 
@@ -57,7 +58,8 @@ test -z "$(run_bob query-path --dev root/interm2/child)"
 
 # Build everything
 run_bob dev root
-set -- $(run_bob query-path --dev root)
+# Convert reported paths to unix format.
+set -- $(run_bob query-path --dev root | sed -e 's|\\|/|g')
 test "$1" = "root"
 test "$2" = "dev/dist/root/1/workspace"
 
@@ -82,8 +84,8 @@ run_bob build root
 test "$(run_bob query-path --release -f '{name}' root)" = "root"
 test "$(run_bob query-path --release -f '{name}{name}' root)" = "rootroot"
 test "$(run_bob query-path --release -f 'X{name}X' root)" = "XrootX"
-test "$(run_bob query-path --release -f '{dist}' root)" = "work/root/dist/1/workspace"
-test "$(run_bob query-path --release -f '{build}' root)" = "work/root/build/1/workspace"
+test "$(run_bob query-path --release -f '{dist}' root | sed -e 's|\\|/|g')" = "work/root/dist/1/workspace"
+test "$(run_bob query-path --release -f '{build}' root | sed -e 's|\\|/|g')" = "work/root/build/1/workspace"
 
 # We don't have source, so these report empty
 test -z "$(run_bob query-path --release -f '{src}' root)"

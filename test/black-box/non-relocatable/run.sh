@@ -34,7 +34,7 @@ writeCfg
 
 checkPath() {
     PKG=$1
-    WORKSPACE=$(run_bob query-path -f '{dist}' --release $PKG)
+    WORKSPACE=$(run_bob query-path -f '{dist}' --release $PKG | sed -e 's|\\|/|g')
     DATA=$(cat $WORKSPACE/path.txt)
     if [[ "$PWD/$WORKSPACE" != "$DATA" ]]; then
         echo "failure building non-relocated: path does not match"

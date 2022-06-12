@@ -42,7 +42,7 @@ git -C "$alternate" clone --mirror "$repo"
 alternate="$(mangle_path "$alternate")"
 sed -i "s#<<GIT_REFERENCE>>#$alternate\/repo.git#" $bob/recipes/t.yaml
 run_bob -C "$bob" dev -DURL="$repo" t -vv
-src=$(run_bob -C "$bob" query-path -DURL="$repo" -f {src} t)
+src=$(run_bob -C "$bob" query-path -DURL="$repo" -f {src} t | sed -e 's|\\|/|g')
 grep -Fxq "$alternate/repo.git/objects" $bob/$src/.git/objects/info/alternates
 git -C "$bob/$src" status
 
@@ -51,7 +51,7 @@ git -C "$bob/$src" status
 ####
 sed -i "s#dissociate: false#dissociate: true#" $bob/recipes/t.yaml
 run_bob -C "$bob" dev -DURL="$repo" t -vv
-src=$(run_bob -C "$bob" query-path -DURL="$repo" -f {src} t)
+src=$(run_bob -C "$bob" query-path -DURL="$repo" -f {src} t | sed -e 's|\\|/|g')
 if [[ -e $bob/$src/.git/objects/info/alternates ]]; then
    echo "alternates file still exists"
    exit 1
@@ -71,6 +71,6 @@ cp default.yaml "$bob"
 sed -i "s#<<GIT_REFERENCE>>#$alternate#" $bob/default.yaml
 sed -i "s#<<GIT_URL_PATTERN>>#${repo%/repo.git}#" $bob/default.yaml
 run_bob -C "$bob" dev -DURL="$repo" t
-src=$(run_bob -C "$bob" query-path -DURL="$repo" -f {src} t)
+src=$(run_bob -C "$bob" query-path -DURL="$repo" -f {src} t | sed -e 's|\\|/|g')
 grep -Fxq "$alternate/repo.git/objects" $bob/$src/.git/objects/info/alternates
 rm -rf $bob/$src

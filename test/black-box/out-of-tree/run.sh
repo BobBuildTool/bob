@@ -14,7 +14,7 @@ pushd "$buildDir/one"
 run_bob init "$srdDir"
 run_bob dev root
 read -r resultDir < dev/dist/root/1/workspace/path.txt
-[[ $resultDir =~ ^${buildDir}/one ]] || die "Result not in build dir"
+[[ $resultDir =~ ${buildDir}/one ]] || die "Result not in build dir"
 expect_output "default" cat dev/dist/root/1/workspace/setting.txt
 popd
 cmp recipes/input.txt "$buildDir/one/dev/dist/root/1/workspace/output.txt"
@@ -28,7 +28,7 @@ environment:
 EOF
 run_bob dev root
 read -r resultDir < dev/dist/root/1/workspace/path.txt
-[[ $resultDir =~ ^${buildDir}/two ]] || die "Result not in build dir"
+[[ $resultDir =~ ${buildDir}/two ]] || die "Result not in build dir"
 # A default.yaml in the external build directory takes precedence
 expect_output "override" cat dev/dist/root/1/workspace/setting.txt
 popd
