@@ -1,0 +1,5 @@
+root: True
+buildScript: |
+    true
+packageScript: |
+    true
