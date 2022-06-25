@@ -1115,7 +1115,8 @@ cd {ROOT}
                 # re-runs with "build-only" the dependent steps should
                 # trigger.
                 if BobState().getResultHash(prettySrcPath) is not None:
-                    BobState().setResultHash(prettySrcPath, datetime.datetime.utcnow())
+                    oldCheckoutHash = datetime.datetime.utcnow()
+                    BobState().setResultHash(prettySrcPath, oldCheckoutHash)
 
                 with stepExec(checkoutStep, "CHECKOUT",
                               "{} {}".format(prettySrcPath, overridesString)) as a:
@@ -1133,12 +1134,12 @@ cd {ROOT}
         # We always have to rehash the directory as the user might have
         # changed the source code manually.
         checkoutHash = hashWorkspace(checkoutStep)
-        BobState().setResultHash(prettySrcPath, checkoutHash)
 
-        # Generate audit trail. Has to be done _after_ setResultHash()
-        # because the result is needed to calculate the buildId.
+        # Generate audit trail before setResultHash() to force re-generation if
+        # the audit trail fails.
         if checkoutHash != oldCheckoutHash or self.__force:
             await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
+            BobState().setResultHash(prettySrcPath, checkoutHash)
 
         # upload live build-id cache in case of fresh checkout
         if isFreshCheckout and self.__archive.canUpload() and checkoutStep.hasLiveBuildId():
