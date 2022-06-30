@@ -662,9 +662,13 @@ class StepSpec:
                 ],
             }
 
-            # special handling to mount all previous steps of current package
+            # Special handling to mount all previous steps of current package.
+            # It is defined that the checkout and build step are visible in the
+            # sandbox for a given package step. We must stop at checkout steps
+            # because they might have dependencies due to the 'checkoutDep'
+            # flag.
             extra = step
-            while extra.isValid() and len(extra.getArguments()) > 0:
+            while extra.isValid() and not extra.isCheckoutStep() and len(extra.getArguments()) > 0:
                 extra = extra.getArguments()[0]
                 if extra.isValid():
                     s['depMounts'].append((extra.getStoragePath(), extra.getExecPath(step)))
