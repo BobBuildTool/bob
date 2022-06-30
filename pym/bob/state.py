@@ -178,6 +178,10 @@ class JenkinsConfig:
         elif key == "scm.ignore-hooks":
             if value.lower() not in ("0", "false", "1", "true"):
                 errorHandler("scm.ignore-hooks must be any of: 0/false/1/true")
+        elif key == "shared.quota":
+            import re
+            if not re.match(r'^[0-9]+([KMGT](i?B)?)?$', value):
+                errorHandler("Invalid 'shared.quota' option")
         elif key in ("scm.poll", "shared.dir"):
             pass
         else:
@@ -249,6 +253,10 @@ class JenkinsConfig:
     @property
     def sharedDir(self):
         return self.__options.get("shared.dir", "${JENKINS_HOME}/bob")
+
+    @property
+    def sharedQuota(self):
+        return self.__options.get("shared.quota")
 
     @property
     def windows(self):

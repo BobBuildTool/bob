@@ -25,6 +25,7 @@ class Spec:
         self.upload = False
         self.artifactsCopy = "jenkins"
         self.shareDir = None
+        self.shareQuota = None
         self.auditMeta = {}
         self.platform = None
         self.__recipesAudit = []
@@ -58,6 +59,8 @@ class Spec:
             self.artifactsCopy = v
         elif k == "share":
             self.shareDir = v
+        elif k == "quota":
+            self.shareQuota = v
         elif k == "platform":
             self.platform = v
         else:
@@ -223,7 +226,8 @@ def doJenkinsExecuteRun(argv, bobRoot):
         builder.setJenkinsUploadMode(spec.upload)
         if spec.shareDir:
             path = Env(os.environ).substitute(spec.shareDir, "shared.dir")
-            builder.setShareHandler(getShare({ 'path' : path }))
+            builder.setShareHandler(getShare({ 'path' : path,
+                                                'quota' : spec.shareQuota }))
             builder.setShareMode(True, True)
         builder.cook(ir.getRoots(), False, loop)
 

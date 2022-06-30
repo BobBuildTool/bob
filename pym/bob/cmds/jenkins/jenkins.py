@@ -443,6 +443,8 @@ class JenkinsJob:
             "copy=" + config.artifactsCopy,
             "share=" + config.sharedDir,
         ])
+        if config.sharedQuota:
+            execCmds.append("quota=" + config.sharedQuota)
         if recipesAudit:
             execCmds.extend(["[recipes-audit]", recipesAudit])
         auditMeta = config.getAuditMeta()
