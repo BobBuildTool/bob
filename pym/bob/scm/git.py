@@ -88,7 +88,8 @@ class GitScm(Scm):
     SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
     REMOTE_PREFIX = "remote-"
 
-    def __init__(self, spec, overrides=[], secureSSL=None, stripUser=None):
+    def __init__(self, spec, overrides=[], secureSSL=None, stripUser=None,
+            useBranchAndCommit=False):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
@@ -111,6 +112,7 @@ class GitScm(Scm):
         self.__references = spec.get('references')
         self.__dissociate = spec.get('dissociate', False)
         self.__resolvedReferences = []
+        self.__useBranchAndCommit = spec.get('useBranchAndCommit', useBranchAndCommit)
 
         def __resolveReferences(self, alt):
             # if the reference is a string it's used as optional reference
@@ -150,6 +152,7 @@ class GitScm(Scm):
             'shallowSubmodules' : self.__shallowSubmodules,
             'references' : self.__references,
             'dissociate' : self.__dissociate,
+            'useBranchAndCommit' : self.__useBranchAndCommit,
         })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
@@ -227,7 +230,9 @@ class GitScm(Scm):
             fetchCmd.append("refs/tags/{0}:refs/tags/{0}".format(self.__tag))
 
         # do the checkout
-        if self.__tag or self.__commit:
+        if (self.__tag or self.__commit) and self.__branch and self.__useBranchAndCommit:
+            await self.__checkoutTagOnBranch(invoker, fetchCmd, switch)
+        elif self.__tag or self.__commit:
             await self.__checkoutTag(invoker, fetchCmd, switch)
         else:
             await self.__checkoutBranch(invoker, fetchCmd, switch)
@@ -235,6 +240,54 @@ class GitScm(Scm):
         if os.path.exists(alternatesFile) and self.__dissociate:
             await invoker.checkCommand(["git", "repack", "-a"], cwd=self.__dir)
             os.unlink(alternatesFile)
+
+    async def __checkoutTagOnBranch(self, invoker, fetchCmd, switch):
+        # Only do something if nothing is checked out yet or a forceful switch
+        # is requested.
+        headValid = (await invoker.callCommand(["git", "rev-parse", "--verify",
+            "-q", "HEAD"], stdout=False, cwd=self.__dir)) == 0
+        if headValid and not switch:
+            return
+
+        # There is no point in doing the extra dance of fetching commits
+        # explicitly like in __checkoutTag on shallow clones. We must make sure
+        # that the commit is on the selected branch and need the full history!
+        await invoker.checkCommand(fetchCmd, cwd=self.__dir)
+
+        # Verify that commit/tag is on requested branch
+        commit = self.__commit if self.__commit else "tags/"+self.__tag
+        if await invoker.callCommand(["git", "merge-base", "--is-ancestor",
+                                     commit, "remotes/origin/"+self.__branch],
+                                     cwd=self.__dir):
+            invoker.fail("Branch '{}' does not contain '{}'".format(self.__branch, commit))
+
+        if headValid:
+            branchExists = (await invoker.callCommand(["git", "show-ref", "-q",
+                "--verify", "refs/heads/" + self.__branch], cwd=self.__dir)) == 0
+        else:
+            branchExists = False
+
+        if not headValid or not branchExists:
+            # New checkout or branch does not exist yet. That's easy...
+            await invoker.checkCommand(["git", "checkout",
+                "--no-recurse-submodules", "-b", self.__branch, commit],
+                cwd=self.__dir)
+            await invoker.checkCommand(["git", "branch",
+                "--set-upstream-to=origin/"+self.__branch], cwd=self.__dir)
+            # FIXME: will not be called again if interrupted!
+            await self.__checkoutSubmodules(invoker)
+        else:
+            # We're switching the ref and the branch exists already. Be extra
+            # careful: the user might have committed to this branch, some other
+            # branch might be checked out currently or both of that. To keep
+            # things simple, assume a fast-forward of the commit on the branch.
+            # It will catch user changes and is usually safe wrt. submodules.
+            await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules",
+                self.__branch], cwd=self.__dir)
+            preUpdate = await self.__updateSubmodulesPre(invoker)
+            await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "merge",
+                "--ff-only", commit], cwd=self.__dir)
+            await self.__updateSubmodulesPost(invoker, preUpdate)
 
     async def __checkoutTag(self, invoker, fetchCmd, switch):
         # checkout only if HEAD is invalid

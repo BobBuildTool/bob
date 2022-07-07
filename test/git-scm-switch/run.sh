@@ -28,6 +28,9 @@ git config user.email "bob@bob.bob"
 git config user.name test
 echo "hello world" > test.txt
 git add test.txt
+git commit -m "initial commit"
+git tag -a -m "Tag0" tag0
+d1_c0=$(git rev-parse HEAD)
 git submodule add "$git_submod" submod
 git commit -m "first commit"
 git tag -a -m "First Tag" tag1
@@ -93,9 +96,11 @@ expect_output "changed" cat dev/src/root/1/workspace/test.txt
 expect_not_exist dev/src/root/1/workspace/bob.txt
 expect_exist dev/src/root/1/workspace/canary.txt
 
-# Enabling submodules on tags is ok
+# Enabling submodules on tags is ok - as long as we're in a clean state
+rm dev/src/root/1/workspace/canary.txt
+rm dev/src/root/1/attic* -rf
 run_bob dev -c submodules -DSCM_DIR="$git_dir1" -DSCM_REV="refs/tags/tag2" root
-expect_exist dev/src/root/1/workspace/canary.txt
+expect_not_exist dev/src/root/1/attic
 expect_exist dev/src/root/1/workspace/submod/sub.txt
 
 # But disabling submodules on tags must trigger an attic move
@@ -118,3 +123,26 @@ expect_exist dev/src/root/1/workspace/canary.txt
 expect_fail run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c2" root --no-attic
 expect_exist dev/src/root/1/workspace/canary.txt
 expect_output "taint" cat dev/src/root/1/workspace/test.txt
+
+# gitBranchAndCommit tests. Start from a clean workspace...
+cleanup
+cat >> config.yaml << EOF
+policies:
+ gitCommitOnBranch: True
+EOF
+
+# Checking out a commit that is *not* on the given branch fails
+expect_fail run_bob dev -DSCM_REV="$d1_c2" -DSCM_DIR="$git_dir1" -DSCM_BRANCH=master root2 -vv
+
+# Checking out an old commit on the branch will not accidentally bring in
+# submodules that are added later on that branch.
+run_bob dev -c submodules -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c0" -DSCM_BRANCH=foobar root2 -vv
+expect_output "foobar" git -C dev/src/root2/1/workspace rev-parse --abbrev-ref HEAD
+expect_output "$d1_c0" git -C dev/src/root2/1/workspace rev-parse HEAD
+expect_not_exist dev/src/root2/1/workspace/submod/sub.txt
+
+# Moving to a later commit will update the branch and bring in the submodules.
+run_bob dev -c submodules -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c1" -DSCM_BRANCH=foobar root2 -vv
+expect_output "foobar" git -C dev/src/root2/1/workspace rev-parse --abbrev-ref HEAD
+expect_output "$d1_c1" git -C dev/src/root2/1/workspace rev-parse HEAD
+expect_exist dev/src/root2/1/workspace/submod/sub.txt

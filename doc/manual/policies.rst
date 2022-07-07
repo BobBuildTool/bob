@@ -542,3 +542,24 @@ New behaviour
    The ``prune`` property defaults to ``True``. The user must edit the files at
    the import source location because the destination in the workspace is
    overwritten and obsolete files are deleted.
+
+.. _policies-gitBranchAndCommit:
+
+gitCommitOnBranch
+~~~~~~~~~~~~~~~~~~
+
+Introduced in: 0.22
+
+This policy handles the use of git if ``commit`` and/or ``tag``  and ``branch``
+are named in the recipe. Before Bob 0.22 the commit took precedence and the branch
+was ignored. The commit was checked out leaving the repo in a detached HEAD state.
+For the developer this makes some additional steps necessary, e.g. switching to
+a branch before being able to push. If the ``commit`` was not on the ``branch``
+special attention must be paid. Otherwise a commit might got lost.
+
+Old behavior
+   ``commit`` was checked out leaving the repo in a detached HEAD state.
+
+New behavior
+   Bob checks if the ``commit`` and / or ``tag`` is on the configured ``branch`` and
+   performs a checkout of the ``commit`` on a local ``branch``.
