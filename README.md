@@ -30,6 +30,9 @@ of how Bob is configured, have a look at the
 [tutorials](https://github.com/BobBuildTool/bob-tutorials). A real project that
 is built by Bob can be found [here](https://github.com/BobBuildTool/basement).
 
+The [Cheat Sheet](doc/cheatsheet/bob_cheatsheet.pdf) shows common used keywords
+and commands.
+
 If you have a specific question you're welcome to post on the
 [mailing list](mailto:bob-build-tool@freelists.org)
 ([FreeLists](http://www.freelists.org/list/bob-build-tool)).

@@ -1,0 +1,381 @@
+\documentclass[8pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[landscape]{geometry}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{courier}
+\usepackage{multicol}
+\usepackage[
+  colorlinks=false,
+  pdftitle={Bob_Cheatsheet},
+  pdfauthor={Ralf Hubert <ralf.hubert@secunet.com>},
+  pdfsubject={Bob BuildTool Cheatsheet},
+  pdfkeywords={Bob BuildTool, Cheatsheet}
+]{hyperref}
+
+\geometry{top=1cm,left=1cm,right=1cm,bottom=1cm}
+\pagestyle{empty}
+
+\setcounter{secnumdepth}{0}
+\setlength{\unitlength}{1mm}
+\setlength{\parindent}{0pt}
+
+\renewcommand{\familydefault}{\sfdefault}
+
+\definecolor{BobOrange}{RGB}{253, 102, 35}
+\definecolor{darkgray}{RGB}{ 88, 88, 90}
+\definecolor{gray}{RGB}{ 156, 157, 159}
+
+\newcommand\YAMLcolonstyle{\color{darkgray}\bfseries}
+\newcommand\YAMLkeystyle{\color{black}\bfseries\scriptsize\ttfamily}
+\newcommand\YAMLvaluestyle{\color{darkgray}\bfseries\scriptsize\ttfamily}
+
+\makeatletter
+
+% highlight yaml: stolen from
+% https://tex.stackexchange.com/questions/152829/how-can-i-highlight-yaml-code-in-a-pretty-way-with-listings
+% here is a macro expanding to the name of the language
+% (handy if you decide to change it further down the road)
+\newcommand\language@yaml{yaml}
+
+\expandafter\expandafter\expandafter\lstdefinelanguage
+\expandafter{\language@yaml}
+{
+  keywords={true,false,null,y,n},
+  keywordstyle=\color{black}\bfseries,
+  basicstyle=\YAMLkeystyle,                                 % assuming a key comes first
+  sensitive=false,
+  comment=[l]{\#},
+  morecomment=[s]{/*}{*/},
+  commentstyle=\color{black}\ttfamily\scriptsize,
+  identifierstyle=\color{black},
+  stringstyle=\YAMLvaluestyle\ttfamily\scriptsize,
+  moredelim=[l][\color{darkgray}]{\&},
+  moredelim=[l][\color{darkgray}]{*},
+  moredelim=**[il][\YAMLcolonstyle{:}\YAMLvaluestyle]{:},   % switch to value style at :
+  morestring=[b]',
+  morestring=[b]",
+  literate =    {---}{{\ProcessThreeDashes}}3
+                {>}{{\textcolor{darkgray}\textgreater}}1
+                {|}{{\textcolor{darkgray}\textbar}}1
+                {\ -\ }{{\bfseries\ -\ }}3,
+}
+
+% switch to key style at EOL
+\lst@AddToHook{EveryLine}{\ifx\lst@language\language@yaml\YAMLkeystyle\fi}
+
+\renewcommand{\section}{\@startsection{section}{1}{0mm}
+                                {-1ex plus -.5ex minus -.2ex}
+                                {0.5ex plus .2ex}
+                                {\normalfont\normalsize\bfseries\color{darkgray}}}
+\renewcommand{\subsection}{\@startsection{subsection}{2}{0mm}
+                                {-1ex plus -.5ex minus -.2ex}
+                                {0.1ex plus .0ex}
+                                {\normalfont\small\color{BobOrange}}}
+\renewcommand{\subsubsection}{\@startsection{subsubsection}{3}{0mm}
+                                {-1ex plus -.5ex minus -.2ex}
+                                {0.1ex plus .0ex\nointerlineskip}
+                                {\normalfont\scriptsize\color{darkgray}}}
+
+
+\makeatother
+
+\newcommand\ProcessThreeDashes{\llap{\color{black}\bfseries-{-}-}}
+
+%% listing setup
+% listings default format
+\lstset{captionpos=t,
+  xleftmargin=.2cm,
+  basicstyle=\ttfamily\scriptsize,
+  language=bash,
+  commentstyle=\color{gray},
+  keywordstyle=\bfseries\color{black},
+  keywordstyle=[1]\bfseries\color{black},
+  stringstyle=\color{darkgray},
+  identifierstyle=\color{darkgray},
+  extendedchars=true,%
+  breaklines=true,
+  breakautoindent=true,
+  postbreak=\space,
+  showspaces=false,
+  showtabs=false,
+  showstringspaces=false,
+  rulecolor=\color{gray},
+  frame=l
+}
+
+\begin{document}
+\raggedright
+{\LARGE\textcolor{BobOrange}{\bf Bob BuildTool -- Mini Cheat Sheet}}
+\ttfamily
+\begin{multicols*}{3}
+
+\setlength{\premulticols}{1pt}
+\setlength{\postmulticols}{1pt}
+\setlength{\multicolsep}{1pt}
+\setlength{\columnsep}{2pt}
+
+\section{Commands}
+
+\subsection{Build}
+\begin{lstlisting}
+bob dev <package query>
+bob build <package query>
+\end{lstlisting}
+\subsubsection{Options}
+
+\scriptsize
+\texttt{
+\begin{tabular}{ l l }
+ -b             & build only mode, no checkout \\
+ -c <file>      & use additional config file \\
+ -DFOO=BAR      & define environment variable \\
+ -f             & force execution \\
+ -j<n>          & use <n> parallel build slots \\
+ -k             & keep going \\
+ -n             & do not build dependencies \\
+ --[no-]sandbox & control sandbox \\
+ -v[v]          & increase verbosity \\
+ --resume       & resume a interrupted build \\
+ \end{tabular}
+}
+
+\subsection{List}
+\begin{lstlisting}
+bob ls <package query>
+\end{lstlisting}
+
+\subsubsection{Options}
+\texttt{
+\begin{tabular}{ l l }
+ -a  &  show indirect deps too \\
+ -c <file>      & use additional config file \\
+ -d  &  show packages, not their contents \\
+ -D  &  DEFINES \\
+ -o  &  show origin of indirect packages \\
+ -p  &  print the full prefixed path \\
+ -r  &  recursive \\
+\end{tabular}
+}
+
+\subsection{Status}
+\begin{lstlisting}
+bob status [<package query>]
+\end{lstlisting}
+
+\subsubsection{Options}
+\texttt{
+\begin{tabular}{ l l }
+ --attic    & consider attic too \\
+ -c <file>  & use additional config file \\
+ -D         & DEFINES \\
+ -r         & recursive \\
+ -v[v]      & increase verbosity \\
+\end{tabular}
+}
+
+\subsubsection{Output}
+\texttt{
+\begin{tabular}{ l l || l l }
+ A    & attic     & O    & overridden \\
+ C    & collision & S    & switched \\
+ E    & error     & u/U  & unpushed \\
+ M    & modified & & \\
+\end{tabular}
+}
+
+\subsection{Query Path}
+\begin{lstlisting}
+bob query-path <package query>
+\end{lstlisting}
+
+\subsubsection{Options}
+\texttt{
+\begin{tabular}{ l l }
+ -c <file>  & use additional config file \\
+ -D DEFINES & define variable\\
+ -f FORMAT  & format string \\
+ --[no-]sandbox & control sandbox \\
+\end{tabular}
+}
+
+\subsubsection{Format String placeholders}
+\texttt{
+\begin{tabular}{ l l}
+   {src} & checkout directory \\
+   {build} & build directory  \\
+   {dist}  & package directory \\
+\end{tabular}
+}
+
+\subsection{Query Meta / Recipe / SCM}
+\begin{lstlisting}
+bob query-meta <package query>
+bob query-recipe <package query>
+bob query-scm <package query>
+\end{lstlisting}
+
+\section {Recipe and Class Keywords}
+\subsection {checkoutSCM}
+Type: List of SCMs
+\begin{lstlisting}[language=yaml]
+checkoutSCM:
+   scm: [git|url|svn|cvs|import]
+   url: <url>
+   dir: <local dir in checkout WS>
+\end{lstlisting}
+
+\subsubsection {git-scm keywords}
+\texttt{
+\begin{tabular}{ l l}
+branch & Branch to check out\\
+tag & Checkout this tag \\
+commit & SHA1 commit Id to check out\\
+rev & git-rev-parse revision \\
+submodules & control submodules \\
+\end{tabular}
+}
+
+\subsubsection {url-scm keywords}
+\texttt{
+\begin{tabular}{ l l}
+digestSHA1   & Expected SHA1 \\
+digestSHA256 & Expected SHA256 \\
+digestSHA512 & Expected SHA512 \\
+extract      & Extract directive \\
+fileName     & Local file name \\
+\end{tabular}
+}
+
+\subsubsection {import-scm keywords}
+\texttt{
+\begin{tabular}{ l l}
+   prune & Delete dest dir before import \\
+\end{tabular}
+}
+
+\subsubsection {svn-scm keywords}
+\texttt{
+\begin{tabular}{ l l}
+   revision & revision number \\
+\end{tabular}
+}
+
+\subsection{\{checkout,build,package\}Script}
+A String forming the script executed by Bob at the respective Stage.
+
+\subsection{\{checkout,build,package\}Tools}
+List of tools added to the PATH when the script is executed.
+
+\subsection{\{checkout,build,package\}Vars}
+List of environment variables that should be set when the step runs.
+
+\subsection {Depends}
+
+Type :List of Strings or Dependency-Dictionaries
+\begin{lstlisting}[language=yaml]
+depends:
+   - name: foo
+     use: [tools]
+     if: "$(eq,${FOO},42}"
+\end{lstlisting}
+
+\subsubsection {Settings}
+\texttt{
+\begin{tabular}{ l l}
+   name & name of the dependency \\
+   depends & list of dependencies \\
+   use  & List: [deps, environment, \\
+         & result, tools, sandbox] \\
+   checkoutDep & Dep available in checkout step \\
+   forward & forward [tools || sandbox || env] \\
+   environment & environment for dep \\
+   if & use dep if condition is true \\
+   tools & remap tools \\
+\end{tabular}
+}
+
+\subsection{Environment}
+Type : Dictionary (String -> String)
+\begin{lstlisting}[language=yaml]
+environment:
+   FOO: "BAR"
+metaEnvironment:
+   LICENSE: "MIT"
+privateEnvironment:
+   BAR: "BAZ"
+\end{lstlisting}
+
+\subsection{inherit}
+Type: List of Strings \\
+Include classes into the current recipe.
+
+\subsection{multiPackage}
+Type: Dictionary (String -> Recipe) \\
+Unify multiple recipes into one.
+
+\subsection{provideDeps}
+Type: List of patterns\\
+Provided deps are injected into the deplist of the upstream recipe.
+
+\subsection{provideTools}
+Type: Dictionary (String -> Path | Tool-Dictionary)
+Defines tools that may be used by other steps during the build process.
+\begin{lstlisting}[language=yaml]
+provideTools:
+   host-toolchain:
+      path: bin
+\end{lstlisting}
+
+\subsubsection{Settings}
+\texttt{
+\begin{tabular}{ l l}
+path         & relative path \\
+libs         & list of library paths added to LD\_LIBRARY\_PATH \\
+environment  & environment defined by the tool \\
+\end{tabular}
+}
+
+\subsection{root}
+Type: Boolean \\
+Defines the package as root package.
+
+\section{User configuration (default.yaml)}
+
+\subsection{environment}
+Define user environment.
+
+\subsection{archive}
+Define bob binary archive (cache).
+
+\subsection{scmOverrides}
+Type: List of override specifications.
+\begin{lstlisting}[language=yaml]
+scmOverrides:
+   -
+      match:
+         url: "git@acme.com:/foo/repo.git"
+      del: [commit, tag]
+      set:
+         branch: develop
+      replace:
+         url:
+           pattern: "foo"
+            replacement: "bar"
+      if: !expr |
+         "${BOB_RECIPE_NAME}" == "foo"
+\end{lstlisting}
+
+\subsection{rootFilter}
+Filter root-recipes using shell glob patterns.
+
+\subsection{include}
+Include additional user config files.
+
+\vspace{\baselineskip}
+
+\end{multicols*}
+
+\end{document}
