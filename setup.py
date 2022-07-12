@@ -56,7 +56,8 @@ data_files = []
 
 # Installation time dependencies only needed by setup.py
 setup_requires = [
-    'setuptools_scm',   # automatically get package version
+    'setuptools_scm<7',   # automatically get package version
+                          # TODO: remove constraint when Python 3.7 is required
 ]
 
 # Stub class that acts as a proxy for the real sphinx.setup_command.BuildDoc
