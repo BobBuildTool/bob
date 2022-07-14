@@ -126,10 +126,6 @@ expect_output "taint" cat dev/src/root/1/workspace/test.txt
 
 # gitBranchAndCommit tests. Start from a clean workspace...
 cleanup
-cat >> config.yaml << EOF
-policies:
- gitCommitOnBranch: True
-EOF
 
 # Checking out a commit that is *not* on the given branch fails
 expect_fail run_bob dev -DSCM_REV="$d1_c2" -DSCM_DIR="$git_dir1" -DSCM_BRANCH=master root2 -vv
