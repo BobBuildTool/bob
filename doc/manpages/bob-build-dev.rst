@@ -26,6 +26,10 @@ Options
     the actual compilation of these packages. See the ``--download`` and
     ``--download-layer`` option to control what is built and what is downloaded.
 
+``--attic``
+    Move checkout workspace to attic if inline SCM switching is not possible.
+    (Default)
+
 ``--audit``
     Generate an audit trail when building.
 
@@ -227,6 +231,10 @@ Options
     While the package that failed to build and all the packages that depend on
     it cannot be built either, the other dependencies are still processed.
     Normally Bob stops on the first error that is encountered.
+
+``--no-attic``
+    Do not move checkout workspace to attic if inline SCM switching is not possible.
+    Instead a build error is issued.
 
 ``-n, --no-deps``
     Don't build dependencies.

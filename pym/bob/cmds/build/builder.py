@@ -308,6 +308,7 @@ cd {ROOT}
         self.__useSharedPackages = False
         self.__installSharedPackages = False
         self.__executor = None
+        self.__attic = True
 
     def setExecutor(self, executor):
         self.__executor = executor
@@ -394,6 +395,9 @@ cd {ROOT}
                 raise BuildError("Meta audit key '{}' contains invalid characters!"
                                     .format(k))
         self.__auditMeta = keys
+
+    def setAtticEnable(self, enable):
+        self.__attic = enable
 
     def setShareHandler(self, handler):
         self.__share = handler
@@ -1021,6 +1025,9 @@ cd {ROOT}
                             continue
 
                         if os.path.exists(scmPath):
+                            if not self.__attic:
+                                raise BuildError("SCM '{}' inline switch not possible and move to attic disabled '{}'!"
+                                            .format(scmDir, prettySrcPath))
                             atticName = datetime.datetime.now().isoformat().translate(INVALID_CHAR_TRANS)+"_"+os.path.basename(scmPath)
                             stepMessage(checkoutStep, "ATTIC",
                                 "{} (move to ../attic/{})".format(scmPath, atticName), WARNING)

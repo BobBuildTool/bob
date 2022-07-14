@@ -132,6 +132,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Disable sandboxing")
     parser.add_argument('--clean-checkout', action='store_true', default=None, dest='clean_checkout',
         help="Do a clean checkout if SCM state is dirty.")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--attic', action='store_true', default=None,
+        help="Move scm to attic if inline switch is not possible (default).")
+    group.add_argument('--no-attic', action='store_false', default=None, dest='attic',
+        help="Do not move to attic, instead fail the build.")
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -171,6 +176,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 'audit' : True,
                 'shared' : True,
                 'install' : True,
+                'attic' : True,
             }
 
         for a in vars(args):
@@ -238,6 +244,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setAuditMeta(meta)
         builder.setShareHandler(getShare(recipes.getShareConfig()))
         builder.setShareMode(args.shared, args.install)
+        builder.setAtticEnable(args.attic)
         if args.resume: builder.loadBuildState()
 
         backlog = []
