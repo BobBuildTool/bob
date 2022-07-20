@@ -14,7 +14,7 @@ import tempfile
 from bob.input import GitScm
 from bob.invoker import Invoker, CmdFailedError, InvocationError
 from bob.errors import ParseError
-from bob.utils import asHexStr, runInEventLoop
+from bob.utils import asHexStr, runInEventLoop, getBashPath
 
 class DummyPackage:
     def getName(self):
@@ -239,7 +239,7 @@ class RealGitRepositoryTestCase(TestCase):
                 'git remote add origin ' + quote(cls.repodir),
                 'git push origin master foobar annotated lightweight',
             ])
-            subprocess.check_call(["bash", "-c", cmds], cwd=tmp)
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=tmp)
 
             def revParse(obj):
                 return bytes.fromhex(subprocess.check_output(['git', 'rev-parse', obj],
@@ -431,7 +431,7 @@ class TestShallow(TestCase):
                 git commit -m "commit $i"
             done
         """
-        subprocess.check_call(["bash", "-c", cmds], cwd=cls.repodir)
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=cls.repodir)
 
     @classmethod
     def tearDownClass(cls):
@@ -551,7 +551,7 @@ class TestSubmodules(TestCase):
             git tag -a -m 'Tag 1' tag1
             cd ..
         """
-        subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
 
     def tearDown(self):
         self.__repodir.cleanup()
@@ -587,7 +587,7 @@ class TestSubmodules(TestCase):
             git commit -m "commit 2"
             cd ..
         """
-        subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
 
     def updateSub1Sub(self):
         # update sub-sub-, sub- and main-module
@@ -612,7 +612,7 @@ class TestSubmodules(TestCase):
             git commit -m update
             cd ..
         """
-        subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
 
     def addSub2(self):
         # Add 2nd submodule
@@ -631,7 +631,7 @@ class TestSubmodules(TestCase):
             git commit -m "commit 2"
             cd ..
         """
-        subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
 
     def testSubmoduleIgnoreDefault(self):
         """Test that submodules are ignored by default"""
@@ -715,7 +715,7 @@ class TestSubmodules(TestCase):
                 git add canary.txt
                 git commit -m canary
             """
-            subprocess.check_call(["bash", "-c", cmds], cwd=workspace)
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=workspace)
             self.updateSub1()
 
             self.invokeGit(workspace, scm)
@@ -757,7 +757,7 @@ class TestSubmodules(TestCase):
                 git commit -m "commit 2"
                 cd ..
             """
-            subprocess.check_call(["bash", "-c", cmds], cwd=self.repodir)
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
 
             self.invokeGit(workspace, scm)
             self.assertFalse(os.path.exists(os.path.join(workspace, "sub1/test.txt")))

@@ -23,7 +23,8 @@ from . import BOB_VERSION
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
-from .utils import asHexStr, removePath, isWindows, sslNoVerifyContext
+from .utils import asHexStr, removePath, isWindows, sslNoVerifyContext, \
+    getBashPath
 from shlex import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import argparse
@@ -918,7 +919,7 @@ class CustomArchive(BaseArchive):
             env = { k:v for (k,v) in os.environ.items() if k in self.__whiteList }
             env["BOB_LOCAL_ARTIFACT"] = tmpName
             env["BOB_REMOTE_ARTIFACT"] = url
-            ret = subprocess.call(["bash", "-ec", self.__downloadCmd],
+            ret = subprocess.call([getBashPath(), "-ec", self.__downloadCmd],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 cwd=gettempdir(), env=env)
             if ret == 0:
@@ -961,7 +962,7 @@ class CustomUploader:
                 env = { k:v for (k,v) in os.environ.items() if k in self.whiteList }
                 env["BOB_LOCAL_ARTIFACT"] = self.name
                 env["BOB_REMOTE_ARTIFACT"] = self.remoteName
-                ret = subprocess.call(["bash", "-ec", self.uploadCmd],
+                ret = subprocess.call([getBashPath(), "-ec", self.uploadCmd],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                     cwd=gettempdir(), env=env)
                 if ret != 0:

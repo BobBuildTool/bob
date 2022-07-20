@@ -5,7 +5,7 @@
 
 from . import BOB_INPUT_HASH
 from .errors import ParseError
-from .utils import escapePwsh, quotePwsh, isWindows, asHexStr
+from .utils import escapePwsh, quotePwsh, isWindows, asHexStr, getBashPath
 from .utils import joinScripts, sliceString
 from base64 import b64encode
 from enum import Enum
@@ -364,7 +364,7 @@ class BashLanguage:
             f.write(BashLanguage.__formatProlog(spec, keepEnv))
             f.write(BashLanguage.__formatSetup(spec))
 
-        args = ["bash", "--rcfile", BashLanguage.__munge(execScriptFile), "-s", "--"]
+        args = [getBashPath(), "--rcfile", BashLanguage.__munge(execScriptFile), "-s", "--"]
         args.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
         return (realScriptFile, execScriptFile, args)
 
@@ -374,7 +374,7 @@ class BashLanguage:
         with open(realScriptFile, "w") as f:
             f.write(BashLanguage.__formatScript(spec))
 
-        args = ["bash"]
+        args = [getBashPath()]
         if trace: args.append("-x")
         args.extend(["--", BashLanguage.__munge(execScriptFile)])
         args.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
@@ -401,7 +401,7 @@ class BashLanguage:
     @staticmethod
     def setupFingerprint(spec, env):
         env["BOB_CWD"] = BashLanguage.__munge(env["BOB_CWD"])
-        return ["bash", "-x", "-c", spec.fingerprintScript]
+        return [getBashPath(), "-x", "-c", spec.fingerprintScript]
 
 
 class PwshResolver(IncludeResolver):

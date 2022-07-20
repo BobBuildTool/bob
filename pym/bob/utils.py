@@ -288,6 +288,33 @@ def getPlatformTag():
     __platformTag = ret
     return ret
 
+__bashPath = None
+
+def getBashPath():
+    """Get path to bash.
+
+    This is required to work around a weird behaviour on Windows when WSL is
+    enabled but no distribution is installed. In this case the subprocess
+    module (which internally uses CreateProcess()) cannot execute bash even
+    though it's in %PATH%. Interrestingly cmd.com and powershell.exe look at
+    %PATH% first and can execute bash successfully.
+    """
+
+    global __bashPath
+    if __bashPath is not None:
+        return __bashPath
+
+    if sys.platform == "win32":
+        import shutil
+        ret = shutil.which("bash")
+        if ret is None:
+            raise BuildError("bash: command not found")
+    else:
+        ret = "bash"
+
+    __bashPath = ret
+    return ret
+
 ### directory hashing ###
 
 def hashFile(path, hasher=hashlib.sha1):
