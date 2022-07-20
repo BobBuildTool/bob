@@ -5,7 +5,7 @@
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError, BobError
-from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
+from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage, PythonLanguage
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
     auditFromDir, getScm, SYNTHETIC_SCM_PROPS
@@ -119,9 +119,11 @@ def fetchFingerprintScripts(recipe):
             recipe.get("fingerprintScript")),
         ScriptLanguage.PWSH : recipe.get("fingerprintScriptPwsh",
             recipe.get("fingerprintScript")),
+        ScriptLanguage.PYTHON : recipe.get("fingerprintScriptPython",
+            recipe.get("fingerprintScript")),
     }
 
-def fetchScripts(recipe, prefix, resolveBash, resolvePwsh):
+def fetchScripts(recipe, prefix, resolveBash, resolvePwsh, resolvePython):
     return {
         ScriptLanguage.BASH : (
             resolveBash(recipe.get(prefix + "SetupBash", recipe.get(prefix + "Setup")),
@@ -134,21 +136,31 @@ def fetchScripts(recipe, prefix, resolveBash, resolvePwsh):
                         prefix + "Setup[Pwsh]"),
             resolvePwsh(recipe.get(prefix + "ScriptPwsh", recipe.get(prefix + "Script")),
                         prefix + "Script[Pwsh]"),
-        )
+        ),
+        ScriptLanguage.PYTHON : (
+            resolvePython(recipe.get(prefix + "SetupPython", recipe.get(prefix + "Setup")),
+                          prefix + "Setup[Python]"),
+            resolvePython(recipe.get(prefix + "ScriptPython", recipe.get(prefix + "Script")),
+                          prefix + "Script[Python]"),
+        ),
     }
 
 def mergeScripts(fragments, glue):
     """Join all scripts of the recipe and its classes.
 
-    The result is a tuple with (setupScript, mainScript, digestScript)
+    The result is a tuple with (setupScript, mainScript, digestScript, includedFiles)
     """
+
     return (
         joinScripts((f[0][0] for f in fragments), glue),
         joinScripts((f[1][0] for f in fragments), glue),
         joinScripts(
             ( joinScripts((f[0][1] for f in fragments), "\n"),
               joinScripts((f[1][1] for f in fragments), "\n"),
-            ), "\n")
+            ), "\n"),
+        { name : content for name, content in
+                         chain.from_iterable(chain(f[0][2].items(), f[1][2].items()) for f in fragments)
+        },
     )
 
 
@@ -800,6 +812,9 @@ class CoreStep(CoreItem):
     def getDigestScript(self):
         raise NotImplementedError
 
+    def getIncludedFiles(self):
+        raise NotImplementedError
+
     def getLabel(self):
         raise NotImplementedError
 
@@ -1051,6 +1066,9 @@ class Step:
         script of _how_ this is done.
         """
         return self._coreStep.getDigestScript()
+
+    def getIncludedFiles(self):
+        return self._coreStep.getIncludedFiles()
 
     def isDeterministic(self):
         """Return whether the step is deterministic.
@@ -1469,6 +1487,9 @@ class CoreCheckoutStep(CoreStep):
         else:
             return None
 
+    def getIncludedFiles(self):
+        return self.corePackage.recipe.checkoutIncludedFiles
+
     @property
     def fingerprintMask(self):
         return 0
@@ -1548,7 +1569,7 @@ class CheckoutStep(Step):
 class CoreBuildStep(CoreStep):
     __slots__ = []
 
-    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[]):
+    def __init__(self, corePackage, script=(None, None, None, {}), digestEnv=Env(), env=Env(), args=[]):
         isValid = script[1] is not None
         super().__init__(corePackage, isValid, True, digestEnv, env, args)
 
@@ -1579,6 +1600,9 @@ class CoreBuildStep(CoreStep):
     def getDigestScript(self):
         return self.corePackage.recipe.buildDigestScript
 
+    def getIncludedFiles(self):
+        return self.corePackage.recipe.buildIncludedFiles
+
     @property
     def fingerprintMask(self):
         # Remove bits of all tools that are not used in buildStep
@@ -1602,7 +1626,7 @@ class BuildStep(Step):
 class CorePackageStep(CoreStep):
     __slots__ = []
 
-    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[]):
+    def __init__(self, corePackage, script=(None, None, None, {}), digestEnv=Env(), env=Env(), args=[]):
         isValid = script[1] is not None
         super().__init__(corePackage, isValid, True, digestEnv, env, args)
 
@@ -1632,6 +1656,9 @@ class CorePackageStep(CoreStep):
 
     def getDigestScript(self):
         return self.corePackage.recipe.packageDigestScript
+
+    def getIncludedFiles(self):
+        return self.corePackage.recipe.packageIncludedFiles
 
     @property
     def fingerprintMask(self):
@@ -1895,7 +1922,7 @@ class IncludeHelper:
                 raise ParseError("Bad substiturion in {}: {}".format(section, str(e)))
             return resolver.resolve(ret)
         else:
-            return (None, None)
+            return (None, None, {})
 
 def mergeFilter(left, right):
     if left is None:
@@ -2185,9 +2212,11 @@ class Recipe(object):
                                       baseDir, packageName, sourceName).resolve
         incHelperPwsh = IncludeHelper(PwshLanguage, recipeSet.loadBinary,
                                       baseDir, packageName, sourceName).resolve
+        incHelperPython = IncludeHelper(PythonLanguage, recipeSet.loadBinary,
+                                        baseDir, packageName, sourceName).resolve
 
         self.__scriptLanguage = recipe.get("scriptLanguage")
-        self.__checkout = fetchScripts(recipe, "checkout", incHelperBash, incHelperPwsh)
+        self.__checkout = fetchScripts(recipe, "checkout", incHelperBash, incHelperPwsh, incHelperPython)
         self.__checkoutSCMs = recipe.get("checkoutSCM", [])
         for scm in self.__checkoutSCMs:
             scm["__source"] = sourceName
@@ -2197,8 +2226,8 @@ class Recipe(object):
         for a in self.__checkoutAsserts:
             a["__source"] = sourceName + ", checkoutAssert #{}".format(i)
             i += 1
-        self.__build = fetchScripts(recipe, "build", incHelperBash, incHelperPwsh)
-        self.__package = fetchScripts(recipe, "package", incHelperBash, incHelperPwsh)
+        self.__build = fetchScripts(recipe, "build", incHelperBash, incHelperPwsh, incHelperPython)
+        self.__package = fetchScripts(recipe, "package", incHelperBash, incHelperPwsh, incHelperPython)
         self.__fingerprintScriptList = fetchFingerprintScripts(recipe)
         self.__fingerprintIf = recipe.get("fingerprintIf")
         self.__fingerprintVarsList = set(recipe.get("fingerprintVars", []))
@@ -2342,7 +2371,7 @@ class Recipe(object):
 
         # the package step must always be valid
         if self.__package[1] is None:
-            self.__package = (None, "", 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
+            self.__package = (None, "", 'da39a3ee5e6b4b0d3255bfef95601890afd80709', {})
 
         # final shared value
         self.__shared = self.__shared == True
@@ -2678,7 +2707,7 @@ class Recipe(object):
                 directPackages, indirectPackages, states, uidGen(), doFingerprint)
 
         # optional checkout step
-        if self.__checkout != (None, None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
+        if self.__checkout != (None, None, None, {}) or self.__checkoutSCMs or self.__checkoutAsserts:
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
@@ -2689,7 +2718,7 @@ class Recipe(object):
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
         # optional build step
-        if self.__build != (None, None, None):
+        if self.__build != (None, None, None, {}):
             buildDigestEnv = env.prune(self.__buildVars)
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
@@ -2802,6 +2831,10 @@ Every dependency must only be given once."""
         return self.__checkout[2] or ""
 
     @property
+    def checkoutIncludedFiles(self):
+        return self.__checkout[3]
+
+    @property
     def checkoutDeterministic(self):
         return self.__checkoutDeterministic
 
@@ -2830,6 +2863,10 @@ Every dependency must only be given once."""
         return self.__build[2]
 
     @property
+    def buildIncludedFiles(self):
+        return self.__build[3]
+
+    @property
     def buildVars(self):
         return self.__buildVars
 
@@ -2848,6 +2885,10 @@ Every dependency must only be given once."""
     @property
     def packageDigestScript(self):
         return self.__package[2]
+
+    @property
+    def packageIncludedFiles(self):
+        return self.__package[3]
 
     @property
     def packageVars(self):
@@ -3065,7 +3106,7 @@ class RecipeSet:
         ),
         schema.Optional('layers') : [str],
         schema.Optional('scriptLanguage',
-                        default=ScriptLanguage.BASH) : schema.And(schema.Or("bash", "PowerShell"),
+                        default=ScriptLanguage.BASH) : schema.And(schema.Or("bash", "PowerShell", "python"),
                                                                   schema.Use(ScriptLanguage)),
     })
 
@@ -3728,21 +3769,27 @@ class RecipeSet:
             schema.Optional('checkoutScript') : str,
             schema.Optional('checkoutScriptBash') : str,
             schema.Optional('checkoutScriptPwsh') : str,
+            schema.Optional('checkoutScriptPython') : str,
             schema.Optional('checkoutSetup') : str,
             schema.Optional('checkoutSetupBash') : str,
             schema.Optional('checkoutSetupPwsh') : str,
+            schema.Optional('checkoutSetupPython') : str,
             schema.Optional('buildScript') : str,
             schema.Optional('buildScriptBash') : str,
             schema.Optional('buildScriptPwsh') : str,
+            schema.Optional('buildScriptPython') : str,
             schema.Optional('buildSetup') : str,
             schema.Optional('buildSetupBash') : str,
             schema.Optional('buildSetupPwsh') : str,
+            schema.Optional('buildSetupPython') : str,
             schema.Optional('packageScript') : str,
             schema.Optional('packageScriptBash') : str,
             schema.Optional('packageScriptPwsh') : str,
+            schema.Optional('packageScriptPython') : str,
             schema.Optional('packageSetup') : str,
             schema.Optional('packageSetupBash') : str,
             schema.Optional('packageSetupPwsh') : str,
+            schema.Optional('packageSetupPython') : str,
             schema.Optional('checkoutTools') : [ toolNameSchema ],
             schema.Optional('buildTools') : [ toolNameSchema ],
             schema.Optional('packageTools') : [ toolNameSchema ],
@@ -3780,6 +3827,7 @@ class RecipeSet:
                         schema.Optional('fingerprintScript', default="") : str,
                         schema.Optional('fingerprintScriptBash') : str,
                         schema.Optional('fingerprintScriptPwsh', default="") : str,
+                        schema.Optional('fingerprintScriptPython', default="") : str,
                         schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
                         schema.Optional('fingerprintVars') : [ varNameUseSchema ],
                     })
@@ -3800,9 +3848,10 @@ class RecipeSet:
             schema.Optional('fingerprintScript', default="") : str,
             schema.Optional('fingerprintScriptBash') : str,
             schema.Optional('fingerprintScriptPwsh', default="") : str,
+            schema.Optional('fingerprintScriptPython', default="") : str,
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
-            schema.Optional('scriptLanguage') : schema.And(schema.Or("bash", "PowerShell"),
+            schema.Optional('scriptLanguage') : schema.And(schema.Or("bash", "PowerShell", "python"),
                                                            schema.Use(ScriptLanguage)),
             schema.Optional('jobServer') : bool,
         }

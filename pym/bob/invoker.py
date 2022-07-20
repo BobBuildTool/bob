@@ -19,6 +19,7 @@ import locale
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -274,7 +275,6 @@ class Invoker:
         #FIXME: if verbosity >= 4: cmdArgs.append('-D')
         cmdArgs.extend(["-S", tmpDir])
         cmdArgs.extend(["-H", "bob"])
-        cmdArgs.extend(["-d", "/tmp"])
         sandboxRootFs = os.path.abspath(self.__spec.sandboxRootWorkspace)
         for f in os.listdir(sandboxRootFs):
             cmdArgs.extend(["-M", os.path.join(sandboxRootFs, f), "-m", "/"+f])
@@ -308,6 +308,16 @@ class Invoker:
             # needed by the particular scripting engine). This directory is
             # also used as ephemeral sandbox container.
             tmpDir = tempfile.mkdtemp()
+
+            # Create /tmp in sandbox container. Receives included files and
+            # needs to be there anyway.
+            os.mkdir(os.path.join(tmpDir, "tmp"), 0o755)
+            for name, content in self.__spec.includedFiles.items():
+                fn = os.path.join(tmpDir, "tmp", name)
+                with open(fn, "wb") as f:
+                    f.write(content)
+                # Set explicit mode to retain Bob 0.19 behaviour.
+                os.chmod(fn, stat.S_IREAD|stat.S_IWRITE)
 
             # prepare workspace
             clean = self.__spec.clean if self.__spec.clean is not None else clean
@@ -476,6 +486,7 @@ class Invoker:
 
                 # Setup workspace
                 cmdArgs = self.__getSandboxCmds(tmpDir)
+                cmdArgs.extend(["-d", "/tmp"])
                 cmdArgs.extend(["-d", "/bob/fingerprint"])
                 cmdArgs.extend(["-W", "/bob/fingerprint"])
 
