@@ -1,6 +1,5 @@
 root: True
 packageVars: [SETTING]
 packageScript: |
-  echo "$PWD" > path.txt
   cat $<<input.txt>> >output.txt
   echo "$SETTING" > setting.txt
