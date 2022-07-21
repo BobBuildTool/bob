@@ -1,0 +1,9 @@
+checkoutSCM:
+    scm: svn
+    url: ${SVNDIR}/svnTest
+
+buildScript: |
+    cp $1/svn/* .
+
+packageScript: |
+    cp $1/* .

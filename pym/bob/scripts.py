@@ -50,7 +50,7 @@ def __init(*args, **kwargs):
     return 0
 
 def __jenkins(*args, **kwargs):
-     from .cmds.jenkins import doJenkins
+     from .cmds.jenkins.jenkins import doJenkins
      doJenkins(*args, **kwargs)
      return 0
 
@@ -94,19 +94,13 @@ def __querypath(*args, **kwargs):
      doQueryPath(*args, **kwargs)
      return 0
 
-def __download(*args, **kwargs):
-    from .archive import doDownload
-    doDownload(*args, **kwargs)
-    return 0
-
-def __upload(*args, **kwargs):
-    from .archive import doUpload
-    doUpload(*args, **kwargs)
-    return 0
-
 def __invoke(*args, **kwargs):
     from .cmds.invoke import doInvoke
     return doInvoke(*args, **kwargs)
+
+def __jenkinsExecute(*args, **kwargs):
+    from .cmds.jenkins.exec import doJenkinsExecute
+    return doJenkinsExecute(*args, **kwargs)
 
 availableCommands = {
     "archive"       : ('hl', __archive, "Manage binary artifact archives"),
@@ -127,9 +121,8 @@ availableCommands = {
     "query-path"    : ('ll', __querypath, "Query path information"),
     "query-meta"    : ('ll', __querymeta, "Query Package meta information"),
 
-    "_download"     : (None, __download, ""),
-    "_upload"       : (None, __upload, ""),
     "_invoke"       : (None, __invoke, ""),
+    "_jexec"        : (None, __jenkinsExecute, "")
 }
 
 def describeCommands():
@@ -266,137 +259,6 @@ def bob(bobRoot = None):
         finalize()
 
     return ret
-
-def hashEngine():
-    parser = argparse.ArgumentParser(description="Create hash based on spec.")
-    parser.add_argument('-o', dest="output", metavar="OUTPUT", default="-", help="Output file (default: stdout)")
-    parser.add_argument('--state', help="State cache directory")
-    parser.add_argument('spec', nargs='?', default="-", help="Spec input (default: stdin)")
-    args = parser.parse_args()
-
-    def cmd():
-        try:
-            if args.spec == "-":
-                inFile = sys.stdin
-            else:
-                inFile = open(args.spec, "r")
-
-            res = b''
-            for cmd in inFile:
-                res += __process(cmd.strip(), inFile, args.state)
-            if args.output == "-":
-                sys.stdout.buffer.write(res)
-            else:
-                with open(args.output, "wb") as f:
-                    f.write(res)
-        except OSError as e:
-            raise BobError("IO error: " + str(e))
-
-        return 0
-
-    return catchErrors(cmd)
-
-def auditEngine():
-    parser = argparse.ArgumentParser(description="Create audit trail.")
-    parser.add_argument('-o', dest="output", metavar="OUTPUT", default="-", help="Output file (default: stdout)")
-    parser.add_argument("-D", dest="defines", action="append", default=[], nargs=2)
-    parser.add_argument("--arg", action="append", default=[])
-    parser.add_argument("--env")
-    parser.add_argument("-E", dest="metaEnv", action="append", default=[], nargs=2)
-    parser.add_argument("--recipes")
-    parser.add_argument("--sandbox")
-    parser.add_argument("--scm", action="append", default=[], nargs=3) # legacy Bob <= 0.15
-    parser.add_argument("--scmEx", action="append", default=[], nargs=4)
-    parser.add_argument("--tool", action="append", default=[], nargs=2)
-    parser.add_argument("variantID")
-    parser.add_argument("buildID")
-    parser.add_argument("resultHash")
-    args = parser.parse_args()
-
-    def cmd(loop, executor):
-        from .audit import Audit
-        import json
-        import os
-        try:
-            gen = Audit.create(bytes.fromhex(args.variantID), bytes.fromhex(args.buildID),
-                bytes.fromhex(args.resultHash))
-        except ValueError:
-            raise BuildError("Invalid digest argument")
-        if args.env is not None: gen.setEnv(args.env)
-        for (name, value) in args.metaEnv: gen.addMetaEnv(name, value)
-        for (name, value) in args.defines: gen.addDefine(name, value)
-        for (name, workspace, dir) in args.scm:
-            loop.run_until_complete(gen.addScm(name, workspace, dir, {}))
-        for (name, workspace, dir, extra) in args.scmEx:
-            loop.run_until_complete(gen.addScm(name, workspace, dir,
-                json.loads(extra)))
-        for (name, audit) in args.tool: gen.addTool(name, audit)
-        try:
-            if args.recipes is not None: gen.setRecipesData(json.loads(args.recipes))
-        except ValueError as e:
-            raise BuildError("Invalid recipes json: " + str(e))
-        if args.sandbox is not None: gen.setSandbox(args.sandbox)
-        for arg in args.arg: gen.addArg(arg)
-
-        if args.output == "-":
-            gen.save(sys.stdout.buffer)
-        else:
-            gen.save(args.output)
-
-        return 0
-
-    with EventLoopWrapper() as (loop, executor):
-        return catchErrors(cmd, loop, executor)
-
-def __process(l, inFile, stateDir):
-    if l.startswith("="):
-        return bytes.fromhex(l[1:])
-    elif l.startswith("<"):
-        with open(l[1:], "rb") as f:
-            return f.read()
-    elif l.startswith("{"):
-        import hashlib
-        fn = l[1:]
-        skipEmpty = False
-        if fn.startswith("?"):
-            fn = fn[1:]
-            skipEmpty = True
-        return __processBlock(hashlib.new(fn), inFile, stateDir, skipEmpty)
-    elif l.startswith("["):
-        exp,sep,l = l[1:].partition("]")
-        start,sep,end = exp.partition(":")
-        start = int(start) if start else None
-        end = int(end) if end else None
-        return __process(l, inFile, stateDir)[start:end]
-    elif l.startswith("#"):
-        import os.path
-        if stateDir:
-            stateFile = os.path.join(stateDir, l[1:].replace(os.sep, "_"))
-        else:
-            stateFile = None
-        return hashPath(l[1:], stateFile)
-    elif l.startswith("g"):
-        from .scm.git import GitScm
-        return bytes.fromhex(GitScm.processLiveBuildIdSpec(l[1:]))
-    elif l == "p":
-        return getPlatformTag()
-    elif l:
-        print("Malformed spec:", l, file=sys.stderr)
-        sys.exit(1)
-    else:
-        return b''
-
-def __processBlock(h, inFile, stateDir, skipEmpty):
-    for l in inFile:
-        l = l.strip()
-        if l.startswith("}"):
-            return h.digest() if not skipEmpty else b''
-        else:
-            data = __process(l, inFile, stateDir)
-            if data: skipEmpty = False
-            h.update(data)
-    print("Malformed spec: unfinished block", file=sys.stderr)
-    sys.exit(1)
 
 if __name__ == '__main__':
     if sys.argv[1] == 'bob':

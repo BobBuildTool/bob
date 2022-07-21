@@ -6,7 +6,7 @@
 from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile, isWindows, removeUserFromUrl, sslNoVerifyContext, \
+from ..utils import asHexStr, hashFile, removeUserFromUrl, sslNoVerifyContext, \
         replacePath
 from .scm import Scm, ScmAudit
 from http.client import HTTPException
@@ -15,12 +15,14 @@ import concurrent.futures.process
 import contextlib
 import hashlib
 import os, os.path
+import posixpath
 import re
 import schema
 import shutil
 import signal
 import ssl
 import stat
+import sys
 import tempfile
 import time
 import urllib.error
@@ -76,7 +78,7 @@ def parseUrl(url):
     """
 
     # Only require some special processing on Windows. Unix URLs just work...
-    if not isWindows():
+    if sys.platform != "win32":
         return urllib.parse.urlparse(url)
 
     # Does it start with a drive letter like "C:…"?
@@ -192,7 +194,7 @@ class UrlScm(Scm):
         self.__fn = spec.get("fileName")
         if not self.__fn:
             url = self.__url
-            if isWindows():
+            if sys.platform == "win32":
                 # On Windows we're allowed to provide native paths with
                 # backslashes.
                 url = url.replace('\\', '/')
@@ -364,7 +366,7 @@ class UrlScm(Scm):
             filt = lambda x: x
         return ( self.__digestSha512 or self.__digestSha256 or 
                  self.__digestSha1 or filt(self.__url)
-               ) + " " + os.path.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
+               ) + " " + posixpath.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
                ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
 
     def getDirectory(self):
@@ -392,16 +394,6 @@ class UrlScm(Scm):
             return bytes.fromhex(self.__digestSha256)
         elif self.__digestSha1:
             return bytes.fromhex(self.__digestSha1)
-        else:
-            return None
-
-    def getLiveBuildIdSpec(self, workspacePath):
-        if self.__digestSha512:
-            return "=" + self.__digestSha512
-        elif self.__digestSha256:
-            return "=" + self.__digestSha256
-        elif self.__digestSha1:
-            return "=" + self.__digestSha1
         else:
             return None
 

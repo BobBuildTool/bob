@@ -23,9 +23,10 @@ from . import BOB_VERSION
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
-from .utils import asHexStr, removePath, isWindows, sslNoVerifyContext
+from .utils import asHexStr, removePath, isWindows, sslNoVerifyContext, \
+    getBashPath
 from shlex import quote
-from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile
+from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import argparse
 import asyncio
 import base64
@@ -68,22 +69,22 @@ def writeFileOrHandle(name, fileobj, content):
 class DummyArchive:
     """Archive that does nothing"""
 
-    def wantDownload(self, enable):
+    def wantDownloadLocal(self, enable):
         pass
 
-    def wantUpload(self, enable):
+    def wantDownloadJenkins(self, enable):
         pass
 
-    def canDownloadLocal(self):
+    def wantUploadLocal(self, enable):
+        pass
+
+    def wantUploadJenkins(self, enable):
+        pass
+
+    def canDownload(self):
         return False
 
-    def canUploadLocal(self):
-        return False
-
-    def canDownloadJenkins(self):
-        return False
-
-    def canUploadJenkins(self):
+    def canUpload(self):
         return False
 
     def canCache(self):
@@ -96,29 +97,17 @@ class DummyArchive:
                               executor=None):
         return False
 
-    def upload(self, step, buildIdFile, tgzFile):
-        return ""
-
-    def download(self, step, buildIdFile, tgzFile):
-        return ""
-
     async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
         pass
 
     async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
         return None
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return ""
-
     async def uploadLocalFingerprint(self, step, key, fingerprint, executor=None):
         pass
 
     async def downloadLocalFingerprint(self, step, key, executor=None):
         return None
-
-    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
-        return ""
 
 class ArtifactNotFoundError(Exception):
     pass
@@ -134,41 +123,7 @@ class ArtifactUploadError(Exception):
     def __init__(self, reason):
         self.reason = reason
 
-class BaseArchive:
-    def __init__(self, spec):
-        flags = spec.get("flags", ["upload", "download"])
-        self.__useDownload = "download" in flags
-        self.__useUpload = "upload" in flags
-        self.__ignoreErrors = "nofail" in flags
-        self.__useLocal = "nolocal" not in flags
-        self.__useJenkins = "nojenkins" not in flags
-        self.__useCache = "cache" in flags
-        self.__wantDownload = False
-        self.__wantUpload = False
-
-    def _ignoreErrors(self):
-        return self.__ignoreErrors
-
-    def wantDownload(self, enable):
-        self.__wantDownload = enable
-
-    def wantUpload(self, enable):
-        self.__wantUpload = enable
-
-    def canDownloadLocal(self):
-        return self.__wantDownload and self.__useDownload and self.__useLocal
-
-    def canUploadLocal(self):
-        return self.__wantUpload and self.__useUpload and self.__useLocal
-
-    def canDownloadJenkins(self):
-        return self.__wantDownload and self.__useDownload and self.__useJenkins
-
-    def canUploadJenkins(self):
-        return self.__wantUpload and self.__useUpload and self.__useJenkins
-
-    def canCache(self):
-        return self.__useCache
+class TarHelper:
 
     def __extractPackage(self, tar, audit, content):
         if tar.pax_headers.get('bob-archive-vsn', "0") != "1":
@@ -197,12 +152,222 @@ class BaseArchive:
                 raise BuildError("Binary artifact contained unknown file: " + f.name)
             f = tar.next()
 
+    def _extract(self, fileobj, audit, content):
+        with tarfile.open(None, "r|*", fileobj=fileobj, errorlevel=1) as tar:
+            removePath(audit)
+            removePath(content)
+            os.makedirs(content)
+            self.__extractPackage(tar, audit, content)
+
+    def _pack(self, name, fileobj, audit, content):
+        pax = { 'bob-archive-vsn' : "1" }
+        with gzip.open(name or fileobj, 'wb', 6) as gzf:
+            with tarfile.open(name, "w", fileobj=gzf,
+                              format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
+                tar.add(audit, "meta/" + os.path.basename(audit))
+                tar.add(content, arcname="content")
+
+
+class JenkinsArchive(TarHelper):
+    ignoreErrors = False
+
+    def __init__(self, spec):
+        self.__xferArtifacts = spec.get("xfer", False)
+
+    def wantDownloadLocal(self, enable):
+        pass
+
+    def wantDownloadJenkins(self, enable):
+        pass
+
+    def wantUploadLocal(self, enable):
+        pass
+
+    def wantUploadJenkins(self, enable):
+        pass
+
+    def canDownload(self):
+        return True
+
+    def canUpload(self):
+        return True
+
+    def canCache(self):
+        return True
+
+    async def uploadPackage(self, step, buildId, audit, content, executor=None):
+        if not audit:
+            raise BuildError("Missing audit trail! Cannot proceed without one.")
+
+        try:
+            with open(self.buildIdName(step), "wb") as f:
+                f.write(buildId)
+        except OSError as e:
+            raise BuildError("Cannot store artifact: " + str(e))
+
+        if self.__xferArtifacts:
+            loop = asyncio.get_event_loop()
+            name = self.tgzName(step)
+            with stepAction(step, "PACK", content) as a:
+                try:
+                    if os.path.exists(name):
+                        a.setResult("skipped (exist already)", SKIPPED)
+                    else:
+                        msg, kind = await loop.run_in_executor(executor,
+                            JenkinsArchive._uploadPackage, self, name, buildId,
+                            audit, content)
+                        a.setResult(msg, kind)
+                except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                    raise BuildError("Packing of package interrupted.")
+
+    def _uploadPackage(self, name, buildId, audit, content):
+        # Set default signal handler so that KeyboardInterrupt is raised.
+        # Needed to gracefully handle ctrl+c.
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        try:
+            self._pack(name, None, audit, content)
+        except (tarfile.TarError, OSError) as e:
+            raise BuildError("Cannot pack artifact: " + str(e))
+        finally:
+            # Restore signals to default so that Ctrl+C kills process. Needed
+            # to prevent ugly backtraces when user presses ctrl+c.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+        return ("ok", EXECUTED)
+
+    async def downloadPackage(self, step, buildId, audit, content, caches=[],
+                              executor=None):
+        loop = asyncio.get_event_loop()
+        with stepAction(step, "UNPACK", content) as a:
+            try:
+                ret, msg = await loop.run_in_executor(executor,
+                    JenkinsArchive._downloadPackage, self, self.tgzName(step),
+                    self.buildIdName(step), buildId, audit, content)
+                if not ret: a.fail(msg, WARNING)
+                return ret
+            except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
+                raise BuildError("Extraction of package interrupted.")
+
+    def _downloadPackage(self, tgzName, buildIdName, buildId, audit, content):
+        # Set default signal handler so that KeyboardInterrupt is raised.
+        # Needed to gracefully handle ctrl+c.
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+
+        try:
+            if not os.path.exists(tgzName):
+                return (False, "not found")
+            with open(buildIdName, "rb") as f:
+                assert f.read() == buildId, "Artifact {} has expect buildId".format(tgzName)
+
+            with open(tgzName, "rb") as f:
+                self._extract(f, audit, content)
+            return (True, None)
+        except (OSError, tarfile.TarError) as e:
+            raise BuildError("Error extracting binary artifact: " + str(e))
+        finally:
+            # Restore signals to default so that Ctrl+C kills process. Needed
+            # to prevent ugly backtraces when user presses ctrl+c.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    def cachePackage(self, buildId, workspace):
+        try:
+            with open(self._buildIdNameW(workspace), "xb") as f:
+                f.write(buildId)
+            if self.__xferArtifacts:
+                return JenkinsCacheHelper(open(self._tgzNameW(workspace), "xb"))
+            else:
+                return None
+        except FileExistsError:
+            return None
+        except OSError as e:
+            raise BuildError("Cannot cache artifact: " + str(e))
+
+    async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
+        pass
+
+    async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
+        return None
+
+    async def uploadLocalFingerprint(self, step, key, fingerprint, executor=None):
+        pass
+
+    async def downloadLocalFingerprint(self, step, key, executor=None):
+        return None
+
+    @staticmethod
+    def tgzName(step):
+        return JenkinsArchive._tgzNameW(step.getWorkspacePath())
+
+    @staticmethod
+    def _tgzNameW(workspace):
+        return workspace.replace('/', '_') + ARTIFACT_SUFFIX
+
+    @staticmethod
+    def buildIdName(step):
+        return JenkinsArchive._buildIdNameW(step.getWorkspacePath())
+
+    @staticmethod
+    def _buildIdNameW(workspace):
+        return workspace.replace('/', '_') + BUILDID_SUFFIX
+
+class JenkinsCacheHelper:
+    def __init__(self, f):
+        self.__f = f
+
+    def __enter__(self):
+        return (None, self.__f)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.__f.close()
+        return False
+
+
+class BaseArchive(TarHelper):
+    def __init__(self, spec):
+        flags = spec.get("flags", ["upload", "download"])
+        self.__useDownload = "download" in flags
+        self.__useUpload = "upload" in flags
+        self.__ignoreErrors = "nofail" in flags
+        self.__useLocal = "nolocal" not in flags
+        self.__useJenkins = "nojenkins" not in flags
+        self.__useCache = "cache" in flags
+        self.__wantDownloadLocal = False
+        self.__wantDownloadJenkins = False
+        self.__wantUploadLocal = False
+        self.__wantUploadJenkins = False
+
+    @property
+    def ignoreErrors(self):
+        return self.__ignoreErrors
+
+    def wantDownloadLocal(self, enable):
+        self.__wantDownloadLocal = enable
+
+    def wantDownloadJenkins(self, enable):
+        self.__wantDownloadJenkins = enable
+
+    def wantUploadLocal(self, enable):
+        self.__wantUploadLocal = enable
+
+    def wantUploadJenkins(self, enable):
+        self.__wantUploadJenkins = enable
+
+    def canDownload(self):
+        return self.__useDownload and ((self.__wantDownloadLocal and self.__useLocal) or
+                                       (self.__wantDownloadJenkins and self.__useJenkins))
+
+    def canUpload(self):
+        return self.__useUpload and ((self.__wantUploadLocal and self.__useLocal) or
+                                     (self.__wantUploadJenkins and self.__useJenkins))
+
+    def canCache(self):
+        return self.__useCache
+
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
 
     async def downloadPackage(self, step, buildId, audit, content, caches=[],
                               executor=None):
-        if not self.canDownloadLocal():
+        if not self.canDownload():
             return False
 
         loop = asyncio.get_event_loop()
@@ -211,13 +376,13 @@ class BaseArchive:
         with stepAction(step, "DOWNLOAD", content, details=details) as a:
             try:
                 ret, msg, kind = await loop.run_in_executor(executor, BaseArchive._downloadPackage,
-                    self, buildId, suffix, audit, content, caches)
+                    self, buildId, suffix, audit, content, caches, step.getWorkspacePath())
                 if not ret: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Download of package interrupted.")
 
-    def cachePackage(self, buildId):
+    def cachePackage(self, buildId, workspace):
         try:
             return self._openUploadFile(buildId, ARTIFACT_SUFFIX)
         except ArtifactExistsError:
@@ -228,19 +393,15 @@ class BaseArchive:
             else:
                 raise BuildError("Cannot cache artifact: " + str(e))
 
-    def _downloadPackage(self, buildId, suffix, audit, content, caches):
+    def _downloadPackage(self, buildId, suffix, audit, content, caches, workspace):
         # Set default signal handler so that KeyboardInterrupt is raised.
         # Needed to gracefully handle ctrl+c.
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
             with self._openDownloadFile(buildId, suffix) as (name, fileobj):
-                with Tee(name, fileobj, buildId, caches) as fo:
-                    with tarfile.open(None, "r|*", fileobj=fo, errorlevel=1) as tar:
-                        removePath(audit)
-                        removePath(content)
-                        os.makedirs(content)
-                        self.__extractPackage(tar, audit, content)
+                with Tee(name, fileobj, buildId, caches, workspace) as fo:
+                    self._extract(fo, audit, content)
             return (True, None, None)
         except ArtifactNotFoundError:
             return (False, "not found", WARNING)
@@ -258,7 +419,7 @@ class BaseArchive:
             signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
-        if not self.canDownloadLocal():
+        if not self.canDownload():
             return None
 
         loop = asyncio.get_event_loop()
@@ -297,7 +458,7 @@ class BaseArchive:
         raise ArtifactUploadError("not implemented")
 
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
-        if not self.canUploadLocal():
+        if not self.canUpload():
             return
         if not audit:
             stepMessage(step, "UPLOAD", "skipped (no audit trail)", SKIPPED,
@@ -322,12 +483,7 @@ class BaseArchive:
 
         try:
             with self._openUploadFile(buildId, suffix) as (name, fileobj):
-                pax = { 'bob-archive-vsn' : "1" }
-                with gzip.open(name or fileobj, 'wb', 6) as gzf:
-                    with tarfile.open(name, "w", fileobj=gzf,
-                                      format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
-                        tar.add(audit, "meta/" + os.path.basename(audit))
-                        tar.add(content, arcname="content")
+                self._pack(name, fileobj, audit, content)
         except ArtifactExistsError:
             return ("skipped ({} exists in archive)".format(content), SKIPPED)
         except (ArtifactUploadError, tarfile.TarError, OSError) as e:
@@ -342,7 +498,7 @@ class BaseArchive:
         return ("ok", EXECUTED)
 
     async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
-        if not self.canUploadLocal():
+        if not self.canUpload():
             return
 
         loop = asyncio.get_event_loop()
@@ -375,7 +531,7 @@ class BaseArchive:
         return ("ok", EXECUTED)
 
     async def uploadLocalFingerprint(self, step, key, fingerprint, executor=None):
-        if not self.canUploadLocal():
+        if not self.canUpload():
             return
 
         loop = asyncio.get_event_loop()
@@ -387,7 +543,7 @@ class BaseArchive:
                 raise BuildError("Upload of build-id interrupted.")
 
     async def downloadLocalFingerprint(self, step, key, executor=None):
-        if not self.canDownloadLocal():
+        if not self.canDownload():
             return None
 
         loop = asyncio.get_event_loop()
@@ -402,7 +558,7 @@ class BaseArchive:
 
 
 class Tee:
-    def __init__(self, fileName, fileObj, buildId, caches):
+    def __init__(self, fileName, fileObj, buildId, caches, workspace):
         if fileObj is not None:
             self.__file = fileObj
             self.__owner = False
@@ -413,9 +569,9 @@ class Tee:
         self.__caches = []
         try:
             for c in caches:
-                mirror = c.cachePackage(buildId)
+                mirror = c.cachePackage(buildId, workspace)
                 if mirror is not None:
-                    self.__caches.append(MirrorWriter(mirror, c._ignoreErrors()))
+                    self.__caches.append(MirrorWriter(mirror, c.ignoreErrors))
         except:
             for c in self.__caches: c.abort()
             raise
@@ -478,7 +634,7 @@ class MirrorLeecher:
                 except (ArtifactUploadError, OSError) as e:
                     del self.__caches[i]
                     c.abort()
-                    if not c._ignoreErrors():
+                    if not c.ignoreErrors:
                         raise BuildError("Cannot cache artifact: " + str(e))
         return ret
 
@@ -529,73 +685,6 @@ class LocalArchive(BaseArchive):
             NamedTemporaryFile(dir=packageResultPath, delete=False),
             self.__fileMode,
             packageResultFile)
-
-    def __uploadJenkins(self, step, buildIdFile, resultFile, suffix):
-        """Generate upload shell script.
-
-        We cannot simply copy the artifact to the final location as this is not
-        atomic. Instead we create a temporary file at the repository root, copy
-        the artifact there and hard-link the temporary file at the final
-        location. If the link fails it is usually caused by a concurrent
-        upload. Test that the artifact is readable in this case to distinguish
-        it from other fatal errors.
-        """
-        if not self.canUploadJenkins():
-            return ""
-
-        if self.__dirMode is not None:
-            setDirMode = "umask {:03o}".format(~self.__dirMode & 0o777)
-        else:
-            setDirMode = ":"
-
-        if self.__fileMode is not None:
-            setFileMode = 'chmod {:03o} "$T"'.format(self.__fileMode & 0o777)
-        else:
-            setFileMode = ""
-
-        return "\n" + textwrap.dedent("""\
-            # upload artifact
-            cd $WORKSPACE
-            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-            BOB_UPLOAD_FILE={DIR}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
-            if [[ ! -e ${{BOB_UPLOAD_FILE}} ]] ; then
-                (
-                    set -eE
-                    T="$(mktemp -p {DIR})"
-                    trap 'rm -f $T' EXIT
-                    cp {RESULT} "$T"
-                    {SET_FILE_MODE}
-                    ({SET_DIR_MODE} ; mkdir -p "${{BOB_UPLOAD_FILE%/*}}")
-                    if ! ln -T "$T" "$BOB_UPLOAD_FILE" ; then
-                        [[ -r "$BOB_UPLOAD_FILE" ]] || exit 2
-                    fi
-                ){FIXUP}
-            fi""".format(DIR=quote(self.__basePath), BUILDID=quote(buildIdFile), RESULT=quote(resultFile),
-                         FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                         GEN=ARCHIVE_GENERATION, SUFFIX=suffix,
-                         SET_DIR_MODE=setDirMode, SET_FILE_MODE=setFileMode))
-
-    def upload(self, step, buildIdFile, tgzFile):
-        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
-
-    def download(self, step, buildIdFile, tgzFile):
-        if not self.canDownloadJenkins():
-            return ""
-
-        return "\n" + textwrap.dedent("""\
-            if [[ ! -e {RESULT} ]] ; then
-                BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-                BOB_DOWNLOAD_FILE={DIR}"/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
-                cp "$BOB_DOWNLOAD_FILE" {RESULT} || echo Download failed: $?
-            fi
-            """.format(DIR=quote(self.__basePath), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-                       GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX))
-
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
-
-    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
-        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -770,54 +859,6 @@ class SimpleHttpArchive(BaseArchive):
         elif response.status not in [200, 201, 204]:
             raise ArtifactUploadError("PUT {} {}".format(response.status, response.reason))
 
-    def __uploadJenkins(self, step, keyFile, contentFile, suffix):
-        # only upload if requested
-        if not self.canUploadJenkins():
-            return ""
-
-        # upload with curl if file does not exist yet on server
-        insecure = "" if self.__sslVerify else "-k"
-        return "\n" + textwrap.dedent("""\
-            # upload artifact
-            cd $WORKSPACE
-            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {KEYFILE}){GEN}"
-            BOB_UPLOAD_URL={URL}"/${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
-            if ! curl --output /dev/null --silent --head --fail {INSECURE} "$BOB_UPLOAD_URL" ; then
-                BOB_UPLOAD_RSP=$(curl -sSgf {INSECURE} -w '%{{http_code}}' -H 'If-None-Match: *' -T {CONTENTFILE} "$BOB_UPLOAD_URL" || true)
-                if [[ $BOB_UPLOAD_RSP != 2?? && $BOB_UPLOAD_RSP != 412 ]]; then
-                    echo "Upload failed with code $BOB_UPLOAD_RSP"{FAIL}
-                fi
-            fi""".format(URL=quote(self.__url.geturl()), KEYFILE=quote(keyFile),
-                         CONTENTFILE=quote(contentFile),
-                         FAIL="" if self._ignoreErrors() else "; exit 1",
-                         GEN=ARCHIVE_GENERATION, SUFFIX=suffix,
-                         INSECURE=insecure))
-
-    def upload(self, step, buildIdFile, tgzFile):
-        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
-
-    def download(self, step, buildIdFile, tgzFile):
-        # only download if requested
-        if not self.canDownloadJenkins():
-            return ""
-
-        insecure = "" if self.__sslVerify else "-k"
-        return "\n" + textwrap.dedent("""\
-            if [[ ! -e {RESULT} ]] ; then
-                BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-                BOB_DOWNLOAD_URL={URL}"/${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
-                curl -sSg {INSECURE} --fail -o {RESULT} "$BOB_DOWNLOAD_URL" || echo Download failed: $?
-            fi
-            """.format(URL=quote(self.__url.geturl()), BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-                       GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX,
-                       INSECURE=insecure))
-
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
-
-    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
-        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
-
 class SimpleHttpDownloader:
     def __init__(self, archiver, response):
         self.archiver = archiver
@@ -864,17 +905,11 @@ class CustomArchive(BaseArchive):
     def _remoteName(self, buildId, suffix):
         return self._makeUrl(buildId, suffix)
 
-    def canDownloadLocal(self):
-        return super().canDownloadLocal() and (self.__downloadCmd is not None)
+    def canDownload(self):
+        return super().canDownload() and (self.__downloadCmd is not None)
 
-    def canUploadLocal(self):
-        return super().canUploadLocal() and (self.__uploadCmd is not None)
-
-    def canDownloadJenkins(self):
-        return super().canDownloadJenkins() and (self.__downloadCmd is not None)
-
-    def canUploadJenkins(self):
-        return super().canUploadJenkins() and (self.__uploadCmd is not None)
+    def canUpload(self):
+        return super().canUpload() and (self.__uploadCmd is not None)
 
     def _openDownloadFile(self, buildId, suffix):
         (tmpFd, tmpName) = mkstemp()
@@ -884,9 +919,9 @@ class CustomArchive(BaseArchive):
             env = { k:v for (k,v) in os.environ.items() if k in self.__whiteList }
             env["BOB_LOCAL_ARTIFACT"] = tmpName
             env["BOB_REMOTE_ARTIFACT"] = url
-            ret = subprocess.call(["/bin/bash", "-ec", self.__downloadCmd],
+            ret = subprocess.call([getBashPath(), "-ec", self.__downloadCmd],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                cwd="/tmp", env=env)
+                cwd=gettempdir(), env=env)
             if ret == 0:
                 ret = tmpName
                 tmpName = None
@@ -901,49 +936,6 @@ class CustomArchive(BaseArchive):
         os.close(tmpFd)
         return CustomUploader(tmpName, self._makeUrl(buildId, suffix), self.__whiteList,
             self.__uploadCmd)
-
-    def __uploadJenkins(self, step, buildIdFile, tgzFile, suffix):
-        # only upload if requested
-        if not self.canUploadJenkins():
-            return ""
-
-        cmd = self.__uploadCmd
-        if self._ignoreErrors():
-            # wrap in subshell
-            cmd = "( " + cmd + " ) || echo Upload failed: $?"
-
-        return "\n" + textwrap.dedent("""\
-            # upload artifact
-            cd $WORKSPACE
-            BOB_UPLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-            BOB_LOCAL_ARTIFACT={RESULT}
-            BOB_REMOTE_ARTIFACT="${{BOB_UPLOAD_BID:0:2}}/${{BOB_UPLOAD_BID:2:2}}/${{BOB_UPLOAD_BID:4}}{SUFFIX}"
-            """.format(BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-                       GEN=ARCHIVE_GENERATION, SUFFIX=suffix)) + cmd
-
-    def upload(self, step, buildIdFile, tgzFile):
-        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
-
-    def download(self, step, buildIdFile, tgzFile):
-        # only download if requested
-        if not self.canDownloadJenkins():
-            return ""
-
-        return """
-if [[ ! -e {RESULT} ]] ; then
-    BOB_DOWNLOAD_BID="$(hexdump -ve '/1 "%02x"' {BUILDID}){GEN}"
-    BOB_LOCAL_ARTIFACT={RESULT}
-    BOB_REMOTE_ARTIFACT="${{BOB_DOWNLOAD_BID:0:2}}/${{BOB_DOWNLOAD_BID:2:2}}/${{BOB_DOWNLOAD_BID:4}}{SUFFIX}"
-    {CMD}
-fi
-""".format(CMD=self.__downloadCmd, BUILDID=quote(buildIdFile), RESULT=quote(tgzFile),
-           GEN=ARCHIVE_GENERATION, SUFFIX=ARTIFACT_SUFFIX)
-
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
-
-    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
-        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
 
 class CustomDownloader:
     def __init__(self, name):
@@ -970,9 +962,9 @@ class CustomUploader:
                 env = { k:v for (k,v) in os.environ.items() if k in self.whiteList }
                 env["BOB_LOCAL_ARTIFACT"] = self.name
                 env["BOB_REMOTE_ARTIFACT"] = self.remoteName
-                ret = subprocess.call(["/bin/bash", "-ec", self.uploadCmd],
+                ret = subprocess.call([getBashPath(), "-ec", self.uploadCmd],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                    cwd="/tmp", env=env)
+                    cwd=gettempdir(), env=env)
                 if ret != 0:
                     raise ArtifactUploadError("command return with status {}".format(ret))
         finally:
@@ -1034,107 +1026,6 @@ class AzureArchive(BaseArchive):
         os.close(tmpFd)
         return AzureUploader(self.__service, self.__container, tmpName, blobName)
 
-    def __uploadJenkins(self, step, keyFile, contentFile, suffix):
-        if not self.canUploadJenkins():
-            return ""
-
-        args = []
-        if self.__key: args.append("--key=" + self.__key)
-        if self.__sasToken: args.append("--sas-token=" + self.__sasToken)
-
-        return "\n" + textwrap.dedent("""\
-            # upload artifact
-            cd $WORKSPACE
-            bob _upload azure {ARGS} {ACCOUNT} {CONTAINER} {KEYFILE} {SUFFIX} {CONTENTFILE}{FIXUP}
-            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
-                       CONTAINER=quote(self.__container), KEYFILE=quote(keyFile),
-                       CONTENTFILE=quote(contentFile),
-                       FIXUP=" || echo Upload failed: $?" if self._ignoreErrors() else "",
-                       SUFFIX=suffix))
-
-    def upload(self, step, buildIdFile, tgzFile):
-        return self.__uploadJenkins(step, buildIdFile, tgzFile, ARTIFACT_SUFFIX)
-
-    def download(self, step, buildIdFile, tgzFile):
-        if not self.canDownloadJenkins():
-            return ""
-
-        args = []
-        if self.__key: args.append("--key=" + self.__key)
-        if self.__sasToken: args.append("--sas-token=" + self.__sasToken)
-
-        return "\n" + textwrap.dedent("""\
-            if [[ ! -e {RESULT} ]] ; then
-                bob _download azure {ARGS} {ACCOUNT} {CONTAINER} {BUILDID} {SUFFIX} {RESULT} || echo Download failed: $?
-            fi
-            """.format(ARGS=" ".join(map(quote, args)), ACCOUNT=quote(self.__account),
-                       CONTAINER=self.__container, BUILDID=quote(buildIdFile),
-                       RESULT=quote(tgzFile), SUFFIX=ARTIFACT_SUFFIX))
-
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return self.__uploadJenkins(step, liveBuildId, buildId, BUILDID_SUFFIX)
-
-    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
-        return self.__uploadJenkins(step, keyFile, fingerprintFile, FINGERPRINT_SUFFIX)
-
-    @staticmethod
-    def scriptDownload(args):
-        service, container, remoteBlob, localFile = AzureArchive.scriptGetService(args)
-        from azure.common import AzureException
-
-        # Download into temporary file and rename if downloaded successfully
-        tmpName = None
-        try:
-            (tmpFd, tmpName) = mkstemp(dir=".")
-            os.close(tmpFd)
-            service.get_blob_to_path(container, remoteBlob, tmpName)
-            os.rename(tmpName, localFile)
-            tmpName = None
-        except (OSError, AzureException) as e:
-            raise BuildError("Download failed: " + str(e))
-        finally:
-            if tmpName is not None: os.unlink(tmpName)
-
-    @staticmethod
-    def scriptUpload(args):
-        service, container, remoteBlob, localFile = AzureArchive.scriptGetService(args)
-        from azure.common import AzureException, AzureConflictHttpError
-        try:
-            service.create_blob_from_path(container, remoteBlob, localFile, if_none_match="*")
-            print("OK")
-        except AzureConflictHttpError:
-            print("skipped")
-        except (OSError, AzureException) as e:
-            raise BuildError("Upload failed: " + str(e))
-
-    @staticmethod
-    def scriptGetService(args):
-        parser = argparse.ArgumentParser()
-        parser.add_argument('account')
-        parser.add_argument('container')
-        parser.add_argument('buildid')
-        parser.add_argument('suffix')
-        parser.add_argument('file')
-        parser.add_argument('--key')
-        parser.add_argument('--sas-token')
-        args = parser.parse_args(args)
-
-        try:
-            from azure.storage.blob import BlockBlobService
-        except ImportError:
-            raise BuildError("azure-storage-blob Python3 library not installed!")
-
-        service = BlockBlobService(account_name=args.account, account_key=args.key,
-            sas_token=args.sas_token, socket_timeout=6000)
-
-        try:
-            with open(args.buildid, 'rb') as f:
-                remoteBlob = AzureArchive.__makeBlobName(f.read(), args.suffix)
-        except OSError as e:
-            raise BuildError(str(e))
-
-        return (service, args.container, remoteBlob, args.file)
-
 class AzureDownloader:
     def __init__(self, name):
         self.name = name
@@ -1177,82 +1068,62 @@ class MultiArchive:
     def __init__(self, archives):
         self.__archives = archives
 
-    def wantDownload(self, enable):
-        for i in self.__archives: i.wantDownload(enable)
+    def wantDownloadLocal(self, enable):
+        for i in self.__archives: i.wantDownloadLocal(enable)
 
-    def wantUpload(self, enable):
-        for i in self.__archives: i.wantUpload(enable)
+    def wantDownloadJenkins(self, enable):
+        for i in self.__archives: i.wantDownloadJenkins(enable)
 
-    def canDownloadLocal(self):
-        return any(i.canDownloadLocal() for i in self.__archives)
+    def wantUploadLocal(self, enable):
+        for i in self.__archives: i.wantUploadLocal(enable)
 
-    def canUploadLocal(self):
-        return any(i.canUploadLocal() for i in self.__archives)
+    def wantUploadJenkins(self, enable):
+        for i in self.__archives: i.wantUploadJenkins(enable)
 
-    def canDownloadJenkins(self):
-        return any(i.canDownloadJenkins() for i in self.__archives)
+    def canDownload(self):
+        return any(i.canDownload() for i in self.__archives)
 
-    def canUploadJenkins(self):
-        return any(i.canUploadJenkins() for i in self.__archives)
+    def canUpload(self):
+        return any(i.canUpload() for i in self.__archives)
 
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
         for i in self.__archives:
-            if not i.canUploadLocal(): continue
+            if not i.canUpload(): continue
             await i.uploadPackage(step, buildId, audit, content, executor=executor)
 
     async def downloadPackage(self, step, buildId, audit, content, executor=None):
         for i in self.__archives:
-            if not i.canDownloadLocal(): continue
+            if not i.canDownload(): continue
             caches = [ a for a in self.__archives if (a is not i) and a.canCache() ]
             if await i.downloadPackage(step, buildId, audit, content, caches, executor):
                 return True
         return False
 
-    def upload(self, step, buildIdFile, tgzFile):
-        return "\n".join(
-            i.upload(step, buildIdFile, tgzFile) for i in self.__archives
-            if i.canUploadJenkins())
-
-    def download(self, step, buildIdFile, tgzFile):
-        return "\n".join(
-            i.download(step, buildIdFile, tgzFile) for i in self.__archives
-            if i.canDownloadJenkins())
-
     async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
         for i in self.__archives:
-            if not i.canUploadLocal(): continue
+            if not i.canUpload(): continue
             await i.uploadLocalLiveBuildId(step, liveBuildId, buildId, executor=executor)
 
     async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
         ret = None
         for i in self.__archives:
-            if not i.canDownloadLocal(): continue
+            if not i.canDownload(): continue
             ret = await i.downloadLocalLiveBuildId(step, liveBuildId, executor=executor)
             if ret is not None: break
         return ret
 
-    def uploadJenkinsLiveBuildId(self, step, liveBuildId, buildId, isWin):
-        return "\n".join(
-            i.uploadJenkinsLiveBuildId(step, liveBuildId, buildId, isWin)
-            for i in self.__archives if i.canUploadJenkins())
-
     async def uploadLocalFingerprint(self, step, key, fingerprint, executor=None):
         for i in self.__archives:
-            if not i.canUploadLocal(): continue
+            if not i.canUpload(): continue
             await i.uploadLocalFingerprint(step, key, fingerprint, executor=executor)
 
     async def downloadLocalFingerprint(self, step, key, executor=None):
         ret = None
         for i in self.__archives:
-            if not i.canDownloadLocal(): continue
+            if not i.canDownload(): continue
             ret = await i.downloadLocalFingerprint(step, key, executor=executor)
             if ret is not None: break
         return ret
-
-    def uploadJenkinsFingerprint(self, step, keyFile, fingerprintFile):
-        return "\n".join(
-            i.uploadJenkinsFingerprint(step, keyFile, fingerprintFile)
-            for i in self.__archives if i.canUploadJenkins())
 
 
 def getSingleArchiver(recipes, archiveSpec):
@@ -1267,26 +1138,21 @@ def getSingleArchiver(recipes, archiveSpec):
         return AzureArchive(archiveSpec)
     elif archiveBackend == "none":
         return DummyArchive()
+    elif archiveBackend == "__jenkins":
+        return JenkinsArchive(archiveSpec)
     else:
         raise BuildError("Invalid archive backend: "+archiveBackend)
 
-def getArchiver(recipes):
+def getArchiver(recipes, jenkins=None):
     archiveSpec = recipes.archiveSpec()
+    if jenkins is not None:
+        jenkins = jenkins.copy()
+        jenkins["backend"] = "__jenkins"
+        if isinstance(archiveSpec, list):
+            archiveSpec = [jenkins] + archiveSpec
+        else:
+            archiveSpec = [jenkins, archiveSpec]
     if isinstance(archiveSpec, list):
         return MultiArchive([ getSingleArchiver(recipes, i) for i in archiveSpec ])
     else:
         return getSingleArchiver(recipes, archiveSpec)
-
-def doDownload(args, bobRoot):
-    archiveBackend = args[0]
-    if archiveBackend == "azure":
-        AzureArchive.scriptDownload(args[1:])
-    else:
-        raise BuildError("Invalid archive backend: "+archiveBackend)
-
-def doUpload(args, bobRoot):
-    archiveBackend = args[0]
-    if archiveBackend == "azure":
-        AzureArchive.scriptUpload(args[1:])
-    else:
-        raise BuildError("Invalid archive backend: "+archiveBackend)

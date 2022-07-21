@@ -288,6 +288,33 @@ def getPlatformTag():
     __platformTag = ret
     return ret
 
+__bashPath = None
+
+def getBashPath():
+    """Get path to bash.
+
+    This is required to work around a weird behaviour on Windows when WSL is
+    enabled but no distribution is installed. In this case the subprocess
+    module (which internally uses CreateProcess()) cannot execute bash even
+    though it's in %PATH%. Interrestingly cmd.com and powershell.exe look at
+    %PATH% first and can execute bash successfully.
+    """
+
+    global __bashPath
+    if __bashPath is not None:
+        return __bashPath
+
+    if sys.platform == "win32":
+        import shutil
+        ret = shutil.which("bash")
+        if ret is None:
+            raise BuildError("bash: command not found")
+    else:
+        ret = "bash"
+
+    __bashPath = ret
+    return ret
+
 ### directory hashing ###
 
 def hashFile(path, hasher=hashlib.sha1):
@@ -675,30 +702,8 @@ def getProcessPoolExecutor():
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
             method = 'fork' if isWindows() else 'forkserver'
-
-            # Hack to get coverage data with the multiprocessing module. Up to
-            # date coverage.py cannot trace cross fork/exec. Taken and adapted
-            # from https://gist.github.com/andreycizov/ee59806a3ac6955c127e511c5e84d2b6
-            if os.environ.get('ENABLE_COVERAGE_HACK') and (sys.version_info >= (3, 7)):
-                ctx = multiprocessing.get_context(method)
-                from coverage import Coverage
-                from multiprocessing.context import Process
-                class CoverageProcess(Process):
-                    def run(self):
-                        cov = Coverage(data_suffix=True)
-                        cov._warn_no_data = True
-                        cov._warn_unimported_source = True
-                        cov.start()
-                        try:
-                            super().run()
-                        finally:
-                            cov.stop()
-                            cov.save()
-                ctx.Process = CoverageProcess
-                executor = concurrent.futures.ProcessPoolExecutor(mp_context=ctx)
-            else:
-                __setStartMethod(method)
-                executor = concurrent.futures.ProcessPoolExecutor()
+            __setStartMethod(method)
+            executor = concurrent.futures.ProcessPoolExecutor()
 
             # fork early before process gets big
             executor.submit(dummy).result()
@@ -770,10 +775,11 @@ def runInEventLoop(coro):
     """Backwards compatibility stub for asyncio.run()"""
     import asyncio
 
-    if sys.version_info.minor >= 7:
-        return asyncio.run(coro)
+    if sys.platform == 'win32':
+        loop = asyncio.ProactorEventLoop()
+    else:
+        loop = asyncio.new_event_loop()
 
-    loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
         return loop.run_until_complete(coro)

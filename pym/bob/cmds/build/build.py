@@ -4,8 +4,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ...archive import getArchiver
+from ...builder import LocalBuilder
 from ...errors import BuildError
 from ...input import RecipeSet
+from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
+    RecipeSetIR
+from ...share import getShare
 from ...tty import setVerbosity, setTui
 from ...utils import copyTree, processDefines, EventLoopWrapper
 import argparse
@@ -18,8 +22,78 @@ import sys
 import time
 
 from .state import DevelopDirOracle
-from .builder import LocalBuilder
-from .share import getShare
+
+class LazyIR:
+    @staticmethod
+    def addStep(step, partial):
+        return step
+
+    @staticmethod
+    def addSandbox(sandbox):
+        return sandbox
+
+    @staticmethod
+    def addTool(tool):
+        return tool
+
+    @staticmethod
+    def addPackage(package, partial):
+        return package
+
+    @staticmethod
+    def addRecipe(recipe):
+        return recipe
+
+    @staticmethod
+    def addRecipeSet(recipeSet):
+        return recipeSet
+
+class LazyIRs:
+    JENKINS = False
+
+    def mungeStep(self, step):
+        return ExecutableStep.fromStep(step, LazyIR)
+
+    def mungePackage(self, package):
+        return ExecutablePackage.fromPackage(package, LazyIR)
+
+    def mungeRecipe(self, recipe):
+        return ExecutableRecipe.fromRecipe(recipe, LazyIR)
+
+    def mungeSandbox(self, sandbox):
+        return sandbox and ExecutableSandbox.fromSandbox(sandbox, LazyIR)
+
+    def mungeTool(self, tool):
+        return ExecutableTool.fromTool(tool, LazyIR)
+
+    def mungeRecipeSet(self, recipeSet):
+        return ExecutableRecipeSet.fromRecipeSet(recipeSet)
+
+class ExecutableStep(LazyIRs, StepIR):
+    pass
+
+class ExecutablePackage(LazyIRs, PackageIR):
+    pass
+
+class ExecutableRecipe(LazyIRs, RecipeIR):
+    pass
+
+class ExecutableRecipeSet(LazyIRs, RecipeSetIR):
+    @classmethod
+    def fromRecipeSet(cls, recipeSet):
+        self = super(ExecutableRecipeSet, cls).fromRecipeSet(recipeSet)
+        self.__recipeSet = recipeSet
+        return self
+
+    async def getScmAudit(self):
+        return await self.__recipeSet.getScmAudit()
+
+class ExecutableTool(LazyIRs, ToolIR):
+    pass
+
+class ExecutableSandbox(LazyIRs, SandboxIR):
+    pass
+
 
 def runHook(recipes, hook, args):
     hookCmd = recipes.getBuildHook(hook)
@@ -231,9 +305,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
         builder.setExecutor(executor)
         builder.setArchiveHandler(getArchiver(recipes))
-        builder.setUploadMode(args.upload)
-        builder.setDownloadMode(args.download)
-        builder.setDownloadLayerMode(args.download_layer)
+        builder.setLocalUploadMode(args.upload)
+        builder.setLocalDownloadMode(args.download)
+        builder.setLocalDownloadLayerMode(args.download_layer)
         builder.setCleanCheckout(args.clean_checkout)
         builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
         builder.setLinkDependencies(args.link_deps)
@@ -268,12 +342,16 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             setTui(args.jobs)
             builder.enableBufferedIO()
         try:
-            builder.cook(backlog, True if args.build_mode == 'checkout-only' else False, loop)
+            builder.cook([ExecutableStep.fromStep(b, LazyIR) for b in backlog],
+                         True if args.build_mode == 'checkout-only' else False,
+                         loop)
             for p in backlog:
                 resultPath = p.getWorkspacePath()
                 if resultPath not in results:
                     results.append(resultPath)
-            builder.cook(providedBacklog, True if args.build_mode == 'checkout-only' else False, loop, 1)
+            builder.cook([ExecutableStep.fromStep(b, LazyIR) for b in providedBacklog],
+                         True if args.build_mode == 'checkout-only' else False,
+                         loop, 1)
             for p in providedBacklog:
                 resultPath = p.getWorkspacePath()
                 if resultPath not in results:

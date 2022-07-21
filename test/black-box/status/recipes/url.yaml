@@ -1,0 +1,11 @@
+checkoutSCM:
+    scm: url
+    url: ${URLDIR}/test2.dat
+    digestSHA1: "5446fb31b66c149c85a381b19c94344a90f6574c"
+    digestSHA256: "a005b1625af0b6ee080dafb904c4505ad285764071ee45a8786159bd1a282634"
+
+buildScript: |
+    cp $1/url/* .
+
+packageScript: |
+    cp $1/* .

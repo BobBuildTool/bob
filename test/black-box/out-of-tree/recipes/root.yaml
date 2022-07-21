@@ -1,0 +1,5 @@
+root: True
+packageVars: [SETTING]
+packageScript: |
+  cat $<<input.txt>> >output.txt
+  echo "$SETTING" > setting.txt

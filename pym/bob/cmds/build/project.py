@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ...builder import LocalBuilder
 from ...errors import BobError
 from ...generators import generators as defaultGenerators
 from ...input import RecipeSet
@@ -12,7 +13,6 @@ import argparse
 import os
 
 from .build import doDevelop
-from .builder import LocalBuilder
 from .state import DevelopDirOracle
 
 def doProject(argv, bobRoot):

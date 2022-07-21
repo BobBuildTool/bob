@@ -1,0 +1,13 @@
+[run]
+parallel = True
+source = $COVERAGE_SOURCES
+data_file = $COVERAGE_OUTPUT
+concurrency = thread
+
+[report]
+exclude_lines =
+    pragma: no cover
+    @abstract
+    def __repr__
+    raise NotImplementedError
+    raise AssertionError

@@ -240,11 +240,10 @@ requires that the following plugins are available:
 .. _Conditional BuildStep Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Conditional+BuildStep+Plugin
 .. _Workspace Cleanup Plugin: https://wiki.jenkins-ci.org/display/JENKINS/Workspace+Cleanup+Plugin
 
-Additionally some of the Bob helper tools must be installed on the Jenkins
-server and be available in the PATH. The ``bob-hash-engine`` and
-``bob-audit-engine`` scripts are always needed. If you're using the sandbox
-feature ``bob-namespace-sandbox`` must be available too. To keep the setup
-simple it is recommended to install Bob entirely on the server.
+Additionally Bob must be installed on the Jenkins server and be available in
+the PATH. It is required to install the same version of Bob on the server and
+the build nodes that is used to configure the Jenkins. Otherwise the build will
+fail.
 
 Suppose you have a suitable Jenkins server located at
 http://jenkins.intranet.local:8080. Go to the project root directory and tell Bob

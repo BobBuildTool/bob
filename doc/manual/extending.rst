@@ -214,6 +214,7 @@ Currently the following additionaly kwargs are passed:
    the job
  * ``checkoutSteps``: list of all checkout steps (:class:`bob.input.Step`) used
    in the job
+ * ``hostPlatform``: Jenkins host platform type (``linux``, ``msys`` or ``win32``)
  * ``name``: name of Jenkins job
  * ``nodes``: The nodes where the job should run
  * ``packageSteps``: list of all package steps (:class:`bob.input.Step`) used

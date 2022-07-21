@@ -21,27 +21,34 @@ Available sub-commands:
 
 ::
 
-    bob jenkins add [-h] [-n NODES] [-o OPTIONS] [-w] [-p PREFIX] [-r ROOT]
-                    [-D DEFINES] [--keep] [--download] [--upload]
+    bob jenkins add [-h] [-n NODES] [-o OPTIONS]
+                    [--host-platform {linux,msys,win32}] [-w] [-p PREFIX]
+                    [-r ROOT] [-D DEFINES] [--keep] [--download] [--upload]
                     [--no-sandbox] [--credentials CREDENTIALS] [--clean]
-                    [--shortdescription] [--longdescription]
+                    [--shortdescription | --longdescription]
                     name url
     bob jenkins export [-h] name dir
     bob jenkins graph [-h] name
     bob jenkins ls [-h] [-v]
     bob jenkins prune [-h] [--obsolete | --intermediate] [--no-ssl-verify]
-                      [-q] [-v]
+                      [--user USER] [--password PASSWORD] [-q] [-v]
                       name
-    bob jenkins push [-h] [-f] [--no-ssl-verify] [--no-trigger] [-q] [-v]
+    bob jenkins push [-h] [-f] [--no-ssl-verify] [--no-trigger]
+                     [--user USER] [--password PASSWORD] [-q] [-v]
                      name
     bob jenkins rm [-h] [-f] name
-    bob jenkins set-options [-h] [--reset] [-n NODES] [-o OPTIONS] [-p PREFIX]
-                            [--add-root ADD_ROOT] [--del-root DEL_ROOT]
-                            [-D DEFINES] [-U UNDEFINES] [--credentials CREDENTIALS]
-                            [--keep | --no-keep] [--download | --no-download]
-                            [--upload | --no-upload] [--sandbox | --no-sandbox]
-                            [--clean | --incremental] [--autotoken AUTHTOKEN]
-                            [--shortdescription]
+    bob jenkins set-options [-h] [--reset] [-n NODES] [-o OPTIONS]
+                            [--host-platform {linux,msys,win32}]
+                            [-p PREFIX] [--add-root ADD_ROOT]
+                            [--del-root DEL_ROOT] [-D DEFINES]
+                            [-U UNDEFINES] [--credentials CREDENTIALS]
+                            [--authtoken AUTHTOKEN]
+                            [--shortdescription | --longdescription]
+                            [--keep | --no-keep]
+                            [--download | --no-download]
+                            [--upload | --no-upload]
+                            [--sandbox | --no-sandbox]
+                            [--clean | --incremental]
                             name
     bob jenkins set-url [-h] name url
 
@@ -75,6 +82,13 @@ Options
 
 ``-f, --force``
     Overwrite existing jobs
+
+``--host-platform``
+    Jenkins host platform type. May be any of ``linux``, ``msys`` or ``win32``.
+
+    This specifies the host operating system where the Jenkins master and the
+    build slaves are running. By default this is the type of the current
+    operating system.
 
 ``--incremental``
     Reuse workspace for incremental builds
@@ -126,6 +140,19 @@ Options
 ``-p PREFIX, --prefix PREFIX``
     Prefix for jobs
 
+``--password``
+    Set password for Jenkins authentication.
+
+    You can also set the user name and password persistently by encoding it
+    into the Jenkins url directly, e.g. *https:://user:password@host/*.
+
+    .. attention::
+       On Linux users can usually see the program arguments of processes from
+       other users. By using the ``--password`` you could inadvertently reveal
+       the password to untrusted other users that have access to the same
+       machine.  It is safer to either enter the password manually or to pipe
+       it through stdin.
+
 ``-q, --quiet``
     Decrease verbosity (may be specified multiple times)
 
@@ -148,11 +175,18 @@ Options
 ``--upload``
     Upload to binary archive
 
+``--user``
+    Set user name for Jenkins authentication.
+
+    You can also set the user name persistently by encoding it into the Jenkins
+    url directly, e.g. *https:://user@host/*.
+
 ``-v, --verbose``
     Show additional information
 
 ``-w, --windows``
-    Jenkins is running on Windows. Produce cygwin compatible scripts.
+    Jenkins is running on Windows. Produce MSYS2 compatible scripts. This
+    option has been deprecated in favour of ``--host-platform``.
 
 Commands
 --------

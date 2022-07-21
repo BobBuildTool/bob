@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ...builder import LocalBuilder
 from ...input import RecipeSet
 from ...scm import getScm, ScmTaint, ScmStatus
 from ...state import BobState
@@ -13,7 +14,6 @@ from textwrap import indent
 import argparse
 import os
 
-from .builder import LocalBuilder
 from .state import DevelopDirOracle
 
 __all__ = ['doStatus']

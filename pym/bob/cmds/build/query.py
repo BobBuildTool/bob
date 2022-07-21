@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ...builder import LocalBuilder
 from ...errors import ParseError
 from ...input import RecipeSet
 from ...utils import processDefines
@@ -11,7 +12,6 @@ import argparse
 import os
 import sys
 
-from .builder import LocalBuilder
 from .state import DevelopDirOracle
 
 def doQueryPath(argv, bobRoot):

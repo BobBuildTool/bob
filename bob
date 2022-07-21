@@ -7,6 +7,10 @@ scr_path = os.path.dirname(os.path.realpath(__file__))
 pym_path = os.path.join(scr_path, 'pym')
 sys.path.insert(0, pym_path)
 
+if os.environ.get("COVERAGE_PROCESS_START"):
+    import coverage
+    coverage.process_startup()
+
 from bob.scripts import bob
 
 if __name__ == '__main__':

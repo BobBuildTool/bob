@@ -1,0 +1,11 @@
+root: True
+
+checkoutSCM:
+    scm: git
+    url: ${REPODIR}
+
+buildScript: |
+    cp $1/* .
+
+packageScript: |
+    cp $1/* .

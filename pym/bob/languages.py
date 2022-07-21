@@ -5,7 +5,7 @@
 
 from . import BOB_INPUT_HASH
 from .errors import ParseError
-from .utils import escapePwsh, quotePwsh, isWindows, asHexStr
+from .utils import escapePwsh, quotePwsh, isWindows, asHexStr, getBashPath
 from .utils import joinScripts, sliceString
 from base64 import b64encode
 from enum import Enum
@@ -364,7 +364,7 @@ class BashLanguage:
             f.write(BashLanguage.__formatProlog(spec, keepEnv))
             f.write(BashLanguage.__formatSetup(spec))
 
-        args = ["bash", "--rcfile", BashLanguage.__munge(execScriptFile), "-s", "--"]
+        args = [getBashPath(), "--rcfile", BashLanguage.__munge(execScriptFile), "-s", "--"]
         args.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
         return (realScriptFile, execScriptFile, args)
 
@@ -374,7 +374,7 @@ class BashLanguage:
         with open(realScriptFile, "w") as f:
             f.write(BashLanguage.__formatScript(spec))
 
-        args = ["bash"]
+        args = [getBashPath()]
         if trace: args.append("-x")
         args.extend(["--", BashLanguage.__munge(execScriptFile)])
         args.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
@@ -401,7 +401,7 @@ class BashLanguage:
     @staticmethod
     def setupFingerprint(spec, env):
         env["BOB_CWD"] = BashLanguage.__munge(env["BOB_CWD"])
-        return ["bash", "-x", "-c", spec.fingerprintScript]
+        return [getBashPath(), "-x", "-c", spec.fingerprintScript]
 
 
 class PwshResolver(IncludeResolver):
@@ -447,32 +447,57 @@ class PwshLanguage:
         }
         """)
 
+    # When we try to execute PowerShell scripts on Windows we have to take into
+    # account that Cygwin/MSYS2 uses unix paths internally. So if we have apply
+    # the following transformations:
+    #
+    #  /c/foo/bar -> C:\foo\bar
+    #  /home/foo/bar -> $WD\..\..\home\foo\bar
+    #
+    if sys.platform in ("msys", "cygwin"):
+        __cygroot = None
+
+        @staticmethod
+        def __munge(p):
+            if p[0] == "/" and p[2] == "/":
+                return p[1].upper() + ":\\\\" + p[3:].replace('/', '\\')
+            elif p[0] == "/":
+                if PwshLanguage.__cygroot is None:
+                    PwshLanguage.__cygroot = os.popen("cygpath -w /").read().strip()
+                return PwshLanguage.__cygroot + p[1:].replace('/', '\\')
+            else:
+                return p.replace('/', '\\')
+    else:
+        @staticmethod
+        def __munge(p):
+            return p
+
     @staticmethod
     def __formatProlog(spec):
-        pathSep = ";" if sys.platform == "win32" else ":"
+        pathSep = ";" if isWindows() else ":"
         env = { key: escapePwsh(value) for (key, value) in spec.env.items() }
         env.update({
             "PATH": pathSep.join(
-                [escapePwsh(os.path.abspath(p)) for p in spec.paths] +
+                [escapePwsh(PwshLanguage.__munge(os.path.abspath(p))) for p in spec.paths] +
                 (["$Env:PATH"] if not spec.hasSandbox else
                  [escapePwsh(p) for p in spec.sandboxPaths])
             ),
             "LD_LIBRARY_PATH": pathSep.join(
-                escapePwsh(os.path.abspath(p)) for p in spec.libraryPaths
+                escapePwsh(PwshLanguage.__munge(os.path.abspath(p))) for p in spec.libraryPaths
             ),
-            "BOB_CWD": escapePwsh(os.path.abspath(spec.workspaceExecPath)),
+            "BOB_CWD": escapePwsh(PwshLanguage.__munge(os.path.abspath(spec.workspaceExecPath))),
         })
 
         ret = [
             "# Special Bob array variables:",
             "$BOB_ALL_PATHS=@{{ {} }}".format("; ".join(sorted(
-                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(os.path.abspath(path)))
+                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(PwshLanguage.__munge(os.path.abspath(path))))
                     for name,path in spec.allPaths ] ))),
             "$BOB_DEP_PATHS=@{{ {} }}".format("; ".join(sorted(
-                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(os.path.abspath(path)))
+                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(PwshLanguage.__munge(os.path.abspath(path))))
                     for name,path in spec.depPaths ] ))),
             "$BOB_TOOL_PATHS=@{{ {} }}".format("; ".join(sorted(
-                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(os.path.abspath(path)))
+                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(PwshLanguage.__munge(os.path.abspath(path))))
                     for name,path in spec.toolPaths ] ))),
             "",
             "# Environment:",
@@ -514,8 +539,8 @@ class PwshLanguage:
                     $ret["Env"][$i.Name] = $i.Value
                 }}
                 $ret["Vars"].Remove("ret")
-                ConvertTo-Json $ret -Compress -Depth 2 > {ENV_FILE}
-                """.format(ENV_FILE=quotePwsh(envFile))) if envFile else "",
+                [System.IO.File]::WriteAllLines({ENV_FILE}, (ConvertTo-Json $ret -Compress -Depth 2), (New-Object System.Text.UTF8Encoding($false)))
+                """.format(ENV_FILE=quotePwsh(PwshLanguage.__munge(envFile)))) if envFile else "",
             dedent("""\
                 cd $Env:BOB_CWD
                 # Error handling
@@ -559,8 +584,8 @@ class PwshLanguage:
 
         interpreter = "powershell" if isWindows() else "pwsh"
         args = [interpreter, "-ExecutionPolicy", "Bypass", "-NoExit", "-File",
-            execScriptFile]
-        args.extend(os.path.abspath(a) for a in spec.args)
+            PwshLanguage.__munge(execScriptFile)]
+        args.extend(PwshLanguage.__munge(os.path.abspath(a)) for a in spec.args)
 
         return (realScriptFile, execScriptFile, args)
 
@@ -571,8 +596,9 @@ class PwshLanguage:
             f.write(PwshLanguage.__formatScript(spec, trace))
 
         interpreter = "powershell" if isWindows() else "pwsh"
-        args = [interpreter, "-ExecutionPolicy", "Bypass", "-File", execScriptFile]
-        args.extend(os.path.abspath(a) for a in spec.args)
+        args = [interpreter, "-ExecutionPolicy", "Bypass", "-File",
+                PwshLanguage.__munge(execScriptFile)]
+        args.extend(PwshLanguage.__munge(os.path.abspath(a)) for a in spec.args)
 
         return (realScriptFile, execScriptFile, args)
 
@@ -596,6 +622,7 @@ class PwshLanguage:
     @staticmethod
     def setupFingerprint(spec, env):
         interpreter = "powershell" if isWindows() else "pwsh"
+        env["BOB_CWD"] = PwshLanguage.__munge(env["BOB_CWD"])
         return [interpreter, "-c", spec.fingerprintScript]
 
 
