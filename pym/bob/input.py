@@ -2897,6 +2897,7 @@ class RecipeSet:
         self.__scmOverrides = []
         self.__hooks = {}
         self.__projectGenerators = {}
+        self.__archiveAccessors = {}
         self.__configFiles = []
         self.__properties = {}
         self.__states = {}
@@ -3157,6 +3158,12 @@ class RecipeSet:
                 }
             self.__projectGenerators.update(projectGenerators)
 
+        archiveAccessors = manifest.get('archiveAccessors', {})
+        if not isinstance(archiveAccessors, dict):
+            raise ParseError("Plugin '"+fileName+"': 'archiveAccessor' has wrong type!")
+        if archiveAccessors:
+            self.__archiveAccessors.update(archiveAccessors)
+
         properties = manifest.get('properties', {})
         if not isinstance(properties, dict):
             raise ParseError("Plugin '"+fileName+"': 'properties' has wrong type!")
@@ -3224,6 +3231,9 @@ class RecipeSet:
 
     def setConfigFiles(self, configFiles):
         self.__configFiles = configFiles
+
+    def getArchiveAccessors (self):
+        return self.__archiveAccessors
 
     def getCommandConfig(self):
         return self.__commandConfig

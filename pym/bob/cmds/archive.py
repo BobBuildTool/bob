@@ -5,7 +5,9 @@
 
 from ..audit import Audit
 from ..errors import BobError
+from ..input import RecipeSet
 from ..utils import binStat, asHexStr, infixBinaryOp
+from ..archive_access import BaseArchiveAccess
 import argparse
 import gzip
 import json
@@ -20,14 +22,29 @@ import tarfile
 # need to enable this for nested expression parsing performance
 pyparsing.ParserElement.enablePackrat()
 
+class LocalAccessor(BaseArchiveAccess):
+    def get(self, path):
+        return path
+    def removeTmp(self, path):
+        return None
+    def listdir(self, path):
+        return os.listdir(path)
+    def getSize(self,path):
+        return os.stat(path).st_size
+    def unlink(self, path):
+        os.unlink(path)
+    def binStat(self, path):
+        return binStat(path)
+
 class ArchiveScanner:
     CUR_VERSION = 2
 
-    def __init__(self):
+    def __init__(self, accessor):
         self.__dirSchema = re.compile(r'[0-9a-zA-Z]{2}')
         self.__archiveSchema = re.compile(r'[0-9a-zA-Z]{36,}-1.tgz')
         self.__db = None
         self.__cleanup = False
+        self.__accessor = accessor
 
     def __enter__(self):
         try:
@@ -80,18 +97,20 @@ class ArchiveScanner:
         try:
             found = False
             self.__db.execute("BEGIN")
-            for l1 in os.listdir("."):
+            for l1 in self.__accessor.listdir("."):
                 if not self.__dirSchema.fullmatch(l1): continue
-                for l2 in os.listdir(l1):
+                for l2 in self.__accessor.listdir(l1):
                     if not self.__dirSchema.fullmatch(l2): continue
                     l2 = os.path.join(l1, l2)
-                    for l3 in os.listdir(l2):
+                    for l3 in self.__accessor.listdir(l2):
                         m = self.__archiveSchema.fullmatch(l3)
                         if not m: continue
                         found = True
                         self.__scan(os.path.join(l2, l3), verbose)
         except OSError as e:
             raise BobError("Error scanning archive: " + str(e))
+        except Exception as e:
+            raise BobError("Error: " + str(e))
         finally:
             self.__db.execute("END")
             if verbose and not found:
@@ -101,8 +120,9 @@ class ArchiveScanner:
             return found
 
     def __scan(self, fileName, verbose):
+        tmpFileName = None
         try:
-            st = binStat(fileName)
+            st = self.__accessor.binStat(fileName)
             bidHex, sep, suffix = fileName.partition("-")
             bid = bytes.fromhex(bidHex[0:2] + bidHex[3:5] + bidHex[6:])
 
@@ -116,9 +136,10 @@ class ArchiveScanner:
                 self.__db.execute("DELETE FROM files WHERE bid=?",
                     (bid,))
 
+            tmpFileName = self.__accessor.get(fileName)
             # read audit trail
             if verbose: print("scan", fileName)
-            with tarfile.open(fileName, errorlevel=1) as tar:
+            with tarfile.open(tmpFileName, errorlevel=1) as tar:
                 # validate
                 if tar.pax_headers.get('bob-archive-vsn') != "1":
                     print("Not a Bob archive:", fileName, "Ignored!")
@@ -135,7 +156,7 @@ class ArchiveScanner:
                 # read audit trail
                 auditJsonGz = tar.extractfile(f)
                 auditJson = gzip.GzipFile(fileobj=auditJsonGz)
-                audit = Audit.fromByteStream(auditJson, fileName)
+                audit = Audit.fromByteStream(auditJson, tmpFileName)
 
             # import data
             artifact = audit.getArtifact()
@@ -152,6 +173,10 @@ class ArchiveScanner:
             raise BobError("Cannot read {}: {}".format(fileName, str(e)))
         except OSError as e:
             raise BobError(str(e))
+        except Exception as e:
+            raise BobError("Error: " + str(e))
+        finally:
+            self.__accessor.removeTmp(tmpFileName)
 
     def remove(self, bid):
         self.__cleanup = True
@@ -386,7 +411,7 @@ def query(scanner, expressions):
     return retained
 
 
-def doArchiveScan(argv):
+def doArchiveScan(accessor, argv):
     parser = argparse.ArgumentParser(prog="bob archive scan")
     parser.add_argument("-v", "--verbose", action='store_true',
         help="Verbose operation")
@@ -394,14 +419,14 @@ def doArchiveScan(argv):
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
-    scanner = ArchiveScanner()
+    scanner = ArchiveScanner(accessor)
     with scanner:
         if not scanner.scan(args.verbose) and args.fail:
             sys.exit(1)
 
 
 # meta.package == "root" && build.date > "2017-06-19" LIMIT 5 ORDER BY build.date ASC
-def doArchiveClean(argv):
+def doArchiveClean(accessor, argv):
     parser = argparse.ArgumentParser(prog="bob archive clean")
     parser.add_argument('expression', nargs='+',
         help="Expression of artifacts that shall be kept")
@@ -415,7 +440,7 @@ def doArchiveClean(argv):
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
-    scanner = ArchiveScanner()
+    scanner = ArchiveScanner(accessor)
     with scanner:
         if not args.noscan:
             if not scanner.scan(args.verbose) and args.fail:
@@ -435,24 +460,29 @@ def doArchiveClean(argv):
             todo.update(scanner.getReferencedBuildIds(n))
 
         # Third pass: remove everything that is *not* retained
+        totalRemoved = 0
         for bid in scanner.getBuildIds():
             if bid in retained: continue
             victim = asHexStr(bid)
             victim = os.path.join(victim[0:2], victim[2:4], victim[4:] + "-1.tgz")
             if args.dry_run:
                 print(victim)
+                totalRemoved += accessor.getSize(victim)
             else:
                 try:
                     if args.verbose:
                         print("rm", victim)
-                    os.unlink(victim)
+                    totalRemoved += accessor.getSize(victim)
+                    accessor.unlink(victim)
                 except FileNotFoundError:
                     pass
                 except OSError as e:
                     raise BobError("Cannot remove {}: {}".format(victim, str(e)))
                 scanner.remove(bid)
+        print("{} {} Bytes from archive".format ("Would remove " if args.dry_run else "Removed",
+            totalRemoved))
 
-def doArchiveFind(argv):
+def doArchiveFind(accessor, argv):
     parser = argparse.ArgumentParser(prog="bob archive find")
     parser.add_argument('expression', nargs='+',
         help="Expression that artifacts need to match")
@@ -464,7 +494,7 @@ def doArchiveFind(argv):
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
-    scanner = ArchiveScanner()
+    scanner = ArchiveScanner(accessor)
     with scanner:
         if not args.noscan:
             if not scanner.scan(args.verbose) and args.fail:
@@ -492,14 +522,25 @@ def doArchive(argv, bobRoot):
 
   bob archive {}
 """.format(subHelp))
+    parser.add_argument('-a', '--accessor', nargs='?', default=None, help="Archive Accessor (plugin)")
     parser.add_argument('subcommand', help="Subcommand")
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for subcommand")
 
     args = parser.parse_args(argv)
 
+    if args.accessor:
+        recipes = RecipeSet()
+        recipes.parse()
+        accessors = recipes.getArchiveAccessors()
+        if not args.accessor in accessors:
+            parser.error("Unknown archive accessor '{}'".format(args.accessor))
+        accessor = accessors[args.accessor]
+    else:
+        accessor = LocalAccessor()
+
     if args.subcommand in availableArchiveCmds:
-        availableArchiveCmds[args.subcommand][0](args.args)
+        availableArchiveCmds[args.subcommand][0](accessor, args.args)
     else:
         parser.error("Unknown subcommand '{}'".format(args.subcommand))
 
