@@ -12,7 +12,7 @@ import sys
 
 from bob.utils import joinScripts, removePath, emptyDirectory, compareVersion, \
     getPlatformTag, run, check_output, removeUserFromUrl, runInEventLoop, \
-    _replacePathWin32, isWindows
+    _replacePathWin32, isWindows, updateDicRecursive
 from bob.errors import BuildError, ParseError
 
 class TestJoinScripts(TestCase):
@@ -339,3 +339,18 @@ class TestReplacePath(TestCase):
             with patch('os.replace', m):
                 _replacePathWin32("foo", "bar")
         m.assert_called_with("foo", "bar")
+
+class TestUpdateDictRecursive(TestCase):
+    def testSameSchema(self):
+        """Verify updates of dictionary keys"""
+        d = { "a" : 1, "b" : { "foo" : "bar" }, "c" : [ 42 ] }
+        u = { "b" : { "foo" : "baz", "x" : 2 }, "c" : [ 11 ] }
+        self.assertEqual(updateDicRecursive(d, u),
+                         { "a" : 1, "b" : { "foo" : "baz", "x" : 2 },
+                           "c" : [ 42, 11 ] })
+
+    def testChangeSchema(self):
+        d = { "a" : 1, "b" : { "foo" : "bar" }, "c" : [ 42 ] }
+        u = { "a" : { "foo" : "bar" }, "b" : [42], "c" : 1 }
+        self.assertEqual(updateDicRecursive(d, u),
+                         { "a" : { "foo" : "bar" }, "b" : [42], "c" : 1 })
