@@ -1129,7 +1129,7 @@ class Step:
         script but the one from getExecPath() instead.
         """
         if self.isValid():
-            return self.__pathFormatter(self, self.__package._getStates())
+            return self.__pathFormatter(self, self.__package.getPluginStates())
         else:
             return "/invalid/workspace/path/of/{}".format(self.__package.getName())
 
@@ -1655,7 +1655,12 @@ class Package(object):
                 self, self.__pathFormatter)
         return ret
 
-    def _getStates(self):
+    def getPluginStates(self):
+        """Return state trackers of this package.
+
+        :return: All plugin defined state trackers of the package
+        :rtype: Mapping[str, :class:`bob.input.PluginState`]
+        """
         return self.__corePackage.states
 
     def isRelocatable(self):
@@ -2227,6 +2232,17 @@ class Recipe(object):
         :meta private:
         """
         return self.__jobServer
+
+    def getPluginProperties(self):
+        """Get all plugin defined properties of recipe.
+
+        The values of all properties have their final value, i.e. after all
+        classes have been resolved.
+
+        :return: Plugin defined properties of recipe
+        :rtype: Mapping[str, :class:`bob.input.PluginProperty`]
+        """
+        return self.__properties
 
     def prepare(self, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
                 inputTools=Env(), stack=[]):
