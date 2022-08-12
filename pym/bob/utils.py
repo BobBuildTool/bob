@@ -119,18 +119,19 @@ def emptyDirectory(path):
 
 # Recursively merge entries of two dictonaries.
 #
-# Expect that both arguments have the same schema. Dictionaries are merged
+# Expect that both arguments have a compatible schema. Dictionaries are merged
 # key-by-key. Lists are appended. Returns merged result.
 #
 # See: http://stackoverflow.com/questions/3232943
 def updateDicRecursive(d, u):
     for k, v in u.items():
-        if isinstance(v, collections.abc.Mapping):
+        isSameType = isinstance(v, type(d.get(k)))
+        if isinstance(v, collections.abc.Mapping) and isSameType:
             d[k] = updateDicRecursive(d.get(k, {}), v)
-        elif isinstance(v, list):
+        elif isinstance(v, list) and isSameType:
             d[k] = d.get(k, []) + v
         else:
-            d[k] = u[k]
+            d[k] = v
     return d
 
 # Compare PEP 440 versions. Not strictly according to spec but enough for us.
