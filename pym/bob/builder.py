@@ -502,6 +502,11 @@ cd {ROOT}
                     if f.read() != content:
                         raise BuildError("Workspace contains stale data! Delete it and restart job.")
             except FileNotFoundError:
+                # If an SCM is used that is supported by Jenkins natively, the
+                # directory will always be present, even if if was deleted
+                # previously. Use the canary as indicator if the workspace was
+                # (re-)created...
+                created = True
                 with open(canary, "w") as f: f.write(content)
             except OSError as e:
                 raise BuildError("Error reading canary: " + str(e))
