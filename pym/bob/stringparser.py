@@ -309,14 +309,17 @@ class FunctionCall():
         return "{}({})".format(self.name,
             ", ".join(str(a) for a in self.args))
 
-    def evalExpression(self, env):
+    def evalExpressionToString(self, env):
         extra = env.funArgs
         args = [ a.evalExpressionToString(env) for a in self.args ]
         if self.name not in env.funs:
             raise ParseError("Bad syntax: " + "Unknown string function: "\
                     + self.name)
         fun = env.funs[self.name]
-        return isTrue(fun(args, env=env, **extra))
+        return fun(args, env=env, **extra)
+
+    def evalExpression(self, env):
+        return isTrue(self.evalExpressionToString(env))
 
 class BinaryStrOperator():
     __slots__ = ('op', 'opStr', 'left', 'right')
