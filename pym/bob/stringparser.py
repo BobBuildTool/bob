@@ -598,6 +598,27 @@ def funToolDefined(args, __tools, **options):
     if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
     return "true" if (args[0] in __tools) else "false"
 
+def funToolEnv(args, __tools, **options):
+    l = len(args)
+    if l == 2:
+        tool, var = args
+        default = None
+    elif l == 3:
+        tool, var, default = args
+    else:
+        raise ParseError("get-tool-env expects two or three arguments")
+
+    try:
+        env = __tools[tool].environment
+    except KeyError:
+        raise ParseError("get-tool-env: tool '{}' undefined".format(tool))
+
+    ret = env.get(var, default)
+    if ret is None:
+        raise ParseError("get-tool-env: undefined variable '{}' in tool '{}'".format(var, tool))
+
+    return ret
+
 def funMatchScm(args, **options):
     if len(args) != 2: raise ParseError("matchScm expects two arguments")
     name = args[0]
@@ -626,6 +647,7 @@ DEFAULT_STRING_FUNS = {
     "if-then-else" : funIfThenElse,
     "is-sandbox-enabled" : funSandboxEnabled,
     "is-tool-defined" : funToolDefined,
+    "get-tool-env" : funToolEnv,
     "ne" : funNotEqual,
     "not" : funNot,
     "strip" : funStrip,
