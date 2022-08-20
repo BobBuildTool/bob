@@ -69,9 +69,9 @@ class LogWriteProtocol(asyncio.SubprocessProtocol):
     def pipe_data_received(self, fd, data):
         self.__logFile.write(data)
         if fd == 1:
-            self.__stdOut.write(data)
+            for f in self.__stdOut: f.write(data)
         elif fd == 2:
-            self.__stdErr.write(data)
+            for f in self.__stdErr: f.write(data)
 
 
 class InvocationMode(Enum):
@@ -187,25 +187,25 @@ class Invoker:
             # If stdout should be captured we use a dedicated buffer. This
             # buffer is then returned to the caller at child exit.
             stdoutRedir = subprocess.PIPE
-            stdoutStream = io.BytesIO()
+            stdoutStreams = [io.BytesIO(), self.__stdoutStream]
         elif stdout == False:
             stdoutRedir = subprocess.DEVNULL
-            stdoutStream = DEVNULL
+            stdoutStreams = []
         else:
             stdoutRedir = self.__stdout
-            stdoutStream = self.__stdoutStream
+            stdoutStreams = [self.__stdoutStream]
 
         if stderr == True:
             # If stderr should be captured we use a dedicated buffer. This
             # buffer is then returned to the caller at child exit.
             stderrRedir = subprocess.PIPE
-            stderrStream = io.BytesIO()
+            stderrStreams = [io.BytesIO(), self.__stderrStream]
         elif stdout == False:
             stderrRedir = subprocess.DEVNULL
-            stderrStream = DEVNULL
+            stderrStreams = []
         else:
             stderrRedir = self.__stderr
-            stderrStream = self.__stderrStream
+            stderrStreams = [self.__stderrStream]
 
         # Sanity check on Windows that there are no environment variables that
         # differ only in case. The Windows envrionment is used case insensitive
@@ -231,7 +231,7 @@ class Invoker:
         try:
             transport, protocol = await loop.subprocess_exec(
                 lambda: LogWriteProtocol(exitFuture, self.__logFile,
-                                         stdoutStream, stderrStream),
+                                         stdoutStreams, stderrStreams),
                 *args,
                 stdin=self.__stdin, stdout=stdoutRedir, stderr=stderrRedir,
                 env=env, cwd=cwd,
@@ -248,19 +248,19 @@ class Invoker:
 
         if stdout == True:
             if universal_newlines:
-                stdoutStream.seek(0)
-                stdoutBuf = io.TextIOWrapper(stdoutStream, errors=errors).read()
+                stdoutStreams[0].seek(0)
+                stdoutBuf = io.TextIOWrapper(stdoutStreams[0], errors=errors).read()
             else:
-                stdoutBuf = stdoutStream.getvalue()
+                stdoutBuf = stdoutStreams[0].getvalue()
         else:
             stdoutBuf = None
 
         if stderr == True:
             if universal_newlines:
-                stderrStream.seek(0)
-                stderrBuf = io.TextIOWrapper(stderrStream, errors=errors).read()
+                stderrStreams[0].seek(0)
+                stderrBuf = io.TextIOWrapper(stderrStreams[0], errors=errors).read()
             else:
-                stderrBuf = stderrStream.getvalue()
+                stderrBuf = stderrStreams[0].getvalue()
         else:
             stderrBuf = None
 
