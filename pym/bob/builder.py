@@ -1807,7 +1807,7 @@ cd {ROOT}
             if fingerprint is None:
                 if sandbox:
                     await self._cook([sandbox], sandbox.getPackage(), False, depth+1)
-                with stepAction(step, "FNGRPRNT", step.getPackage().getName()) as a:
+                with stepExec(step, "FNGRPRNT", step.getPackage().getName()) as a:
                     fingerprint = await self.__runFingerprintScript(step, a)
 
                 # Always upload if this was calculated in a sandbox. The task will
@@ -1829,23 +1829,19 @@ cd {ROOT}
 
     async def __runFingerprintScript(self, step, logger):
         spec = StepSpec.fromStep(step, None, self.__envWhiteList, isJenkins=step.JENKINS)
-        invoker = Invoker(spec, self.__preserveEnv, True, True, True, False, True,
+        invoker = Invoker(spec, self.__preserveEnv, True,
+                          self.__verbose >= INFO, self.__verbose >= NORMAL,
+                          self.__verbose >= DEBUG, self.__bufferedStdIO,
                           executor=self.__executor)
         (ret, stdout, stderr) = await invoker.executeFingerprint()
 
         if ret == -int(signal.SIGINT):
             raise BuildError("Fingerprint script interrupted by user")
         elif ret != 0:
-            help = "Script output: " + stderr.decode(
-                locale.getpreferredencoding(False), 'replace').strip()
-            if self.__verbose >= DEBUG:
-                help += "\nScript: " + spec.fingerprintScript
-            raise BuildError("Fingerprint script returned with {}".format(ret),
-                help=help)
+            if self.__bufferedStdIO:
+                logger.setError(invoker.getStdio().strip())
+            raise BuildError("Fingerprint script returned with {}".format(ret))
 
-        log = repr(stdout.decode(locale.getpreferredencoding(False), 'replace').strip())
-        if len(log) > 43: log = log[:40] + "..."
-        logger.setResult(log)
         return stdout
 
     async def __runScmSwitch(self, step, scmPath, scm, oldSpec):
