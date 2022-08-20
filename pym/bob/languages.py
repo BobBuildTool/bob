@@ -399,9 +399,12 @@ class BashLanguage:
         return "\n".join(reversed(ret))
 
     @staticmethod
-    def setupFingerprint(spec, env):
+    def setupFingerprint(spec, env, trace):
         env["BOB_CWD"] = BashLanguage.__munge(env["BOB_CWD"])
-        return [getBashPath(), "-x", "-c", spec.fingerprintScript]
+        args = [getBashPath()]
+        if trace: args.append("-x")
+        args.extend(["-c", spec.fingerprintScript])
+        return args
 
 
 class PwshResolver(IncludeResolver):
@@ -620,7 +623,7 @@ class PwshLanguage:
         return "\n".join(reversed(ret))
 
     @staticmethod
-    def setupFingerprint(spec, env):
+    def setupFingerprint(spec, env, trace):
         interpreter = "powershell" if isWindows() else "pwsh"
         env["BOB_CWD"] = PwshLanguage.__munge(env["BOB_CWD"])
         return [interpreter, "-c", spec.fingerprintScript]

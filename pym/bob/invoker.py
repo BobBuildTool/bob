@@ -488,7 +488,7 @@ class Invoker:
                 env["BOB_CWD"] = tmpDir
                 cmdArgs = []
 
-            cmdArgs += self.__spec.language.setupFingerprint(self.__spec, env)
+            cmdArgs += self.__spec.language.setupFingerprint(self.__spec, env, self.__trace)
             proc = await self.__runCommand(cmdArgs, tmpDir, env=env,
                 universal_newlines=False, stdout=True, stderr=True,
                 specEnv=False)
