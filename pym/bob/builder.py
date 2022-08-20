@@ -564,6 +564,10 @@ cd {ROOT}
                         if dep.isValid(): audit.addArg(auditOf(dep))
                 except BobError as e:
                     a.fail(e.slogan, WARNING)
+                    if self.__verbose < INFO:
+                        stepMessage(step, "AUDIT", "{}: failed: {}"
+                                            .format(step.getWorkspacePath(), e.slogan),
+                                    WARNING)
                     return None
 
             # Always check for SCMs but don't fail if we did not execute the step
