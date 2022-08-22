@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from bob.stringparser import StringParser
 from bob.stringparser import funEqual, funNotEqual, funNot, funOr, \
     funAnd, funMatch, funIfThenElse, funSubst, funStrip, \
-    funSandboxEnabled, funToolDefined
+    funSandboxEnabled, funToolDefined, funToolEnv
 from bob.errors import ParseError
 
 def echo(args, **options):
@@ -206,3 +206,29 @@ class TestStringFunctions(TestCase):
         self.assertEqual(funToolDefined(["a"], __tools={"a":1, "b":2}), "true")
         self.assertEqual(funToolDefined(["c"], __tools={"a":1, "b":2}), "false")
 
+    def testToolEnv(self):
+        # Wrong number of arguments
+        with self.assertRaises(ParseError):
+            funToolEnv(["foo"], __tools={})
+        with self.assertRaises(ParseError):
+            funToolEnv(["foo", "bar", "baz", "extra"], __tools={})
+
+        # Undefined tool
+        with self.assertRaises(ParseError):
+            funToolEnv(["foo", "bar"], __tools={})
+
+        t = MagicMock()
+        t.environment = { "bar" : "baz" }
+        tools = { "foo" : t }
+
+        # Undefined variable in tool
+        with self.assertRaises(ParseError):
+            funToolEnv(["foo", "nx"], __tools=tools)
+
+        # Undefined variable in tool with default
+        self.assertEqual(funToolEnv(["foo", "nx", "default"], __tools=tools),
+                         "default")
+
+        # Get real var
+        self.assertEqual(funToolEnv(["foo", "bar"], __tools=tools), "baz")
+        self.assertEqual(funToolEnv(["foo", "bar", "def"], __tools=tools), "baz")
