@@ -392,6 +392,11 @@ The following built in string functions are supported:
   of ``text``.
 * ``$(subst,from,to,text)``: Replace every occurence of ``from`` with ``to`` in
   ``text``.
+* ``$(get-tool-env,tool,var[,default])``: Return the environment variable ``var``
+  defined by tool ``tool``. The substition will fail if the variable is
+  undefined in the tools :ref:`configuration-recipes-provideTools` environment
+  definition unless the optional ``default`` is given, which is then used
+  instead.
 
 The following built in string functions are additionally supported in
 :ref:`package path queries <manpage-bobpaths>`. They cannot be used in recipes
