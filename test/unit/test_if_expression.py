@@ -12,7 +12,11 @@ from bob.errors import BobError
 class TestIfExpressionParser(TestCase):
 
     def setUp(self):
-        tools = {"a":1, "b":2}
+        tool_a = MagicMock()
+        tool_a.environment = {}
+        tool_b = MagicMock()
+        tool_b.environment = { "foo" : "bar" }
+        tools = {"a" : tool_a, "b" : tool_b}
         self.__env = Env({"FOO" : "foo"
             })
         self.__env.setFuns(DEFAULT_STRING_FUNS.copy())
@@ -76,6 +80,11 @@ class TestIfExpressionParser(TestCase):
         self.assertFalse(self.evalExpr('is-tool-defined("c")'))
         self.assertFalse(self.evalExpr('match( "string", "pattern")'))
         self.assertRaises(BobError, self.evalExpr, "!does-not-exist()")
+
+    def testComplex(self):
+        self.assertTrue(self.evalExpr('get-tool-env("b", "foo") == "bar"'))
+        self.assertFalse(self.evalExpr('get-tool-env("a", "foo", "x") != "x"'))
+        self.assertTrue(self.evalExpr('!get-tool-env("a", "foo", "")'))
 
     def testCompare(self):
         """Equality comparison should work on the actual expression"""

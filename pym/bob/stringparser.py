@@ -309,14 +309,17 @@ class FunctionCall():
         return "{}({})".format(self.name,
             ", ".join(str(a) for a in self.args))
 
-    def evalExpression(self, env):
+    def evalExpressionToString(self, env):
         extra = env.funArgs
         args = [ a.evalExpressionToString(env) for a in self.args ]
         if self.name not in env.funs:
             raise ParseError("Bad syntax: " + "Unknown string function: "\
                     + self.name)
         fun = env.funs[self.name]
-        return isTrue(fun(args, env=env, **extra))
+        return fun(args, env=env, **extra)
+
+    def evalExpression(self, env):
+        return isTrue(self.evalExpressionToString(env))
 
 class BinaryStrOperator():
     __slots__ = ('op', 'opStr', 'left', 'right')
@@ -598,6 +601,27 @@ def funToolDefined(args, __tools, **options):
     if len(args) != 1: raise ParseError("is-tool-defined expects one argument")
     return "true" if (args[0] in __tools) else "false"
 
+def funToolEnv(args, __tools, **options):
+    l = len(args)
+    if l == 2:
+        tool, var = args
+        default = None
+    elif l == 3:
+        tool, var, default = args
+    else:
+        raise ParseError("get-tool-env expects two or three arguments")
+
+    try:
+        env = __tools[tool].environment
+    except KeyError:
+        raise ParseError("get-tool-env: tool '{}' undefined".format(tool))
+
+    ret = env.get(var, default)
+    if ret is None:
+        raise ParseError("get-tool-env: undefined variable '{}' in tool '{}'".format(var, tool))
+
+    return ret
+
 def funMatchScm(args, **options):
     if len(args) != 2: raise ParseError("matchScm expects two arguments")
     name = args[0]
@@ -626,6 +650,7 @@ DEFAULT_STRING_FUNS = {
     "if-then-else" : funIfThenElse,
     "is-sandbox-enabled" : funSandboxEnabled,
     "is-tool-defined" : funToolDefined,
+    "get-tool-env" : funToolEnv,
     "ne" : funNotEqual,
     "not" : funNot,
     "strip" : funStrip,
