@@ -4,7 +4,7 @@ Installation
 Dependencies
 ============
 
-Bob is built with Python3 (>=3.5). Some additional Python packages are
+Bob is built with Python3 (>=3.6). Some additional Python packages are
 required. They are installed automatically as dependencies.
 
 Apart from the Python dependencies additional run time dependencies could arise,

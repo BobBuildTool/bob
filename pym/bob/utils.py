@@ -513,26 +513,25 @@ class DirHasher:
     def __hashDir(self, prefix, path=b''):
         entries = []
         try:
-            dirEntries = os.scandir(os.path.join(prefix, path if path else b'.'))
+            with os.scandir(os.path.join(prefix, path if path else b'.')) as dirEntries:
+                for dirEntry in dirEntries:
+                    f = dirEntry.name
+                    e = os.path.join(path, f)
+                    try:
+                        if dirEntry.is_dir(follow_symlinks=False):
+                            # skip useless directories
+                            if f in self.__ignoreDirs: continue
+                            # add training '/' for directores for correct sorting
+                            f = f + os.fsencode(os.path.sep)
+                        else:
+                            # skip useless files
+                            if f in DirHasher.IGNORE_FILES: continue
+                        entries.append((e, f, dirEntry.stat(follow_symlinks=False)))
+                    except OSError as err:
+                        logging.getLogger(__name__).warning("Cannot stat '%s': %s", e, str(err))
         except OSError as e:
             logging.getLogger(__name__).warning("Cannot list directory: %s", str(e))
-            dirEntries = []
 
-        for dirEntry in dirEntries:
-            f = dirEntry.name
-            e = os.path.join(path, f)
-            try:
-                if dirEntry.is_dir(follow_symlinks=False):
-                    # skip useless directories
-                    if f in self.__ignoreDirs: continue
-                    # add training '/' for directores for correct sorting
-                    f = f + os.fsencode(os.path.sep)
-                else:
-                    # skip useless files
-                    if f in DirHasher.IGNORE_FILES: continue
-                entries.append((e, f, dirEntry.stat(follow_symlinks=False)))
-            except OSError as err:
-                logging.getLogger(__name__).warning("Cannot stat '%s': %s", e, str(err))
         entries = sorted(entries, key=lambda x: x[1])
         dirList = [
             (struct.pack("=L", s.st_mode) + self.__hashEntry(prefix, e, s) + f)
