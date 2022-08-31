@@ -10,11 +10,12 @@ __all__ = ('makeSandboxHelper', 'makeManpages')
 
 def findYoungestInDir(path, exclude):
     ret = 0
-    for entry in os.scandir(path):
-        if entry.name in exclude: continue
-        ret = max(ret, entry.stat().st_mtime)
-        if entry.is_dir():
-            ret = max(ret, findYoungestInDir(entry.path, exclude))
+    with os.scandir(path) as entries:
+        for entry in entries:
+            if entry.name in exclude: continue
+            ret = max(ret, entry.stat().st_mtime)
+            if entry.is_dir():
+                ret = max(ret, findYoungestInDir(entry.path, exclude))
     return ret
 
 def findYoungest(path, exclude=set()):

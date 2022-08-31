@@ -452,12 +452,10 @@ class GitScm(Scm):
 
         # If we recurse into sub-submodules get their potential state up-front
         if self.__recurseSubmodules:
-            # Explicit loop because of Python 3.5: "'await' expressions in
-            # comprehensions are not supported".
-            subMods = {}
-            for p in updatePaths:
-                subMods[p] = await self.__updateSubmodulesPre(invoker,
-                    os.path.join(base, p))
+            subMods = {
+                p : await self.__updateSubmodulesPre(invoker, os.path.join(base, p))
+                for p in updatePaths
+            }
 
         # Do the update of safe submodules
         args = ["git", "-C", base, "submodule", "update", "--init"]

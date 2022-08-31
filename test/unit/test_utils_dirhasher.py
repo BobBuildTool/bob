@@ -35,6 +35,17 @@ class TestHashFile(TestCase):
                     "da39a3ee5e6b4b0d3255bfef95601890afd80709"))
                 self.assertEqual(cm.records[0].msg, "Cannot hash file: %s")
 
+class OsScandirList(list):
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+def makeOsScandir(entries):
+    m = MagicMock()
+    m.return_value = OsScandirList(entries)
+    return m
+
 class TestHashDir(TestCase):
     def setUp(self):
         self.umask = os.umask(0o022)
@@ -133,8 +144,7 @@ class TestHashDir(TestCase):
         entry.is_dir = MagicMock(return_value=False)
         entry.name = b'ghost'
         entry.stat = mock_lstat
-        entries = MagicMock()
-        entries.return_value = [ entry ]
+        entries = makeOsScandir([ entry ])
 
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
@@ -168,8 +178,7 @@ class TestHashDir(TestCase):
         entry.is_dir = MagicMock(return_value=False)
         entry.name = b'McFly'
         entry.stat = mock_lstat
-        entries = MagicMock()
-        entries.return_value = [ entry ]
+        entries = makeOsScandir([ entry ])
 
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
@@ -206,8 +215,7 @@ class TestHashDir(TestCase):
         entry.is_dir = MagicMock(return_value=False)
         entry.name = b'sda'
         entry.stat = mock_lstat
-        entries = MagicMock()
-        entries.return_value = [ entry ]
+        entries = makeOsScandir([ entry ])
 
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
@@ -237,8 +245,7 @@ class TestHashDir(TestCase):
         entry.is_dir = MagicMock(return_value=False)
         entry.name = b'tty'
         entry.stat = mock_lstat
-        entries = MagicMock()
-        entries.return_value = [ entry ]
+        entries = makeOsScandir([ entry ])
 
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
