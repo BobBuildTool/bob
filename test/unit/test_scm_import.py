@@ -47,7 +47,7 @@ class TestImportScm(TestCase):
     def tearDownClass(cls):
         cls.__repodir.cleanup()
 
-    def createImportScm(self, spec = {}):
+    def createImportScm(self, spec = {}, **kwargs):
         s = {
             'scm' : 'import',
             'url' : self.url,
@@ -55,7 +55,7 @@ class TestImportScm(TestCase):
             '__source' : "Recipe foo",
         }
         s.update(spec)
-        return ImportScm(s)
+        return ImportScm(s, **kwargs)
 
     def invokeScm(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
@@ -170,3 +170,10 @@ class TestImportScm(TestCase):
 
             self.assertEqual(d, ImportAudit.fromData(d).dump())
 
+    def testOutOfTree(self):
+        """Out of tree builds are supported"""
+        digest = hashDirectory(os.path.join(self.url, "sub"))
+        s = self.createImportScm({ 'url' : 'sub' }, projectRoot=self.url)
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, s)
+            self.assertEqual(digest, hashDirectory(workspace))
