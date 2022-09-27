@@ -127,12 +127,13 @@ class ImportScm(Scm):
 
     SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
 
-    def __init__(self, spec, overrides=[], pruneDefault=None):
+    def __init__(self, spec, overrides=[], pruneDefault=None, projectRoot=""):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
         self.__prune = spec.get("prune", pruneDefault or False)
         self.__data = spec.get("__data")
+        self.__projectRoot = spec.get("__projectRoot", projectRoot)
 
     def getProperties(self, isJenkins):
         ret = super().getProperties(isJenkins)
@@ -144,6 +145,8 @@ class ImportScm(Scm):
         })
         if isJenkins:
             ret['__data'] = packTree(self.__url)
+        else:
+            ret['__projectRoot'] = self.__projectRoot
         return ret
 
     async def invoke(self, invoker):
@@ -151,9 +154,10 @@ class ImportScm(Scm):
         os.makedirs(dest, exist_ok=True)
         if self.__prune: emptyDirectory(dest)
         if self.__data is None:
-            if not os.path.isdir(self.__url):
-                invoker.fail("Cannot import '{}': not a directory!".format(self.__url))
-            copyTree(self.__url, dest, invoker)
+            src = os.path.join(self.__projectRoot, self.__url)
+            if not os.path.isdir(src):
+                invoker.fail("Cannot import '{}': not a directory!".format(src))
+            copyTree(src, dest, invoker)
         else:
             unpackTree(self.__data, dest)
 
