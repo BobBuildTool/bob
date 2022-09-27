@@ -535,6 +535,7 @@ class RecipeSetIR:
         }
         self.__data['archiveSpec'] = recipeSet.archiveSpec()
         self.__data['envWhiteList'] = sorted(recipeSet.envWhiteList())
+        self.__data['projectRoot'] = recipeSet.getProjectRoot()
         return self
 
     @classmethod
@@ -563,3 +564,5 @@ class RecipeSetIR:
     def getPolicy(self, name, location=None):
         return self.__data['policies'][name]
 
+    def getProjectRoot(self):
+        return self.__data['projectRoot']
