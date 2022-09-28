@@ -85,7 +85,8 @@ jobs:
             - name: Run unit tests
               run: |
                 git config --global init.defaultBranch master # keep the old name
-                $env:PATH += ";C:\msys64\usr\bin"
+                $env:PATH = "$env:JAVA_HOME_11_X64\bin;$env:PATH;C:\msys64\usr\bin"
+                $env:JAVA_HOME = "$env:JAVA_HOME_11_X64"
                 bash ./test/run-tests.sh -c xml
 
             - name: Build Python package
