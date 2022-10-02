@@ -966,7 +966,7 @@ git
    The ``rev`` property of the ``git`` SCM unifies the specification of the
    desired branch/tag/commit into one single property. If present it will be
    evaluated first. Any other ``branch``, ``tag`` or ``commit`` property is
-   evalued after it and may override a precious setting made by ``rev``. The
+   evaluated after it and may override a previous setting made by ``rev``. The
    branch/tag/commit precedence is still respected, though. Following the patterns
    described in git-rev-parse(1) the following formats are currently supported:
 
