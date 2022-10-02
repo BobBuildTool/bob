@@ -1089,6 +1089,41 @@ url
        possible to fetch multiple files in the same directory. This is done to
        separate possibly extracted files safely from other checkouts.
 
+.. _configuration-recipes-checkoutUpdateIf:
+
+checkoutUpdateIf
+~~~~~~~~~~~~~~~~
+
+Type: String | Boolean | ``null`` | IfExpression
+(:ref:`configuration-principle-booleans`), default: ``False``
+
+By default no checkout scripts are run when building with ``--build-only``.
+Some use cases practically require the ``checkoutScript`` to be always run,
+through. A typical example are code generators that generate sources from some
+high level description. These generators must be run every time when the user
+has changed the input. A recipe or class can explicitly opt in to run their
+``checkoutScript`` also in build-only mode to cover such a use case. This is
+done by either setting ``checkoutUpdateIf`` to ``True`` or by a boolean
+expression that is evaluated to ``True``. Otherwise the ``checkoutScript`` is
+ignored even if some other class enables its script. The ``checkoutUpdateIf``
+property thus only applies to the corresponding ``checkoutScript`` in the same
+recipe/class.
+
+A ``null`` value has a special semantic. It does not enable the
+``checkoutScript`` on ``--build-only`` builds by itself but only if some
+inherited class or the recipe does enable its ``checkoutUpdateIf``. This is
+useful for classes to provide some update functions but, unless an inheriting
+recipe explicitly enables ``checkoutUpdateIf``, does not cause the checkout
+step to run by itself in ``--build-only`` mode.
+
+Examples::
+
+    checkoutUpdateIf: False                             # default, same as if unset
+    checkoutUpdateIf: True                              # unconditionally run checkoutScript
+    checkoutUpdateIf: "$(is-tool-defined,idl-compiler)" # boolean expression
+    checkoutUpdateIf: !expr |                           # IfExpression
+                        is-tool-defined("idl-compiler")
+
 .. _configuration-recipes-depends:
 
 depends

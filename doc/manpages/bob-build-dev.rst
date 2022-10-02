@@ -181,7 +181,9 @@ Options
    defined by Bob itself (e.g. ``meta.bob``) cannot be redifined!
 
 ``-b, --build-only``
-    Don't checkout, just build and package
+    Don't checkout, just build and package. Checkout scripts whose
+    :ref:`configuration-recipes-checkoutUpdateIf` property was evaluated as
+    true will still be run.
 
     If the sources of a package that needs to be built are missing then Bob
     will still check them out. This option just prevents updates of existing
