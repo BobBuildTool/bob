@@ -185,6 +185,11 @@ class TestDependencies(TestCase):
         self.cmpEntry(res[5], "f", checkoutDep=True)
 
 
+def applyRecipeDefaults(recipe):
+    r = recipe.copy()
+    r.setdefault("checkoutUpdateIf", False)
+    return r
+
 class TestRelocatable(TestCase):
 
     def parseAndPrepare(self, name, recipe, classes={}, allRelocatable=None):
@@ -195,13 +200,13 @@ class TestRelocatable(TestCase):
         recipeSet.scriptLanguage = ScriptLanguage.BASH
         recipeSet.getPolicy = lambda x: allRelocatable if x == 'allRelocatable' else None
 
-        cc = { n : Recipe(recipeSet, r, [], n+".yaml", cwd, n, n, {}, False)
+        cc = { n : Recipe(recipeSet, applyRecipeDefaults(r), [], n+".yaml",
+                          cwd, n, n, {}, False)
             for n, r in classes.items() }
         recipeSet.getClass = lambda x, cc=cc: cc[x]
 
-        r = recipe.copy()
-        r["root"] = True
-        ret = Recipe(recipeSet, recipe, [], name+".yaml", cwd, name, name, {})
+        ret = Recipe(recipeSet, applyRecipeDefaults(recipe), [], name+".yaml",
+                     cwd, name, name, {})
         ret.resolveClasses(Env())
         return ret.prepare(Env(), False, {})[0].refDeref([], {}, None, None)
 

@@ -632,7 +632,8 @@ cd {ROOT}
                                         "{:02}-{}".format(i, a.getPackage().getName())))
                 i += 1
 
-    async def _runShell(self, step, scriptName, logger, cleanWorkspace=None):
+    async def _runShell(self, step, scriptName, logger, cleanWorkspace=None,
+                        mode=InvocationMode.CALL):
         workspacePath = step.getWorkspacePath()
         if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
         self.__linkDependencies(step)
@@ -683,7 +684,7 @@ cd {ROOT}
             executor=self.__executor)
         if step.jobServer() and self.__jobServer:
             invoker.setMakeParameters(self.__jobServer.getMakeFd(), self.__jobs)
-        ret = await invoker.executeStep(InvocationMode.CALL, cleanWorkspace)
+        ret = await invoker.executeStep(mode, cleanWorkspace)
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):
             raise BuildError("User aborted while running {}".format(absRunFile),
@@ -693,26 +694,6 @@ cd {ROOT}
                 logger.setError(invoker.getStdio().strip())
             raise BuildError("{} returned with {}"
                                 .format(absRunFile, ret),
-                             help="You may resume at this point with '--resume' after fixing the error.")
-
-    async def _runLocalSCMs(self, step, logger):
-        workspacePath = step.getWorkspacePath()
-        logFile = os.path.join(workspacePath, "..", "log.txt")
-        spec = StepSpec.fromStep(step, logFile=logFile, isJenkins=step.JENKINS)
-        invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
-            self.__verbose >= INFO, self.__verbose >= NORMAL,
-            self.__verbose >= DEBUG, self.__bufferedStdIO,
-            executor=self.__executor)
-        ret = await invoker.executeLocalSCMs()
-        if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
-        if ret == -int(signal.SIGINT):
-            raise BuildError("User aborted while updating local SCMs",
-                             help = "Run again with '--resume' to skip already built packages.")
-        elif ret != 0:
-            if self.__bufferedStdIO:
-                logger.setError(invoker.getStdio().strip())
-            raise BuildError("Update of local SCMs failed with exit code {}"
-                                .format(ret),
                              help="You may resume at this point with '--resume' after fixing the error.")
 
     def getStatistic(self):
@@ -1029,18 +1010,23 @@ cd {ROOT}
             isFreshCheckout = True
         oldCheckoutHash = BobState().getResultHash(prettySrcPath)
 
+        checkoutInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
+            for i in checkoutStep.getAllDepSteps() if i.isValid() ]
+
         checkoutExecuted = False
         checkoutDigest = checkoutStep.getVariantId()
         checkoutState = checkoutStep.getScmDirectories().copy()
         checkoutState[None] = (checkoutDigest, None)
         if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
+            inputChanged = checkoutInputHashes != BobState().getInputHashes(prettySrcPath)
+            rehash = lambda: hashWorkspace(checkoutStep)
             if not compareDirectoryState(checkoutState, oldCheckoutState):
                 stepMessage(checkoutStep, "CHECKOUT", "WARNING: recipe changed but skipped due to --build-only ({})"
                     .format(prettySrcPath), WARNING)
-            elif any((s.isLocal() and not s.isDeterministic()) for s in checkoutStep.getScmList()):
+            elif checkoutStep.mayUpdate(inputChanged, BobState().getResultHash(prettySrcPath), rehash):
                 with stepExec(checkoutStep, "UPDATE",
                               "{} {}".format(prettySrcPath, overridesString)) as a:
-                    await self._runLocalSCMs(checkoutStep, a)
+                    await self._runShell(checkoutStep, "checkout", a, mode=InvocationMode.UPDATE)
             else:
                 stepMessage(checkoutStep, "CHECKOUT", "skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString),
                     SKIPPED, IMPORTANT)
@@ -1059,8 +1045,6 @@ cd {ROOT}
                         # Do not use None here to distinguish it from a non-existent directory.
                         oldCheckoutState[scmDir] = (False, scmSpec)
 
-            checkoutInputHashes = [ BobState().getResultHash(i.getWorkspacePath())
-                for i in checkoutStep.getAllDepSteps() if i.isValid() ]
             if (self.__force or (not checkoutStep.isDeterministic()) or
                 (BobState().getResultHash(prettySrcPath) is None) or
                 not compareDirectoryState(checkoutState, oldCheckoutState) or

@@ -302,7 +302,7 @@ class BashLanguage:
         ])
 
     @staticmethod
-    def __formatScript(spec):
+    def __formatScript(spec, script):
         colorize = not spec.isJenkins
         if spec.envFile:
             envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
@@ -343,7 +343,7 @@ class BashLanguage:
             BashLanguage.__formatSetup(spec),
             "",
             "# Recipe main script",
-            spec.mainScript,
+            script,
         ]
         return "\n".join(ret)
 
@@ -369,10 +369,10 @@ class BashLanguage:
         return (realScriptFile, execScriptFile, args)
 
     @staticmethod
-    def setupCall(spec, tmpDir, keepEnv, trace):
+    def __setupExec(spec, script, tmpDir, keepEnv, trace):
         realScriptFile, execScriptFile = BashLanguage.__scriptFilePaths(spec, tmpDir)
         with open(realScriptFile, "w") as f:
-            f.write(BashLanguage.__formatScript(spec))
+            f.write(BashLanguage.__formatScript(spec, script))
 
         args = [getBashPath()]
         if trace: args.append("-x")
@@ -380,6 +380,14 @@ class BashLanguage:
         args.extend(BashLanguage.__munge(os.path.abspath(a)) for a in spec.args)
 
         return (realScriptFile, execScriptFile, args)
+
+    @staticmethod
+    def setupCall(spec, tmpDir, keepEnv, trace):
+        return BashLanguage.__setupExec(spec, spec.mainScript, tmpDir, keepEnv, trace)
+
+    @staticmethod
+    def setupUpdate(spec, tmpDir, keepEnv, trace):
+        return BashLanguage.__setupExec(spec, spec.updateScript, tmpDir, keepEnv, trace)
 
     @staticmethod
     def mangleFingerprints(scriptFragments, env):
@@ -521,7 +529,7 @@ class PwshLanguage:
         ])
 
     @staticmethod
-    def __formatScript(spec, trace):
+    def __formatScript(spec, script, trace):
         if spec.envFile:
             envFile = "/bob/env" if spec.hasSandbox else os.path.abspath(spec.envFile)
         else:
@@ -558,7 +566,7 @@ class PwshLanguage:
             PwshLanguage.__formatSetup(spec),
             "",
             "# Recipe main script",
-            spec.mainScript,
+            script,
             dedent("""\
                 } finally {
                     foreach($f in $_BOB_TMP_CLEANUP) {
@@ -593,10 +601,10 @@ class PwshLanguage:
         return (realScriptFile, execScriptFile, args)
 
     @staticmethod
-    def setupCall(spec, tmpDir, keepEnv, trace):
+    def __setupExec(spec, script, tmpDir, keepEnv, trace):
         realScriptFile, execScriptFile = PwshLanguage.__scriptFilePaths(spec, tmpDir)
         with open(realScriptFile, "w") as f:
-            f.write(PwshLanguage.__formatScript(spec, trace))
+            f.write(PwshLanguage.__formatScript(spec, script, trace))
 
         interpreter = "powershell" if isWindows() else "pwsh"
         args = [interpreter, "-ExecutionPolicy", "Bypass", "-File",
@@ -604,6 +612,14 @@ class PwshLanguage:
         args.extend(PwshLanguage.__munge(os.path.abspath(a)) for a in spec.args)
 
         return (realScriptFile, execScriptFile, args)
+
+    @staticmethod
+    def setupCall(spec, tmpDir, keepEnv, trace):
+        return PwshLanguage.__setupExec(spec, spec.mainScript, tmpDir, keepEnv, trace)
+
+    @staticmethod
+    def setupUpdate(spec, tmpDir, keepEnv, trace):
+        return PwshLanguage.__setupExec(spec, spec.updateScript, tmpDir, keepEnv, trace)
 
     @staticmethod
     def mangleFingerprints(scriptFragments, env):
@@ -706,6 +722,7 @@ class StepSpec:
         d['preRunCmds'] = step.getJenkinsPreRunCmds() if isJenkins else step.getPreRunCmds()
         d['setupScript'] = step.getSetupScript()
         d['mainScript'] = step.getMainScript()
+        d['updateScript'] = step.getUpdateScript()
         d['postRunCmds'] = step.getPostRunCmds()
         d['fingerprintScript'] = step._getFingerprintScript()
 
@@ -806,6 +823,10 @@ class StepSpec:
     @property
     def mainScript(self):
         return self.__data['mainScript']
+
+    @property
+    def updateScript(self):
+        return self.__data['updateScript']
 
     @property
     def fingerprintScript(self):
