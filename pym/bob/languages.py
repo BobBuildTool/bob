@@ -542,7 +542,7 @@ class PwshLanguage:
                     $ret["Env"][$i.Name] = $i.Value
                 }}
                 $ret["Vars"].Remove("ret")
-                [System.IO.File]::WriteAllLines({ENV_FILE}, (ConvertTo-Json $ret -Compress -Depth 2), (New-Object System.Text.UTF8Encoding($false)))
+                [System.IO.File]::WriteAllLines({ENV_FILE}, (ConvertTo-Json $ret -Compress -Depth 2 -WarningAction Ignore), (New-Object System.Text.UTF8Encoding($false)))
                 """.format(ENV_FILE=quotePwsh(PwshLanguage.__munge(envFile)))) if envFile else "",
             dedent("""\
                 cd $Env:BOB_CWD
