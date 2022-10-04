@@ -208,7 +208,7 @@ class IfExpression():
         self.__expr = IfExpressionParser.getInstance().parseExpression(expr)
 
     def __eq__(self, other):
-        return self.__expr == other.__expr
+        return isinstance(other, IfExpression) and self.__expr == other.__expr
 
     def __lt__(self, other): return NotImplemented
     def __le__(self, other): return NotImplemented
