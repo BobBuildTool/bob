@@ -172,7 +172,7 @@ described in :ref:`configuration-principle-subst` is allowed. These functions
 are called with at least one positional parameter for the arguments that were
 specified when invoking the string function. They are expected to return a
 string and shall have no side effects. The function has to accept any number of
-additionaly keyword arguments.  Currently the following additionaly kwargs are
+additional keyword arguments. Currently the following additional kwargs are
 passed:
 
 * ``env``: dict of all available environment variables at the current context
@@ -208,8 +208,8 @@ ways. For such use cases the following hooks are available:
 
 All hooks take a single mandatory positional parameter: the job config XML as
 string. The hook is expected to return the altered config XML as string too.
-The function has to accept any number of additionaly keyword arguments.
-Currently the following additionaly kwargs are passed:
+The function has to accept any number of additional keyword arguments.
+Currently the following additional kwargs are passed:
 
  * ``alias``: alias name used for jenkins
  * ``buildSteps``: list of all build steps (:class:`bob.input.Step`) used in
@@ -222,8 +222,8 @@ Currently the following additionaly kwargs are passed:
  * ``packageSteps``: list of all package steps (:class:`bob.input.Step`) used
    in the job
  * ``prefix``: Prefix of all job names
- * ``sandbox``: Boolean wether sandbox should be used
- * ``url``: URL of Jenkins instane
+ * ``sandbox``: Boolean whether sandbox should be used
+ * ``url``: URL of Jenkins instance
  * ``windows``: True if Jenkins runs on Windows
 
 See the jenkins-cobertura plugin in the "contrib" directory for an example. The
@@ -253,7 +253,7 @@ Generators
 ----------
 
 The main purpose of a generator is to generate project files for one or more IDEs. 
-There is a build-in generator for QtCreator project files.
+There are several built-in generators, e.g. for QtCreator project files.
 
 A generator is called with at least 3 arguments:
 

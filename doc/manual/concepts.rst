@@ -31,8 +31,8 @@ created. Dependencies (downstream recipes) may be propagated upwards which is
 not shown in the picture. Environment variables are key-value-pairs of
 strings. They are passed as shell variables to the individual build steps.
 Tools are scripts or executables that are needed to produce the build result,
-e.g. compilers, image generator or post processing scripts. Consuming recipes
-of tools get the directory of the required tool added to their $PATH so that
+e.g. compilers, image generators or post processing scripts. Consuming recipes
+of tools get the directory of the required tool added to their ``$PATH`` so that
 they are available for the build steps. By explicitly defining the dependencies
 and required environment variables/tools of a recipe, Bob can track changes that
 influence the build result with a high degree of certainty.
@@ -50,7 +50,7 @@ previous build runs or from external build servers.
 The flow of environment variables is depicted in red while the flow of tools is
 shown in green. By default only build results and dependencies are exchanged. A
 recipe may declare that it consumes certain environment variables
-({checkout,build,package}Consume) and tools ({checkout,build,pac kage}Tools).
+(:ref:`configuration-recipes-vars`) and tools (:ref:`configuration-recipes-tools`).
 On the other hand a recipe may also declare to provide a dependency, tool or
 variable, providing the necessary input for upstream recipes. If a tool or
 environment variable is used without declaring its usage, Bob will stop
@@ -66,13 +66,13 @@ Implicit versioning
 A key concept of Bob is that recipes do not have an explicit version. Instead,
 Bob constructs an implicit version that is derived from the recipe and the
 input to this recipe when building a particular package. This is called the
-Package-Id. The recipe language is static in the sense that the Package-Id of a
+:term:`Package-Id`. The recipe language is static in the sense that the :term:`Package-Id` of a
 package can be calculated in advance without executing any build steps. This
 enables Bob to determine exactly when a package has to be built from scratch
 (e.g. the build script changed) or if Bob has to build several packages from
 the same recipe due to varying input parameters.
 
-Technically, the Package-Id is the Variant-Id of the package step. The Variant-Id of
+Technically, the :term:`Package-Id` is the :term:`Variant-Id` of the package step. The Variant-Id of
 each step (checkout, build and package) is calculated as follows:
 
 .. math::
@@ -89,10 +89,10 @@ where
 To keep the Variant-Id stable in the long run, the scripts of SCMs in the
 checkout step are replaced by a symbolic representation.
 
-There exists also a second implicit version, called Build-Id, which identifies
-the build result in advance. The Build-Id can be used to grab matching build
+There exists also a second implicit version, called :term:`Build-Id`, which identifies
+the build result in advance. The :term:`Build-Id` can be used to grab matching build
 artifacts from another build server instead of building them locally. The
-Build-Id is derived from the actual sources created by the checkout step, the
+:term:`Build-Id` is derived from the actual sources created by the checkout step, the
 build/package Scripts, the environment and all Build-Ids of the recipe
 dependencies:
 
@@ -139,25 +139,26 @@ resolving all dependent variables.
 Re-usage of build artifacts
 ---------------------------
 
-When building packages, Bob will use a separate directory for each Step-Id.
+When building packages, Bob will use a separate directory for each :term:`Variant-Id`.
 Future executions of a particular step will use the same directory unless the
-step is changed and gets a new Step-Id. By using the Step-Id as discriminator, a
+step is changed and gets a new :term:`Variant-Id`. By using the :term:`Variant-Id` as discriminator, a
 safe incremental build is possible. The previous directory will be reused as long
-as the Step-Id is stable. If anything is changed that might influence
+as the :term:`Variant-Id` is stable. If anything is changed that might influence
 the build result (step itself or any dependency), it will result in a new
-Step-Id and Bob will use a new directory. Likewise, if the changes are
-reverted, the Step-Id will get the previous value and Bob will restart using
+:term:`Variant-Id` and Bob will use a new directory. Likewise, if the changes are
+reverted, the :term:`Variant-Id` will get the previous value and Bob will restart using
 the previous directory.
 
 In local builds, the build results are shared directly with upstream packages by
 passing the path to the upstream steps. On the Jenkins build server the build
 results are copied between the different work spaces.
 
-Based on the Build-Id, it is possible to fetch build results of a build server
+Based on the :term:`Build-Id`, it is possible to fetch build results of a build server
 from an artifact repository instead of building it locally. To compute the
-Build-Id, Bob requires that the checkout step of the recipe and all its
-dependencies must be deterministic. Then Bob will look up the package result
-from the artifact repository based on the Build-Id. If the artifact is found it
+:term:`Build-Id`, Bob needs to know the result of the checkout step of the recipe (either by
+having cached the anticipated result of deterministic checkout steps or by running it) and all its
+dependencies. Then Bob will look up the package result
+from the artifact repository based on the :term:`Build-Id`. If the artifact is found it
 will be downloaded and the build and package steps are skipped. Otherwise the
 package is built as always. Additionally, Bob requires the following properties
 from a recipe:

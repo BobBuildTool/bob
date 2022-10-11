@@ -1,7 +1,7 @@
 Introduction
 ============
 
-Bob is a build automation tool inspired by bitbake and portage. It's main
+Bob is a build automation tool inspired by bitbake and portage. Its main
 purpose is to build software packages, very much like packages in a Linux
 distribution. It typically works on coarse entities i.e. not on individual
 source files.
@@ -36,11 +36,11 @@ scripts. To maximize reproducibility, Bob tracks the environment and the input
 of these scripts. If in doubt, Bob will rebuild the (supposedly) changed
 package.
 
-What sets Bob apart from other systems is the functional approach. Bob takes
-the input for each package and processes the instructions to build the result,
-very much like a (imperfect) mathematical function. Every package is kept
-separately and only declared dependencies are available to the package build
-scripts.
+What sets Bob apart from other systems is the functional approach. Bob viewes
+build recipes as (sometimes imperfect) functions where the source code and
+dependencies are the input and the built package is the result.  Every package
+is kept separately and only declared dependencies are available to the package
+build scripts.
 
 In contrast to that, typical other package build systems describe dependencies
 that must be satisfied in a shared root file system. This ensures that required

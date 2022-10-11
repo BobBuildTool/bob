@@ -217,7 +217,8 @@ Status codes:
 * ``u`` : unpushed commits on local branch (Git only)
 * ``M`` : Modified sources.
 * ``S`` : Switched. Could be different tag, commitId, branch or URL.
-* ``O`` : Overridden. This Scm is overridden (:ref:`configuration-config-scmOverrides`). Depends on `--show-overrides`.
+* ``O`` : Overridden. This Scm is overridden
+  (:ref:`configuration-config-scmOverrides`). Depends on ``--show-overrides``.
 
 
 Firing up a Jenkins
@@ -282,7 +283,7 @@ Using IDEs with Bob
 ===================
 
 You may want to use an IDE with Bob. At the moment Qt Creator and Eclipse are
-supported. You can add more IDE's using :ref:`extending-generators` extension.
+supported. You can add more IDEs using :ref:`extending-generators` extension.
 To generate project files the basic call is::
 
     $ bob project <genericArgs> <generator> <package> <specificArgs>
@@ -336,7 +337,7 @@ QtCreator specific Arguments:
 * ``-f``: additional files. Normally only c[pp] and h[pp] files will be added.
   You can add more files using a regex.
 * ``--kit``: kit to use for this project. You may want to use a different
-  sysroot for includes and buildin preprocessor settings from your compiler. To
+  sysroot for includes and built-in preprocessor settings from your compiler. To
   tell QtCreator which toolchain to use you need to specify a kit. There are at
   least two options to create a kit: using the GUI or the sdkTools.
 
@@ -384,7 +385,7 @@ Visualizing dependencies
 A dependency graph visualizes your package dependencies. Bob supports
 two different graph types: 'dot' and 'd3'.
 
-For the sandbox-totorial the output of ::
+For the sandbox-tutorial the output of ::
 
       $ bob graph vexpress -t dot
       $ dot -Tpng -osandbox_graph.png graph/vexpress.dot
@@ -393,8 +394,8 @@ gives you the following image:
 
 .. image:: ../images/sandbox_graph.png
 
-For more complex projects 'dot' graphs doesn't scale well. Therefore you
-can make interactive graphs using the d3_ javascript library:
+For more complex projects 'dot' graphs don't scale well. Therefore you
+can create interactive graphs using the d3_ javascript library:
 
 .. _d3: https://d3js.org/
 

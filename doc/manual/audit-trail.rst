@@ -5,12 +5,13 @@
 Audit trail
 ===========
 
-For every built artifact Bob records all involved sources and build steps that
+For every build artifact Bob records all involved sources and build steps that
 lead to a particular artifact. The recorded information contains at least, but
 not limited to, the following records:
 
 * state of the recipes,
-* recipe name, package path,
+* recipe name
+* package path,
 * build host/time,
 * environment,
 * dependencies (with their respective audit trail),
@@ -110,7 +111,7 @@ Basic information
 
 ``env``
     Dump of the bash environment as created by ``declare -p``. See
-    `bash declare`_. For PowerShell recipes it is a JSON string that contain
+    `bash declare`_. For PowerShell recipes it is a JSON string that contains
     all internal variables and environment variables as dictionaries. Use
     the ``meta.language`` key to determine the used scripting language.
 
@@ -168,7 +169,7 @@ SCMs
 
 All SCMs are recorded after the checkout step was run. The audit record will
 contain a list of objects under the ``scms`` key. Each object has at least a
-``type`` key that identifies the kind ob SCM and a ``dir`` key for the relative
+``type`` key that identifies the kind of SCM and a ``dir`` key for the relative
 directory (or file) that was managed by the SCM in the workspace.
 
 See the following list for the additional information that each SCM adds to the
