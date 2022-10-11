@@ -1,3 +1,5 @@
+.. highlight:: json
+
 .. _audit-trail:
 
 Audit trail
@@ -25,7 +27,9 @@ Audit trails are stored as gzip compressed JSON documents. For local builds the
 audit trail is stored as ``audit.json.gz`` file next to the workspace. Jenkins
 builds only rely on binary artifacts where the same file is stored in the
 compressed tar file in a ``meta/`` directory. The general structure of an audit
-trail looks like the following::
+trail looks like the following:
+
+.. code-block:: yaml
 
     {
         "artifact" : {

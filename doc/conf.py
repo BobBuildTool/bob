@@ -118,6 +118,9 @@ pygments_style = 'sphinx'
 # If true, keep warnings as "system message" paragraphs in the built documents.
 #keep_warnings = False
 
+# No specific language highlighting by default. We have a mix of python, bash,
+# batch and yaml...
+highlight_language = "none"
 
 # -- Options for HTML output ----------------------------------------------
 

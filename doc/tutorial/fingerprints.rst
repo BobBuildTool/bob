@@ -1,3 +1,5 @@
+.. highlight:: yaml
+
 How to properly tell Bob about host dependencies
 ************************************************
 

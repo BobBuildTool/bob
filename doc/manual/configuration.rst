@@ -1,3 +1,5 @@
+.. highlight:: yaml
+
 .. _configuration:
 
 Configuration
@@ -21,7 +23,9 @@ There are two additional configuration files: ``config.yaml`` and
 ``default.yaml``. The former contains static configuration options while the
 latter holds some options that can have a default value and might be overridden
 on the command line. Putting that all together, a typical recipe tree looks like
-the following::
+the following:
+
+.. code-block:: none
 
     .
     ├── classes
@@ -52,7 +56,9 @@ In addition to the single project tree configuration, Bob supports layers. A
 layer has the same structure as shown above but is merged with the other layers
 during parsing. This structure is recursive (a layer may contain another layer)
 but is flattened during parsing. A typical structure might look like the
-following::
+following:
+
+.. code-block:: none
 
     .
     ├── classes
@@ -578,7 +584,9 @@ available. It has two arguments: the first one (``ScriptBlock``) expects a
 script block that is executed. The optional second argument (``ErrorAction``)
 lets you override the error action. After the script block was executed the
 ``Check-Command`` function will check the last exit status and invoke the error
-action if it is not zero. Example::
+action if it is not zero. Example:
+
+.. code-block:: powershell
 
     Check-Command { cmake --build . }
 
@@ -2305,7 +2313,9 @@ with the project root directory as working directory. Example::
     hooks:
         postBuildHook: ./contrib/notify.sh
 
-where ``contrib/notify.sh`` is::
+where ``contrib/notify.sh`` is:
+
+.. code-block:: bash
 
     #!/bin/bash
     HEADLINE="Bob build finished"
