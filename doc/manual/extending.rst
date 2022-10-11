@@ -3,14 +3,12 @@
 Extending Bob
 =============
 
-Bob may be extended through plugins. Right now the functionaly that can be
-tweaked through plugins is quite limited. If you can make a case what should be
-added to the plugin interface open an issue at GitHub or write to the mailing
-list.
+Bob may be extended through plugins. Right now the functionality that can be
+tweaked through plugins is intentionally limited. If you can make a case what
+should be added to the plugin interface, please open an issue at GitHub or
+write to the mailing list.
 
-See ``contrib/plugins`` in the Bob repository for an example.
-
-Another extension are generators. See :ref:`extending-generators`
+See ``contrib/plugins`` in the Bob repository for some examples.
 
 .. _extending-plugins:
 
@@ -27,20 +25,6 @@ At minimum this looks like this::
     manifest = {
         'apiVersion' : "0.2"
     }
-
-A plugin may define any number of properties and state trackers.
-
-A property describes a key in a recipe that is parsed. The class handling the
-property is responsible to validate the data in the recipe and store the value.
-It must be derived from :class:`bob.input.PluginProperty`
-The property class handles to inheritance between recipes and classes too.
-
-A state tracker is a class that is invoked on every step when walking the
-dependency tree to instantiate the packages. The state tracker thus has the
-responsibility to calculate the final values associated with the properties for
-every package. Like properties there can be more than one state tracker. Any
-state tracker provided by a plugin must be derived from
-:class:`bob.input.PluginState`-
 
 Class documentation
 -------------------
@@ -82,7 +66,8 @@ Hooks
 Path formatters
 ~~~~~~~~~~~~~~~
 
-There are three plugin hooks that override the path name calculation:
+Path formatters are responsible for calculating the workspace path of a
+package. There are three plugin hooks that override the path name calculation:
 
  * releaseNameFormatter: local build in release mode
  * developNameFormatter: local build in development mode
@@ -226,7 +211,7 @@ Currently the following additional kwargs are passed:
  * ``url``: URL of Jenkins instance
  * ``windows``: True if Jenkins runs on Windows
 
-See the jenkins-cobertura plugin in the "contrib" directory for an example. The
+See the jenkins-cobertura plugin in the `contrib <https://github.com/BobBuildTool/bob/tree/master/contrib>`_ directory for an example. The
 default implementation in Bob looks like this::
 
     def jenkinsJobCreate(config, **info):
@@ -318,8 +303,9 @@ following::
     }
 
 This will define a new, optional "MySettings" keyword for the user
-configuration that will accept any string. The default, if nothing is
-configured in ``default.yaml``, is an empty string.
+configuration that will accept any string. The default value, if nothing is
+configured in ``default.yaml``, is specified when constructing ``MySettings``.
+In the above example it is an empty string.
 
 .. attention::
     Do not configure your plugins by any other means. Bob will not detect
@@ -332,3 +318,44 @@ both to Bob built-in settings as well as settings defined by other plugins.
 Because Bob is expected to define new settings in the future a plugin defined
 setting must not start with a lower case letter. These names are reserved for
 Bob.
+
+Custom recipe properties
+------------------------
+
+A plugin may define any number of additional recipe properties. A property
+describes a key in a recipe that is parsed. The class handling the property is
+responsible to validate the data in the recipe and store the value. It must be
+derived from :class:`bob.input.PluginProperty`. The property class handles the
+inheritance between recipes and classes too.
+
+The following example shows two trivial properties::
+
+    class StringProperty(PluginProperty):
+        @staticmethod
+        def validate(data):
+            return isinstance(data, str)
+
+    manifest = {
+        'apiVersion' : "0.21",
+        'properties' : {
+            "checkoutDir" : StringProperty,
+            "platform" : StringProperty
+        },
+    }
+
+The above example defines two new keywords in recipes: ``checkoutDir`` and
+``platform``. As verified by the ``validate`` method they need to be strings.
+Because :func:`bob.input.PluginProperty.inherit` was not overridden, the recipe
+and higher priority classes will simply replace the value of lower priority
+classes. Other plugin extensions can query the value of a property by calling
+:func:`bob.input.Recipe.getPluginProperties` to fetch the instances of a
+particular recipe. For example this might be used by project generators to
+supply recipe specific data to the generator.
+
+If custom properties need to be propagated in the recipe dependency hierarchy,
+a *property state tracker* is required. A state tracker is a class that is
+invoked on every step when walking the dependency tree to instantiate the
+packages. The state tracker thus has the responsibility to calculate the final
+values associated with the properties for every package. Like properties there
+can be more than one state tracker. Any state tracker provided by a plugin must
+be derived from :class:`bob.input.PluginState`.
