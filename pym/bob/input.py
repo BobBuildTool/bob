@@ -173,6 +173,9 @@ class PluginProperty:
 
         The default implementation will use the value from the class if the
         property was not present. Otherwise the class value will be ignored.
+
+        :param cls: The property instance of the class
+        :type cls: PluginProperty
         """
         if not self.present:
             self.present = cls.present
@@ -300,7 +303,7 @@ class PluginSetting:
 
         * Dictionaries are merged recursively on a key-by-key basis
         * Lists are appended to each other
-        * Everything else in *other* reuucplaces the current settings
+        * Everything else in *other* replaces the current settings
 
         It is assumed that the actual settings are stored in the ``settings``
         member variable.
@@ -1047,8 +1050,8 @@ class Step:
 
         The digest script will not be executed but is the basis to calculate if
         the step has changed. In case of the checkout step the involved SCMs will
-        return a stable representation of _what_ is checked out and not the real
-        script of _how_ this is done.
+        return a stable representation of *what* is checked out and not the real
+        script of *how* this is done.
         """
         return self._coreStep.getDigestScript()
 
@@ -1091,7 +1094,7 @@ class Step:
 
         The Variant-Id is used to distinguish different packages or multiple
         variants of a package. Each Variant-Id need only be built once but
-        successive builds might yield different results (e.g. when building
+        subsequent builds might yield different results (e.g. when building
         from branches)."""
         return self._coreStep.variantId
 
@@ -1102,6 +1105,9 @@ class Step:
         """Return Sandbox used in this Step.
 
         Returns a Sandbox object or None if this Step is built without one.
+
+        :param bool forceSandbox: Deprecated. Return sandbox even though user
+                                  disabled it.
         """
         # Forcing the sandbox is only allowed if sandboxInvariant policy is not
         # set or disabled.
@@ -1124,7 +1130,7 @@ class Step:
     def getWorkspacePath(self):
         """Return the workspace path of the step.
 
-        The workspace path represents the location of the step in the users
+        The workspace path represents the location of the step in the user's
         workspace. When building in a sandbox this path is not passed to the
         script but the one from getExecPath() instead.
         """
@@ -1161,6 +1167,9 @@ class Step:
 
         This includes the direct input to the Step as well as indirect inputs
         such as the used tools or the sandbox.
+
+        :param bool forceSandbox: Deprecated. Include sandbox even though user
+                                  disabled it.
         """
         sandbox = self.getSandbox(forceSandbox)
         return self.getArguments() + [ d.step for n,d in sorted(self.getTools().items()) ] + (
@@ -1581,7 +1590,7 @@ class Package(object):
         return self.__corePackage.recipe
 
     def getDirectDepSteps(self):
-        """Return list to the package steps of the direct dependencies.
+        """Return list of the package steps of the direct dependencies.
 
         Direct dependencies are the ones that are named explicitly in the
         ``depends`` section of the recipe. The order of the items is
@@ -1607,7 +1616,11 @@ class Package(object):
         """Return list of all dependencies of the package.
 
         This list includes all direct and indirect dependencies. Additionally
-        the used sandbox and tools are included too."""
+        the used sandbox and tools are included too.
+
+        :param bool forceSandbox: Deprecated. Include sandbox even though user
+                                  disabled it.
+        """
         # Forcing the sandbox is only allowed if sandboxInvariant policy is not
         # set or disabled.
         forceSandbox = forceSandbox and \
