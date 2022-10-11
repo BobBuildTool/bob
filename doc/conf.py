@@ -307,3 +307,13 @@ texinfo_documents = [
 
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 #texinfo_no_detailmenu = False
+
+# -- Options for HTML output ----------------------------------------------
+
+# Use RTD theme if available.
+try:
+    import sphinx_rtd_theme
+    extensions.append('sphinx_rtd_theme')
+    html_theme = 'sphinx_rtd_theme'
+except ImportError:
+    pass
