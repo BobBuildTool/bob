@@ -129,7 +129,7 @@ Environment
 Tools
     Tools are aliases for paths to executables. Initially there are no tools.
     They are defined by ``provideTools`` and must be explicitly imported by
-    upstream recipes by listing ``tools`` in the ``use`` attribute. Like
+    downstream recipes by listing ``tools`` in the ``use`` attribute. Like
     environment variables, the tools are kept as key value pairs where the key
     is a string and the value is the executable and library paths that are
     imported when using a tool.
@@ -141,9 +141,9 @@ Sandbox
     Sandboxed builds are described in a separate section below.
 
 All of this information is carried as local state when traversing the
-dependency tree. Each recipe gets a local copy that is propagated downstream.
-Any updates to upstream recipes must be done by explicitly offering the
-information with one of the ``provide*`` keywords and the upstream recipe must
+dependency tree. Each recipe gets a local copy that is propagated upstream.
+Any updates to downstream recipes must be done by explicitly offering the
+information with one of the ``provide*`` keywords and the downstream recipe must
 consume it by adding the relevant item to the ``use`` attribute of the
 dependency.
 
@@ -209,7 +209,7 @@ each root recipe.
     new behaviour (i.e. enabled policy) is to start with a clean environment.
 
 The next steps are repeated for each recipe as the dependency tree is traversed.
-A copy of the environment is inherited from the upstream recipe.
+A copy of the environment is inherited from the downstream recipe.
 
 1. Any variable defined in ``environment`` is set to the given value.
 2. Make a copy of the local environment that is subsequently passed to each
@@ -248,10 +248,10 @@ step depends on a certain variable then the result of the following step is
 already indirectly dependent on this variable. Thus it can be set during the
 following step anyway.
 
-A recipe might optionally offer some variables to the upstream recipe with a
+A recipe might optionally offer some variables to the downstream recipe with a
 ``provideVars`` section. The values of these variables might use variable
 substitution where the substituted values are coming from the local
-environment. The upstream recipe must explicitly consume these provided
+environment. The downstream recipe must explicitly consume these provided
 variables by adding ``environment`` to the ``use`` attribute of the dependency.
 
 Tool handling
@@ -265,7 +265,7 @@ to its ``$PATH``.
 
 Starting at the root recipe, there are no tools. The next steps are repeated
 for each recipe as the dependency tree is traversed. A copy of the tool
-aliases is inherited from the upstream recipe.
+aliases is inherited from the downstream recipe.
 
 #. Make a copy of the local tool aliases that is subsequently passed to each
    dependency (named "forwarded tools" thereafter).
@@ -288,7 +288,7 @@ package step too.
 
 To define one or more tools, a recipe must include a ``provideTools`` section
 that defines the relative execution path and library paths of one or more tool
-aliases. These aliases may be picked up by the upstream recipe by having
+aliases. These aliases may be picked up by the downstream recipe by having
 ``tools`` in the ``use`` attribute of the dependency.
 
 Sandbox operation
@@ -306,8 +306,8 @@ by a recipe in the project.
 
 .. _user namespaces: http://man7.org/linux/man-pages/man7/user_namespaces.7.html
 
-Initially no sandbox is defined. A downstream recipe might offer its built
-package as sandbox through ``provideSandbox``. The upstream recipe must define
+Initially no sandbox is defined. An upstream recipe might offer its built
+package as sandbox through ``provideSandbox``. The downstream recipe must define
 ``sandbox`` in the ``use`` attribute of this dependency to pick it up as
 sandbox. This sandbox is effective only for the current recipe. If ``forward``
 is additionally set to ``True`` the following dependencies will inherit this
@@ -1237,8 +1237,8 @@ environment
 Type: Dictionary (String -> String)
 
 Defines environment variables in the scope of the current recipe. Any inherited
-variables of the upstream recipe with the same name are overwritten. All
-variables are passed to downstream recipes.
+variables of the downstream recipe with the same name are overwritten. All
+variables are passed to upstream recipes.
 
 Example::
 
@@ -1258,7 +1258,7 @@ filter
 Type: Dictionary ( "environment" | "sandbox" | "tools" -> List of Strings)
 
 The filter keyword allows to restrict the environment variables, tools and
-sandboxes inherited from upstream recipes. This way a recipe can effectively
+sandboxes inherited from downstream recipes. This way a recipe can effectively
 restrict the number of package variants.
 
 The filters specifications may use shell globbing patterns. As a special
@@ -1518,7 +1518,7 @@ privateEnvironment
 Type: Dictionary (String -> String)
 
 Defines environment variables just for the current recipe. Any inherited
-variables with the same name of the upstream recipe or others that were
+variables with the same name of the downstream recipe or others that were
 consumed from the dependencies are overwritten. All variables defined or
 replaced by this keyword are private to the current recipe.
 
@@ -1547,10 +1547,10 @@ false. In this case the entry is silently dropped. To specify multiple
 dependencies with a single entry shell globbing patterns may be used.
 
 Provided dependencies are subsequently injected into the dependency list of the
-upstream recipe that has a dependency to this one (if ``deps`` is included in
+downstream recipe that has a dependency to this one (if ``deps`` is included in
 the ``use`` attribute of the dependency, which is the default). This works in a
-transitive fashion too, that is provided dependencies of a downstream recipe
-are forwarded to the upstream recipe too.
+transitive fashion too, that is provided dependencies of an upstream recipe
+are forwarded to the downstream recipe too.
 
 Example::
 
@@ -1635,7 +1635,7 @@ provideVars
 Type: Dictionary (String -> String)
 
 Declares arbitrary environment variables with values that should be passed to
-the upstream recipe. The values of the declared variables are subject to
+the downstream recipe. The values of the declared variables are subject to
 variable substitution. The substituted values are taken from the current
 package environment. Example::
 
@@ -1644,10 +1644,10 @@ package environment. Example::
         CROSS_COMPILE: "arm-linux-${ABI}-"
 
 
-By default these provided variables are not picked up by upstream recipes. This
+By default these provided variables are not picked up by downstream recipes. This
 must be declared explicitly by a ``use: [environment]`` attribute in the
-dependency section of the upstream recipe. Only then are the provided variables
-merged into the upstream recipes environment.
+dependency section of the downstream recipe. Only then are the provided variables
+merged into the downstream recipes environment.
 
 .. _configuration-recipes-provideSandbox:
 
@@ -1657,7 +1657,7 @@ provideSandbox
 Type: Sandbox-Dictionary
 
 The ``provideSandbox`` keyword offers the current recipe as sandbox for the
-upstream recipe. Any consuming upstream recipe (via ``use: [sandbox]``) will
+downstream recipe. Any consuming downstream recipe (via ``use: [sandbox]``) will
 be built in a sandbox where the root file system is the result of the current
 recipe. The initial ``$PATH`` is defined with the required ``paths`` keyword
 that should hold a list of paths. This will completely replace ``$PATH`` of

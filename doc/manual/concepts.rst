@@ -20,14 +20,14 @@ resolved, is called a package.  Each package is created from a single recipe
 but there might be multiple packages that are created from a particular recipe.
 Inside each recipe there are always three steps: checkout, build and package.
 The following picture shows the processing inside a recipe and the interaction
-with upstream and downstream recipes:
+with downstream and upstream recipes:
 
 .. image:: /images/recipe-flow.png
 
 There are four kinds of objects that are exchanged between recipes: results,
 dependencies, environment variables and tools. Results (shown as black arrows)
-are always propagated upstream. These are the actual build artifacts that are
-created. Dependencies (downstream recipes) may be propagated upwards which is
+are always propagated downstream. These are the actual build artifacts that are
+created. Dependencies (upstream recipes) may be propagated downstream which is
 not shown in the picture. Environment variables are key-value-pairs of
 strings. They are passed as shell variables to the individual build steps.
 Tools are scripts or executables that are needed to produce the build result,
@@ -52,7 +52,7 @@ shown in green. By default only build results and dependencies are exchanged. A
 recipe may declare that it consumes certain environment variables
 (:ref:`configuration-recipes-vars`) and tools (:ref:`configuration-recipes-tools`).
 On the other hand a recipe may also declare to provide a dependency, tool or
-variable, providing the necessary input for upstream recipes. If a tool or
+variable, providing the necessary input for downstream recipes. If a tool or
 environment variable is used without declaring its usage, Bob will stop
 processing. This will either happen when parsing the recipes (if detectable) or
 during execution of the build. All executed scripts are configured to fail if
@@ -149,8 +149,8 @@ the build result (step itself or any dependency), it will result in a new
 reverted, the :term:`Variant-Id` will get the previous value and Bob will restart using
 the previous directory.
 
-In local builds, the build results are shared directly with upstream packages by
-passing the path to the upstream steps. On the Jenkins build server the build
+In local builds, the build results are shared directly with downstream packages by
+passing the path to the downstream steps. On the Jenkins build server the build
 results are copied between the different work spaces.
 
 Based on the :term:`Build-Id`, it is possible to fetch build results of a build server
