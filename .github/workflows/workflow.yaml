@@ -36,6 +36,7 @@ jobs:
             - name: Run unit tests
               run: |
                 git config --global init.defaultBranch master # keep the old name
+                git config --global protocol.file.allow always # roll back CVE-2022-39253
                 eatmydata ./test/run-tests.sh -c xml
 
             - name: Build Python package
@@ -85,6 +86,7 @@ jobs:
             - name: Run unit tests
               run: |
                 git config --global init.defaultBranch master # keep the old name
+                git config --global protocol.file.allow always # roll back CVE-2022-39253
                 $env:PATH = "$env:JAVA_HOME_11_X64\bin;$env:PATH;C:\msys64\usr\bin"
                 $env:JAVA_HOME = "$env:JAVA_HOME_11_X64"
                 bash ./test/run-tests.sh -c xml
