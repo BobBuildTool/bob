@@ -15,6 +15,7 @@ Synopsis
 --------
 
 ::
+
     bob query-meta [-h] [-D DEFINES] [-c CONFIGFILE] [-r]
                    [--sandbox | --no-sandbox]
                    packages [packages ...]
