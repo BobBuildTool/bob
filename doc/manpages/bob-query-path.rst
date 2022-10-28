@@ -1,3 +1,5 @@
+.. _manpage-bob-query-path:
+
 bob-query-path
 ==============
 

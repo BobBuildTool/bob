@@ -258,6 +258,7 @@ man_pages = [
     #('manual/configuration.rst', 'bobconfig', 'Bob configuration', ['Jan Klötzke'], 1),
     #('manual/extending.rst', 'bobplugins', 'Bob plugin extensions', ['Jan Klötzke'], 1),
 
+    ('manpages/bob', 'bob', 'Functional package build system', ['Jan Klötzke'], 1),
     ('manpages/bob-archive', 'bob-archive', 'Manage binary artifacts archive', ['Jan Klötzke'], 1),
     ('manpages/bob-build', 'bob-build', 'Bob release mode build', ['Jan Klötzke'], 1),
     ('manpages/bob-clean', 'bob-clean', 'Delete unused src/build/dist paths of release builds', ['Jan Klötzke'], 1),

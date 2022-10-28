@@ -21,6 +21,9 @@ def doHelp(availableCommands, argv, bobRoot):
     if args.command in availableCommands:
         manPage = "bob-" + args.command
         manSection = "1"
+    elif args.command == "bob":
+        manPage = "bob"
+        manSection = "1"
     else:
         manPage = "bob" + args.command
         manSection = "7"

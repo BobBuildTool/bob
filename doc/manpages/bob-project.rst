@@ -1,3 +1,5 @@
+.. _manpage-bob-project:
+
 bob-project
 ===========
 
