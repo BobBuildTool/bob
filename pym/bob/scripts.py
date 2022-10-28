@@ -194,6 +194,9 @@ def bob(bobRoot = None):
         parser.add_argument('--color', dest='color_mode',
                 help="Color mode of console output (default: auto)",
                 choices=['never', 'always', 'auto'])
+        parser.add_argument("--query", dest='query_mode', metavar="MODE",
+                choices=['nullset', 'nullglob', 'nullfail'],
+                help="Handling of emtpy queries (default: nullglob)")
         parser.add_argument('command', nargs='?', help="Command to execute")
         parser.add_argument('args', nargs=argparse.REMAINDER, help="Arguments to command")
 
@@ -212,6 +215,10 @@ def bob(bobRoot = None):
         if args.color_mode:
             from .input import RecipeSet
             RecipeSet.setColorModeCfg(args.color_mode)
+
+        if args.query_mode:
+            from .input import RecipeSet
+            RecipeSet.setQueryMode(args.query_mode)
 
         if args.command is None:
             print("No command specified. Use 'bob -h' for help.", file=sys.stderr)

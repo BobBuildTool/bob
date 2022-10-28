@@ -51,9 +51,10 @@ def markLocation(line, loc):
         "^.-- Error location"
 
 class BaseASTNode:
-    def __init__(self, s, loc):
+    def __init__(self, s, loc, precedence=1000):
         self.__s = s
         self.__loc = loc
+        self.precedence = precedence
 
     def barf(self, msg):
         raise BobError("Bad syntax: " + msg + " (at char {})".format(self.__loc),
@@ -92,6 +93,11 @@ class LocationPath(BaseASTNode):
             path.append(step)
             i += 1
         self.__path = path
+
+    def __str__(self):
+        ret = "/" if self.__absolute else ""
+        ret += "/".join(str(p) for p in self.__path)
+        return ret
 
     def __repr__(self):
         return "LocationPath({})".format(self.__path)
@@ -132,7 +138,7 @@ class LocationPath(BaseASTNode):
 
         return ret
 
-    def evalForward(self, root):
+    def evalForward(self, root, emptyMode):
         """Evaluate path step by step.
 
         Each step is performed with the set of context nodes that represent the
@@ -147,9 +153,18 @@ class LocationPath(BaseASTNode):
         """
         nodes = set([root])
         valid = set([root])
+        wasComplex = False
+        stack = []
         for i in self.__path:
             oldNodes = nodes
-            nodes, search = i.evalForward(nodes, valid)
+            nodes, search, complexQuery = i.evalForward(nodes, valid)
+            wasComplex = wasComplex or complexQuery
+            stack.append(i)
+            if not nodes and emptyMode != "nullset":
+                if not wasComplex:
+                    raise BobError("Package '/{}' not found".format("/".join(str(s) for s in stack)))
+                elif emptyMode == "nullfail":
+                    raise BobError("Query '/{}' matched no packages".format("/".join(str(s) for s in stack)))
             if search is not None:
                 valid.update(self.__findIntermediateNodes(oldNodes, nodes, search))
             else:
@@ -211,6 +226,23 @@ class LocationStep(BaseASTNode):
                 assert remain[0] == '['
                 assert remain[2] == ']'
                 self.__pred = remain[1]
+
+    def __str__(self):
+        if self.__pred is None:
+            if self.__axis == 'self' and self.__test == '*':
+                return "."
+            elif self.__axis == 'child':
+                return self.__test
+
+        if self.__axis == 'child':
+            ret = self.__test
+        else:
+            ret = self.__axis + "@" + self.__test
+
+        if self.__pred is not None:
+            ret += "[" + str(self.__pred) + "]"
+
+        return ret
 
     def __repr__(self):
         return "LocationStep({}@{}[{}])".format(self.__axis, self.__test, self.__pred)
@@ -301,16 +333,19 @@ class LocationStep(BaseASTNode):
             assert False, "Invalid axis: " + self.__axis
 
         if self.__test == "*":
-            pass
+            complexQuery = True
         elif '*' in self.__test:
+            complexQuery = True
             nodes = set(i for i in nodes if fnmatchcase(i.getName(), self.__test))
         else:
+            complexQuery = search is not None
             nodes = set(i for i in nodes if i.getName() == self.__test)
 
         if self.__pred:
+            complexQuery = True
             nodes = nodes & self.__pred.evalBackward()
 
-        return (nodes, search)
+        return (nodes, search, complexQuery)
 
     def evalBackward(self, nodes):
         """Inverse evaluation of location path step."""
@@ -344,14 +379,20 @@ class LocationStep(BaseASTNode):
         return nodes
 
 class NotOperator(BaseASTNode):
-    def __init__(self, s, loc, toks, rootNodeGetter):
-        super().__init__(s, loc)
+    def __init__(self, s, loc, toks, rootNodeGetter, precedence):
+        super().__init__(s, loc, precedence)
         self.rootNodeGetter = rootNodeGetter
         assert len(toks) == 1, toks
         toks = toks[0]
         assert len(toks) == 2, toks
         assert toks[0] == '!'
         self.op = toks[1]
+
+    def __str__(self):
+        if self.op.precedence < self.precedence:
+            return "!({})".format(str(self.op))
+        else:
+            return "!" + str(self.op)
 
     def __repr__(self):
         return "NotOperator({})".format(self.op)
@@ -363,8 +404,8 @@ class NotOperator(BaseASTNode):
         self.barf("operator in string context")
 
 class BinaryBoolOperator(BaseASTNode):
-    def __init__(self, s, loc, toks):
-        super().__init__(s, loc)
+    def __init__(self, s, loc, toks, precedence):
+        super().__init__(s, loc, precedence)
         self.left = toks[0]
         self.right = toks[2]
         self.opStr = op = toks[1]
@@ -374,6 +415,11 @@ class BinaryBoolOperator(BaseASTNode):
             self.op = lambda l, r: l | r
         else:
             assert False, op
+
+    def __str__(self):
+        l = "({})".format(str(self.left)) if self.left.precedence < self.precedence else str(self.left)
+        r = "({})".format(str(self.right)) if self.right.precedence < self.precedence else str(self.right)
+        return "{} {} {}".format(l, self.opStr, r)
 
     def __repr__(self):
         return "BinaryBoolOperator({}, {}, {})".format(self.left, self.opStr, self.right)
@@ -392,6 +438,9 @@ class StringLiteral(BaseASTNode):
         self.subst = doSubst and any((c in self.literal) for c in '\\\"\'$')
         self.stringFunctions = stringFunctions
         self.graphIterator = graphIterator
+
+    def __str__(self):
+        return ("\"{}\"" if self.subst else "'{}'").format(self.literal)
 
     def __repr__(self):
         if self.subst:
@@ -429,6 +478,9 @@ class FunctionCall(BaseASTNode):
         self.args = toks[1:]
         self.graphIterator = graphIterator
 
+    def __str__(self):
+        return "{}({})".format(self.name, ", ".join(str(a) for a in self.args))
+
     def __repr__(self):
         return "FunctionCall({}, {})".format(self.name,
             ", ".join(repr(a) for a in self.args))
@@ -451,8 +503,8 @@ class FunctionCall(BaseASTNode):
         return self.fun(args, env=env, **extra)
 
 class BinaryStrOperator(BaseASTNode):
-    def __init__(self, s, loc, toks, graphIterator):
-        super().__init__(s, loc)
+    def __init__(self, s, loc, toks, graphIterator, precedence):
+        super().__init__(s, loc, precedence)
         self.left = toks[0]
         self.right = toks[2]
         self.opStr = op = toks[1]
@@ -471,6 +523,11 @@ class BinaryStrOperator(BaseASTNode):
         else:
             assert False, op
         self.graphIterator = graphIterator
+
+    def __str__(self):
+        l = "({})".format(str(self.left)) if self.left.precedence < self.precedence else str(self.left)
+        r = "({})".format(str(self.right)) if self.right.precedence < self.precedence else str(self.right)
+        return "{} {} {}".format(l, self.opStr, r)
 
     def __repr__(self):
         return "BinaryStrOperator({}, {}, {})".format(self.left,
@@ -681,11 +738,12 @@ class PackageSet:
     used for the path query evaluation.
     """
 
-    def __init__(self, cacheKey, aliases, stringFunctions, packageGenerator):
+    def __init__(self, cacheKey, aliases, stringFunctions, packageGenerator, emptyMode="nullglob"):
         self.__cacheKey = cacheKey
         self.__aliases = aliases
         self.__stringFunctions = stringFunctions
         self.__generator = packageGenerator
+        self.__emptyMode = emptyMode
         self.__root = None
         self.__graph = None
 
@@ -732,15 +790,15 @@ class PackageSet:
         predExpr = pyparsing.infixNotation(
             locationPath ^ stringLiteral ^ functionCall,
             [
-                ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks, self.__getGraphRoot)),
-                ('<',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
-                ('<=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
-                ('>',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
-                ('>=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
-                ('==', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
-                ('!=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter)),
-                ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator)),
-                ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator))
+                ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks, self.__getGraphRoot, 9)),
+                ('<',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 8)),
+                ('<=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 7)),
+                ('>',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 6)),
+                ('>=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 5)),
+                ('==', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 4)),
+                ('!=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 3)),
+                ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator, precedence=2)),
+                ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator, precedence=1))
             ])
         predicate = '[' + predExpr + ']'
         step = abbreviatedStep | (pyparsing.Optional(axisSpecifier) +
@@ -824,7 +882,7 @@ class PackageSet:
             assert len(path) == 1
             assert isinstance(path[0], LocationPath)
             #print(path[0])
-            return path[0].evalForward(self.__getGraphRoot())
+            return path[0].evalForward(self.__getGraphRoot(), self.__emptyMode)
         else:
             root = self.__getGraphRoot()
             return (set([root]), set([root]))

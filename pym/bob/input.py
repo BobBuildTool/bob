@@ -2916,6 +2916,11 @@ class RecipeSet:
     def setColorModeCfg(cls, mode):
         cls._colorModeConfig = mode
 
+    _queryMode = None
+    @classmethod
+    def setQueryMode(cls, mode):
+        cls._queryMode = mode
+
     def __init__(self):
         self.__defaultEnv = {}
         self.__aliases = {}
@@ -3104,7 +3109,8 @@ class RecipeSet:
             ),
             "ui" : BuiltinSetting(
                 schema.Schema({
-                    schema.Optional('color') : schema.Or('never', 'always', 'auto')
+                    schema.Optional('color') : schema.Or('never', 'always', 'auto'),
+                    schema.Optional('queryMode') : schema.Or('nullset', 'nullglob', 'nullfail'),
                 }),
                 lambda x: updateDicRecursive(self.__uiConfig, x)
             ),
@@ -3714,7 +3720,8 @@ class RecipeSet:
         cacheKey = h.digest()
 
         return PackageSet(cacheKey, self.__aliases, self.__stringFunctions,
-            lambda: self.__generatePackages(nameFormatter, cacheKey, sandboxEnabled))
+            lambda: self.__generatePackages(nameFormatter, cacheKey, sandboxEnabled),
+            self._queryMode or  self.__uiConfig.get('queryMode', 'nullglob'))
 
     def getPolicy(self, name, location=None):
         (policy, warning) = self.__policies[name]

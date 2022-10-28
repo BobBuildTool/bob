@@ -31,9 +31,9 @@ expect_fail run_bob query-path --release --fail root/interm1/child
 expect_fail run_bob query-path --release --fail root/interm2/child
 
 # Also, errors on non-present packages should be reported
-test -n "$(run_bob query-path --release notpresent 2>&1 | grep 'Naptime')"
-test -z "$(run_bob query-path --release -q notpresent 2>&1 | grep 'Naptime')"
-expect_fail run_bob query-path --release --fail notpresent
+test -n "$(run_bob --query=nullset query-path --release notpresent 2>&1 | grep 'Naptime')"
+test -z "$(run_bob --query=nullset query-path --release -q notpresent 2>&1 | grep 'Naptime')"
+expect_fail run_bob --query=nullset query-path --release --fail notpresent
 
 # Perform a full release build. Must report paths for everything.
 # Convert reported paths to unix format.
