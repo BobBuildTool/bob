@@ -330,7 +330,7 @@ class LocationStep(BaseASTNode):
         elif self.__axis == "self":
             pass
         else:
-            assert False, "Invalid axis: " + self.__axis
+            raise AssertionError("Invalid axis: " + str(self.__axis))
 
         if self.__test == "*":
             complexQuery = True
@@ -374,7 +374,7 @@ class LocationStep(BaseASTNode):
         elif self.__axis == "self":
             pass
         else:
-            assert False, "Invalid axis: " + self.__axis
+            raise AssertionError("Invalid axis: " + str(self.__axis))
 
         return nodes
 
@@ -414,7 +414,7 @@ class BinaryBoolOperator(BaseASTNode):
         elif op == '||':
             self.op = lambda l, r: l | r
         else:
-            assert False, op
+            raise AssertionError("Invalid op: " + str(op))
 
     def __str__(self):
         l = "({})".format(str(self.left)) if self.left.precedence < self.precedence else str(self.left)
@@ -521,7 +521,7 @@ class BinaryStrOperator(BaseASTNode):
         elif op == '!=':
             self.op = lambda l, r: l != r
         else:
-            assert False, op
+            raise AssertionError("Invalid op: " + str(op))
         self.graphIterator = graphIterator
 
     def __str__(self):
