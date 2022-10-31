@@ -1,0 +1,6 @@
+root: True
+depends:
+    - level1a
+    - level1b
+buildScript: "true"
+packageScript: "true"

@@ -1,0 +1,7 @@
+metaEnvironment:
+    LEVEL: "1b"
+depends:
+    - level2
+buildScript: "level1b"
+packageScript: "level1b"
+provideDeps: [ level2 ]
