@@ -3335,9 +3335,8 @@ class RecipeSet:
         else:
             return schema[0].validate(default)
 
-    def parse(self, envOverrides={}, platform=getPlatformString()):
-        recipesRoot = ""
-        if os.path.isfile(".bob-project"):
+    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot=""):
+        if not recipesRoot and os.path.isfile(".bob-project"):
             try:
                 with open(".bob-project") as f:
                     recipesRoot = f.read()
