@@ -149,8 +149,12 @@ def getDependencies(ir):
     ret = set()
     for package in (s.getPackage() for s in ir.getRoots()):
         ret.update(package.getPackageStep().getAllDepSteps())
-        ret.update(package.getBuildStep().getAllDepSteps())
-        ret.update(package.getCheckoutStep().getAllDepSteps())
+        buildStep = package.getBuildStep()
+        if buildStep.isValid():
+            ret.update(buildStep.getAllDepSteps())
+        checkoutStep = package.getCheckoutStep()
+        if checkoutStep.isValid():
+            ret.update(checkoutStep.getAllDepSteps())
     ret.difference_update(ir.getRoots())
     return [s for s in ret if s.isPackageStep()]
 
