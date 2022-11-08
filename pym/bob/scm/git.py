@@ -600,9 +600,7 @@ class GitScm(Scm):
             ElementTree.SubElement(extensions,
                 "hudson.plugins.git.extensions.impl.RelativeTargetDirectory"),
             "relativeTargetDir").text = str(PurePosixPath(workPath, self.__dir))
-        # remove untracked files and stale branches
-        ElementTree.SubElement(extensions,
-            "hudson.plugins.git.extensions.impl.CleanCheckout")
+        # remove stale branches
         ElementTree.SubElement(extensions,
             "hudson.plugins.git.extensions.impl.PruneStaleBranch")
         # set git clone options
