@@ -1,3 +1,5 @@
+.. _manpage-bob-query-recipe:
+
 bob-query-recipe
 ================
 

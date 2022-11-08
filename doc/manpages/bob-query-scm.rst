@@ -1,3 +1,5 @@
+.. _manpage-bob-query-scm:
+
 bob-query-scm
 =============
 

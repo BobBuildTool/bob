@@ -2,7 +2,7 @@
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
 # Smoke test to see if all output formats are not crashing
-run_bob show something-invalid
+run_bob --query=nullset show something-invalid
 run_bob show root --format=yaml --indent=2
 run_bob show root --format=json --no-indent
 run_bob show root --format=flat

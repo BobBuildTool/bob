@@ -39,31 +39,31 @@ esac
 # installing a new one.
 writeCfg '1024' "True"
 
-run_bob dev -c "$cfg" dev root-small
+run_bob dev -c "$cfg" root-small
 expect_exist "$shareDir/$smallBuildId-3/workspace/result.txt"
 
 rm -rf dev
-run_bob dev -c "$cfg" dev root-medium
+run_bob dev -c "$cfg" root-medium
 expect_not_exist "$shareDir/$smallBuildId-3/workspace/result.txt"
 expect_exist "$shareDir/$mediumBuildId-3/workspace/result.txt"
 
 # Low quota but no auto-gc. All packages are still installed.
 writeCfg '"2K"' "False"
 rm -rf dev
-run_bob dev -c "$cfg" dev root-big
+run_bob dev -c "$cfg" root-big
 expect_exist "$shareDir/$mediumBuildId-3/workspace/result.txt"
 expect_exist "$shareDir/$bigBuildId-3/workspace/result.txt"
 
 # Start from scratch. Make sure installed packages are referenced.
 writeCfg '"5G"' "False"
 rm -rf dev "$shareDir"
-run_bob dev -c "$cfg" dev root-medium
-run_bob dev -c "$cfg" dev root-big
+run_bob dev -c "$cfg" root-medium
+run_bob dev -c "$cfg" root-big
 
 # Enable auto-gc and install another package. Because everything is still used
 # no package will be garbage collected.
 writeCfg '"2048"' "True"
-run_bob dev -c "$cfg" dev root-small
+run_bob dev -c "$cfg" root-small
 expect_exist "$shareDir/$smallBuildId-3/workspace/result.txt"
 expect_exist "$shareDir/$mediumBuildId-3/workspace/result.txt"
 expect_exist "$shareDir/$bigBuildId-3/workspace/result.txt"
@@ -84,7 +84,7 @@ expect_not_exist "$shareDir/$bigBuildId-3/workspace/result.txt"
 
 # Normally unused packages are not removed if the quota is not exceeded
 writeCfg '"1MB"' "True"
-run_bob dev -c "$cfg" dev '*'
+run_bob dev -c "$cfg" '*'
 rm -rf dev
 run_bob clean -c "$cfg" --shared
 expect_exist "$shareDir/$smallBuildId-3/workspace/result.txt"

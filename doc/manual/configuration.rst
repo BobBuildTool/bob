@@ -2428,3 +2428,22 @@ color
 
     ``auto``
         Use colors only when TTY console detected (default)
+
+queryMode
+    Set the behaviour of package queries when no package is matched. Can be
+    overridden on the command line by the global ``--query`` option of
+    :ref:`manpage-bob`.
+
+    ``nullset``
+        Empty sets of packages are considered a regular result and never
+        treated as an error. This includes trivial path location steps where
+        exact package names do not match.
+
+    ``nullglob``
+        Return an empty set of packages if the query involves wildcard name
+        matches and/or predicates. Otherwise, that is if only direct name
+        matches are used, an error is raised if a package name in the path does
+        not match. This is the default.
+
+    ``nullfail``
+        An empty set of packages is always treated as an error.
