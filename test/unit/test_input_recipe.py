@@ -6,7 +6,7 @@ import os
 from bob.errors import ParseError
 from bob.input import Recipe
 from bob.languages import ScriptLanguage
-from bob.stringparser import Env
+from bob.stringparser import Env, IfExpression, DEFAULT_STRING_FUNS
 
 class TestDependencies(TestCase):
 
@@ -185,25 +185,37 @@ class TestDependencies(TestCase):
         self.cmpEntry(res[5], "f", checkoutDep=True)
 
 
-class TestRelocatable(TestCase):
+class RecipeCommon:
+
+    SCRIPT_LANGUAGE = ScriptLanguage.BASH
+
+    def applyRecipeDefaults(self, recipe):
+        r = recipe.copy()
+        r.setdefault("checkoutUpdateIf", False)
+        return r
 
     def parseAndPrepare(self, name, recipe, classes={}, allRelocatable=None):
 
         cwd = os.getcwd()
         recipeSet = MagicMock()
         recipeSet.loadBinary = MagicMock()
-        recipeSet.scriptLanguage = ScriptLanguage.BASH
+        recipeSet.scriptLanguage = self.SCRIPT_LANGUAGE
         recipeSet.getPolicy = lambda x: allRelocatable if x == 'allRelocatable' else None
 
-        cc = { n : Recipe(recipeSet, r, [], n+".yaml", cwd, n, n, {}, False)
+        cc = { n : Recipe(recipeSet, self.applyRecipeDefaults(r), [], n+".yaml",
+                          cwd, n, n, {}, False)
             for n, r in classes.items() }
         recipeSet.getClass = lambda x, cc=cc: cc[x]
 
-        r = recipe.copy()
-        r["root"] = True
-        ret = Recipe(recipeSet, recipe, [], name+".yaml", cwd, name, name, {})
-        ret.resolveClasses(Env())
-        return ret.prepare(Env(), False, {})[0].refDeref([], {}, None, None)
+        env = Env()
+        env.funs = DEFAULT_STRING_FUNS
+        ret = Recipe(recipeSet, self.applyRecipeDefaults(recipe), [], name+".yaml",
+                     cwd, name, name, {})
+        ret.resolveClasses(env)
+        return ret.prepare(env, False, {})[0].refDeref([], {}, None, None)
+
+
+class TestRelocatable(RecipeCommon, TestCase):
 
     def testNormalRelocatable(self):
         """Normal recipes are relocatable by default"""
@@ -335,3 +347,167 @@ class TestRelocatable(TestCase):
         }
         p = self.parseAndPrepare("foo", recipe, allRelocatable=True)
         self.assertTrue(p.isRelocatable())
+
+
+class TestCheckoutUpdateIf(RecipeCommon, TestCase):
+
+    def testDefault(self):
+        """By default checkoutUpdateIf is 'False'"""
+
+        recipe = {
+            "checkoutScript" : "asdf",
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        self.assertFalse(c.getUpdateScript())
+        self.assertTrue(c.isUpdateDeterministic())
+
+    def testSimpleBool(self):
+        """checkoutUpdateIf can be a boolean value"""
+        recipe = {
+            "checkoutScript" : "asdf",
+            "checkoutUpdateIf" : True,
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        self.assertIn("asdf", c.getUpdateScript())
+
+    def testSimpleIfString(self):
+        """checkoutUpdateIf can be a boolean string value"""
+        recipe = {
+            "checkoutScript" : "asdf",
+            "checkoutUpdateIf" : "$(eq,a,b)",
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        self.assertNotIn("asdf", c.getUpdateScript())
+
+        recipe["checkoutUpdateIf"] = "$(eq,a,a)"
+        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        self.assertIn("asdf", c.getUpdateScript())
+
+    def testSimpleIfExpr(self):
+        """checkoutUpdateIf can be an IfExpression value"""
+        recipe = {
+            "checkoutScript" : "asdf",
+            "checkoutUpdateIf" : IfExpression('"a" == "b"'),
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        self.assertNotIn("asdf", c.getUpdateScript())
+
+        recipe["checkoutUpdateIf"] = IfExpression('"a" == "a"')
+        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        self.assertIn("asdf", c.getUpdateScript())
+
+    def testDeterministicDefault(self):
+        """checkoutDeterministic applies for updates too"""
+        recipe = {
+            "checkoutScript" : "asdf",
+            "checkoutUpdateIf" : True,
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        self.assertFalse(c.isUpdateDeterministic())
+
+        recipe["checkoutDeterministic"] = True
+        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        self.assertTrue(c.isUpdateDeterministic())
+
+    def testDeterministicInherit(self):
+        """checkoutDeterministic applies only for selected update parts"""
+
+        recipe = {
+            "inherit" : [ "bar" ],
+            "checkoutScript" : "asdf",
+            "checkoutUpdateIf" : True,
+            "checkoutDeterministic" : True,
+            "buildScript" : "asdf",
+        }
+        classes = {
+            "bar" : {
+                "checkoutScript" : "qwer",
+                "checkoutUpdateIf" : False,
+                "checkoutDeterministic" : False,
+                "buildScript" : "qwer",
+            },
+        }
+
+        c = self.parseAndPrepare("foo", recipe, classes).getCheckoutStep()
+        self.assertTrue(c.isUpdateDeterministic())
+
+    def testInherit(self):
+        """Only enabled checkoutScript takes part in update"""
+
+        recipe = {
+            "inherit" : [ "bar" ],
+            "checkoutScript" : "asdf",
+            "checkoutUpdateIf" : True,
+            "checkoutDeterministic" : True,
+            "buildScript" : "asdf",
+        }
+        classes = {
+            "bar" : {
+                "inherit" : [ "baz" ],
+                "checkoutScript" : "qwer",
+                "checkoutUpdateIf" : False,
+                "checkoutDeterministic" : False,
+                "buildScript" : "qwer",
+            },
+            "baz" : {
+                "relocatable" : True,
+                "checkoutScript" : "yxcv",
+                "checkoutUpdateIf" : True,
+                "buildScript" : "qwer",
+            },
+        }
+
+        c = self.parseAndPrepare("foo", recipe, classes).getCheckoutStep()
+        self.assertFalse(c.isUpdateDeterministic())
+        self.assertIn("asdf", c.getUpdateScript())
+        self.assertNotIn("qwer", c.getUpdateScript())
+        self.assertIn("yxcv", c.getUpdateScript())
+
+    def testInheritNullNotEnabled(self):
+        """A null checkoutUpdateIf does not yet enable the update script"""
+        recipe = {
+            "inherit" : [ "bar" ],
+            "checkoutScript" : "asdf",
+            "buildScript" : "asdf",
+        }
+        classes = {
+            "bar" : {
+                "checkoutScript" : "qwer",
+                "checkoutUpdateIf" : None,
+                "buildScript" : "qwer",
+            },
+        }
+
+        c = self.parseAndPrepare("foo", recipe, classes).getCheckoutStep()
+        self.assertNotIn("asdf", c.getUpdateScript())
+        self.assertNotIn("qwer", c.getUpdateScript())
+
+    def testInheritNullEnabled(self):
+        """A null checkoutUpdateIf is included if enabled elsewhere"""
+        recipe = {
+            "inherit" : [ "bar" ],
+            "checkoutScript" : "asdf",
+            "checkoutUpdateIf" : True,
+            "buildScript" : "asdf",
+        }
+        classes = {
+            "bar" : {
+                "checkoutScript" : "qwer",
+                "checkoutUpdateIf" : None,
+                "buildScript" : "qwer",
+            },
+        }
+
+        c = self.parseAndPrepare("foo", recipe, classes).getCheckoutStep()
+        self.assertIn("asdf", c.getUpdateScript())
+        self.assertIn("qwer", c.getUpdateScript())

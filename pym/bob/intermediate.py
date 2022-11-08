@@ -85,10 +85,12 @@ class StepIR(AbstractIR):
             self.__data['postRunCmds'] = step.getPostRunCmds()
             self.__data['setupScript'] = step.getSetupScript()
             self.__data['mainScript'] = step.getMainScript()
+            self.__data['updateScript'] = step.getUpdateScript()
             self.__data['fingerprintScript'] = step._getFingerprintScript()
             self.__data['jobServer'] = step.jobServer()
             self.__data['label'] = step.getLabel()
             self.__data['isDeterministic'] = step.isDeterministic()
+            self.__data['isUpdateDeterministic'] = step.isUpdateDeterministic()
             self.__data['hasNetAccess'] = step.hasNetAccess()
             if self.__data['isCheckoutStep']:
                 self.__data['hasLiveBuildId'] = step.hasLiveBuildId()
@@ -255,6 +257,9 @@ class StepIR(AbstractIR):
     def getMainScript(self):
         return self.__data['mainScript']
 
+    def getUpdateScript(self):
+        return self.__data['updateScript']
+
     def _getFingerprintScript(self):
         return self.__data['fingerprintScript']
 
@@ -266,6 +271,9 @@ class StepIR(AbstractIR):
 
     def isDeterministic(self):
         return self.__data['isDeterministic']
+
+    def isUpdateDeterministic(self):
+        return self.__data['isUpdateDeterministic']
 
     def hasLiveBuildId(self):
         return self.__data['hasLiveBuildId']
@@ -284,6 +292,15 @@ class StepIR(AbstractIR):
 
     def getScmDirectories(self):
         return { d : (bytes.fromhex(h), p) for (d, (h, p)) in self.__data['scmDirectories'].items() }
+
+    def mayUpdate(self, inputChanged, oldHash, rehash):
+        if any((s.isLocal() and not s.isDeterministic()) for s in self.getScmList()):
+            return True
+        if not self.getUpdateScript():
+            return False
+        if not self.isUpdateDeterministic():
+            return True
+        return rehash() != oldHash
 
     def _getSandboxVariantId(self):
         return bytes.fromhex(self.__data['sandboxVariantId'])

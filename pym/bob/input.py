@@ -803,6 +803,9 @@ class CoreStep(CoreItem):
     def getDigestScript(self):
         raise NotImplementedError
 
+    def getUpdateScript(self):
+        return ""
+
     def getLabel(self):
         raise NotImplementedError
 
@@ -816,6 +819,9 @@ class CoreStep(CoreItem):
 
     def isDeterministic(self):
         return self.deterministic
+
+    def isUpdateDeterministic(self):
+        return True
 
     def isCheckoutStep(self):
         return False
@@ -1055,6 +1061,12 @@ class Step:
         """
         return self._coreStep.getDigestScript()
 
+    def getUpdateScript(self):
+        return self._coreStep.getUpdateScript()
+
+    def isUpdateDeterministic(self):
+        return self._coreStep.isUpdateDeterministic()
+
     def isDeterministic(self):
         """Return whether the step is deterministic.
 
@@ -1246,10 +1258,11 @@ class Step:
 
 
 class CoreCheckoutStep(CoreStep):
-    __slots__ = ( "scmList" )
+    __slots__ = ( "scmList", "__checkoutUpdateIf", "__checkoutUpdateDeterministic" )
 
     def __init__(self, corePackage, checkout=None, checkoutSCMs=[],
-                 fullEnv=Env(), digestEnv=Env(), env=Env(), args=[]):
+                 fullEnv=Env(), digestEnv=Env(), env=Env(), args=[],
+                 checkoutUpdateIf=[], checkoutUpdateDeterministic=True):
         if checkout:
             recipeSet = corePackage.recipe.getRecipeSet()
             overrides = recipeSet.scmOverrides()
@@ -1273,6 +1286,8 @@ class CoreCheckoutStep(CoreStep):
             isValid = False
             self.scmList = []
 
+        self.__checkoutUpdateIf = checkoutUpdateIf
+        self.__checkoutUpdateDeterministic = checkoutUpdateDeterministic
         deterministic = corePackage.recipe.checkoutDeterministic
         super().__init__(corePackage, isValid, deterministic, digestEnv, env, args)
 
@@ -1293,6 +1308,9 @@ class CoreCheckoutStep(CoreStep):
 
     def isDeterministic(self):
         return super().isDeterministic() and all(s.isDeterministic() for s in self.scmList)
+
+    def isUpdateDeterministic(self):
+        return self.__checkoutUpdateDeterministic
 
     def hasLiveBuildId(self):
         return super().isDeterministic() and all(s.hasLiveBuildId() for s in self.scmList)
@@ -1323,6 +1341,10 @@ class CoreCheckoutStep(CoreStep):
                     + [s.asDigestScript() for s in recipe.checkoutAsserts])
         else:
             return None
+
+    def getUpdateScript(self):
+        glue = getLanguage(self.corePackage.recipe.scriptLanguage.index).glue
+        return joinScripts(self.__checkoutUpdateIf, glue) or ""
 
     @property
     def fingerprintMask(self):
@@ -1493,8 +1515,10 @@ class CorePackage:
         tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathFormatter)
         return Package(self, stack, pathFormatter, inputTools, tools, inputSandbox, sandbox)
 
-    def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv, env, args):
-        ret = self.checkoutStep = CoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv, env, args)
+    def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv,
+                               env, args, checkoutUpdateIf, checkoutUpdateDeterministic):
+        ret = self.checkoutStep = CoreCheckoutStep(self, checkout, checkoutSCMs,
+            fullEnv, digestEnv, env, args, checkoutUpdateIf, checkoutUpdateDeterministic)
         return ret
 
     def createInvalidCoreCheckoutStep(self):
@@ -1933,6 +1957,7 @@ class Recipe(object):
             "depends" : [
                 { "name" : name, "use" : ["result"] } for name in roots
             ],
+            "checkoutUpdateIf" : False,
             "buildScript" : "true",
             "packageScript" : "true"
         }
@@ -2015,6 +2040,7 @@ class Recipe(object):
         for a in self.__checkoutAsserts:
             a["__source"] = sourceName + ", checkoutAssert #{}".format(i)
             i += 1
+        self.__checkoutUpdateIf = recipe["checkoutUpdateIf"]
         self.__build = fetchScripts(recipe, "build", incHelperBash, incHelperPwsh)
         self.__package = fetchScripts(recipe, "package", incHelperBash, incHelperPwsh)
         self.__fingerprintScriptList = fetchFingerprintScripts(recipe)
@@ -2089,15 +2115,25 @@ class Recipe(object):
             if ret is not None:
                 return ret
             return r.__checkout[self.__scriptLanguage][1][0] is None
-        self.__checkoutDeterministic = all(coDet(i) for i in inheritAll)
+
+        checkoutDeterministic = [ coDet(i) for i in inheritAll ]
+        self.__checkoutDeterministic = all(checkoutDeterministic)
 
         # merge scripts and other lists
         selLang = lambda x: x[self.__scriptLanguage]
 
         # Join all scripts. The result is a tuple with (setupScript, mainScript, digestScript)
-        self.__checkout = mergeScripts([ selLang(i.__checkout) for i in inheritAll ], glue)
+        checkoutScripts = [ selLang(i.__checkout) for i in inheritAll ]
+        self.__checkout = mergeScripts(checkoutScripts, glue)
         self.__checkoutSCMs = list(chain.from_iterable(i.__checkoutSCMs for i in inheritAll))
         self.__checkoutAsserts = list(chain.from_iterable(i.__checkoutAsserts for i in inheritAll))
+        self.__checkoutUpdateIf = [
+            (cond, fragments[1][0], deterministic)
+                for cond, fragments, deterministic
+                in zip((i.__checkoutUpdateIf for i in inheritAll), checkoutScripts,
+                       checkoutDeterministic)
+                if cond != False
+        ]
         self.__build = mergeScripts([ selLang(i.__build) for i in inheritAll ], glue)
         self.__package = mergeScripts([ selLang(i.__package) for i in inheritAll ], glue)
         self.__fingerprintScriptList = [ i.__fingerprintScriptList for i in inheritAll ]
@@ -2511,9 +2547,24 @@ class Recipe(object):
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
+            checkoutUpdateIf = [
+                ( (env.evaluate(cond, "checkoutUpdateIf")
+                    if (isinstance(cond, str) or isinstance(cond, IfExpression))
+                    else cond),
+                  script,
+                  deterministic)
+                for cond, script, deterministic in self.__checkoutUpdateIf ]
+            if any(cond == True for cond, _, _ in checkoutUpdateIf):
+                checkoutUpdateDeterministic = all(
+                    deterministic for cond, _, deterministic in checkoutUpdateIf
+                    if cond != False)
+                checkoutUpdateIf = [ script for cond, script, _ in checkoutUpdateIf if cond != False ]
+            else:
+                checkoutUpdateDeterministic = True
+                checkoutUpdateIf = []
             srcCoreStep = p.createCoreCheckoutStep(self.__checkout,
                 self.__checkoutSCMs, env, checkoutDigestEnv, checkoutEnv,
-                checkoutDeps)
+                checkoutDeps, checkoutUpdateIf, checkoutUpdateDeterministic)
         else:
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
@@ -3565,6 +3616,7 @@ class RecipeSet:
             schema.Optional('checkoutSetup') : str,
             schema.Optional('checkoutSetupBash') : str,
             schema.Optional('checkoutSetupPwsh') : str,
+            schema.Optional('checkoutUpdateIf', default=False) : schema.Or(None, str, bool, IfExpression),
             schema.Optional('buildScript') : str,
             schema.Optional('buildScriptBash') : str,
             schema.Optional('buildScriptPwsh') : str,

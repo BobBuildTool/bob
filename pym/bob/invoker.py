@@ -77,6 +77,7 @@ class LogWriteProtocol(asyncio.SubprocessProtocol):
 class InvocationMode(Enum):
     CALL = 'call'
     SHELL = 'shell'
+    UPDATE = 'update'
 
 class Invoker:
     def __init__(self, spec, preserveEnv, noLogFiles, showStdOut, showStdErr,
@@ -333,6 +334,9 @@ class Invoker:
             elif mode == InvocationMode.CALL:
                 realScriptFile, execScriptFile, callArgs = self.__spec.language.setupCall(
                     self.__spec, tmpDir, self.__preserveEnv, self.__trace)
+            elif mode == InvocationMode.UPDATE:
+                realScriptFile, execScriptFile, callArgs = self.__spec.language.setupUpdate(
+                    self.__spec, tmpDir, self.__preserveEnv, self.__trace)
             else:
                 assert False, "not reached"
 
@@ -366,9 +370,11 @@ class Invoker:
 
             if mode == InvocationMode.SHELL:
                 ret = await self.callCommand(cmdArgs, specEnv=False)
-            elif mode == InvocationMode.CALL:
+            elif mode in (InvocationMode.CALL, InvocationMode.UPDATE):
                 for scm in self.__spec.preRunCmds:
                     scm = getScm(scm)
+                    if mode == InvocationMode.UPDATE and not scm.isLocal():
+                        continue # Skip non-local SCMs on update-only
                     try:
                         await scm.invoke(self)
                     except CmdFailedError as e:
@@ -406,50 +412,6 @@ class Invoker:
                         self.error("Error removing sandbox:", str(e))
                 elif self.__spec.hasSandbox:
                     self.info("Keeping sandbox image at", tmpDir)
-            self.__closeLog(ret)
-
-        return ret
-
-    async def executeLocalSCMs(self):
-        # make permissions predictable
-        os.umask(0o022)
-
-        ret = 1
-        try:
-            self.__openLog("only local SCMs")
-
-            # execute only local SCMs
-            for scm in self.__spec.preRunCmds:
-                scm = getScm(scm)
-                if not scm.isLocal(): continue
-                try:
-                    await scm.invoke(self)
-                except CmdFailedError as e:
-                    self.error(scm.getSource(), "failed")
-                    self.error(e.what)
-                    raise
-                except Exception:
-                    self.error(scm.getSource(), "failed")
-                    raise
-
-            # still run all checkout asserts afterwards
-            for a in self.__spec.postRunCmds:
-                a = CheckoutAssert(a)
-                try:
-                    await a.invoke(self)
-                except Exception:
-                    self.error(a.getSource(), "failed")
-                    raise
-
-            # everything went well
-            ret = 0
-
-        except OSError as e:
-            self.error("Something went wrong:", str(e))
-            ret = 1
-        except InvocationError as e:
-            ret = e.returncode
-        finally:
             self.__closeLog(ret)
 
         return ret

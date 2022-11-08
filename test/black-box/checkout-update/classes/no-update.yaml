@@ -1,0 +1,4 @@
+inherit: [update]
+checkoutDeterministic: True
+checkoutScript: |
+    bumpCounter "no-update.txt"

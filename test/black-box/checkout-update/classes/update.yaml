@@ -1,0 +1,14 @@
+checkoutUpdateIf: null
+checkoutDeterministic: True
+checkoutScript: |
+    bumpCounter()
+    {
+        local i
+        if [[ -r "$1" ]] ; then
+            read -r i < "$1"
+        else
+            i=0
+        fi
+        : $(( i++ ))
+        echo "$i" > "$1"
+    }

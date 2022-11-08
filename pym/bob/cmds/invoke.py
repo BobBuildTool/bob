@@ -15,8 +15,8 @@ def doInvoke(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob _invoke",
         description="Invoke a single step.")
     parser.add_argument('spec', help="The step spec file")
-    parser.add_argument('mode', default='run', choices=['run', 'shell', 'fingerprint'], nargs='?',
-        help="Invocation mode")
+    parser.add_argument('mode', default='run', choices=['run', 'update', 'shell', 'fingerprint'],
+        nargs='?', help="Invocation mode")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--clean', '-c', action='store_true', default=False,
@@ -51,11 +51,12 @@ def doInvoke(argv, bobRoot):
                               False, executor=executor)
             ret = loop.run_until_complete(invoker.executeStep(InvocationMode.SHELL,
                 args.clean, args.keep_sandbox))
-        elif args.mode == 'run':
+        elif args.mode in ('run', 'update'):
             invoker = Invoker(spec, args.preserve_env, args.no_logfiles,
                 verbosity >= 2, verbosity >= 1, verbosity >= 3, False,
                 executor=executor)
-            ret = loop.run_until_complete(invoker.executeStep(InvocationMode.CALL,
+            ret = loop.run_until_complete(invoker.executeStep(
+                InvocationMode.CALL if args.mode == 'run' else InvocationMode.UPDATE,
                 args.clean, args.keep_sandbox))
         elif args.mode == 'fingerprint':
             invoker = Invoker(spec, args.preserve_env, True, True, True,

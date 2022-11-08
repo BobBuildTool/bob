@@ -1,0 +1,9 @@
+root: True
+inherit: [update, no-update]
+checkoutUpdateIf: True
+checkoutScript: |
+    bumpCounter "root.txt"
+buildScript: |
+    cp "$1"/* .
+packageScript: |
+    cp "$1"/* .

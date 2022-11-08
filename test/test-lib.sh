@@ -198,3 +198,17 @@ die()
 	echo "$@"
 	exit 1
 }
+
+expect_equal()
+{
+	if [[ "$1" != "$2" ]] ; then
+		die "Failed: '$1' == '$2'"
+	fi
+}
+
+expect_not_equal()
+{
+	if [[ "$1" = "$2" ]] ; then
+		die "Failed: '$1' != '$2'"
+	fi
+}

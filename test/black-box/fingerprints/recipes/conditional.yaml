@@ -5,7 +5,8 @@ packageScript: |
     echo "${CANARY:-unset}" > result.txt
 
 # never fingerpint if $CANARY not set
-fingerprintIf: "$(ne,${CANARY:-},)"
+fingerprintIf: !expr |
+    "${CANARY:-}" != ""
 fingerprintScript: |
     touch $CANARY
     echo "${CANARY}"
