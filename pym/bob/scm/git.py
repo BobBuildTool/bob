@@ -680,7 +680,6 @@ class GitScm(Scm):
         status = ScmStatus()
         try:
             onCorrectBranch = False
-            onTag = False
             output = self.callGit(workspacePath, 'ls-remote' ,'--get-url')
             if output != self.__url:
                 status.add(ScmTaint.switched,
@@ -702,7 +701,6 @@ class GitScm(Scm):
                 # log" command at the end will trip.
                 try:
                     self.callGit(workspacePath, 'rev-parse', 'tags/'+self.__tag)
-                    onTag = True
                 except BuildError:
                     pass
             elif self.__branch:
@@ -728,12 +726,11 @@ class GitScm(Scm):
             # The following shows all unpushed commits reachable by any ref
             # (local branches, stash, detached HEAD, etc).
             # Exclude HEAD if the configured branch is checked out to not
-            # double-count them. Does not mark the SCM as dirty. Exclude the
-            # configured tag too if it is checked out. Otherwise the tag would
-            # count as unpushed if it is not on a remote branch.
-            what = ['--all', '--not', '--remotes']
+            # double-count them. Does not mark the SCM as dirty. Exclude
+            # all tags too as it's not uncommon to have tags not
+            # belonging to a branch.
+            what = ['--all', '--not', '--remotes', '--tags']
             if onCorrectBranch: what.append('HEAD')
-            if onTag: what.append("tags/"+self.__tag)
             output = self.callGit(workspacePath, 'log', '--oneline', '--decorate',
                 *what)
             if output:
@@ -818,7 +815,7 @@ class GitScm(Scm):
                     indent(output, '   ')))
 
             output = self.callGit(workspacePath, "-C", subPath, 'log',
-                '--oneline', '--decorate', '--all', '--not', '--remotes')
+                '--oneline', '--decorate', '--all', '--not', '--remotes', '--tags')
             if output:
                 status.add(ScmTaint.unpushed_local, joinLines(
                     "> submodule '{}' unpushed local commits:".format(subPath),
