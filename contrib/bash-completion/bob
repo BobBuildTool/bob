@@ -180,15 +180,18 @@ __bob_jenkins_add()
 
    case "$cur" in
       -*)
-         __bob_complete_words "--clean --credentials --download --help --keep --longdescription --no-sandbox --nodes --prefix --root --shortdescription --upload --windows -D -h -n -o -p -r -w"
+         __bob_complete_words "--clean --credentials --download --help --host-platform --keep --longdescription --no-sandbox --nodes --prefix --root --shortdescription --upload --windows -D -h -n -o -p -r -w"
          ;;
       *)
          case "$prev" in
             -r|--root)
                __bob_complete_path
                ;;
+            --host-platform)
+               __bob_complete_words "linux msys win32"
+               ;;
             -o)
-               __bob_complete_words "artifacts.copy jobs.isolate jobs.policy scm.git.shallow scm.git.timeout scm.ignore-hooks scm.poll shared.dir" "" "="
+               __bob_complete_words "artifacts.copy jobs.isolate jobs.policy scm.git.shallow scm.git.timeout scm.ignore-hooks scm.poll shared.dir shared.quota" "" "="
                ;;
          esac
    esac
@@ -236,11 +239,17 @@ __bob_jenkins_prune()
 {
    case "$cur" in
       -*)
-         __bob_complete_words "-h --help --intermediate --no-ssl-verify --obsolete -q --quiet -v --verbose"
+         __bob_complete_words "-h --help --intermediate --no-ssl-verify --obsolete --password -q --quiet --user -v --verbose"
          ;;
       *)
-         __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
-         ;;
+         case "$prev" in
+            --user|--password)
+               COMPREPLY=( )
+               ;;
+            *)
+               __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
+               ;;
+         esac
    esac
 }
 
@@ -248,11 +257,17 @@ __bob_jenkins_push()
 {
    case "$cur" in
       -*)
-         __bob_complete_words "-f --force -h --help --no-ssl-verify --no-trigger -q --quiet -v --verbose"
+         __bob_complete_words "-f --force -h --help --no-ssl-verify --no-trigger --password -q --quiet --user -v --verbose"
          ;;
       *)
-         __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
-         ;;
+         case "$prev" in
+            --user|--password)
+               COMPREPLY=( )
+               ;;
+            *)
+               __bob_complete_words "$($bob --color=never jenkins ls 2>/dev/null)"
+               ;;
+         esac
    esac
 }
 
@@ -286,12 +301,15 @@ __bob_jenkins_set_options()
 
    case "$cur" in
       -*)
-         __bob_complete_words "-h --help --reset -n --nodes -o -p --prefix --add-root --del-root -D -U --credentials --authtoken --shortdescription --longdescription --keep --no-keep --download --no-download --upload --no-upload --sandbox --no-sandbox --clean --incremental"
+         __bob_complete_words "-h --help --reset -n --nodes -o -p --prefix --add-root --del-root -D -U --credentials --authtoken --shortdescription --longdescription --keep --no-keep --download --no-download --upload --no-upload --sandbox --no-sandbox --clean --incremental --host-platform"
          ;;
       *)
          case "$prev" in
             --add-root)
                __bob_complete_path
+               ;;
+            --host-platform)
+               __bob_complete_words "linux msys win32"
                ;;
             -n|--nodes|-p|--prefix|-D|-U|--credentials|--authtoken)
                COMPREPLY=( )
