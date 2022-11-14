@@ -1,0 +1,150 @@
+Bob 0.22 Release Notes
+======================
+
+Changes made since Bob 0.21.0 include the following.
+
+New features
+------------
+
+* A `mini cheat sheet <../_static/bob_cheatsheet.pdf>`_ with the most common
+  used commands, options and keywords was added to the documentation.
+* Added support for projects that use PowerShell on MSYS2.
+* Added a ``get-tool-env`` :ref:`string function <configuration-principle-subst>`.
+  It queries defined variables of a tool. The tool only needs to be defined and
+  is not required to be actually used by the recipe. An optional default value
+  can be passed that will be used if the variable is not defined in the tool.
+  Otherwise undefined variables will fail the parsing. (:issue:`486`).
+
+Bob build/dev
+~~~~~~~~~~~~~
+
+* Added the ``--no-attic`` build option to fail the build instead of moving
+  unswitchable SCMs to attic.
+* Git checkouts are moved to the attic if they are in a detached HEAD state and the
+  current commit does not match the old checkout state. This could happen if
+  commits are made in detached HEAD state (i.e. when not being on a branch).
+  While the commit(s) would still be available through the git reflog, it is
+  not guaranteed that they are not expunged eventually.
+* Improved git workflow with commits and branches.
+
+  Bob gained additional support for working with recipes, where a commit and a
+  branch is specified. Historically Bob simply gave priority to the commit or
+  tag and moved to a detached HEAD state. Now, controlled under the
+  :ref:`policies-gitBranchAndCommit` policy, Bob will check if the commit is on
+  the specified branch or fail the build otherwise. Additionally the branch is
+  checked out at precisely the given commit. This avoids the `detached` HEAD
+  state.
+* Bob gained the :ref:`configuration-recipes-checkoutUpdateIf` recipe keyword
+  to run selected ``checkoutScript`` in build-only mode.
+
+  By default no checkout scripts are run when building with ``--build-only``.
+  Some use cases practically require the ``checkoutScript`` to be always run,
+  through. A typical example are code generators that generate sources from some
+  high level description. These generators must be run every time when the user
+  has changed the input. A recipe or class can explicitly opt in to run their
+  ``checkoutScript`` also in build-only mode to cover such a use case.
+* The output of fingerprint scripts is now optionally visible just like for
+  normal steps at higher verbosity levels (:issue:`478`).
+* Audit failures are always shown even if successful audit actions are not
+  visible on the current verbosity level (:issue:`472`).
+
+Bob Jenkins
+~~~~~~~~~~~
+
+* Bob gained support for Jenkins running on native Windows. Previously there was
+  only limited support for Windows Jenkins builds with MSYS2. The additional
+  support requires that the same version of Bob that configures the Jenkins
+  master needs to be installed on all build nodes.
+* Added a ``--host-platform`` option. It allows for a distinction between
+  native Windows and MSYS2. By default, the Jenkins platform is assumed to be
+  the same as where Bob is executed. Because the host platform is now an
+  enumeration, the existing ``-w`` option is deprecated. It will still be
+  understood and existing projects will keep on working too.
+* Improved handling of the ``--force`` option. Previously the "force" switch
+  only enabled overwriting existing jobs if Bob wanted to create a new one. Now
+  the "force" switch will unconditionally overwrite all jobs. With that, it is
+  now possible to discard all manual changes even if Bob does not need to
+  update the jobs.
+* Bob Jenkins gained the ``--user`` and ``--password`` options. They provide an
+  alternative to specify the credentials instead of storing them in the Jenkins
+  alias.
+* Added the ``shared.quota`` extended option. It allows to limit the amount of
+  data stored in the shared location. It works the same way as the local
+  configuration.
+
+Bob status
+~~~~~~~~~~
+
+* Bob now avoids tags to be shown as unpushed.
+
+  It's not uncommon to have tags which do not belong to a branch. The old
+  behavior of the status command was to show them as 'unpushed' even if they
+  exist as a remote tag and nothing was changed locally. Now all tags are
+  excluded from the 'unpushed' status output to avoid this. (:pull:`494`)
+
+Plugins
+~~~~~~~
+
+* Added support for schema changes in ``bob.utils.updateDictRecursive()``
+  by allowing to change the type of values in dictionaries. Usually this is
+  fine and may save plugins that use the :class:`bob.input.PluginSetting`
+  class from doing schema normalization.
+* Added the :func:`bob.input.Package.getPluginStates` and
+  :func:`bob.input.Recipe.getPluginProperties` methods to make this
+  information available to all plugins.
+
+Backwards incompatible changes
+------------------------------
+
+* Removed support for Python 3.5.
+
+  Python 3.5 has reached end-of-life long ago. We did not build packages for
+  this version since a long time but it was still possible to use Bob with it.
+  Note that compatibility is still kept for Python 3.6 even though it has
+  reached EOL too. Ubuntu 18.04LTS (bionic) is still shipping this version and
+  will be supported until April 2023.
+* Fail if a given trivial package path does not match. Previously Bob would
+  just ignore the path and do nothing. Note that more complex package
+  queries that involve predicates or wildcards and that do not produce a match
+  will not cause an error. The exact behaviour can be further tweaked by the
+  global ``--query`` :ref:`manpage-bob` option that recognizes the following
+  policies:
+
+  ``nullset``
+      Empty sets of packages are considered a regular result and never
+      treated as an error. This includes trivial path location steps where
+      exact package names do not match.
+
+  ``nullglob``
+      Return an empty set of packages if the query involves wildcard name
+      matches and/or predicates. Otherwise, that is if only direct name
+      matches are used, an error is raised if a package name in the path does
+      not match. This is the default.
+
+  ``nullfail``
+      An empty set of packages is always treated as an error.
+
+  The old behaviour - ``nullset`` - has been replaced by the new ``nullglob``
+  default.  While it may break existing setups, the new default is much closer
+  to the behaviour regular shells. If required, the policy may be overridden on
+  the command line or the user configuration files (see
+  :ref:`ui.queryMode <configuration-config-ui>`).
+
+Bug fixes
+---------
+
+* Fixed failing sandbox mounts in conjunction with the ``checkoutDep`` flag
+  (:issue:`479`)
+* Fixed symlink handling of the ``import`` SCM on Windows. When creating
+  symlinks on Windows the target type must be known in advance. To work around
+  these problems the import SCM will now copy everything *except* symlinks
+  first and later only the symlinks.
+* Fixed a bug when generation of the audit trail was not retried if it failed
+  for checkout steps.
+* Added a workaround for Bash on Windows when WSL is enabled but no
+  distribution is installed. Previously Bash could not be executed even though
+  the MSYS2 version was in ``%PATH%``.
+* Fixed a crash in IfExpressions where a function call and a literal were
+  compared, e.g.: ``foo() == "bar"``.
+* Fixed out of tree builds of projects that use the ``import`` SCM.
+  (:issue:`489`).

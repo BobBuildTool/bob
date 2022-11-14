@@ -2444,6 +2444,8 @@ configuration file (``~/.config/bob/default.yaml``). This way all projects
 built by the user will benefit from this location and the quota is consistently
 configured for all projects.
 
+.. _configuration-config-ui:
+
 ui
 ~~
 
