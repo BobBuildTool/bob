@@ -406,6 +406,11 @@ __bob_subcommands()
          -C?*)
             chroot+=( "${c:2}" )
             ;;
+         --query)
+            if [[ $parse_pos -lt $COMP_CWORD ]] ; then
+               : $((parse_pos++))
+            fi
+            ;;
          -*) ;;
          *) command="$c" ; break ;;
       esac
@@ -417,11 +422,13 @@ __bob_subcommands()
             __bob_complete_dir "${cur:2}" "-C"
             ;;
          -*)
-            __bob_complete_words "-h --help -i --version -C"
+            __bob_complete_words "-h --help -i --version -C --query"
             ;;
          *)
             if [[ $prev == "-C" ]] ; then
                __bob_complete_dir "$cur"
+            elif [[ $prev == "--query" ]] ; then
+               __bob_complete_words "nullset nullglob nullfail"
             else
                __bob_complete_words "$1"
             fi
