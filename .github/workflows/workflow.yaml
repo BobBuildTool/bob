@@ -3,7 +3,7 @@ name: CI/CD
 on: [push, pull_request]
 
 jobs:
-    linux:
+    build-linux:
         runs-on: ubuntu-latest
         timeout-minutes: 15
         strategy:
@@ -41,22 +41,20 @@ jobs:
 
             - name: Build Python package
               run: |
-                python3 setup.py sdist bdist_wheel --plat-name manylinux1_x86_64
+                python3 setup.py bdist_wheel --plat-name manylinux1_x86_64
 
             - name: Upload coverage to Codecov
               # Coverage is not complete on Python <3.7 (see pym/bob/utils.py)
               if: matrix.python-version != '3.6'
               uses: codecov/codecov-action@v2
 
-            - name: Publish package
-              if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-              uses: pypa/gh-action-pypi-publish@release/v1
+            - name: Store the binary wheel
+              uses: actions/upload-artifact@v3
               with:
-                user: __token__
-                password: ${{ secrets.PYPI_API_TOKEN }}
-                skip_existing: true
+                name: python-package-distributions
+                path: dist
 
-    windows:
+    build-windows:
         runs-on: windows-latest
         timeout-minutes: 20
         steps:
@@ -93,10 +91,56 @@ jobs:
 
             - name: Build Python package
               run: |
-                python3 setup.py sdist bdist_wheel
+                python3 setup.py bdist_wheel
 
             - name: Upload coverage to Codecov
               uses: codecov/codecov-action@v2
+
+            - name: Store the binary wheel
+              uses: actions/upload-artifact@v3
+              with:
+                name: python-package-distributions
+                path: dist
+
+    build-sdist:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v2
+
+            - name: Set up Python 3.10
+              uses: actions/setup-python@v2
+              with:
+                python-version: "3.10"
+
+            - name: Build Python package
+              run: |
+                python3 setup.py sdist
+
+            - name: Store the source distribution
+              uses: actions/upload-artifact@v3
+              with:
+                name: python-package-distributions
+                path: dist
+
+    publish:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        needs:
+            - build-linux
+            - build-windows
+            - build-sdist
+        steps:
+            - name: Download all the dists
+              uses: actions/download-artifact@v3
+              with:
+                name: python-package-distributions
+                path: dist/
+
+            - name: List
+              run: |
+                ls dist
 
             - name: Publish package
               if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
