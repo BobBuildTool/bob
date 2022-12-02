@@ -184,7 +184,7 @@ class CommonIDEGenerator:
                 self.checkout = False
                 self.dependencies = set()
 
-        checkouts = { False : CheckoutInfo(None, None) }
+        checkouts = { False : CheckoutInfo(BaseScanner(), None) }
         packages = {}
 
         def collect(package, rootPackage=True):
