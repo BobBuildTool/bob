@@ -3139,7 +3139,7 @@ class RecipeSet:
                     schema.Optional('if') : schema.Or(str, IfExpression),
                     schema.Optional('match') : schema.Schema({ str: object }),
                     schema.Optional('del') : [str],
-                    schema.Optional('set') : object,
+                    schema.Optional('set') : schema.Schema({ str: object }),
                     schema.Optional('replace') : schema.Schema({
                         str : schema.Schema({
                             'pattern' : str,
