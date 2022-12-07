@@ -148,3 +148,8 @@ Bug fixes
   compared, e.g.: ``foo() == "bar"``.
 * Fixed out of tree builds of projects that use the ``import`` SCM.
   (:issue:`489`).
+* Rectified schema validation of ``set`` properties of ``scmOverride``.
+  (:issue:`497`)
+* Fixed a crash of the Visual Studio and Visual Studio Code project generators
+  with packages that have a host executable file but has no checkout step.
+  (:issue:`498`)
