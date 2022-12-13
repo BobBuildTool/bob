@@ -1,8 +1,8 @@
 Build a demo project
 ********************
 
-Prequisites
-===========
+Prerequisites
+=============
 
 You should have Bob somewhere in your ``$PATH``. As the first step clone the
 tutorial projects::
