@@ -110,6 +110,12 @@ run_bob()
 	fi
 }
 
+# Run bob on pty. This only works on Linux, though.
+run_bob_tty()
+{
+	script -c "/bin/bash -c \"$BOB_ROOT/bob --debug=pkgck,ngd $*\"" -e /dev/null
+}
+
 # Run bob only with the "no global defaults" debug switch. Used for black box
 # regression tests of the package calculation algorithm.
 run_bob_plain()
