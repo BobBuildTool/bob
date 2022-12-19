@@ -1,5 +1,6 @@
 packageVars: [FAIL_LIB2]
 packageScript: |
     if [ ${FAIL_LIB2:-} ] ; then
+        echo "Failing lib2" >&2
         exit 1
     fi
