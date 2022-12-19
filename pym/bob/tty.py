@@ -274,6 +274,7 @@ class ParallelTtyUI(BaseTUI):
         self.__putFooter()
 
     def __putFooter(self):
+        # CR, disable line wrap, erase line, ...
         print("\r\x1b[?7l\x1b[2K====== {}/{} jobs running, {}% ({}/{} tasks) done "
                 .format(len(self.__jobs), self.__maxJobs,
                         self.__tasksDone*100//self.__tasksNum,
@@ -287,6 +288,7 @@ class ParallelTtyUI(BaseTUI):
             else:
                 print("\n\x1b[2K ****  <idle>", end='')
             i += 1
+        # Move up <i> lines, enable line wrap
         print("\x1b[{}A".format(i), "\x1b[?7h\r", sep='', end='')
 
     def _putResult(self, slot, msg):
@@ -381,12 +383,7 @@ class ParallelDumbUIAction(BaseTUIAction):
         elif exc_type is not None and self.err_message:
             kind = self.err_kind
             stderr = self.err_message
-        self.__tui._print(self.__job, msg, kind, "End")
-        if stderr:
-            # Print error messages on stderr when being on a dumb output. It is
-            # probably redirected by some other script or an analyzed IDE (thin
-            # "bob project").
-            print(stderr, file=sys.stderr)
+        self.__tui._printResult(self.__job, msg, stderr, kind)
         return False
 
 class ParallelDumbUI(BaseTUI):
@@ -402,6 +399,14 @@ class ParallelDumbUI(BaseTUI):
     def _print(self, job, msg, kind, stage=""):
         level = COLORS2TEXT[kind & 7]
         print("[{:<5} {:>4}] {}: {}".format(stage, job, level, colorize(msg, kind)))
+
+    def _printResult(self, job, msg, stderr, kind):
+        self._print(job, msg, kind, "End")
+        if stderr:
+            # Print error messages on stderr when being on a dumb output. It is
+            # probably redirected by some other script or an analyzed IDE (think
+            # "bob project").
+            print(stderr, file=sys.stderr)
 
     def log(self, message, kind, severity):
         if not self._isVisible(severity): return
@@ -434,6 +439,109 @@ class ParallelDumbUI(BaseTUI):
         msg = "{:10}{} - {}{}".format(action, name, message, details)
         return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails)
 
+class MassiveParallelTtyUI(BaseTUI):
+    def __init__(self, verbosity, maxJobs):
+        super().__init__(verbosity)
+        self.__index = 1
+        self.__maxJobs = maxJobs
+        self.__jobs = set()
+        self.__tasksDone = 0
+        self.__tasksNum = 1
+
+        # disable cursor
+        print("\x1b[?25l")
+
+        # disable echo
+        try:
+            import termios
+            fd = sys.stdin.fileno()
+            self.__oldTcAttr = termios.tcgetattr(fd)
+            new = termios.tcgetattr(fd)
+            new[3] = new[3] & ~termios.ECHO
+            termios.tcsetattr(fd, termios.TCSADRAIN, new)
+        except ImportError:
+            pass
+
+    def __nextJob(self):
+        ret = self.__index
+        self.__index += 1
+        return ret
+
+    def __putLineCont(self, line):
+        print("\r" + "\x1b[2K", line, "\x1b[K", sep="")
+
+    def __putLine(self, line):
+        self.__putLineCont(line)
+        self.__putFooter()
+
+    def __putFooter(self):
+        # CR, disable line wrap, erase line, ...
+        print("\r\x1b[?7l\x1b[2K====== {}/{} jobs running, {}% ({}/{} tasks) done "
+                .format(len(self.__jobs), self.__maxJobs,
+                        self.__tasksDone*100//self.__tasksNum,
+                        self.__tasksDone, self.__tasksNum))
+        for i in sorted(self.__jobs):
+            print("[{}]".format(i), end="")
+        # Move up one lines, enable line wrap
+        print("\x1b[A\x1b[?7h\r", end='')
+
+    def _print(self, job, msg, kind, stage=""):
+        self.__putLine("[{:<5} {:>4}] {}".format(stage, job, colorize(msg, kind)))
+
+    def _printResult(self, job, msg, stderr, kind):
+        self.__jobs.remove(job)
+        self._print(job, msg, kind, "End")
+        if stderr:
+            for l in stderr.splitlines():
+                self.__putLineCont("[{:<5} {:>4}] {}".format("ERR", job, l))
+            self.__putFooter()
+
+    def log(self, message, kind, severity):
+        if not self._isVisible(severity): return
+        self._print("****", message, kind, "*****")
+
+    def stepMessage(self, step, action, message, kind, severity):
+        if not self._isVisible(severity): return
+        self._print("", "{:10}{} - {}".format(action,
+            step.getPackage().getName(), message), kind)
+
+    def stepAction(self, step, action, message, severity, details):
+        return self.__action(step, action, message, severity, details, True)
+
+    def stepExec(self, step, action, message, severity, details):
+        return self.__action(step, action, message, severity, details, False)
+
+    def __action(self, step, action, message, severity, details, ellipsis):
+        if not self._isVisible(severity): return DummyTUIAction()
+        showDetails = self._isVisible(INFO)
+        if showDetails and details:
+            details = " " + details
+        else:
+            details = ""
+        if ellipsis:
+            details += ": "
+
+        job = self.__nextJob()
+        self.__jobs.add(job)
+        name = step.getPackage().getName()
+        self._print(job, "{:10}{} - {}".format(action, name, message), EXECUTED, "Start")
+        msg = "{:10}{} - {}{}".format(action, name, message, details)
+        return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails)
+
+    def cleanup(self):
+        self.__putFooter()
+        print()
+        print("\x1b[?25h")
+        try:
+            import termios
+            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
+        except ImportError:
+            pass
+
+    def setProgress(self, done, num):
+        self.__tasksDone = done
+        self.__tasksNum = num
+
 def log(message, kind, severity=-2):
     __tui.log(message, kind, severity)
 
@@ -459,7 +567,10 @@ def setTui(maxJobs):
     if maxJobs <= 1:
         __tui = SingleTUI(__tui.getVerbosity())
     elif __onTTY:
-        __tui = ParallelTtyUI(__tui.getVerbosity(), maxJobs)
+        if maxJobs <= 16:
+            __tui = ParallelTtyUI(__tui.getVerbosity(), maxJobs)
+        else:
+            __tui = MassiveParallelTtyUI(__tui.getVerbosity(), maxJobs)
     else:
         __tui = ParallelDumbUI(__tui.getVerbosity())
 
