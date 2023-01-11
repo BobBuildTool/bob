@@ -89,18 +89,8 @@ jobs:
                 $env:JAVA_HOME = "$env:JAVA_HOME_11_X64"
                 bash ./test/run-tests.sh -c xml
 
-            - name: Build Python package
-              run: |
-                python3 setup.py bdist_wheel
-
             - name: Upload coverage to Codecov
               uses: codecov/codecov-action@v2
-
-            - name: Store the binary wheel
-              uses: actions/upload-artifact@v3
-              with:
-                name: python-package-distributions
-                path: dist
 
     build-sdist:
         runs-on: ubuntu-latest
@@ -128,6 +118,8 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 5
         needs:
+            # Depend on all builds even if they don't provide an artifact (e.g.
+            # windows). This makes sure we publish only if everything is ok.
             - build-linux
             - build-windows
             - build-sdist
