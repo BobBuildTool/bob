@@ -2892,6 +2892,7 @@ class RecipeSet:
     BUILD_DEV_SCHEMA = schema.Schema(
         {
             schema.Optional('always_checkout') : [str],
+            schema.Optional('attic') : bool,
             schema.Optional('audit') : bool,
             schema.Optional('build_mode') : schema.Or("build-only","normal", "checkout-only"),
             schema.Optional('clean') : bool,
