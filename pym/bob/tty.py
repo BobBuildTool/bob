@@ -567,7 +567,7 @@ def setTui(maxJobs):
     if maxJobs <= 1:
         __tui = SingleTUI(__tui.getVerbosity())
     elif __onTTY:
-        if maxJobs <= 16:
+        if maxJobs <= __parallelTUIThreshold:
             __tui = ParallelTtyUI(__tui.getVerbosity(), maxJobs)
         else:
             __tui = MassiveParallelTtyUI(__tui.getVerbosity(), maxJobs)
@@ -594,6 +594,7 @@ def ttyReinit():
 __onTTY = (sys.stdout.isatty() and sys.stderr.isatty())
 __useColor = False
 __tui = SingleTUI(NORMAL)
+__parallelTUIThreshold = 16
 
 if __onTTY and sys.platform == "win32":
     # Try to set ENABLE_VIRTUAL_TERMINAL_PROCESSING flag. Enables vt100 color
@@ -615,6 +616,10 @@ def setColorMode(mode):
         __useColor = True
     elif mode == 'auto':
         __useColor = __onTTY
+
+def setParallelTUIThreshold(num):
+    global __parallelTUIThreshold
+    __parallelTUIThreshold = num
 
 # auto is the default
 setColorMode('auto')

@@ -2466,6 +2466,12 @@ color
     ``auto``
         Use colors only when TTY console detected (default)
 
+parallelTUIThreshold
+    Set the threshold for switching between TUIs. Default: 16
+
+    If the number of jobs exceeds this threshold the TUI switches from one
+    status line per job to a TUI using only two status lines.
+
 queryMode
     Set the behaviour of package queries when no package is matched. Can be
     overridden on the command line by the global ``--query`` option of
