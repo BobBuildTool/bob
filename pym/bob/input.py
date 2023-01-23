@@ -11,7 +11,7 @@ from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
     auditFromDir, getScm, SYNTHETIC_SCM_PROPS
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
-from .tty import InfoOnce, Warn, WarnOnce, setColorMode
+from .tty import InfoOnce, Warn, WarnOnce, setColorMode, setParallelTUIThreshold
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
     updateDicRecursive, hashString, getPlatformTag, getPlatformString, \
     replacePath
@@ -3162,6 +3162,7 @@ class RecipeSet:
             "ui" : BuiltinSetting(
                 schema.Schema({
                     schema.Optional('color') : schema.Or('never', 'always', 'auto'),
+                    schema.Optional('parallelTUIThreshold') : int,
                     schema.Optional('queryMode') : schema.Or('nullset', 'nullglob', 'nullfail'),
                 }),
                 lambda x: updateDicRecursive(self.__uiConfig, x)
@@ -3539,6 +3540,7 @@ class RecipeSet:
         # color mode provided in cmd line takes precedence
         # (if no color mode provided by user, default one will be used)
         setColorMode(self._colorModeConfig or self.__uiConfig.get('color', 'auto'))
+        setParallelTUIThreshold(self.__uiConfig.get('parallelTUIThreshold', 16))
 
         # finally parse recipes
         classesDir = os.path.join(rootDir, 'classes')
