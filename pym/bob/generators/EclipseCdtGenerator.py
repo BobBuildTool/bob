@@ -14,6 +14,7 @@ import uuid
 from os.path import expanduser
 from os.path import join
 from bob.utils import summonMagic, removePath
+from bob.errors import ParseError
 from collections import OrderedDict
 from shlex import quote
 
@@ -233,7 +234,7 @@ def eclipseCdtGenerator(package, argv, extra, bobRoot):
             if os.path.exists(i):
                 includeDirs.append(i)
     except re.error as e:
-        raise ParseError("Invalid regular expression '{}': {}".format(e.pattern), e)
+        raise ParseError("Invalid regular expression '{}': {}".format(e.pattern, e))
 
     with open(os.path.join(destination, ".cproject"), 'w') as cProjectFile:
         cProjectFile.write(cProjectHeader)

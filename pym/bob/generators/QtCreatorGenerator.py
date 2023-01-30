@@ -15,7 +15,7 @@ import shutil
 from os.path import expanduser
 from os.path import join
 from bob.utils import removePath, isWindows
-from bob.errors import BuildError
+from bob.errors import BuildError, ParseError
 from bob.utils import summonMagic, hashFile
 from collections import OrderedDict, namedtuple
 from bob.tty import colorize, WARNING
@@ -227,7 +227,7 @@ def qtProjectGenerator(package, argv, extra, bobRoot):
         else:
             _kit = re.compile(r""+args.kit)
     except re.error as e:
-        raise ParseError("Invalid regular expression '{}': {}".format(e.pattern), e)
+        raise ParseError("Invalid regular expression '{}': {}".format(e.pattern, e))
 
     getCheckOutDirs(package, excludes, dirs)
     if not projectName:
