@@ -2220,16 +2220,6 @@ class Recipe(object):
         if self.__jobServer is None:
             self.__jobServer = False
 
-        # check provided dependencies
-        availDeps = [ d.recipe for d in self.__deps ]
-        providedDeps = set()
-        for pattern in self.__provideDeps:
-            l = set(d for d in availDeps if fnmatch.fnmatchcase(d, pattern))
-            if not l:
-                raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern))
-            providedDeps |= l
-        self.__provideDeps = providedDeps
-
         # Evaluate root property
         if isinstance(self.__root, str) or isinstance(self.__root, IfExpression):
             self.__root = rootEnv.evaluate(self.__root, "root")
@@ -2346,6 +2336,7 @@ class Recipe(object):
         directPackages = []
         indirectPackages = []
         provideDeps = UniquePackageList(stack, self.__raiseIncompatibleProvided)
+        maybeProvideDeps = []
         checkoutDeps = []
         results = []
         depEnv = env.derive()
@@ -2355,12 +2346,16 @@ class Recipe(object):
         depDiffSandbox = diffSandbox
         depDiffTools = diffTools.copy()
         thisDeps = {}
+        resolvedDeps = []
 
         for dep in self.__deps:
             env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
                 "__tools" : tools })
 
-            if dep.condition and not all(env.evaluate(cond, "dependency "+dep.recipe)
+            recipe = env.substitute(dep.recipe, "dependency::"+dep.recipe)
+            resolvedDeps.append(recipe)
+
+            if dep.condition and not all(env.evaluate(cond, "dependency "+recipe)
                                                       for cond in dep.condition): continue
 
             if dep.toolOverride:
@@ -2369,7 +2364,7 @@ class Recipe(object):
                         k : depTools[v] for k,v in dep.toolOverride.items() })
                 except KeyError as e:
                     raise ParseError("Cannot remap unkown tool '{}' for dependency '{}'!"
-                        .format(e.args[0], dep.recipe))
+                        .format(e.args[0], recipe))
                 thisDepDiffTools = depDiffTools.copy()
                 thisDepDiffTools.update({
                     k : depDiffTools.get(v, v)
@@ -2379,10 +2374,10 @@ class Recipe(object):
                 thisDepDiffTools = depDiffTools
 
             thisDepEnv = depEnv.derive(
-                { key : env.substitute(value, "depends["+dep.recipe+"].environment["+key+"]")
+                { key : env.substitute(value, "depends["+recipe+"].environment["+key+"]")
                   for key, value in dep.envOverride.items() })
 
-            r = self.__recipeSet.getRecipe(dep.recipe)
+            r = self.__recipeSet.getRecipe(recipe)
             try:
                 if r.__packageName in stack:
                     raise ParseError("Recipes are cyclic (1st package in cylce)")
@@ -2400,16 +2395,16 @@ class Recipe(object):
             # A dependency should be named only once. Hence we can
             # optimistically create the DepTracker object. If the dependency is
             # named more than one we make sure that it is the same variant.
-            depTrack = thisDeps.setdefault(dep.recipe, DepTracker(depRef))
+            depTrack = thisDeps.setdefault(recipe, DepTracker(depRef))
             if depTrack.prime():
                 directPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
                 self.__raiseIncompatibleLocal(depCoreStep)
             elif self.__recipeSet.getPolicy('uniqueDependency'):
                 raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
-                                    .format(dep.recipe))
+                                    .format(recipe))
             else:
-                warnDepends.show("{} -> {}".format(self.__packageName, dep.recipe))
+                warnDepends.show("{} -> {}".format(self.__packageName, recipe))
 
             # Remember dependency diffs before changing them
             origDepDiffTools = thisDepDiffTools
@@ -2449,10 +2444,23 @@ class Recipe(object):
                 if sandboxEnabled:
                     env.update(sandbox.environment)
                     if dep.provideGlobal: depEnv.update(sandbox.environment)
-            if dep.recipe in self.__provideDeps:
+
+            maybeProvideDeps.append((recipe, depRef, p.getName(), origDepDiffTools, origDepDiffSandbox))
+
+        # check provided dependencies
+        providedDeps = set()
+        for pattern in self.__provideDeps:
+            pattern = env.substitute(pattern, "providedDep::"+pattern)
+            l = set(d for d in resolvedDeps if fnmatch.fnmatchcase(d, pattern))
+            if not l:
+                raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern))
+            providedDeps |= l
+
+        for (recipe, depRef, name, origDepDiffTools, origDepDiffSandbox) in maybeProvideDeps:
+            if recipe in providedDeps:
                 provideDeps.append(depRef)
-                provideDeps.extend(CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox)
-                    for d in depCoreStep.providedDeps)
+                provideDeps.extend([CoreRef(d, [name], origDepDiffTools, origDepDiffSandbox)
+                    for d in depRef.refGetDestination().providedDeps])
 
         # Filter indirect packages and add to result list if necessary. Most
         # likely there are many duplicates that are dropped.

@@ -251,6 +251,70 @@ class TestProjectConfiguration(RecipesTmp, TestCase):
 
 
 class TestDependencies(RecipesTmp, TestCase):
+    def testVariableDeps(self):
+        """Test resolve of dependecies by environment substitution"""
+        self.writeRecipe("root", """\
+            root: True
+            depends: [a]
+            environment:
+                A : "b"
+                D : "c"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("root2", """\
+            root: True
+            depends: [a, d]
+            environment:
+                A : "c"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+        self.writeRecipe("a", """\
+            depends: [ "$A-foo" ]
+            buildScript: "true"
+            packageScript: "true"
+            provideDeps: [ "$A-f*" ]
+            provideVars:
+                D: "e"
+            """)
+
+        self.writeRecipe("b-foo", """\
+            buildScript: "true"
+            packageScript: "echo 'b'"
+            """)
+        self.writeRecipe("c-foo", """\
+            buildScript: "true"
+            packageScript: "echo 'c'"
+            """)
+        self.writeRecipe("d", """\
+            depends:
+             - name: a
+               use: [environment, deps]
+             - "$D"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("e", """\
+            buildScript: "true"
+            packageScript: "true"
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda x,y: "unused")
+
+        p = packages.walkPackagePath("root/a/b-foo")
+        self.assertEqual(p.getName(), "b-foo")
+        p = packages.walkPackagePath("root2/a/c-foo")
+        self.assertEqual(p.getName(), "c-foo")
+        p = packages.walkPackagePath("root2/d/e")
+        self.assertEqual(p.getName(), "e")
+        #access via providedDeps
+        p = packages.walkPackagePath("root/b-foo")
+        self.assertEqual(p.getName(), "b-foo")
+
     def testDuplicateRemoval(self):
         """Test that provided dependencies do not replace real dependencies"""
         self.writeRecipe("root", """\

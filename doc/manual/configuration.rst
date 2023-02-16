@@ -1178,6 +1178,7 @@ The following settings are supported:
 | Name        | Type            | Description                                         |
 +=============+=================+=====================================================+
 | name        | String          | The name of the required recipe.                    |
+|             |                 | String substitution is applied to this setting.     |
 +-------------+-----------------+-----------------------------------------------------+
 | depends     | List of         | A list of dependencies inheriting the settings of   |
 |             | Dependencies    | this entry.                                         |
@@ -1567,7 +1568,8 @@ The ``provideDeps`` keyword receives a list of dependency names. These must be
 dependencies of the current recipe, i.e. they must appear in the ``depends``
 section. It is no error if the condition of such a dependency evaluates to
 false. In this case the entry is silently dropped. To specify multiple
-dependencies with a single entry shell globbing patterns may be used.
+dependencies with a single entry shell globbing patterns may be used. As for the
+names of the dependencies string substitution is also applied to ``provideDeps``.
 
 Provided dependencies are subsequently injected into the dependency list of the
 downstream recipe that has a dependency to this one (if ``deps`` is included in
