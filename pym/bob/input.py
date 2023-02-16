@@ -2356,9 +2356,13 @@ class Recipe(object):
         depDiffTools = diffTools.copy()
         thisDeps = {}
 
+        self.__provideDeps = [ env.substitute(p, "providedDep::"+p)
+                for p in self.__provideDeps]
+
         for dep in self.__deps:
             env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
                 "__tools" : tools })
+            dep.recipe = env.substitute(dep.recipe, "dependency::"+dep.recipe)
 
             if dep.condition and not all(env.evaluate(cond, "dependency "+dep.recipe)
                                                       for cond in dep.condition): continue
