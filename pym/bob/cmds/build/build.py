@@ -10,7 +10,7 @@ from ...input import RecipeSet
 from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
     RecipeSetIR
 from ...share import getShare
-from ...tty import setVerbosity, setTui
+from ...tty import setVerbosity, setTui, Warn
 from ...utils import copyTree, processDefines, EventLoopWrapper
 import argparse
 import datetime
@@ -380,11 +380,22 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                     + " package" + ("s" if (stats.packagesBuilt != 1) else "") + " built, "
                 + str(stats.packagesDownloaded) + " downloaded.")
 
-        # copy build result if requested
+        # Copy build result if requested. It's ok to overwrite files that are
+        # already at the destination. Warn if built packages overwrite
+        # themselves, though.
         ok = True
         if args.destination:
+            allFiles = set()
+            collisions = set()
             for result in results:
-                ok = copyTree(result, args.destination) and ok
+                nextFiles = set()
+                ok = copyTree(result, args.destination, nextFiles) and ok
+                collisions |= allFiles & nextFiles
+                allFiles |= nextFiles
+            if collisions:
+                shownCollisions = ", ".join(sorted(collisions)[:3])
+                if len(collisions) > 3: shownCollisions = shownCollisions + ", ..."
+                Warn("duplicate files at distination overwritten: " + shownCollisions).warn()
         if not ok:
             raise BuildError("Could not copy everything to destination. Your aggregated result is probably incomplete.")
     else:

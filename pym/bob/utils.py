@@ -603,7 +603,11 @@ def summonMagic():
 
 ### directory copy ###
 
-def copyTree(src, dst):
+class __BlackHoleSet:
+    def add(self, item):
+        pass
+
+def copyTree(src, dst, fileSet = __BlackHoleSet()):
     try:
         names = os.listdir(src)
         os.makedirs(dst, exist_ok=True)
@@ -626,6 +630,7 @@ def copyTree(src, dst):
                 else:
                     ret = copyTree(srcname, dstname) and ret
             else:
+                fileSet.add(dstname)
                 if os.path.lexists(dstname):
                     os.unlink(dstname)
                 if os.path.islink(srcname):
