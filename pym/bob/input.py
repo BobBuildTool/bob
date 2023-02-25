@@ -1849,6 +1849,40 @@ class DepTracker:
             self.usedResult = True
             return True
 
+
+class VerbatimProvideDepsResolver:
+    def __init__(self, pattern):
+        self.pattern = pattern
+
+    def resolve(self, env, resolvedDeps):
+        pattern = self.pattern
+        return set(d for d in resolvedDeps if d == pattern)
+
+class GlobProvideDepsResolver:
+    def __init__(self, pattern):
+        self.pattern = pattern
+
+    def resolve(self, env, resolvedDeps):
+        pattern = self.pattern
+        return set(d for d in resolvedDeps if fnmatch.fnmatchcase(d, pattern))
+
+class SubstituteProvideDepsResolver:
+    def __init__(self, pattern):
+        self.pattern = pattern
+
+    def resolve(self, env, resolvedDeps):
+        pattern = self.pattern
+        pattern = env.substitute(pattern, "providedDeps::"+pattern)
+        return set(d for d in resolvedDeps if fnmatch.fnmatchcase(d, pattern))
+
+def getProvideDepsResolver(pattern):
+    if any((c in pattern) for c in '\\\"\'$'):
+        return SubstituteProvideDepsResolver(pattern)
+    elif any((c in pattern) for c in '*?['):
+        return GlobProvideDepsResolver(pattern)
+    else:
+        return VerbatimProvideDepsResolver(pattern)
+
 class Recipe(object):
     """Representation of a single recipe
 
@@ -2220,6 +2254,9 @@ class Recipe(object):
         if self.__jobServer is None:
             self.__jobServer = False
 
+        # Optimize provideDeps
+        self.__provideDeps = [ getProvideDepsResolver(d) for d in self.__provideDeps ]
+
         # Evaluate root property
         if isinstance(self.__root, str) or isinstance(self.__root, IfExpression):
             self.__root = rootEnv.evaluate(self.__root, "root")
@@ -2450,10 +2487,9 @@ class Recipe(object):
         # check provided dependencies
         providedDeps = set()
         for pattern in self.__provideDeps:
-            pattern = env.substitute(pattern, "providedDep::"+pattern)
-            l = set(d for d in resolvedDeps if fnmatch.fnmatchcase(d, pattern))
+            l = pattern.resolve(env, resolvedDeps)
             if not l:
-                raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern))
+                raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern.pattern))
             providedDeps |= l
 
         for (recipe, depRef, name, origDepDiffTools, origDepDiffSandbox) in maybeProvideDeps:
