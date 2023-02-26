@@ -315,6 +315,37 @@ class TestDependencies(RecipesTmp, TestCase):
         p = packages.walkPackagePath("root/b-foo")
         self.assertEqual(p.getName(), "b-foo")
 
+    def testGlobProvideDeps(self):
+        """Test globbing pattern in provideDeps"""
+        self.writeRecipe("root", """\
+            root: True
+            depends: [a]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("a", """\
+            depends: [b-dev, b-tgt]
+            packageScript: "echo a"
+            provideDeps: [ "*-dev" ]
+            """)
+        self.writeRecipe("b", """\
+            multiPackage:
+                dev:
+                    packageScript: "echo b-dev"
+                tgt:
+                    packageScript: "echo b-tgt"
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda x,y: "unused")
+
+        rootArgs = packages.walkPackagePath("root").getBuildStep().getArguments()
+        self.assertEqual(len(rootArgs), 3)
+        self.assertEqual(rootArgs[0].getPackage().getName(), "root")
+        self.assertEqual(rootArgs[1].getPackage().getName(), "a")
+        self.assertEqual(rootArgs[2].getPackage().getName(), "b-dev")
+
     def testDuplicateRemoval(self):
         """Test that provided dependencies do not replace real dependencies"""
         self.writeRecipe("root", """\
