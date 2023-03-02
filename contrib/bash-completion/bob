@@ -424,7 +424,7 @@ __bob_subcommands()
          -C?*)
             chroot+=( "${c:2}" )
             ;;
-         --query)
+         --query | --debug | --color)
             if [[ $parse_pos -lt $COMP_CWORD ]] ; then
                : $((parse_pos++))
             fi
@@ -440,13 +440,18 @@ __bob_subcommands()
             __bob_complete_dir "${cur:2}" "-C"
             ;;
          -*)
-            __bob_complete_words "-h --help -i --version -C --query"
+            __bob_complete_words "-h --help -i --version -C --query
+               --debug --color"
             ;;
          *)
             if [[ $prev == "-C" ]] ; then
                __bob_complete_dir "$cur"
             elif [[ $prev == "--query" ]] ; then
                __bob_complete_words "nullset nullglob nullfail"
+            elif [[ $prev == "--debug" ]] ; then
+               __bob_complete_words "pkgck ngd prof"
+            elif [[ $prev == "--color" ]] ; then
+               __bob_complete_words "never always auto"
             else
                __bob_complete_words "$1"
             fi
