@@ -35,6 +35,7 @@ import concurrent.futures.process
 import gzip
 import hashlib
 import http.client
+import io
 import os
 import os.path
 import signal
@@ -972,6 +973,25 @@ class CustomUploader:
         return False
 
 
+class AzureStreamReadAdapter(io.RawIOBase):
+    def __init__(self, raw):
+        super().__init__()
+        self.raw = raw
+    def readable(self):
+        return True
+    def seekable(self):
+        return False
+    def writable(self):
+        return False
+    def read(self, size = -1):
+        return self.raw.read(size)
+    def readall(self):
+        return self.raw.read()
+    def readinto(self, buf):
+        data = self.raw.read(len(buf))
+        buf[0:len(data)] = data
+        return len(data)
+
 class AzureArchive(BaseArchive):
     def __init__(self, spec):
         super().__init__(spec)
@@ -1002,6 +1022,8 @@ class AzureArchive(BaseArchive):
         from azure.core.exceptions import AzureError, ResourceNotFoundError
         try:
             stream = client.download_blob(self.__makeBlobName(buildId, suffix))
+            stream = AzureStreamReadAdapter(stream) # Make io.RawIOBase compatible
+            stream = io.BufferedReader(stream, 1048576) # 1MiB buffer. Azure read()s are synchronous.
             ret = AzureDownloader(client, stream)
             client = None
             return ret
