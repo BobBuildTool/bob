@@ -35,6 +35,7 @@ import concurrent.futures.process
 import gzip
 import hashlib
 import http.client
+import io
 import os
 import os.path
 import signal
@@ -972,19 +973,39 @@ class CustomUploader:
         return False
 
 
+class AzureStreamReadAdapter(io.RawIOBase):
+    def __init__(self, raw):
+        super().__init__()
+        self.raw = raw
+    def readable(self):
+        return True
+    def seekable(self):
+        return False
+    def writable(self):
+        return False
+    def read(self, size = -1):
+        return self.raw.read(size)
+    def readall(self):
+        return self.raw.read()
+    def readinto(self, buf):
+        data = self.raw.read(len(buf))
+        buf[0:len(data)] = data
+        return len(data)
+
 class AzureArchive(BaseArchive):
     def __init__(self, spec):
         super().__init__(spec)
         self.__container = spec['container']
         self.__account = spec['account']
-        self.__key = spec.get('key')
-        self.__sasToken = spec.get('sasToken')
+        self.__credential = spec.get('key', spec.get('sasToken'))
+
+    def __getClient(self):
         try:
-            from azure.storage.blob import BlockBlobService
+            from azure.storage.blob import ContainerClient
         except ImportError:
             raise BuildError("azure-storage-blob Python3 library not installed!")
-        self.__service = BlockBlobService(account_name=self.__account,
-            account_key=self.__key, sas_token=self.__sasToken, socket_timeout=6000)
+        return ContainerClient("https://{}.blob.core.windows.net".format(self.__account),
+            self.__container, self.__credential)
 
     @staticmethod
     def __makeBlobName(buildId, suffix):
@@ -997,70 +1018,79 @@ class AzureArchive(BaseArchive):
             self.__container, self.__makeBlobName(buildId, suffix))
 
     def _openDownloadFile(self, buildId, suffix):
-        from azure.common import AzureException, AzureMissingResourceHttpError
-        (tmpFd, tmpName) = mkstemp()
+        client = self.__getClient()
+        from azure.core.exceptions import AzureError, ResourceNotFoundError
         try:
-            os.close(tmpFd)
-            self.__service.get_blob_to_path(self.__container,
-                self.__makeBlobName(buildId, suffix), tmpName)
-            ret = tmpName
-            tmpName = None
-            return AzureDownloader(ret)
-        except AzureMissingResourceHttpError:
+            stream = client.download_blob(self.__makeBlobName(buildId, suffix))
+            stream = AzureStreamReadAdapter(stream) # Make io.RawIOBase compatible
+            stream = io.BufferedReader(stream, 1048576) # 1MiB buffer. Azure read()s are synchronous.
+            ret = AzureDownloader(client, stream)
+            client = None
+            return ret
+        except ResourceNotFoundError:
             raise ArtifactNotFoundError()
-        except AzureException as e:
+        except AzureError as e:
             raise ArtifactDownloadError(str(e))
         finally:
-            if tmpName is not None: os.unlink(tmpName)
+            if client is not None: client.close()
 
     def _openUploadFile(self, buildId, suffix):
-        from azure.common import AzureException
-
+        containerClient = self.__getClient()
+        from azure.core.exceptions import AzureError
         blobName = self.__makeBlobName(buildId, suffix)
+        blobClient = None
         try:
-            if self.__service.exists(self.__container, blobName):
+            blobClient = containerClient.get_blob_client(blobName)
+            if blobClient.exists():
                 raise ArtifactExistsError()
-        except AzureException as e:
+            ret = AzureUploader(containerClient, blobClient)
+            containerClient = blobClient = None
+            return ret
+        except AzureError as e:
             raise ArtifactUploadError(str(e))
-        (tmpFd, tmpName) = mkstemp()
-        os.close(tmpFd)
-        return AzureUploader(self.__service, self.__container, tmpName, blobName)
+        finally:
+            if blobClient is not None: blobClient.close()
+            if containerClient is not None: containerClient.close()
 
 class AzureDownloader:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, client, stream):
+        self.__client = client
+        self.__stream = stream
     def __enter__(self):
-        return (self.name, None)
+        return (None, self.__stream)
     def __exit__(self, exc_type, exc_value, traceback):
-        os.unlink(self.name)
+        self.__client.close()
         return False
 
 class AzureUploader:
-    def __init__(self, service, container, name, remoteName):
-        self.__service = service
-        self.__container = container
-        self.__name = name
-        self.__remoteName = remoteName
+    def __init__(self, containerClient, blobClient):
+        self.__containerClient = containerClient
+        self.__blobClient = blobClient
 
     def __enter__(self):
-        return (self.__name, None)
+        self.__tmp = TemporaryFile()
+        return (None, self.__tmp)
 
     def __exit__(self, exc_type, exc_value, traceback):
         try:
             if exc_type is None:
                 self.__upload()
         finally:
-            os.unlink(self.__name)
+            self.__tmp.close()
+            self.__blobClient.close()
+            self.__containerClient.close()
         return False
 
     def __upload(self):
-        from azure.common import AzureException, AzureConflictHttpError
+        from azure.core.exceptions import AzureError, ResourceExistsError
         try:
-            self.__service.create_blob_from_path(self.__container,
-                self.__remoteName, self.__name, if_none_match="*")
-        except AzureConflictHttpError:
+            self.__tmp.seek(0, os.SEEK_END)
+            length = self.__tmp.tell()
+            self.__tmp.seek(0)
+            self.__blobClient.upload_blob(self.__tmp, length=length, overwrite=False)
+        except ResourceExistsError:
             raise ArtifactExistsError()
-        except AzureException as e:
+        except AzureError as e:
             raise ArtifactUploadError(str(e))
 
 
