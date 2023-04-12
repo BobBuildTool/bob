@@ -6,6 +6,18 @@ depends:
 checkoutScript: |
     cp $<<src/main.c>> main.c
 
+multiPackage:
+   "":
+      environment:
+         FOO: "1"
+   "2":
+      environment:
+         FOO: "2"
+   "3":
+      environment:
+         FOO: "3"
+
+buildVars: [FOO]
 buildScript:
     cp $1/main.c .
 

@@ -239,7 +239,7 @@ default implementation in Bob looks like this::
 Generators
 ----------
 
-The main purpose of a generator is to generate project files for one or more IDEs. 
+The main purpose of a generator is to generate project files for one or more IDEs.
 There are several built-in generators, e.g. for QtCreator project files.
 
 A generator is called with at least 3 arguments:
@@ -271,6 +271,29 @@ A simple generator may look like::
             'nullGenerator' : nullGenerator,
         }
     }
+
+Traditionally a generator handles only one package. When running the generator
+this package needs to be provided using the complete path. Starting with Bob
+0.23 a generator can specify that he can handle multiple packages as a result
+of a :ref:`package query <manpage-bobpaths>`. This is done by setting the
+optional `query` property to `True`. In this case the first argument of the
+generator are the package objects returned by
+:func:`bob.pathspec.PackageSet.queryPackagePath`.::
+
+   def nullQueryGenerator(packages, argv, extra, bob):
+       for p in packages:
+           print(p.getName())
+       return 0
+
+   manifest = {
+        'apiVersion' : "0.23",
+        'projectGenerators' : {
+            'nullQueryGenerator' : {
+               'func' : nullQueryGenerator,
+               'query' : True,
+        }
+    }
+
 
 .. _extending-settings:
 

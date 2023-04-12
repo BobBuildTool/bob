@@ -11,6 +11,9 @@ fi
 run_bob project -n g1 root > log-cmd.txt
 diff -uZ <(grep '^PLUGIN' log-cmd.txt) output-plugin.txt
 
+run_bob project -n g2 root* > log-cmd.txt
+diff -uZ <(grep '^G2' log-cmd.txt) output-plugin-g2.txt
+
 # run and generate
 run_bob project qt-creator root --kit 'dummy' > log-cmd.txt
 RES=$(sed -ne '/^Build result is in/s/.* //p' log-cmd.txt)

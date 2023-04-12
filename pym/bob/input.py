@@ -3287,6 +3287,10 @@ class RecipeSet:
                     name : lambda package, args, extra, bobRoot: generator(package, args, extra)
                     for name, generator in projectGenerators.items()
                 }
+            projectGenerators = {
+                name : generator if isinstance(generator, dict) else {'func' :  generator, 'query' : False }
+                for name, generator in projectGenerators.items()
+            }
             self.__projectGenerators.update(projectGenerators)
 
         properties = manifest.get('properties', {})
