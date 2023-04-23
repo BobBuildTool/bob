@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from pipes import quote
+from shlex import quote
 from unittest import TestCase, skip
 from unittest.mock import MagicMock
 import asyncio

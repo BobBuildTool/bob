@@ -10,7 +10,7 @@ from .stringparser import Env
 from .tty import Unbuffered
 from .utils import removePath, emptyDirectory, isWindows
 from enum import Enum
-from pipes import quote
+from shlex import quote
 import asyncio
 import concurrent.futures
 import datetime
