@@ -41,48 +41,40 @@ class BuildApps(Command):
             "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections"])
         self.spawn(["strip", "bin/bob-namespace-sandbox"])
 
+# Additional command to build manpages on POSIX systems
+class BuildManpages(Command):
+    description = "Build manpages"
+    user_options = []
+
+    def enabled(self):
+        return sys.platform != "win32"
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        self.spawn(["sphinx-build", "-b", "man", "doc", "doc/_build/man"])
+
 # Wrapper around build command to force automatic execution of the
 # documentation and applet builds.
 class build(build_orig):
     sub_commands = [
-        ('build_apps', BuildApps.enabled )
+        ('build_apps', BuildApps.enabled ),
+        ('build_man', BuildManpages.enabled ),
     ] + build_orig.sub_commands
 
 cmdclass = {
     'build' : build,
     'build_apps': BuildApps,
+    'build_man' : BuildManpages,
 }
 data_files = []
 
-# Installation time dependencies only needed by setup.py
-setup_requires = [
-    'setuptools_scm<7',   # automatically get package version
-                          # TODO: remove constraint when Python 3.7 is required
-]
-
-# Stub class that acts as a proxy for the real sphinx.setup_command.BuildDoc
-# class. We want to defer the import until it is really needed to give the
-# setuptools a chance to fetch the build depencency first.
-class BuildDocStub:
-    def __getattr__(self, attr):
-        from sphinx.setup_command import BuildDoc
-        return getattr(BuildDoc, attr)
-
-    def __setattr__(self, attr, value):
-        from sphinx.setup_command import BuildDoc
-        setattr(BuildDoc, attr, value)
-
-    def __call__(self, *args, **kwargs):
-        from sphinx.setup_command import BuildDoc
-        return BuildDoc(*args, **kwargs)
-
 # Sphinx manpages and bash completion do not work on Windows
 if sys.platform != 'win32':
-    cmdclass['build_sphinx'] = BuildDocStub()
-    build.sub_commands.append(('build_sphinx', None))
-    setup_requires.extend([
-        'sphinx',
-    ])
     data_files.extend([
         ('share/man/man1', [
             'doc/_build/man/bob-archive.1',
@@ -151,7 +143,10 @@ setup(
     },
 
     # Installation time dependencies only needed by setup.py
-    setup_requires = setup_requires,
+    setup_requires = [
+        'setuptools_scm<7',   # automatically get package version
+                              # TODO: remove constraint when Python 3.7 is required
+    ],
 
     # Provide executables
     entry_points = {
