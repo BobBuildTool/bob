@@ -265,6 +265,29 @@ class TestDownloads(UrlScmTest, TestCase):
         self.assertEqual(fs1.st_mtime_ns, fs2.st_mtime_ns)
         self.assertEqual(fs1.st_ctime_ns, fs2.st_ctime_ns)
 
+    def testDownloadRetry(self):
+        """Test HTTP retry"""
+        with HttpServerMock(self.dir, retries=1) as port:
+            scm = self.createUrlScm({
+                "url" : "http://localhost:{}/test.txt".format(port),
+                "retries" : 2
+            })
+            with tempfile.TemporaryDirectory() as workspace:
+                self.invokeScm(workspace, scm)
+                self.assertContent(os.path.join(workspace, "test.txt"))
+
+    def testDownloadRetryFailing(self):
+        """Test HTTP retry"""
+        with HttpServerMock(self.dir, retries=2) as port:
+            scm = self.createUrlScm({
+                "url" : "http://localhost:{}/test.txt".format(port),
+                "retries" : 1
+            })
+            with tempfile.TemporaryDirectory() as workspace:
+                with self.assertRaises(InvocationError):
+                    self.invokeScm(workspace, scm)
+
+
     def testDownloadNotExisting(self):
         """Try to download an invalid file -> 404"""
         with HttpServerMock(self.dir) as port:

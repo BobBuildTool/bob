@@ -1,9 +1,9 @@
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread, Lock
-import os
+import os,sys
 
-def createHttpHandler(repoPath, noResponse):
+def createHttpHandler(repoPath, args):
 
     class Handler(BaseHTTPRequestHandler):
 
@@ -37,8 +37,13 @@ def createHttpHandler(repoPath, noResponse):
             if f: f.close()
 
         def do_GET(self):
-            if noResponse:
+            if args.get('noResponse'):
                 self.close_connection = True
+                return
+            if args.get('retries') > 0:
+                self.send_error(500, "internal error")
+                self.end_headers()
+                args['retries'] = args.get('retries') - 1
                 return
 
             f = self.getCommon()
@@ -49,9 +54,9 @@ def createHttpHandler(repoPath, noResponse):
     return Handler
 
 class HttpServerMock():
-    def __init__(self, repoPath, noResponse=False):
+    def __init__(self, repoPath, noResponse=False, retries=0):
         self.server = HTTPServer(('localhost', 0), createHttpHandler(repoPath,
-            noResponse))
+            {'noResponse' : noResponse, 'retries' : retries }))
 
     def __enter__(self):
         self.thread = Thread(target=self.server.serve_forever)

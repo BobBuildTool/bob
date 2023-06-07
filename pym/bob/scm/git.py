@@ -73,6 +73,7 @@ class GitScm(Scm):
                 schema.Optional('optional') : bool,
             })]),
         schema.Optional('dissociate') : bool,
+        schema.Optional('retries') : int,
     }
 
     __SCHEMA = {
@@ -113,6 +114,7 @@ class GitScm(Scm):
         self.__dissociate = spec.get('dissociate', False)
         self.__resolvedReferences = []
         self.__useBranchAndCommit = spec.get('useBranchAndCommit', useBranchAndCommit)
+        self.__retries = spec.get('retries', 0)
 
         def __resolveReferences(self, alt):
             # if the reference is a string it's used as optional reference
@@ -144,6 +146,7 @@ class GitScm(Scm):
                 (("refs/tags/" + self.__tag) if self.__tag else
                     ("refs/heads/" + self.__branch))
             ),
+            'retries' : self.__retries,
             'sslVerify' : self.__sslVerify,
             'singleBranch' : self.__singleBranch,
             'shallow' : self.__shallow,
@@ -252,7 +255,7 @@ class GitScm(Scm):
         # There is no point in doing the extra dance of fetching commits
         # explicitly like in __checkoutTag on shallow clones. We must make sure
         # that the commit is on the selected branch and need the full history!
-        await invoker.checkCommand(fetchCmd, cwd=self.__dir)
+        await invoker.checkCommand(fetchCmd, retries=self.__retries, cwd=self.__dir)
 
         # Verify that commit/tag is on requested branch
         commit = self.__commit if self.__commit else "tags/"+self.__tag
@@ -294,7 +297,7 @@ class GitScm(Scm):
         head = await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
             stdout=False, cwd=self.__dir)
         if head or switch:
-            await invoker.checkCommand(fetchCmd, cwd=self.__dir)
+            await invoker.checkCommand(fetchCmd, retries=self.__retries, cwd=self.__dir)
             if self.__commit and (self.__shallow is not None):
                 # Shallow clones might not fetch the requested commit if the
                 # depth is too small. The problem is that we cannot blindly
@@ -306,7 +309,7 @@ class GitScm(Scm):
                     self.__commit], cwd=self.__dir) == 0
                 if not haveCommit:
                     ok = await invoker.callCommand(fetchCmd + [self.__commit],
-                        cwd=self.__dir)
+                        retries = self.__retries, cwd=self.__dir)
                     if ok != 0:
                         invoker.fail("Plain git-fetch in", self.__dir,
                             "did not download the requested commit and the explicit fetch failed!",
@@ -317,7 +320,7 @@ class GitScm(Scm):
             await self.__checkoutSubmodules(invoker)
 
     async def __checkoutBranch(self, invoker, fetchCmd, switch):
-        await invoker.checkCommand(fetchCmd, cwd=self.__dir)
+        await invoker.checkCommand(fetchCmd, retries=self.__retries, cwd=self.__dir)
         if await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
                        stdout=False, cwd=self.__dir):
             # checkout only if HEAD is invalid
@@ -850,6 +853,7 @@ class GitScm(Scm):
             cmdLine = ['git', 'ls-remote', self.__url] + refs
             try:
                 stdout = await check_output(cmdLine, stderr=subprocess.DEVNULL,
+                    retries = self.__retries,
                     universal_newlines=True, errors='replace')
                 output = stdout.strip()
             except subprocess.CalledProcessError as e:

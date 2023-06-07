@@ -908,6 +908,7 @@ git    `Git`_ project               | ``url``: URL of remote repository
                                     |           optional if true. Otherwise a error is raised if the
                                     |           local reference repo didn't exitst.
                                     |   Note: ``references`` are not used for submodules.
+                                    | ``retries`` (\*): Number of retries before the checkout is set to failed.
                                     | ``disassociate``: (Boolean, default false). Diasassociate the reference.
 import Import directory from        | ``url``: Directory path relative to project root.
        project                      | ``prune`` (\*): Delete destination directory before importing files.
@@ -922,7 +923,8 @@ url    While not a real SCM it      | ``url``: File that should be downloaded
                                     | ``fileName`` (\*): Local file name (optional, default: url file name)
                                     | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
                                     | ``stripComponents`` (\*): Number of leading components stripped from file name
-                                                                (optional, tar files only)
+                                    |                           (optional, tar files only)
+                                    | ``retries`` (\*): Number of retries before the checkout is set to failed.
 ====== ============================ =======================================================================================
 
 The following synthetic attributes exist. They are generated internally
@@ -2176,6 +2178,7 @@ Example::
       git:
          branch: "main"
          singleBranch: True
+         retries: 3
       url:
          extract: False
 
