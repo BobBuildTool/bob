@@ -475,7 +475,8 @@ class GitScm(Scm):
         diff = self._diffSpec(oldSpec)
 
         # Filter irrelevant properties
-        diff -= {"sslVerify", 'singleBranch', 'shallow', 'shallowSubmodules'}
+        diff -= {"sslVerify", 'singleBranch', 'shallow',
+                'shallowSubmodules', "useBranchAndCommit"}
         diff = set(prop for prop in diff if not prop.startswith("remote-"))
 
         # Enabling "submodules" and/or "recurseSubmodules" is ok. The
