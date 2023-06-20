@@ -509,14 +509,26 @@ class Invoker:
         ret = await self.__runCommand(args, cwd, **kwargs)
         return ret
 
-    async def callCommand(self, args, cwd=None, **kwargs):
+    async def callCommand(self, args, cwd=None, retries=0, success=0, **kwargs):
         cwd = os.path.join(self.__cwd, cwd) if cwd else self.__cwd
-        ret = await self.__runCommand(args, cwd, **kwargs)
+        while True:
+            ret = await self.__runCommand(args, cwd, **kwargs)
+            if (ret == success) or (retries == 0):
+                break
+            await asyncio.sleep(3)
+            retries -= 1
         return ret.returncode
 
-    async def checkCommand(self, args, cwd=None, **kwargs):
+    async def checkCommand(self, args, cwd=None, retries=0, **kwargs):
         cwd = os.path.join(self.__cwd, cwd) if cwd else self.__cwd
-        await self.__runCommand(args, cwd, check=True, **kwargs)
+        while retries != 0:
+            ret = await self.__runCommand(args, cwd, **kwargs)
+            if ret.returncode == 0:
+                return
+            await asyncio.sleep(3)
+            retries -= 1
+        if retries == 0:
+            await self.__runCommand(args, cwd, check=True, **kwargs)
 
     async def checkOutputCommand(self, args, cwd=None, **kwargs):
         cwd = os.path.join(self.__cwd, cwd) if cwd else self.__cwd

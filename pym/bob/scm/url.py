@@ -124,6 +124,7 @@ class UrlScm(Scm):
         schema.Optional('fileName') : str,
         schema.Optional('stripComponents') : int,
         schema.Optional('sslVerify') : bool,
+        schema.Optional('retries') : int,
     }
 
     __SCHEMA = {
@@ -204,6 +205,7 @@ class UrlScm(Scm):
         self.__strip = spec.get("stripComponents", 0)
         self.__sslVerify = spec.get('sslVerify', True)
         self.__stripUser = stripUser
+        self.__retries = spec.get("retries", 0)
 
     def getProperties(self, isJenkins):
         ret = super().getProperties(isJenkins)
@@ -218,6 +220,7 @@ class UrlScm(Scm):
             'extract' : self.__extract,
             'stripComponents' : self.__strip,
             'sslVerify' : self.__sslVerify,
+            'retries' : self.__retries,
         })
         return ret
 
@@ -310,13 +313,22 @@ class UrlScm(Scm):
                     invoker.trace("<cp>", url.path, workspaceFile)
                     shutil.copy(url.path, destination)
             elif url.scheme in ["http", "https", "ftp"]:
-                invoker.trace("<wget>", self.__url, ">", workspaceFile)
-                try:
-                    err = await invoker.runInExecutor(UrlScm._download, self, destination)
-                    if err:
-                        invoker.fail(err)
-                except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                    invoker.fail("Download interrupted!")
+                retries = self.__retries
+                while True:
+                    invoker.trace("<wget>", self.__url, ">",
+                            workspaceFile, "retires:", retries)
+                    try:
+                        err = await invoker.runInExecutor(UrlScm._download, self, destination)
+                        if err:
+                            if retries == 0:
+                                invoker.fail(err)
+                        else:
+                            break
+                    except (concurrent.futures.CancelledError,
+                            concurrent.futures.process.BrokenProcessPool):
+                        invoker.fail("Download interrupted!")
+                    retries -= 1
+                    await asyncio.sleep(3)
             else:
                 invoker.fail("Unsupported URL scheme: " + url.scheme)
 
@@ -364,7 +376,7 @@ class UrlScm(Scm):
             filt = removeUserFromUrl
         else:
             filt = lambda x: x
-        return ( self.__digestSha512 or self.__digestSha256 or 
+        return ( self.__digestSha512 or self.__digestSha256 or
                  self.__digestSha1 or filt(self.__url)
                ) + " " + posixpath.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
                ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
