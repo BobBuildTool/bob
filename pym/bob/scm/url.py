@@ -159,8 +159,8 @@ class UrlScm(Scm):
     # different file modes!). But it shouldn't make a difference on Windows.
     EXTRACTORS = {
         "tar"  : [
-            (True, "tar", ["-x", "--no-same-owner", "--no-same-permissions", "-f", "{}"], "--strip-components={}"),
             (isWin32, "python", ["-m", "tarfile", "-e", "{}"], None),
+            (True, "tar", ["-x", "--no-same-owner", "--no-same-permissions", "-f", "{}"], "--strip-components={}"),
         ],
         "gzip" : [
             (True, "gunzip", ["-kf", "{}"], None),
@@ -172,8 +172,8 @@ class UrlScm(Scm):
             (True, "7z", ["x", "-y", "{}"], None),
         ],
         "zip" : [
-            (True, "unzip", ["-o", "{}"], None),
             (isWin32, "python", ["-m", "zipfile", "-e", "{}", "."], None),
+            (True, "unzip", ["-o", "{}"], None),
         ],
     }
 
