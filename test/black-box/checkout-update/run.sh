@@ -25,7 +25,25 @@ read -r CNT_ROOT_NEW < dev/src/deterministic-root/1/workspace/root.txt
 read -r CNT_NO_UPDATE_NEW < dev/src/deterministic-root/1/workspace/no-update.txt
 expect_not_equal "$CNT_ROOT_BASE" "$CNT_ROOT_NEW"
 expect_equal "$CNT_NO_UPDATE_BASE" "$CNT_NO_UPDATE_NEW"
+CNT_ROOT_BASE="$CNT_ROOT_NEW"
 
+# Changing the checkout script will run the deterministic checkout again
+run_bob dev deterministic-root --build-only -DDUMMY=foo
+read -r CNT_ROOT_NEW < dev/src/deterministic-root/1/workspace/root.txt
+read -r CNT_NO_UPDATE_NEW < dev/src/deterministic-root/1/workspace/no-update.txt
+expect_not_equal "$CNT_ROOT_BASE" "$CNT_ROOT_NEW"
+expect_equal "$CNT_NO_UPDATE_BASE" "$CNT_NO_UPDATE_NEW"
+CNT_ROOT_BASE="$CNT_ROOT_NEW"
+
+# Running with the same checkout script won't run the deterministic checkout
+# again
+run_bob dev deterministic-root --build-only -DDUMMY=foo
+read -r CNT_ROOT_NEW < dev/src/deterministic-root/1/workspace/root.txt
+read -r CNT_NO_UPDATE_NEW < dev/src/deterministic-root/1/workspace/no-update.txt
+expect_equal "$CNT_ROOT_BASE" "$CNT_ROOT_NEW"
+expect_equal "$CNT_NO_UPDATE_BASE" "$CNT_NO_UPDATE_NEW"
+
+### indeterministic tests #####################################################
 
 # checkout sources and remember state of indeterministic checkout
 run_bob dev indeterministic-root --build-only
@@ -48,3 +66,4 @@ read -r CNT_ROOT_NEW < dev/src/indeterministic-root/1/workspace/root.txt
 read -r CNT_NO_UPDATE_NEW < dev/src/indeterministic-root/1/workspace/no-update.txt
 expect_not_equal "$CNT_ROOT_BASE" "$CNT_ROOT_NEW"
 expect_equal "$CNT_NO_UPDATE_BASE" "$CNT_NO_UPDATE_NEW"
+CNT_ROOT_BASE="$CNT_ROOT_NEW"

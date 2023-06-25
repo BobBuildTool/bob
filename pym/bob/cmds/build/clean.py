@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ...builder import LocalBuilder
+from ...builder import LocalBuilder, checkoutsFromState
 from ...input import RecipeSet
 from ...scm import getScm, ScmTaint, ScmStatus
 from ...share import getShare
@@ -55,7 +55,6 @@ def collectPaths(rootPackage):
     return paths
 
 def checkSCM(workspace, scmDir, scmSpec, verbose):
-    if scmDir is None: return True
     if scmSpec is not None:
         status = getScm(scmSpec).status(workspace)
     else:
@@ -78,7 +77,7 @@ def checkSCM(workspace, scmDir, scmSpec, verbose):
 def checkRegularSource(workspace, verbose):
     ret = True
     state = BobState().getDirectoryState(workspace, True)
-    for (scmDir, (scmDigest, scmSpec)) in state.items():
+    for (scmDir, (scmDigest, scmSpec)) in checkoutsFromState(state):
         if not checkSCM(workspace, scmDir, scmSpec, verbose):
             ret = False
 

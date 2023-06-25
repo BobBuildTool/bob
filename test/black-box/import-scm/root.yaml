@@ -3,5 +3,6 @@ checkoutSCM:
     scm: import
     url: src
     prune: False
+    dir: "${IMPORT_DIR:-.}"
 buildScript: cp -a "$1/"* .
 packageScript: cp -a "$1/"* .

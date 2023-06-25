@@ -65,16 +65,66 @@ def hashWorkspace(step):
     return hashDirectory(step.getStoragePath(),
         os.path.join(os.path.dirname(step.getWorkspacePath()), "cache.bin"))
 
+CHECKOUT_STATE_VARIANT_ID = None    # Key in checkout directory state for step variant-id
+CHECKOUT_STATE_BUILD_ONLY = 1       # Key for checkout state of build-only builds
+
+# Keys in checkout getDirectoryState that are not directories
+CHECKOUT_NON_DIR_KEYS = {CHECKOUT_STATE_VARIANT_ID, CHECKOUT_STATE_BUILD_ONLY}
+
 def compareDirectoryState(left, right):
     """Compare two directory states while ignoring the SCM specs.
 
     The SCM specs might change even though the digest stays the same (e.g. the
     URL changes but the commit id stays the same).  This function filters the
     spec to detect real changes.
+
+    It also compares the CHECKOUT_STATE_VARIANT_ID to detect recipe changes. In
+    contrast, the CHECKOUT_STATE_BUILD_ONLY sub-state is ignored as this is
+    only relevant for build-only builds that have their dedicated functions
+    below.
     """
-    left  = { d : v[0] for d, v in left.items()  }
-    right = { d : v[0] for d, v in right.items() }
+    left  = { d : v[0] for d, v in left.items()  if d != CHECKOUT_STATE_BUILD_ONLY }
+    right = { d : v[0] for d, v in right.items() if d != CHECKOUT_STATE_BUILD_ONLY }
     return left == right
+
+def checkoutsFromState(state):
+    """Return only the tuples related to SCMs from the checkout state."""
+    return [ (k, v) for k, v in state.items() if k not in CHECKOUT_NON_DIR_KEYS ]
+
+def checkoutBuildOnlyState(checkoutStep, inputHashes):
+    """Obtain state for build-only checkout updates.
+
+    The assumption is that we can run updates as long as all local SCMs stayed
+    the same. As this is just for build-only builds, we can assume that
+    dependencies have been setup correctly (direct deps, tools).
+
+    Because of the fixImportScmVariant bug, we include the directory too. This
+    should not have been necessary otherwise. Needs to return a tuple because
+    that's what is expected in the checkout SCM state (will be silently
+    upgraded to a tuple by BobState otherwise).
+    """
+    return ("\n".join("{} {}".format(scm.getDirectory(), scm.asDigestScript())
+                      for scm in checkoutStep.getScmList()
+                      if scm.isLocal()),
+            checkoutStep.getUpdateScriptDigest(),
+            inputHashes)
+
+def checkoutBuildOnlyStateCompatible(left, right):
+    """Returns True if it's safe to run build-only checkout updates.
+
+    Current policy is to just require that local SCMs are compatible. A
+    different step variant-id, changed update script or dependency changes do
+    *not* prohibit an in-place update.
+    """
+    left = left.get(CHECKOUT_STATE_BUILD_ONLY, (None, None, None))[0]
+    right = right.get(CHECKOUT_STATE_BUILD_ONLY, (None, None, None))[0]
+    return left == right
+
+def checkoutBuildOnlyStateChanged(left, right):
+    """Returns True if the update script has changed"""
+    left = left.get(CHECKOUT_STATE_BUILD_ONLY, None)
+    right = right.get(CHECKOUT_STATE_BUILD_ONLY, None)
+    return left != right
 
 def dissectPackageInputState(oldInputBuildId):
     """Take a package step input hashes and convert them to a common
@@ -1016,17 +1066,25 @@ cd {ROOT}
         checkoutExecuted = False
         checkoutDigest = checkoutStep.getVariantId()
         checkoutState = checkoutStep.getScmDirectories().copy()
-        checkoutState[None] = (checkoutDigest, None)
+        checkoutState[CHECKOUT_STATE_VARIANT_ID] = (checkoutDigest, None)
+        checkoutState[CHECKOUT_STATE_BUILD_ONLY] = checkoutBuildOnlyState(checkoutStep, checkoutInputHashes)
         if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
-            inputChanged = checkoutInputHashes != BobState().getInputHashes(prettySrcPath)
+            inputChanged = checkoutBuildOnlyStateChanged(checkoutState, oldCheckoutState)
             rehash = lambda: hashWorkspace(checkoutStep)
-            if not compareDirectoryState(checkoutState, oldCheckoutState):
+            if checkoutStep.mayUpdate(inputChanged, BobState().getResultHash(prettySrcPath), rehash):
+                if checkoutBuildOnlyStateCompatible(checkoutState, oldCheckoutState):
+                    with stepExec(checkoutStep, "UPDATE",
+                                  "{} {}".format(prettySrcPath, overridesString)) as a:
+                        await self._runShell(checkoutStep, "checkout", a, mode=InvocationMode.UPDATE)
+                    newCheckoutState = oldCheckoutState.copy()
+                    newCheckoutState[CHECKOUT_STATE_BUILD_ONLY] = checkoutState[CHECKOUT_STATE_BUILD_ONLY]
+                    BobState().setDirectoryState(prettySrcPath, newCheckoutState)
+                else:
+                    stepMessage(checkoutStep, "UPDATE", "WARNING: recipe changed - cannot update ({})"
+                        .format(prettySrcPath), WARNING)
+            elif not compareDirectoryState(checkoutState, oldCheckoutState):
                 stepMessage(checkoutStep, "CHECKOUT", "WARNING: recipe changed but skipped due to --build-only ({})"
                     .format(prettySrcPath), WARNING)
-            elif checkoutStep.mayUpdate(inputChanged, BobState().getResultHash(prettySrcPath), rehash):
-                with stepExec(checkoutStep, "UPDATE",
-                              "{} {}".format(prettySrcPath, overridesString)) as a:
-                    await self._runShell(checkoutStep, "checkout", a, mode=InvocationMode.UPDATE)
             else:
                 stepMessage(checkoutStep, "CHECKOUT", "skipped due to --build-only ({}) {}".format(prettySrcPath, overridesString),
                     SKIPPED, IMPORTANT)
@@ -1036,8 +1094,7 @@ cd {ROOT}
 
             if self.__cleanCheckout:
                 # check state of SCMs and invalidate if the directory is dirty
-                for (scmDir, (scmDigest, scmSpec)) in oldCheckoutState.copy().items():
-                    if scmDir is None: continue
+                for (scmDir, (scmDigest, scmSpec)) in checkoutsFromState(oldCheckoutState):
                     if scmDigest != checkoutState.get(scmDir, (None, None))[0]: continue
                     if not os.path.exists(os.path.join(prettySrcPath, scmDir)): continue
                     if scmMap[scmDir].status(checkoutStep.getWorkspacePath()).dirty:
@@ -1050,8 +1107,8 @@ cd {ROOT}
                 not compareDirectoryState(checkoutState, oldCheckoutState) or
                 (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
                 # Switch or move away old or changed source directories
-                for (scmDir, (scmDigest, scmSpec)) in oldCheckoutState.copy().items():
-                    if (scmDir is not None) and (scmDigest != checkoutState.get(scmDir, (None, None))[0]):
+                for (scmDir, (scmDigest, scmSpec)) in checkoutsFromState(oldCheckoutState):
+                    if scmDigest != checkoutState.get(scmDir, (None, None))[0]:
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                         canSwitch = (scmDir in scmMap) and scmDigest and \
                                      scmSpec is not None and \
@@ -1087,8 +1144,8 @@ cd {ROOT}
                 # workspace. Do it before we store the new SCM state to
                 # check again if the step is rerun.
                 if not checkoutStep.JENKINS:
-                    for scmDir in checkoutState.keys():
-                        if scmDir is None or scmDir == ".": continue
+                    for scmDir in [ k for k,v in checkoutsFromState(checkoutState)]:
+                        if scmDir == ".": continue
                         if scmDir in oldCheckoutState: continue
                         scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                         if os.path.exists(scmPath):
@@ -1100,7 +1157,7 @@ cd {ROOT}
                 # record the SCM directories as some checkouts might already
                 # succeeded before the step ultimately fails.
                 BobState().setDirectoryState(prettySrcPath,
-                    { d:s for (d,s) in checkoutState.items() if d is not None })
+                    { d:s for (d,s) in checkoutState.items() if d != CHECKOUT_STATE_VARIANT_ID })
 
                 # Forge checkout result before we run the step again.
                 # Normally the correct result is set directly after the

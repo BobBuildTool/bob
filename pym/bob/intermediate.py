@@ -298,7 +298,7 @@ class StepIR(AbstractIR):
             return True
         if not self.getUpdateScript():
             return False
-        if not self.isUpdateDeterministic():
+        if not self.isUpdateDeterministic() or inputChanged:
             return True
         return rehash() != oldHash
 
@@ -387,6 +387,21 @@ class StepIR(AbstractIR):
             liveBId = s.calcLiveBuildId(workspacePath)
             if liveBId is None: return None
             h.update(liveBId)
+        return h.digest()
+
+    def getUpdateScriptDigest(self):
+        """Return a digest that tracks relevant changes to the update script behaviour"""
+        h = hashlib.sha1()
+        script = self.getUpdateScript()
+        if script:
+            h.update(struct.pack("<I", len(script)))
+            h.update(script.encode("utf8"))
+        else:
+            h.update(b'\x00\x00\x00\x00')
+        h.update(struct.pack("<I", len(self.__data['digestEnv'])))
+        for (key, val) in sorted(self.__data['digestEnv'].items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
         return h.digest()
 
 

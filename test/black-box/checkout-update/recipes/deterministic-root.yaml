@@ -2,6 +2,7 @@ root: True
 inherit: [update, no-update]
 checkoutDeterministic: True
 checkoutUpdateIf: True
+checkoutVars: [DUMMY]
 checkoutScript: |
     bumpCounter "root.txt"
 buildScript: |
