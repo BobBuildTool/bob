@@ -563,3 +563,30 @@ Old behavior
 New behavior
    Bob checks if the ``commit`` and / or ``tag`` is on the configured ``branch`` and
    performs a checkout of the ``commit`` on a local ``branch``.
+
+fixImportScmVariant
+~~~~~~~~~~~~~~~~~~~
+
+Introduced in: 0.23
+
+Bob uses the concept of a :term:`Variant-Id` to track *how* a package is built.
+This includes the sub-directory in which a particular SCM is checked out. So if
+the ``dir`` attribute of an SCM changes, the respective Variant-Id of the
+package changes too. Bob versions before 0.23 contained a bug where the ``dir``
+attribute of an ``import`` SCM was not included in the Variant-Id calculation.
+This can cause build failures or wrongly used binary artifacts if just the
+``dir`` attribute of an ``import`` SCM is changed.
+
+Fixing the bug will affect the :term:`Variant-Id` of all packages that use an
+``import`` SCM. This implies that binary artifacts of such packages will need
+to be built again. It also transitively affects packages that depend on
+packages that utilize an ``import`` SCM.
+
+Old behavior
+   Changes to the ``dir`` attribute of an ``import`` SCM do not cause rebuilds
+   of the affected package. Wrong sharing of binary artifacts for such packages
+   may occur.
+
+New behavior
+   Changes to the ``dir`` attribute of an ``import`` SCM behave the same as for
+   any other SCM.

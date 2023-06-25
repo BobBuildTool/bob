@@ -549,6 +549,7 @@ class RecipeSetIR:
             'tidyUrlScm' : recipeSet.getPolicy('tidyUrlScm'),
             'sandboxFingerprints' : recipeSet.getPolicy('sandboxFingerprints'),
             'gitCommitOnBranch' : recipeSet.getPolicy('gitCommitOnBranch'),
+            'fixImportScmVariant' : recipeSet.getPolicy('fixImportScmVariant'),
         }
         self.__data['archiveSpec'] = recipeSet.archiveSpec()
         self.__data['envWhiteList'] = sorted(recipeSet.envWhiteList())

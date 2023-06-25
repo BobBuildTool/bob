@@ -2985,6 +2985,7 @@ class RecipeSet:
                 schema.Optional('scmIgnoreUser') : bool,
                 schema.Optional('pruneImportScm') : bool,
                 schema.Optional('gitCommitOnBranch') : bool,
+                schema.Optional('fixImportScmVariant') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
@@ -3111,6 +3112,11 @@ class RecipeSet:
                 "0.21.0.dev5",
                 InfoOnce("gitCommitOnBranch policy not set. Will not check if commit / tag is on configured branch.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#gitcommitonbranch for more information.")
+            ),
+            'fixImportScmVariant' : (
+                "0.22.1.dev34",
+                InfoOnce("fixImportScmVariant policy not set. Recipe variant calculation w/ import SCM is boguous.",
+                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#fiximportscmvariant for more information.")
             ),
         }
         self.__buildHooks = {}

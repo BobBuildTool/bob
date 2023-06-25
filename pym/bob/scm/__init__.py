@@ -51,6 +51,7 @@ def getScm(spec, overrides=[], recipeSet=None):
     elif scm == "import":
         return ImportScm(spec, overrides,
             recipeSet and recipeSet.getPolicy('pruneImportScm'),
+            recipeSet and recipeSet.getPolicy('fixImportScmVariant'),
             recipeSet and recipeSet.getProjectRoot())
     elif scm == "svn":
         return SvnScm(spec, overrides)
