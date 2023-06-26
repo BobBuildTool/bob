@@ -73,7 +73,7 @@ class GitScm(Scm):
                 schema.Optional('optional') : bool,
             })]),
         schema.Optional('dissociate') : bool,
-        schema.Optional('retries') : int,
+        schema.Optional('retries') : schema.And(int, lambda n: n >= 0, error="Invalid retries attribute"),
     }
 
     __SCHEMA = {

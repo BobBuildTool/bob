@@ -124,7 +124,7 @@ class UrlScm(Scm):
         schema.Optional('fileName') : str,
         schema.Optional('stripComponents') : int,
         schema.Optional('sslVerify') : bool,
-        schema.Optional('retries') : int,
+        schema.Optional('retries') : schema.And(int, lambda n: n >= 0, error="Invalid retries attribute"),
     }
 
     __SCHEMA = {
