@@ -1,0 +1,8 @@
+root: True
+shared: True
+
+buildVars: [VALUE]
+buildScript: |
+    echo "${VALUE}" > result.txt
+packageScript: |
+    cp "$1/result.txt" .
