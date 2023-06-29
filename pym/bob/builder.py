@@ -1226,10 +1226,11 @@ cd {ROOT}
         if somethingThere and packageDigest != oldPackageDigest:
             stepMessage(packageStep, "PRUNE", "{} (recipe changed)".format(prettyPackagePath),
                 WARNING)
-            if os.path.isdir(prettyPackagePath):
-                emptyDirectory(prettyPackagePath)
-            else:
+            if os.path.islink(prettyPackagePath) or os.path.isfile(prettyPackagePath):
+                # Remove symlink or file which was left by a shared package
                 os.unlink(prettyPackagePath)
+            else:
+                emptyDirectory(prettyPackagePath)
             somethingThere = False
 
         # Reset state if we start from scratch
