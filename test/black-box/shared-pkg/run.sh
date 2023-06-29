@@ -122,6 +122,22 @@ test -L dev/dist/root/1/workspace
 
 cleanup
 
+# Make sure that alternating between two different shared packages works as
+# expected.
+
+run_bob dev -c $cfg mutable --download no -DVALUE=one
+expect_equal "one" "$(cat dev/dist/mutable/1/workspace/result.txt)"
+run_bob dev -c $cfg mutable --download no -DVALUE=two
+expect_equal "two" "$(cat dev/dist/mutable/1/workspace/result.txt)"
+run_bob dev -c $cfg mutable --download no -DVALUE=one
+expect_equal "one" "$(cat dev/dist/mutable/1/workspace/result.txt)"
+run_bob dev -c $cfg mutable --download no -DVALUE=two
+expect_equal "two" "$(cat dev/dist/mutable/1/workspace/result.txt)"
+
+########################
+
+cleanup
+
 # An invalid result hash is rejected
 echo '{"hash": "12345678", "size": 7}' > "$shareDir/$buildId-3/pkg.json"
 expect_fail run_bob dev -c $cfg root --download no --no-install
