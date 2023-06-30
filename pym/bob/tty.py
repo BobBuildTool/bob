@@ -444,7 +444,7 @@ class MassiveParallelTtyUI(BaseTUI):
         super().__init__(verbosity)
         self.__index = 1
         self.__maxJobs = maxJobs
-        self.__jobs = set()
+        self.__jobs = {}
         self.__tasksDone = 0
         self.__tasksNum = 1
 
@@ -480,8 +480,8 @@ class MassiveParallelTtyUI(BaseTUI):
                 .format(len(self.__jobs), self.__maxJobs,
                         self.__tasksDone*100//self.__tasksNum,
                         self.__tasksDone, self.__tasksNum))
-        for i in sorted(self.__jobs):
-            print("[{}]".format(i), end="")
+        for i, name in sorted(self.__jobs.items()):
+            print("[{} {}]".format(i, name), end="")
         # Move up one lines, enable line wrap
         print("\x1b[A\x1b[?7h\r", end='')
 
@@ -489,7 +489,7 @@ class MassiveParallelTtyUI(BaseTUI):
         self.__putLine("[{:<5} {:>4}] {}".format(stage, job, colorize(msg, kind)))
 
     def _printResult(self, job, msg, stderr, kind):
-        self.__jobs.remove(job)
+        del self.__jobs[job]
         self._print(job, msg, kind, "End")
         if stderr:
             for l in stderr.splitlines():
@@ -522,8 +522,8 @@ class MassiveParallelTtyUI(BaseTUI):
             details += ": "
 
         job = self.__nextJob()
-        self.__jobs.add(job)
         name = step.getPackage().getName()
+        self.__jobs[job] = name
         self._print(job, "{:10}{} - {}".format(action, name, message), EXECUTED, "Start")
         msg = "{:10}{} - {}{}".format(action, name, message, details)
         return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails)
