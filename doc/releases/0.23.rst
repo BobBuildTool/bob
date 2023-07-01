@@ -1,0 +1,61 @@
+Bob 0.23 Release Notes
+======================
+
+Changes made since Bob 0.22.0 include the following.
+
+New features
+------------
+
+* The TUI now handles many jobs better by switching to a different output
+  format. By default the new TUI is utilized when more than 16 jobs are used.
+  This can be configured by the ``parallelTUIThreshold`` key in the
+  :ref:`configuration-config-ui` section of the user configuration.
+* Bob now warns if files collide on ``--destination`` builds.
+
+  When building with ``--destination`` the result of all built packages is
+  copied to the desired directory. It has never been an error if files
+  are overwritten by that to support building multiple times in a row with the
+  same destination. But if multiple built packages contain the same files then
+  they silently overwrite each other. Now Bob issues a warning message for this
+  case because the destination is in an undefined state.
+* Added support for string substitution to package names in
+  :ref:`configuration-recipes-depends` section.
+* Project generators gained the ability to use package queries.
+
+  Usually project generators only handle a single package. There are use cases
+  where a generator needs complex package queries with :ref:`manpage-bobpaths`,
+  though. To support this, a ``projectGenerator`` can set the additional
+  ``query`` property to ``True``. In this case the first argument for the
+  generator is a "generator iterator" that yields :class:`bob.input.Package`
+  objects. See :ref:`extending-generators` for more details.
+* Bob can retry downloads of git and url SCMs when they fail.
+
+  Bob performs a configurable number of retries for ``git`` and ``wget``
+  commands where server communication is needed. After each unsuccessful
+  operation Bob waits 3 seconds before retrying. By default no retries are
+  made. See :ref:`configuration-recipes-scm`.
+
+Bug fixes
+---------
+
+* Remove binary wheel for Windows. It was causing installation problems on
+  Linux and was never needed to begin with. (:issue:`502`)
+* Fixed the Azure :ref:`configuration-config-archive` backend. (:issue:`505`)
+* Added the missing ``attic`` option to the default dev/build settings
+* Fixed error reporting in Qtcreator and Eclipse project generators of invalid
+  regular expressions
+* Added ``--debug`` and ``--color`` switches to bash-completion
+* Removed Sphinx setuptools integration.
+
+  The Sphinx project removed the setuptools integration with version 7. When
+  installing Bob from a source distribution it is now required to have `Sphinx
+  <https://pypi.org/project/Sphinx/>`_ installed. (:issue:`513` and
+  :issue:`515`).
+* Bob now does inline updates of git repositories also when the
+  ``useCommitOnBranch`` property changes.
+* Fixed garbling of shared packages.
+
+  Packages at shared locations are immutable. If the recipe was changed and the
+  package is unshared, the workspace link in the project tree should be
+  removed. The bug was that Bob actually cleared the shared location instead of
+  removing the symlink. (:issue:`522`)
