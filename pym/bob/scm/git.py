@@ -704,13 +704,6 @@ class GitScm(Scm):
                     actual = ("'" + ", ".join(output) + "'") if output else "not on any tag"
                     status.add(ScmTaint.switched,
                         "> tag: configured: '{}', actual: {}".format(self.__tag, actual))
-
-                # Need to check if the tag still exists. Otherwise the "git
-                # log" command at the end will trip.
-                try:
-                    self.callGit(workspacePath, 'rev-parse', 'tags/'+self.__tag)
-                except BuildError:
-                    pass
             elif self.__branch:
                 output = self.callGit(workspacePath, 'rev-parse', '--abbrev-ref', 'HEAD')
                 if output != self.__branch:
