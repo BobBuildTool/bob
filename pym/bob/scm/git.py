@@ -695,8 +695,12 @@ class GitScm(Scm):
                     status.add(ScmTaint.switched,
                         "> commit: configured: '{}', actual: '{}'".format(self.__commit, output))
             elif self.__tag:
-                output = self.callGit(workspacePath, 'tag', '--points-at', 'HEAD').splitlines()
-                if self.__tag not in output:
+                currentCommit = self.callGit(workspacePath, 'rev-parse', 'HEAD')
+                tagCommit = self.callGit(workspacePath, 'rev-parse',
+                                         'refs/tags/'+self.__tag+'^{commit}',
+                                         check=False)
+                if (not currentCommit) or (currentCommit != tagCommit):
+                    output = self.callGit(workspacePath, 'tag', '--points-at', 'HEAD').splitlines()
                     actual = ("'" + ", ".join(output) + "'") if output else "not on any tag"
                     status.add(ScmTaint.switched,
                         "> tag: configured: '{}', actual: {}".format(self.__tag, actual))
