@@ -1,1 +1,2 @@
-bobMinimumVersion: "0.17"
+# Include fixImportScmVariant policy
+bobMinimumVersion: "0.22.1.dev34"

@@ -127,13 +127,14 @@ class ImportScm(Scm):
 
     SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
 
-    def __init__(self, spec, overrides=[], pruneDefault=None, projectRoot=""):
+    def __init__(self, spec, overrides=[], pruneDefault=None, fixDigestBug=False, projectRoot=""):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
         self.__prune = spec.get("prune", pruneDefault or False)
         self.__data = spec.get("__data")
         self.__projectRoot = spec.get("__projectRoot", projectRoot)
+        self.__fixDigestBug = fixDigestBug
 
     def getProperties(self, isJenkins):
         ret = super().getProperties(isJenkins)
@@ -162,7 +163,10 @@ class ImportScm(Scm):
             unpackTree(self.__data, dest)
 
     def asDigestScript(self):
-        return self.__url
+        if self.__fixDigestBug:
+            return self.__url + " " + self.__dir
+        else:
+            return self.__url
 
     def getDirectory(self):
         return self.__dir

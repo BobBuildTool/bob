@@ -289,8 +289,9 @@ class _BobState():
     #  5 -> 6: build state stores predicted live-build-ids too
     #  6 -> 7: amended directory state for source steps, store attic directories
     #  7 -> 8: normalize attic directories
+    #  8 -> 9: checkout directory state tracks import scm / update script state
     MIN_VERSION = 2
-    CUR_VERSION = 8
+    CUR_VERSION = 9
 
     VERSION_SINCE_ATTIC_TRACKED = 7
 

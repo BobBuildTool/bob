@@ -9,7 +9,7 @@ cleanup
 check_result()
 {
 	local DATA
-	read -r DATA < "$prj/output/result.txt"
+	read -r DATA < "$prj/output/${2:-.}/result.txt"
 	[[ "$1" = "$DATA" ]] || { echo "Mismatch: $1 <> $DATA" ; exit 1; }
 }
 
@@ -38,3 +38,19 @@ check_result "2"
 echo "3" > "$prj/src/result.txt"
 run_bob -C "$prj" dev --destination output root --build-only
 check_result "3"
+
+# The import SCM is even updated when the checkoutScript changes!
+# But the checkoutScript itself must not run.
+echo 'checkoutScript: "rm -f result.txt"' >>"$prj/recipes/root.yaml"
+echo "4" > "$prj/src/result.txt"
+run_bob -C "$prj" dev --destination output root --build-only
+check_result "4"
+
+# But when changing the import SCM itself, Bob will refuse to update the
+# workspace on build-only builds. This can only be rectified by running without
+# --build-only.
+echo "5" > "$prj/src/result.txt"
+run_bob -C "$prj" dev --destination output root -DIMPORT_DIR=sub --build-only
+check_result "4"
+run_bob -C "$prj" dev --destination output root -DIMPORT_DIR=sub
+check_result "5" "sub"

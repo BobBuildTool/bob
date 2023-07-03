@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ...builder import LocalBuilder
+from ...builder import LocalBuilder, checkoutsFromState
 from ...input import RecipeSet
 from ...scm import getScm, ScmTaint, ScmStatus
 from ...state import BobState
@@ -112,8 +112,7 @@ class Printer:
         # First scan old checkout state. This is what the user is most
         # interested in. The recipe might have changed compared to the
         # persisted state!
-        for (scmDir, (scmDigest, scmSpec)) in oldCheckoutState.items():
-            if scmDir is None: continue # checkoutScript state -> ignored
+        for (scmDir, (scmDigest, scmSpec)) in checkoutsFromState(oldCheckoutState):
             if not os.path.exists(os.path.join(workspace, scmDir)): continue
 
             if scmDigest == checkoutState.get(scmDir, (None, None))[0]:
@@ -208,10 +207,10 @@ class Printer:
                 BobState().delDirectoryState(workspace)
                 continue
 
-            # Upgrade from old format without scmSpec. Drop None dir.
+            # Upgrade from old format without scmSpec.
             dirState = sorted(
                 (dir, state) if isinstance(state, tuple) else (dir, (state, None))
-                for dir,state in dirState.items() if dir is not None)
+                for dir,state in checkoutsFromState(dirState))
             for (scmDir, (scmDigest, scmSpec)) in dirState:
                 scmDir = os.path.join(workspace, scmDir)
                 if scmSpec is not None:
