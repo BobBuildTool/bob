@@ -147,6 +147,14 @@ class TestGitScmStatus(TestCase):
         s = self.statusGitScm({ 'tag' : 'v1.1' })
         self.assertEqual(s.flags, set())
 
+    def testNestedTagOk(self):
+        self.callGit('git fetch origin tag v1.1', cwd=self.repodir_local)
+        self.callGit('git tag -a -m nested nested v1.1', cwd=self.repodir_local)
+        self.callGit('git tag -a -m double double nested', cwd=self.repodir_local)
+        self.callGit('git checkout tags/double', cwd=self.repodir_local)
+        s = self.statusGitScm({ 'tag' : 'double' })
+        self.assertEqual(s.flags, set())
+
 
 class TestSubmodulesStatus(TestCase):
 
