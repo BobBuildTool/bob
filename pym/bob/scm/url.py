@@ -117,6 +117,8 @@ def parseUrl(url):
     return urllib.parse.ParseResult(url.scheme, url.netloc,path, '', '', '')
 
 
+isWin32 = sys.platform == "win32"
+
 class UrlScm(Scm):
 
     DEFAULTS = {
@@ -153,23 +155,26 @@ class UrlScm(Scm):
         (".zip",       "zip"),
     ]
 
+    # Use the Python tar/zip extraction only on Windows. They are slower and in
+    # case of tarfile broken in certain ways (e.g. tarfile will result in
+    # different file modes!). But it shouldn't make a difference on Windows.
     EXTRACTORS = {
         "tar"  : [
-            ("tar", ["-x", "--no-same-owner", "--no-same-permissions", "-f", "{}"], "--strip-components={}"),
-            ("python", ["-m", "tarfile", "-e", "{}"], None),
+            (isWin32, "python", ["-m", "tarfile", "-e", "{}"], None),
+            (True, "tar", ["-x", "--no-same-owner", "--no-same-permissions", "-f", "{}"], "--strip-components={}"),
         ],
         "gzip" : [
-            ("gunzip", ["-kf", "{}"], None),
+            (True, "gunzip", ["-kf", "{}"], None),
         ],
         "xz" : [
-            ("unxz", ["-kf", "{}"], None),
+            (True, "unxz", ["-kf", "{}"], None),
         ],
         "7z" : [
-            ("7z", ["x", "-y", "{}"], None),
+            (True, "7z", ["x", "-y", "{}"], None),
         ],
         "zip" : [
-            ("unzip", ["-o", "{}"], None),
-            ("python", ["-m", "zipfile", "-e", "{}", "."], None),
+            (isWin32, "python", ["-m", "zipfile", "-e", "{}", "."], None),
+            (True, "unzip", ["-o", "{}"], None),
         ],
     }
 
@@ -428,13 +433,14 @@ class UrlScm(Scm):
 
         ret = []
         for extractor in extractors:
+            if not extractor[0]: continue
             if self.__strip > 0:
-                if extractor[2] is None:
+                if extractor[3] is None:
                     continue
-                strip = [extractor[2].format(self.__strip)]
+                strip = [extractor[3].format(self.__strip)]
             else:
                 strip = []
-            ret.append([extractor[0]] + [a.format(self.__fn) for a in extractor[1]] + strip)
+            ret.append([extractor[1]] + [a.format(self.__fn) for a in extractor[2]] + strip)
 
         if not ret:
             raise ParseError("Extractor does not support 'stripComponents'!")
