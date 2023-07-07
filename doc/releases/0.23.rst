@@ -35,6 +35,40 @@ New features
   operation Bob waits 3 seconds before retrying. By default no retries are
   made. See :ref:`configuration-recipes-scm`.
 
+Backwards incompatible changes
+------------------------------
+
+* Better support for ``checkoutScript`` changes with respect to recipes that
+  utilize :ref:`configuration-recipes-checkoutUpdateIf`. (:issue:`506`)
+
+  The tracking of recipe changes was not sufficient for build-only updates of
+  checkouts that involve the ``import``-SCM or recipes that utilize
+  :ref:`configuration-recipes-checkoutUpdateIf`. Bob was over-cautious and
+  prevented running these updates if *anything* related to the checkout step
+  changed.
+
+  To make the behaviour more predictable, Bob now tracks the related state more
+  closely. Updates of checkouts in build-only mode are now only prevented if an
+  ``import``-SCM is changed. So changes to the ``checkoutScript`` will always
+  trigger the update in build-only mode and run the affected parts of the
+  ``checkoutScript``.
+* Use Python to extract zip and tar files only on Windows.
+
+  The ``tarfile`` and ``zipfile`` Python modules are slower and have
+  behavioural differences compared to their native implementations. The
+  ``tarfile`` module in particular differs in the handling of file modes (it
+  does not behave like GNU tar with ``--no-same-permissions`` which is used by
+  Bob). The ``zipfile`` module looks safer but is certainly slower than the
+  native implementation. Consequently, the Python implementations are not used
+  on POSIX systems anymore, including MSYS2. This might break builds when these
+  essential tools are not installed.
+
+  On the other hand the ``unzip`` and ``tar`` tools are usually not available
+  on native Windows installations. There even seem to be broken ``unzip`` tools
+  out there in the wild (:issue:`496`). For this reason, Bob prefers to use
+  Python to extract tar and zip files on native Windows installations (*not*
+  MSYS2).
+
 Bug fixes
 ---------
 
@@ -59,3 +93,13 @@ Bug fixes
   package is unshared, the workspace link in the project tree should be
   removed. The bug was that Bob actually cleared the shared location instead of
   removing the symlink. (:issue:`522`)
+* Fixed broken variant handling regarding the ``dir`` attribute of ``import``
+  SCMs. Bob versions before 0.23 contained a bug where the ``dir`` attribute of
+  an ``import`` SCM was not included in the :term:`Variant-Id` calculation.
+  This can cause build failures or wrongly used binary artifacts if just the
+  ``dir`` attribute of an ``import`` SCM is changed. Because the fix cannot be
+  made in a backwards compatible way, a new :ref:`policies-fixImportScmVariant`
+  policy was introduced.
+* Fixed handling of nested annotated git tags in :ref:`manpage-bob-status`.
+  Even though nested tags, that is a tag that points at a tag, could be checked
+  out successfully, the workspace was flagged as "switched". (:issue:`520`)

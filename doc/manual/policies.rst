@@ -564,6 +564,8 @@ New behavior
    Bob checks if the ``commit`` and / or ``tag`` is on the configured ``branch`` and
    performs a checkout of the ``commit`` on a local ``branch``.
 
+.. _policies-fixImportScmVariant:
+
 fixImportScmVariant
 ~~~~~~~~~~~~~~~~~~~
 
