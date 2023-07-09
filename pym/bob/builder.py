@@ -1019,7 +1019,8 @@ cd {ROOT}
                 await self._cook(step.getAllDepSteps(), step.getPackage(), checkoutOnly, depth+1)
                 async with self.__workspaceLock(step):
                     if not self._wasAlreadyRun(step, checkoutOnly):
-                        await self._cookBuildStep(step, checkoutOnly, depth)
+                        if not checkoutOnly:
+                            await self._cookBuildStep(step, depth)
                         self._setAlreadyRun(step, False, checkoutOnly)
             else:
                 assert step.isPackageStep()
@@ -1065,8 +1066,9 @@ cd {ROOT}
                     await self._cook(step.getAllDepSteps(), step.getPackage(), checkoutOnly, depth+1)
                     async with self.__workspaceLock(step):
                         if not self._wasAlreadyRun(step, checkoutOnly):
-                            built, audit = await self._cookPackageStep(step, checkoutOnly,
-                                depth, mayUpOrDownload, buildId)
+                            if not checkoutOnly:
+                                built, audit = await self._cookPackageStep(step,
+                                    depth, mayUpOrDownload, buildId)
                             self._setAlreadyRun(step, False, checkoutOnly)
 
                 # Upload package if it was built. On Jenkins we always upload
@@ -1286,7 +1288,7 @@ cd {ROOT}
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
-    async def _cookBuildStep(self, buildStep, checkoutOnly, depth):
+    async def _cookBuildStep(self, buildStep, depth):
         # Add the execution path of the build step to the buildDigest to
         # detect changes between sandbox and non-sandbox builds. This is
         # necessary in any build mode. Include the actual directories of
@@ -1301,10 +1303,6 @@ cd {ROOT}
 
         # get directory into shape
         (prettyBuildPath, created) = self._constructDir(buildStep, "build")
-        if checkoutOnly:
-            stepMessage(buildStep, "BUILD", "skipped due to --checkout-only ({})".format(prettyBuildPath),
-                    SKIPPED, IMPORTANT)
-            return
         oldBuildDigest = BobState().getDirectoryState(prettyBuildPath, False)
         if created or (buildDigest != oldBuildDigest):
             # not created but exists -> something different -> prune workspace
@@ -1552,7 +1550,7 @@ cd {ROOT}
 
         return wasDownloaded, audit
 
-    async def _cookPackageStep(self, packageStep, checkoutOnly, depth, mayUpOrDownload, packageBuildId):
+    async def _cookPackageStep(self, packageStep, depth, mayUpOrDownload, packageBuildId):
         # Dissect input parameters that lead to current workspace the last time
         (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
         oldWasDownloaded, oldWasShared, oldInputHashes, oldInputBuildId = \
@@ -1574,10 +1572,7 @@ cd {ROOT}
         # downloads are not possible anymore. Even if the package was
         # previously downloaded the oldInputHashes will be None to trigger
         # an actual build.
-        if checkoutOnly:
-            stepMessage(packageStep, "PACKAGE", "skipped due to --checkout-only ({})".format(prettyPackagePath),
-                SKIPPED, IMPORTANT)
-        elif (not self.__force) and (oldInputHashes == packageInputHashes):
+        if (not self.__force) and (oldInputHashes == packageInputHashes):
             stepMessage(packageStep, "PACKAGE", "skipped (unchanged input for {})".format(prettyPackagePath),
                 SKIPPED, IMPORTANT)
             audit = os.path.join(os.path.dirname(prettyPackagePath), "audit.json.gz")
