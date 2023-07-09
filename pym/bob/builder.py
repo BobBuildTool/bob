@@ -1068,7 +1068,7 @@ cd {ROOT}
                         if not self._wasAlreadyRun(step, checkoutOnly):
                             if not checkoutOnly:
                                 built, audit = await self._cookPackageStep(step,
-                                    depth, mayUpOrDownload, buildId)
+                                    depth, buildId)
                             self._setAlreadyRun(step, False, checkoutOnly)
 
                 # Upload package if it was built. On Jenkins we always upload
@@ -1550,7 +1550,7 @@ cd {ROOT}
 
         return wasDownloaded, audit
 
-    async def _cookPackageStep(self, packageStep, depth, mayUpOrDownload, packageBuildId):
+    async def _cookPackageStep(self, packageStep, depth, packageBuildId):
         # Dissect input parameters that lead to current workspace the last time
         (prettyPackagePath, created) = self._constructDir(packageStep, "dist")
         oldWasDownloaded, oldWasShared, oldInputHashes, oldInputBuildId = \
