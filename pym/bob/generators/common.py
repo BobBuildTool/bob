@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ..errors import BuildError
+from ..errors import BuildError, ParseError
 from ..utils import removePath, isWindows, summonMagic, replacePath
 import argparse
 import os
@@ -306,9 +306,9 @@ class CommonIDEGenerator:
         try:
             for e in self.args.excludes: excludes.append(re.compile(e))
             for e in self.args.include: excludes.append(re.compile(r"^((?!"+e+").)*$"))
-            additionalFiles = re.compile(args.filter) if self.args.filter else None
+            additionalFiles = re.compile(self.args.filter) if self.args.filter else None
         except re.error as e:
-            raise ParseError("Invalid regular expression '{}': {}".format(e.pattern), e)
+            raise ParseError("Invalid regular expression '{}': {}".format(e.pattern, e))
 
         self.packages = self.__walk(package, excludes, additionalFiles)
 
