@@ -14,8 +14,8 @@ RES=$(run_bob query-path -f '{dist}' --develop root)
 diff -u "$RES/file.txt" recipes/file.txt
 
 cleanup
-run_bob dev root
-RES=$(run_bob query-path -f '{dist}' --develop root)
+run_bob dev bash
+RES=$(run_bob query-path -f '{dist}' --develop bash)
 diff -u "$RES/file.txt" recipes/file.txt
 
 # Run the sandbox check only if namespace feature works on this host.
