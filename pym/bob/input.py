@@ -3722,7 +3722,7 @@ class RecipeSet:
                         schema.Optional('environment') : VarDefineValidator("provideTools::environment"),
                         schema.Optional('fingerprintScript', default="") : str,
                         schema.Optional('fingerprintScriptBash') : str,
-                        schema.Optional('fingerprintScriptPwsh', default="") : str,
+                        schema.Optional('fingerprintScriptPwsh') : str,
                         schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
                         schema.Optional('fingerprintVars') : [ varNameUseSchema ],
                     })
@@ -3742,7 +3742,7 @@ class RecipeSet:
             schema.Optional('packageNetAccess') : bool,
             schema.Optional('fingerprintScript', default="") : str,
             schema.Optional('fingerprintScriptBash') : str,
-            schema.Optional('fingerprintScriptPwsh', default="") : str,
+            schema.Optional('fingerprintScriptPwsh') : str,
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
             schema.Optional('scriptLanguage') : schema.And(schema.Or("bash", "PowerShell"),
