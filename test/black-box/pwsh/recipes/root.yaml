@@ -4,9 +4,21 @@ depends:
     - name: sandbox
       use: [sandbox]
 
+environment:
+    FOO: bar
+
+fingerprintIf: True
+fingerprintVars: [FOO]
+fingerprintScript: |
+    Write-Output $Env:FOO
+    if ($Env:FOO -ne "bar") {
+        exit 1
+    }
+
 checkoutDeterministic: True
 checkoutScript: |
     Copy-Item $<<file.txt>> file.txt
+buildVars: [FOO]
 buildScript: |
     Copy-Item ($args[0] + "/file.txt")
 packageScript: |
