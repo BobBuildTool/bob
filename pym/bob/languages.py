@@ -637,7 +637,7 @@ class PwshLanguage:
         # Add snippets as they match and a default settings preamble
         ret = [script]
         ret.extend(['$ErrorActionPreference="Stop"', 'Set-PSDebug -Strict'])
-        for n,v in sorted(env.items()):
+        for k,v in sorted(env.items()):
             ret.append('$Env:{}="{}"'.format(k, escapePwsh(v)))
         ret.append(PwshLanguage.HELPERS)
 
