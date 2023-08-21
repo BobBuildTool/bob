@@ -45,8 +45,13 @@ int main(void)
 {
 #if defined(CYGWIN_VERSION_DLL_IDENTIFIER)
     printf("%s/%d.%d.%d\n", CYGWIN_VERSION_DLL_IDENTIFIER,
+#ifdef CYGWIN_VERSION_DLL_EPOCH
         CYGWIN_VERSION_DLL_EPOCH,
         CYGWIN_VERSION_DLL_MAJOR,
+#else
+        CYGWIN_VERSION_DLL_MAJOR / 1000,
+        CYGWIN_VERSION_DLL_MAJOR % 1000,
+#endif
         CYGWIN_VERSION_DLL_MINOR);
 #elif defined(__MSVCRT_VERSION__)
     printf("mingw%d/msvcrt-%03x\n",
