@@ -295,14 +295,30 @@ class GitScm(Scm):
         else:
             # We're switching the ref and the branch exists already. Be extra
             # careful: the user might have committed to this branch, some other
-            # branch might be checked out currently or both of that. To keep
-            # things simple, assume a fast-forward of the commit on the branch.
-            # It will catch user changes and is usually safe wrt. submodules.
+            # branch might be checked out currently or both of that.
             await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules",
                 self.__branch], cwd=self.__dir)
             preUpdate = await self.__updateSubmodulesPre(invoker)
-            await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "merge",
-                "--ff-only", commit], cwd=self.__dir)
+
+            # check if any remote or any other than the local branch  holds the current
+            # commit. Otherwise we'd lose it when going back in history.
+            contains = await invoker.runCommand(["git", "branch", "-a",
+                                                 "--format=%(refname:lstrip=2)",
+                                                 "--contains", "HEAD"],
+                                                cwd=self.__dir, stdout=True)
+            currentBranch = await invoker.runCommand(["git", "rev-parse",
+                                                    "--abbrev-ref", "HEAD"],
+                                                    cwd=self.__dir, stdout=True)
+            for b in contains.stdout.splitlines():
+                if b.rstrip() != currentBranch.stdout.rstrip():
+                    break
+            else:
+                # neither a remote nor another local branch contains the current commit
+                # move to attic
+                invoker.fail("Cannot switch: Current state woulde be lost.")
+
+            await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "reset",
+                "--keep", commit], cwd=self.__dir)
             await self.__updateSubmodulesPost(invoker, preUpdate)
 
     async def __checkoutTag(self, invoker, fetchCmd, switch):
