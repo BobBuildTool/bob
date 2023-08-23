@@ -2278,34 +2278,35 @@ Set default build arguments here. See :ref:`manpage-dev` or
 
 The following table lists possible arguments and their type:
 
-=============== ====================== ===============================================
-Key             Command line switch    Type
-=============== ====================== ===============================================
-always_checkout ``--always-checkout``  List of strings (regular expression patterns)
-attic           ``--[no]-attic``       Boolean
-audit           ``--[no]-audit``       Boolean
-build_mode      ``-b`` | ``-B`` |      String (``normal``, ``build-only`` or
-                ``--normal``           ``checkout-only``)
-clean           ``--clean`` |          Boolean
+=============== ======================== ===============================================
+Key             Command line switch      Type
+=============== ======================== ===============================================
+always_checkout ``--always-checkout``    List of strings (regular expression patterns)
+attic           ``--[no]-attic``         Boolean
+audit           ``--[no]-audit``         Boolean
+build_mode      ``-b`` | ``-B`` |        String (``normal``, ``build-only`` or
+                ``--normal``             ``checkout-only``)
+clean           ``--clean`` |            Boolean
                 ``--incremental``
-clean_checkout  ``--clean-checkout``   Boolean
-destination     ``--destination``      String (Path)
-download        ``--download``         String (``yes``, ``no``, ``deps``, ``forced``,
-                                       ``forced-deps``, ``forced-fallback`` or
-                                       ``packages=<packages>``)
-download_layer  ``--download-layer``   List of strings (``yes=<layer>``,
-                                       ``no=<layer>``, ``forced=<layer>```)
-force           ``-f``                 Boolean
-install         ``--[no-]install``     Boolean
-jobs            ``-j``                 Integer
-link_deps       ``--[no-]link-deps``   Boolean
-no_deps         ``-n``                 Boolean
-no_logfiles     ``--no-logfiles``      Boolean
-sandbox         ``--[no-]sandbox``     Boolean
-shared          ``--[no-]shared``      Boolean
-upload          ``--upload``           Boolean
-verbosity       ``-q | -v``            Integer (-2[quiet] .. 3[verbose], default 0)
-=============== ====================== ===============================================
+clean_checkout  ``--clean-checkout``     Boolean
+destination     ``--destination``        String (Path)
+download        ``--download``           String (``yes``, ``no``, ``deps``, ``forced``,
+                                         ``forced-deps``, ``forced-fallback`` or
+                                         ``packages=<packages>``)
+download_layer  ``--download-layer``     List of strings (``yes=<layer>``,
+                                         ``no=<layer>``, ``forced=<layer>```)
+force           ``-f``                   Boolean
+force_branch    ``--[no-]-force-branch`` Boolean
+install         ``--[no-]install``       Boolean
+jobs            ``-j``                   Integer
+link_deps       ``--[no-]link-deps``     Boolean
+no_deps         ``-n``                   Boolean
+no_logfiles     ``--no-logfiles``        Boolean
+sandbox         ``--[no-]sandbox``       Boolean
+shared          ``--[no-]shared``        Boolean
+upload          ``--upload``             Boolean
+verbosity       ``-q | -v``              Integer (-2[quiet] .. 3[verbose], default 0)
+=============== ======================== ===============================================
 
 graph
 ^^^^^

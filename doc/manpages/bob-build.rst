@@ -24,6 +24,7 @@ Synopsis
               [--shared | --no-shared] [--install | --no-install]
               [--sandbox | --no-sandbox] [--clean-checkout]
               [--attic | --no-attic]
+              [--force-branch | --no-force-branch]
               PACKAGE [PACKAGE ...]
 
 

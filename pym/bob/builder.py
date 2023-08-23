@@ -359,6 +359,7 @@ cd {ROOT}
         self.__installSharedPackages = False
         self.__executor = None
         self.__attic = True
+        self.__forceBranch = None
 
     def setExecutor(self, executor):
         self.__executor = executor
@@ -433,6 +434,9 @@ cd {ROOT}
 
     def setJobs(self, jobs):
         self.__jobs = max(jobs, 1)
+
+    def setForceBranch(self, value):
+        self.__forceBranch = value
 
     def setMakeFds(self, makeFds):
         self.__makeFds = makeFds
@@ -734,6 +738,7 @@ cd {ROOT}
             executor=self.__executor)
         if step.jobServer() and self.__jobServer:
             invoker.setMakeParameters(self.__jobServer.getMakeFd(), self.__jobs)
+        invoker.setExtra("forceBranch", self.__forceBranch)
         ret = await invoker.executeStep(mode, cleanWorkspace)
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):

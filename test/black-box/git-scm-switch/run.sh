@@ -142,3 +142,7 @@ run_bob dev -c submodules -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c1" -DSCM_BRANCH=
 expect_output "foobar" git -C dev/src/root2/1/workspace rev-parse --abbrev-ref HEAD
 expect_output "$d1_c1" git -C dev/src/root2/1/workspace rev-parse HEAD
 expect_exist dev/src/root2/1/workspace/submod/sub.txt
+
+# test `no-force-branch` switch
+cleanup
+run_bob dev -DSCM_REV="$d1_c2" -DSCM_DIR="$git_dir1" -DSCM_BRANCH=master root2 -vv --no-force-branch

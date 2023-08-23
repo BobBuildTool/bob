@@ -103,6 +103,10 @@ Options
     forced=<layer regex>
       like 'yes' above, but fail if any download fails
 
+
+``--force-branch``
+    Inverse option of ``--no-force-branch``.
+
 ``--incremental``
     Reuse build directory for incremental builds.
 
@@ -237,6 +241,12 @@ Options
 ``--no-attic``
     Do not move checkout workspace to attic if inline SCM switching is not possible.
     Instead a build error is issued.
+
+``--no-force-branch``
+    If a commit/tag doesn't exist on the configured branch the checkout fails if
+    gitCommitOnBranch policy is enabled. Use this switch to checkout the commit/tag
+    without a branch instead which will leave the workspace in detached HEAD state.
+    This has only a effect for git scms.
 
 ``-n, --no-deps``
     Don't build dependencies.

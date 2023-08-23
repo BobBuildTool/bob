@@ -262,7 +262,11 @@ class GitScm(Scm):
         if await invoker.callCommand(["git", "merge-base", "--is-ancestor",
                                      commit, "remotes/origin/"+self.__branch],
                                      cwd=self.__dir):
-            invoker.fail("Branch '{}' does not contain '{}'".format(self.__branch, commit))
+            if invoker.getExtra("forceBranch") is None or invoker.getExtra("forceBranch"):
+                invoker.fail("Branch '{}' does not contain '{}'".format(self.__branch, commit))
+            else:
+                # fall back to checkoutTag to checkout the configured tag/branch to detached HEAD
+                return await self.__checkoutTag(invoker, fetchCmd, switch)
 
         if headValid:
             branchExists = (await invoker.callCommand(["git", "show-ref", "-q",

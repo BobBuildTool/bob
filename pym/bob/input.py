@@ -2941,6 +2941,7 @@ class RecipeSet:
             schema.Optional('build_mode') : schema.Or("build-only","normal", "checkout-only"),
             schema.Optional('clean') : bool,
             schema.Optional('clean_checkout') : bool,
+            schema.Optional('force_branch') : bool,
             schema.Optional('destination') : str,
             schema.Optional('download') : schema.Or("yes", "no", "deps",
                 "forced", "forced-deps", "forced-fallback",

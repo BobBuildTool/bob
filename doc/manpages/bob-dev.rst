@@ -23,6 +23,7 @@ Synopsis
             [--no-link-deps] [--download MODE] [--download-layer MODE]
             [--shared | --no-shared] [--install | --no-install]
             [--sandbox | --no-sandbox] [--clean-checkout]
+            [--force-branch | --no-force-branch]
             [--attic | --no-attic]
             PACKAGE [PACKAGE ...]
 

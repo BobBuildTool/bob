@@ -99,6 +99,7 @@ class Invoker:
         self.__stdioBuffer = io.BytesIO() if redirect else None
         self.__warnedDuplicates = { '' }
         self.__executor = executor
+        self.__extra = {}
 
         # Redirection is a bit complicated. We have to consider two levels: the
         # optional log file and the console.
@@ -574,3 +575,9 @@ class Invoker:
     async def runInExecutor(self, func, *args):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self.__executor, func, *args)
+
+    def setExtra(self, name, value):
+        self.__extra[name] = value
+
+    def getExtra(self, name):
+        return self.__extra[name] if name in self.__extra else None

@@ -211,6 +211,13 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Move scm to attic if inline switch is not possible (default).")
     group.add_argument('--no-attic', action='store_false', default=None, dest='attic',
         help="Do not move to attic, instead fail the build.")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--force-branch', action='store_true', default=None,
+        dest="force_branch", help="Raise build error if a commit is not on the configured branch. (git-only")
+    group.add_argument('--no-force-branch', action='store_false', default=None,
+        dest='force_branch', help="Do not raise a build error if a commit is not on the configured branch.")
+
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -251,6 +258,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 'shared' : True,
                 'install' : True,
                 'attic' : True,
+                'force_branch' : None,
             }
 
         for a in vars(args):
@@ -319,6 +327,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setShareHandler(getShare(recipes.getShareConfig()))
         builder.setShareMode(args.shared, args.install)
         builder.setAtticEnable(args.attic)
+        builder.setForceBranch(args.force_branch)
         if args.resume: builder.loadBuildState()
 
         backlog = []
