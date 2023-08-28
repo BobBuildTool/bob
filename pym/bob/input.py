@@ -3796,8 +3796,8 @@ class RecipeSet:
                     tmp = PackageUnpickler(f, self.getRecipe, self.__plugins,
                                            nameFormatter).load()
                     return tmp.refDeref([], {}, None, nameFormatter)
-        except (EOFError, OSError, pickle.UnpicklingError):
-            pass
+        except Exception as e:
+            Warn("Could not load package cache: " + str(e)).show(cacheName)
 
         # not cached -> calculate packages
         states = { n:s() for (n,s) in self.__states.items() }
@@ -3811,7 +3811,7 @@ class RecipeSet:
                 PackagePickler(f, nameFormatter).dump(result)
             replacePath(newCacheName, cacheName)
         except OSError as e:
-            print("Error saving internal state:", str(e), file=sys.stderr)
+            Warn("Could not save package cache: " + str(e)).show(cacheName)
 
         return result.refDeref([], {}, None, nameFormatter)
 
