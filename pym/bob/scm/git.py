@@ -247,10 +247,23 @@ class GitScm(Scm):
     async def __checkoutTagOnBranch(self, invoker, fetchCmd, switch):
         # Only do something if nothing is checked out yet or a forceful switch
         # is requested.
-        headValid = (await invoker.callCommand(["git", "rev-parse", "--verify",
-            "-q", "HEAD"], stdout=False, cwd=self.__dir)) == 0
-        if headValid and not switch:
-            return
+        rev_parse = await invoker.runCommand(["git", "rev-parse", "--verify",
+            "-q", "HEAD"], stdout=True, cwd=self.__dir)
+        headValid = rev_parse.returncode == 0
+        if headValid:
+            if not switch:
+                return
+            # if the workspace is already on the correct commit / tag do nothing
+            if self.__commit:
+                if rev_parse.stdout.rstrip() == self.__commit:
+                    return
+            else:
+                # Convert tag to commit. Beware of annotated commits!
+                tag = await invoker.runCommand(["git", "rev-parse",
+                                "tags/"+self.__tag+"^0"],
+                                stdout=True, cwd=self.__dir)
+                if tag.returncode == 0 and tag.stdout == rev_parse.stdout:
+                    return
 
         # There is no point in doing the extra dance of fetching commits
         # explicitly like in __checkoutTag on shallow clones. We must make sure
