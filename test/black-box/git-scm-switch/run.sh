@@ -136,9 +136,52 @@ run_bob dev -c submodules -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c0" -DSCM_BRANCH=
 expect_output "foobar" git -C dev/src/root2/1/workspace rev-parse --abbrev-ref HEAD
 expect_output "$d1_c0" git -C dev/src/root2/1/workspace rev-parse HEAD
 expect_not_exist dev/src/root2/1/workspace/submod/sub.txt
+expect_output "hello world" cat dev/src/root2/1/workspace/test.txt
 
 # Moving to a later commit will update the branch and bring in the submodules.
 run_bob dev -c submodules -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c1" -DSCM_BRANCH=foobar root2 -vv
 expect_output "foobar" git -C dev/src/root2/1/workspace rev-parse --abbrev-ref HEAD
 expect_output "$d1_c1" git -C dev/src/root2/1/workspace rev-parse HEAD
 expect_exist dev/src/root2/1/workspace/submod/sub.txt
+
+# Move to c2 but without submodules. Otherwise every revision change triggers a move to attic and
+# hides potential issues when going back to older revisions
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c2" -DSCM_BRANCH=foobar root2 -vv
+expect_output "changed" cat dev/src/root2/1/workspace/test.txt
+
+# Move back to a older commit
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c0" -DSCM_BRANCH=foobar root2 -vv
+expect_output "foobar" git -C dev/src/root2/1/workspace rev-parse --abbrev-ref HEAD
+expect_output "$d1_c0" git -C dev/src/root2/1/workspace rev-parse HEAD
+expect_not_exist dev/src/root2/1/workspace/submod/sub.txt
+expect_output "hello world" cat dev/src/root2/1/workspace/test.txt
+
+# make a new commit but do not push it and run the update. This should move to attic as we'd lose
+# the commit when switching.
+pushd dev/src/root2/1/workspace
+git config user.email "bob@bob.bob"
+git config user.name test
+echo "local_commit" > test.txt
+git commit -a -m "just a local change"
+popd
+rm dev/src/root/1/attic* -rf
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c1" -DSCM_BRANCH=foobar root2 -vv
+ls -la dev/src/root2/1/workspace
+expect_output "hello world" cat dev/src/root2/1/workspace/test.txt
+expect_exist dev/src/root2/1/attic
+
+# make a new commit, switch to a different local branch and run the update. This should not move to attic.
+# But first go back...
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c0" -DSCM_BRANCH=foobar root2 -vv
+pushd dev/src/root2/1/workspace
+git config user.email "bob@bob.bob"
+git config user.name test
+echo "local_commit" > test.txt
+git commit -a -m "just a local change"
+git checkout -b foobar2
+popd
+rm dev/src/root2/1/attic* -rf
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c1" -DSCM_BRANCH=foobar root2 -vv
+ls -la dev/src/root2/1/workspace
+expect_output "hello world" cat dev/src/root2/1/workspace/test.txt
+expect_not_exist dev/src/root2/1/attic
