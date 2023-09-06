@@ -3796,6 +3796,8 @@ class RecipeSet:
                     tmp = PackageUnpickler(f, self.getRecipe, self.__plugins,
                                            nameFormatter).load()
                     return tmp.refDeref([], {}, None, nameFormatter)
+        except FileNotFoundError:
+            pass
         except Exception as e:
             Warn("Could not load package cache: " + str(e)).show(cacheName)
 
