@@ -3174,6 +3174,14 @@ class RecipeSet:
             else:
                 self.__whiteList.update(x)
 
+        def removeWhiteList(x):
+            if self.__platform == "win32":
+                # Convert to upper case on Windows. The Python interpreter does that
+                # too and the variables are considered case insensitive by Windows.
+                self.__whiteList.difference_update(i.upper() for i in x)
+            else:
+                self.__whiteList.difference_update(x)
+
         self.__settings = {
             "include" : SentinelSetting(),
             "require" : SentinelSetting(),
@@ -3275,6 +3283,11 @@ class RecipeSet:
             "whitelist" : BuiltinSetting(
                 schema.Schema([ schema.Regex(r'^[^=]*$') ]),
                 updateWhiteList
+            ),
+            "whitelistRemove" : BuiltinSetting(
+                schema.Schema([ schema.Regex(r'^[^=]*$') ]),
+                removeWhiteList,
+                priority=100
             ),
         }
 
