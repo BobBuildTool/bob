@@ -40,14 +40,21 @@ warnDepends = WarnOnce("The same package is named multiple times as dependency!"
 warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
 warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
 
-def overlappingPaths(p1, p2):
+def isPrefixPath(p1, p2):
+    """Check if the initial elements of ``p2`` equal ``p1``.
+
+    :return: True if ``p2`` is a subdirectory or file inside ``p1``, otherwise
+             False.
+    """
     p1 = os.path.normcase(os.path.normpath(p1)).split(os.sep)
     if p1 == ["."]: p1 = []
     p2 = os.path.normcase(os.path.normpath(p2)).split(os.sep)
     if p2 == ["."]: p2 = []
-    for i in range(min(len(p1), len(p2))):
-        if p1[i] != p2[i]: return False
-    return True
+
+    if len(p1) > len(p2):
+        return False
+
+    return p2[:len(p1)] == p1
 
 def __maybeGlob(pred):
     if pred.startswith("!"):
@@ -1271,17 +1278,30 @@ class CoreCheckoutStep(CoreStep):
                 if fullEnv.evaluate(scm.get("if"), "checkoutSCM") ]
             isValid = (checkout[1] is not None) or bool(self.scmList)
 
-            # Validate that SCM paths do not overlap
+            # Validate all SCM paths. Only relative paths are allowed. If they
+            # overlap, the following rules must apply:
+            #  1. Deeper paths must be checked out later.
+            #     -> required for initial checkout to work
+            #  2. A Jenkins native SCM (e.g. git) must not overlap with a
+            #     previous non-native SCM.
+            #     -> required because SCM plugins are running before scripts on
+            #        Jenkins jobs
             knownPaths = []
             for s in self.scmList:
                 p = s.getDirectory()
                 if os.path.isabs(p):
                     raise ParseError("SCM paths must be relative! Offending path: " + p)
-                for known in knownPaths:
-                    if overlappingPaths(known, p):
-                        raise ParseError("SCM paths '{}' and '{}' overlap."
-                                            .format(known, p))
-                knownPaths.append(p)
+                for knownPath, knownHasJenkins in knownPaths:
+                    if isPrefixPath(p, knownPath):
+                        raise ParseError("SCM path '{}' obstructs '{}'."
+                                            .format(p, knownPath),
+                                         help="Nested SCMs must be specified in a upper-to-lower directory order.")
+                    if isPrefixPath(knownPath, p) and s.hasJenkinsPlugin() and not knownHasJenkins:
+                        raise ParseError("SCM path '{}' cannot be checked out after '{}' in Jenkins jobs"
+                                            .format(p, knownPath),
+                                         help="SCM plugins always run first in a Jenkins job but the SCM in '{}' does not have a native Jenkins plugin."
+                                                .format(knownPath))
+                knownPaths.append((p, s.hasJenkinsPlugin()))
         else:
             isValid = False
             self.scmList = []

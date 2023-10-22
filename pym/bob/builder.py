@@ -88,8 +88,12 @@ def compareDirectoryState(left, right):
     return left == right
 
 def checkoutsFromState(state):
-    """Return only the tuples related to SCMs from the checkout state."""
-    return [ (k, v) for k, v in state.items() if k not in CHECKOUT_NON_DIR_KEYS ]
+    """Return only the tuples related to SCMs from the checkout state.
+
+    The list is sorted so that SCM operation can safely be done in list order.
+    """
+    return sorted(( (d, v) for d, v in state.items() if d not in CHECKOUT_NON_DIR_KEYS ),
+                  key=lambda i: os.path.normcase(os.path.normpath(i[0])) )
 
 def checkoutBuildOnlyState(checkoutStep, inputHashes):
     """Obtain state for build-only checkout updates.
@@ -262,6 +266,38 @@ class LocalBuilderStatistic:
 
     def getActiveOverrides(self):
         return self.__activeOverrides
+
+class AtticTracker:
+    """Track directories that were moved to attic."""
+
+    def __init__(self):
+        self.__paths = {}
+
+    def add(self, scmPath, atticPath):
+        """Add directory that was moved to attic."""
+        scmPath = os.path.normpath(scmPath)
+        self.__paths[scmPath + os.sep] = atticPath
+
+    def affected(self, nestedScmPath):
+        """Check if a directory is affected by a directory that was previously
+           moved to attic.
+        """
+        nestedScmPath = os.path.normpath(nestedScmPath)
+        return self.__match(nestedScmPath) is not None
+
+    def getAtticPath(self, nestedScmPath):
+        """Get attic path for a directory that was affected."""
+        nestedScmPath = os.path.normpath(nestedScmPath)
+        prefix = self.__match(nestedScmPath)
+        subDir = nestedScmPath[len(prefix):]
+        return os.path.join(self.__paths[prefix], subDir)
+
+    def __match(self, nestedScmPath):
+        nestedScmPath += os.sep
+        for p in self.__paths:
+            if nestedScmPath.startswith(p):
+                return p
+        return None
 
 class LocalBuilder:
 
@@ -1106,10 +1142,23 @@ cd {ROOT}
                 (BobState().getResultHash(prettySrcPath) is None) or
                 not compareDirectoryState(checkoutState, oldCheckoutState) or
                 (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
-                # Switch or move away old or changed source directories
+                # Switch or move away old or changed source directories. In
+                # case of nested SCMs the loop relies on the property of
+                # checkoutsFromState() to return the directories in a top-down
+                # order.
+                atticPaths = AtticTracker()
                 for (scmDir, (scmDigest, scmSpec)) in checkoutsFromState(oldCheckoutState):
-                    if scmDigest != checkoutState.get(scmDir, (None, None))[0]:
-                        scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                    scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
+                    if atticPaths.affected(scmPath):
+                        # An SCM in the hierarchy above this one was moved to
+                        # attic. This implies that all nested SCMs are affected
+                        # too...
+                        atticPath = atticPaths.getAtticPath(scmPath)
+                        if os.path.exists(atticPath):
+                            BobState().setAtticDirectoryState(atticPath, scmSpec)
+                        del oldCheckoutState[scmDir]
+                        BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
+                    elif scmDigest != checkoutState.get(scmDir, (None, None))[0]:
                         canSwitch = (scmDir in scmMap) and scmDigest and \
                                      scmSpec is not None and \
                                      scmMap[scmDir].canSwitch(scmSpec) and \
@@ -1137,6 +1186,7 @@ cd {ROOT}
                             atticPath = os.path.join(atticPath, atticName)
                             os.rename(scmPath, atticPath)
                             BobState().setAtticDirectoryState(atticPath, scmSpec)
+                            atticPaths.add(scmPath, atticPath)
                         del oldCheckoutState[scmDir]
                         BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
 
