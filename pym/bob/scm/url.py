@@ -368,7 +368,7 @@ class UrlScm(Scm):
                 os.utime(canary)
                 break
             else:
-                executor.fail("No suitable extractor found!")
+                invoker.fail("No suitable extractor found!")
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this url.
