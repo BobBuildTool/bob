@@ -83,7 +83,7 @@ class JenkinsConnection:
             return q['computer'][0]['idle']
 
     def drainBuildQueue(self):
-        for i in range(30):
+        for i in range(120):
             time.sleep(1)
             q = self.getBuildQueue()
             if q is None:
@@ -327,7 +327,7 @@ with tempfile.TemporaryDirectory() as jenkinsHome:
         print("[TEST]:", "Jenkins running as pid", jenkinsProc.pid, "in", jenkinsHome)
 
         print("[TEST]:", "Waiting for Jenkins to get ready...")
-        for i in range(60):
+        for i in range(120):
             time.sleep(1)
             try:
                 jc = JenkinsConnection("http://localhost:8080/", "bob", "test")
