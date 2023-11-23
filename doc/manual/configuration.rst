@@ -558,7 +558,8 @@ automatically:
   ``${BOB_DEP_PATHS[libfoo-dev]}``) instead of the position (e.g. ``$2``).
 * ``BOB_TOOL_PATHS``: An associative array that holds the execution paths to
   consumed tools indexed by the package name. All these paths are in ``$PATH``
-  resp. ``%PATH%``.
+  resp. ``%PATH%``. If a tool requires more than one path each path is added
+  separately with a incrementing counter appended to the package name.
 
 The associative arrays are no regular environment variables. Hence they are not
 inherited by other processes that are invoked by the executed scripts. In bash
@@ -1619,10 +1620,11 @@ consuming recipes. Example::
          fingerprintScript: |
             bob-libc-version gcc
 
-The ``path`` attribute is always needed.  The ``libs`` attribute, if present,
-must be a list of paths to needed shared libraries. Any path that is specified
-must be relative. If the recipe makes use of existing host binaries and wants
-to provide them as tool you should create symlinks to the host paths.
+The ``path`` attribute is always needed. It might be a single path or a colon
+separated list of paths. The ``libs`` attribute, if present, must be a list of
+paths to needed shared libraries. Any path that is specified must be relative.
+If the recipe makes use of existing host binaries and wants to provide them as
+tool you should create symlinks to the host paths.
 
 The ``netAccess`` attribute allows the tool to request network access during
 build/package step execution even if the recipe has not requested it (see

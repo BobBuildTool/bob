@@ -225,8 +225,8 @@ class StepIR(AbstractIR):
         The returned list is intended to be passed as PATH environment variable.
         The paths are sorted by name.
         """
-        return sorted([ os.path.join(tool.getStep().getExecPath(self), tool.getPath())
-            for tool in self.getTools().values() ])
+        return sorted([ os.path.join(tool.getStep().getExecPath(self), p)
+            for tool in self.getTools().values() for p in tool.getPath().split(':') ])
 
     def getLibraryPaths(self):
         """Get sorted list of library paths of used tools.

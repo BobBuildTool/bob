@@ -1,0 +1,16 @@
+packageScript: |
+  mkdir -p foo bar
+  for i in foo bar; do
+    pushd $i
+    cat > $i.sh << EOF
+  #!/bin/bash
+  echo "Hello $i"
+  EOF
+    chmod +x $i.sh
+    popd
+  done
+
+provideTools:
+  foo_bar:
+    path: "foo:bar"
+

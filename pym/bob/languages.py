@@ -688,8 +688,8 @@ class StepSpec:
                 for a in step.getArguments() if a.isValid()
             ]),
             'toolPaths' : sorted([
-                (n, os.path.join(t.getStep().getExecPath(step), t.getPath()))
-                for (n,t) in step.getTools().items()
+                (n if i == 0 else n + str(i), os.path.join(t.getStep().getExecPath(step), p))
+                for (n,t) in step.getTools().items() for i, p in enumerate(t.getPath().split(':'))
             ]),
         }
 

@@ -1,0 +1,10 @@
+root: True
+
+depends:
+  - name: tools
+    use: [tools]
+
+packageTools: [foo_bar]
+packageScript: |
+  foo.sh
+  bar.sh
