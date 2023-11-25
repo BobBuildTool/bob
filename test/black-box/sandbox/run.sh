@@ -1,8 +1,7 @@
 #!/bin/bash -e
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
-# Run a simple sandbox that mounts the full host. Just see if exeuction works
-# even if $PATH is empty in the sandbox.
+# Run a simple sandbox that mounts the full host. Just see if exeuction works.
 
 cleanup
 

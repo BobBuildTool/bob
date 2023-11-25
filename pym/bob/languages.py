@@ -258,8 +258,7 @@ class BashLanguage:
         env.update({
             "PATH": ":".join(
                 [quote(BashLanguage.__munge(os.path.abspath(p))) for p in spec.paths] +
-                (["$PATH"] if not spec.hasSandbox else
-                 [quote(p) for p in spec.sandboxPaths])
+                ["$PATH"]
             ),
             "LD_LIBRARY_PATH": ":".join(
                 quote(BashLanguage.__munge(os.path.abspath(p))) for p in spec.libraryPaths
@@ -495,8 +494,7 @@ class PwshLanguage:
         env.update({
             "PATH": pathSep.join(
                 [escapePwsh(PwshLanguage.__munge(os.path.abspath(p))) for p in spec.paths] +
-                (["$Env:PATH"] if not spec.hasSandbox else
-                 [escapePwsh(p) for p in spec.sandboxPaths])
+                ["$Env:PATH"]
             ),
             "LD_LIBRARY_PATH": pathSep.join(
                 escapePwsh(PwshLanguage.__munge(os.path.abspath(p))) for p in spec.libraryPaths
