@@ -364,12 +364,16 @@ class Invoker:
 
                 # Command follows. Stop parsing options.
                 cmdArgs.append("--")
+
+                # Hard override of PATH. The sandbox helper is found by an absolute path!
+                env = { "PATH" : ":".join(self.__spec.sandboxPaths) }
             else:
                 cmdArgs = []
+                env = None
             cmdArgs.extend(callArgs)
 
             if mode == InvocationMode.SHELL:
-                ret = await self.callCommand(cmdArgs, specEnv=False)
+                ret = await self.callCommand(cmdArgs, env=env, specEnv=False)
             elif mode in (InvocationMode.CALL, InvocationMode.UPDATE):
                 for scm in self.__spec.preRunCmds:
                     scm = getScm(scm)
@@ -384,7 +388,7 @@ class Invoker:
                     except Exception:
                         self.error(scm.getSource(), "failed")
                         raise
-                await self.checkCommand(cmdArgs, specEnv=False)
+                await self.checkCommand(cmdArgs, env=env, specEnv=False)
                 for a in self.__spec.postRunCmds:
                     a = CheckoutAssert(a)
                     try:
