@@ -341,7 +341,7 @@ class BashLanguage:
                 }
                 declare -A _BOB_SOURCES=( [0]="Bob prolog" )
                 trap 'bob_handle_error $? >&2 ; exit 99' ERR
-                trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do /bin/rm -f "$i" ; done' EXIT
+                trap 'for i in "${_BOB_TMP_CLEANUP[@]-}" ; do command rm -f "$i" ; done' EXIT
                 set -o errtrace -o nounset -o pipefail
                 """),
             BashLanguage.__formatSetup(spec),
