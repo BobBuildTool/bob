@@ -194,7 +194,7 @@ class RecipeCommon:
         r.setdefault("checkoutUpdateIf", False)
         return r
 
-    def parseAndPrepare(self, name, recipe, classes={}, allRelocatable=None):
+    def parseAndPrepare(self, recipe, classes={}, allRelocatable=None, name="foo"):
 
         cwd = os.getcwd()
         recipeSet = MagicMock()
@@ -223,7 +223,7 @@ class TestRelocatable(RecipeCommon, TestCase):
         recipe = {
             "packageScript" : "asdf"
         }
-        p = self.parseAndPrepare("foo", recipe)
+        p = self.parseAndPrepare(recipe)
         self.assertTrue(p.isRelocatable())
 
     def testToolsNonRelocatable(self):
@@ -235,7 +235,7 @@ class TestRelocatable(RecipeCommon, TestCase):
                 "foo" : "bar"
             }
         }
-        p = self.parseAndPrepare("foo", recipe)
+        p = self.parseAndPrepare(recipe)
         self.assertFalse(p.isRelocatable())
 
     def testCheckoutAndBuildStep(self):
@@ -246,7 +246,7 @@ class TestRelocatable(RecipeCommon, TestCase):
             "buildScript" : "asdf",
             "packageScript" : "asdf",
         }
-        p = self.parseAndPrepare("foo", recipe)
+        p = self.parseAndPrepare(recipe)
         self.assertFalse(p.getCheckoutStep().isRelocatable())
         self.assertFalse(p.getBuildStep().isRelocatable())
         self.assertTrue(p.getPackageStep().isRelocatable())
@@ -261,7 +261,7 @@ class TestRelocatable(RecipeCommon, TestCase):
             },
             "relocatable" : True
         }
-        p = self.parseAndPrepare("foo", recipe)
+        p = self.parseAndPrepare(recipe)
         self.assertTrue(p.isRelocatable())
 
     def testNotRelocatable(self):
@@ -271,7 +271,7 @@ class TestRelocatable(RecipeCommon, TestCase):
             "packageScript" : "asdf",
             "relocatable" : False
         }
-        p = self.parseAndPrepare("foo", recipe)
+        p = self.parseAndPrepare(recipe)
         self.assertFalse(p.isRelocatable())
 
     def testClassCanSetRelocatable(self):
@@ -286,7 +286,7 @@ class TestRelocatable(RecipeCommon, TestCase):
                 "relocatable" : False
             }
         }
-        p = self.parseAndPrepare("foo", recipe, classes)
+        p = self.parseAndPrepare(recipe, classes)
         self.assertFalse(p.isRelocatable())
 
         # two-stage inheritence
@@ -298,7 +298,7 @@ class TestRelocatable(RecipeCommon, TestCase):
                 "relocatable" : False,
             }
         }
-        p = self.parseAndPrepare("foo", recipe, classes)
+        p = self.parseAndPrepare(recipe, classes)
         self.assertFalse(p.isRelocatable())
 
     def testClassOverride(self):
@@ -317,7 +317,7 @@ class TestRelocatable(RecipeCommon, TestCase):
                 "relocatable" : True,
             }
         }
-        p = self.parseAndPrepare("foo", recipe, classes)
+        p = self.parseAndPrepare(recipe, classes)
         self.assertFalse(p.isRelocatable())
 
         # recipe overrides classes
@@ -325,7 +325,7 @@ class TestRelocatable(RecipeCommon, TestCase):
             "inherit" : [ "bar" ],
             "relocatable" : True,
         }
-        p = self.parseAndPrepare("foo", recipe, classes)
+        p = self.parseAndPrepare(recipe, classes)
         self.assertTrue(p.isRelocatable())
 
     def testAllRelocatablePolicy(self):
@@ -335,7 +335,7 @@ class TestRelocatable(RecipeCommon, TestCase):
         recipe = {
             "packageScript" : "asdf"
         }
-        p = self.parseAndPrepare("foo", recipe, allRelocatable=True)
+        p = self.parseAndPrepare(recipe, allRelocatable=True)
         self.assertTrue(p.isRelocatable())
 
         # tool package
@@ -345,7 +345,7 @@ class TestRelocatable(RecipeCommon, TestCase):
                 "foo" : "bar"
             }
         }
-        p = self.parseAndPrepare("foo", recipe, allRelocatable=True)
+        p = self.parseAndPrepare(recipe, allRelocatable=True)
         self.assertTrue(p.isRelocatable())
 
 
@@ -359,7 +359,7 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             "buildScript" : "asdf",
             "packageScript" : "asdf",
         }
-        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
         self.assertFalse(c.getUpdateScript())
         self.assertTrue(c.isUpdateDeterministic())
 
@@ -371,7 +371,7 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             "buildScript" : "asdf",
             "packageScript" : "asdf",
         }
-        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
         self.assertIn("asdf", c.getUpdateScript())
 
     def testSimpleIfString(self):
@@ -382,11 +382,11 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             "buildScript" : "asdf",
             "packageScript" : "asdf",
         }
-        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
         self.assertNotIn("asdf", c.getUpdateScript())
 
         recipe["checkoutUpdateIf"] = "$(eq,a,a)"
-        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
         self.assertIn("asdf", c.getUpdateScript())
 
     def testSimpleIfExpr(self):
@@ -397,11 +397,11 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             "buildScript" : "asdf",
             "packageScript" : "asdf",
         }
-        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
         self.assertNotIn("asdf", c.getUpdateScript())
 
         recipe["checkoutUpdateIf"] = IfExpression('"a" == "a"')
-        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
         self.assertIn("asdf", c.getUpdateScript())
 
     def testDeterministicDefault(self):
@@ -412,11 +412,11 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             "buildScript" : "asdf",
             "packageScript" : "asdf",
         }
-        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
         self.assertFalse(c.isUpdateDeterministic())
 
         recipe["checkoutDeterministic"] = True
-        c = self.parseAndPrepare("foo", recipe).getCheckoutStep()
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
         self.assertTrue(c.isUpdateDeterministic())
 
     def testDeterministicInherit(self):
@@ -438,7 +438,7 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             },
         }
 
-        c = self.parseAndPrepare("foo", recipe, classes).getCheckoutStep()
+        c = self.parseAndPrepare(recipe, classes).getCheckoutStep()
         self.assertTrue(c.isUpdateDeterministic())
 
     def testInherit(self):
@@ -467,7 +467,7 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             },
         }
 
-        c = self.parseAndPrepare("foo", recipe, classes).getCheckoutStep()
+        c = self.parseAndPrepare(recipe, classes).getCheckoutStep()
         self.assertFalse(c.isUpdateDeterministic())
         self.assertIn("asdf", c.getUpdateScript())
         self.assertNotIn("qwer", c.getUpdateScript())
@@ -488,7 +488,7 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             },
         }
 
-        c = self.parseAndPrepare("foo", recipe, classes).getCheckoutStep()
+        c = self.parseAndPrepare(recipe, classes).getCheckoutStep()
         self.assertNotIn("asdf", c.getUpdateScript())
         self.assertNotIn("qwer", c.getUpdateScript())
 
@@ -508,6 +508,6 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
             },
         }
 
-        c = self.parseAndPrepare("foo", recipe, classes).getCheckoutStep()
+        c = self.parseAndPrepare(recipe, classes).getCheckoutStep()
         self.assertIn("asdf", c.getUpdateScript())
         self.assertIn("qwer", c.getUpdateScript())
