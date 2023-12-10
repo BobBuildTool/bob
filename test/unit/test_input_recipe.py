@@ -511,3 +511,160 @@ class TestCheckoutUpdateIf(RecipeCommon, TestCase):
         c = self.parseAndPrepare(recipe, classes).getCheckoutStep()
         self.assertIn("asdf", c.getUpdateScript())
         self.assertIn("qwer", c.getUpdateScript())
+
+
+class TestSCMs(RecipeCommon, TestCase):
+
+    def testAbsPath(self):
+        """Absolute SCM paths are rejected"""
+        recipe = {
+            "checkoutSCM" : [
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "/absolute",
+                },
+            ],
+            "buildScript" : "true",
+        }
+        with self.assertRaises(ParseError):
+            self.parseAndPrepare(recipe)
+
+    def testDifferentPath(self):
+        """Multple SCMs in different directories are fine"""
+        recipe = {
+            "checkoutSCM" : [
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "foo",
+                },
+                {
+                    "scm" : "svn",
+                    "url" : "http://bob.test/test.svn",
+                    "dir" : "bar",
+                },
+            ],
+            "buildScript" : "true",
+        }
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
+        l = c.getScmList()
+        self.assertEqual(len(l), 2)
+        self.assertEqual(l[0].getProperties(False)["scm"], "git")
+        self.assertEqual(l[0].getDirectory(), "foo")
+        self.assertEqual(l[1].getProperties(False)["scm"], "svn")
+        self.assertEqual(l[1].getDirectory(), "bar")
+
+    def testSamePath(self):
+        """Multiple SCMs on same directory are rejected"""
+        recipe = {
+            "checkoutSCM" : [
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "same",
+                },
+                {
+                    "scm" : "svn",
+                    "url" : "http://bob.test/test.svn",
+                    "dir" : "same",
+                },
+            ],
+            "buildScript" : "true",
+        }
+        with self.assertRaises(ParseError):
+            self.parseAndPrepare(recipe)
+
+    def testNested(self):
+        """Nested SCMs in upper-to-lower order are accepted"""
+        recipe = {
+            "checkoutSCM" : [
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "foo",
+                },
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "foo/bar",
+                },
+            ],
+            "buildScript" : "true",
+        }
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
+        l = c.getScmList()
+        self.assertEqual(len(l), 2)
+        self.assertEqual(l[0].getDirectory(), "foo")
+        self.assertEqual(l[1].getDirectory(), "foo/bar")
+
+    def testNestedObstructs(self):
+        """Nested SCMs that obstruct deeper SCMs are rejected"""
+        recipe = {
+            "checkoutSCM" : [
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "foo/bar",
+                },
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "foo",
+                },
+            ],
+            "buildScript" : "true",
+        }
+        with self.assertRaises(ParseError):
+            self.parseAndPrepare(recipe)
+
+    def testNestedJenkinsMixedPluginOk(self):
+        """Nested non-plugin SCMs inside plugin SCMs are ok"""
+        recipe = {
+            "checkoutSCM" : [
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "foo",
+                },
+                {
+                    "scm" : "cvs",
+                    "url" : "http://bob.test/test.cvs",
+                    "cvsroot" : "cvsroot",
+                    "module" : "module",
+                    "dir" : "foo/bar",
+                },
+            ],
+            "buildScript" : "true",
+        }
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
+        l = c.getScmList()
+        self.assertEqual(len(l), 2)
+        self.assertEqual(l[0].getProperties(True)["scm"], "git")
+        self.assertEqual(l[0].getDirectory(), "foo")
+        self.assertTrue(l[0].hasJenkinsPlugin())
+        self.assertEqual(l[1].getProperties(True)["scm"], "cvs")
+        self.assertEqual(l[1].getDirectory(), "foo/bar")
+        self.assertFalse(l[1].hasJenkinsPlugin())
+
+    def testNestedJenkinsMixedPluginBad(self):
+        """Nested plugin SCMs inside non-plugin SCMs are rejected"""
+        recipe = {
+            "checkoutSCM" : [
+                {
+                    "scm" : "cvs",
+                    "url" : "http://bob.test/test.cvs",
+                    "cvsroot" : "cvsroot",
+                    "module" : "module",
+                    "dir" : "foo",
+                },
+                {
+                    "scm" : "git",
+                    "url" : "http://bob.test/test.git",
+                    "dir" : "foo/bar",
+                },
+            ],
+            "buildScript" : "true",
+        }
+        with self.assertRaises(ParseError):
+            self.parseAndPrepare(recipe)
