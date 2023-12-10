@@ -868,6 +868,14 @@ be given as IfExpression (see :ref:`configuration-principle-booleans`). By
 default the SCMs check out to the root of the workspace. You may specify any
 relative path in ``dir`` to checkout to this directory.
 
+Special care must be taken if SCMs are nested, that is the ``dir`` attribute of
+one SCM is a subdirectory of another. Bob requires that the SCM with the upper
+directory has to be in the list before the SCMs that are checked out into
+subdirectories. Additionally, SCMs that are natively supported by Jenkins
+plugins (git, svn), cannot be nested into the other SCMs (cvs, import, url).
+The reason is that Jenkins SCM plugins always execute before anything else in a
+Jenkins job.
+
 By using ``if`` you can selectively enable or disable a particular SCM using
 either a string or a expression. In case a string is given to the ``if``-keyword
 it is substituted according to :ref:`configuration-principle-subst` and the final

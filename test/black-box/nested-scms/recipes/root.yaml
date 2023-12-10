@@ -1,0 +1,16 @@
+root: True
+
+checkoutSCM:
+    - if: "${GIT_1_ENABLE:-true}"
+      scm: git
+      url: file://${GIT_1_DIR}
+      rev: ${GIT_1_REV:-refs/heads/master}
+      dir: "foo"
+    - if: "${GIT_2_ENABLE:-true}"
+      scm: git
+      url: file://${GIT_2_DIR}
+      rev: ${GIT_2_REV:-refs/heads/master}
+      dir: "foo/bar"
+
+buildScript: "true"
+packageScript: "true"
