@@ -7,6 +7,7 @@ from . import BOB_INPUT_HASH
 from .errors import ParseError
 from .utils import escapePwsh, quotePwsh, isWindows, asHexStr, getBashPath
 from .utils import joinScripts, sliceString
+from abc import ABC, abstractmethod
 from base64 import b64encode
 from enum import Enum
 from glob import glob
@@ -147,7 +148,7 @@ class ScriptLanguage(Enum):
     PWSH = 'PowerShell'
 
 
-class IncludeResolver:
+class IncludeResolver(ABC):
     def __init__(self, fileLoader, baseDir, origText, sourceName, varBase):
         self.fileLoader = fileLoader
         self.baseDir = baseDir
@@ -168,25 +169,33 @@ class IncludeResolver:
                 content.append(self.fileLoader(path))
         except OSError as e:
             raise ParseError("Error including '"+item+"': " + str(e))
-        content = b''.join(content)
+        allContent = b''.join(content)
 
-        self.__incDigests.append(hashlib.sha1(content).digest().hex())
+        self.__incDigests.append(hashlib.sha1(allContent).digest().hex())
         if mode == '<':
-            ret = self._includeFile(content)
+            ret = self._includeFile(allContent)
+        elif mode == '@':
+            ret = self._includeFiles(content)
         else:
             assert mode == "'"
-            ret = self._includeLiteral(content)
+            ret = self._includeLiteral(allContent)
 
         return ret
 
+    @abstractmethod
     def _includeFile(self, content):
-        raise NotImplementedError()
+        pass
 
+    def _includeFiles(self, contentList):
+        return " ".join((self._includeFile(content) for content in contentList))
+
+    @abstractmethod
     def _includeLiteral(self, content):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def _resolveContent(self, result):
-        raise NotImplementedError()
+        pass
 
     def resolve(self, result):
         return (self._resolveContent(result), "\n".join(self.__incDigests))
