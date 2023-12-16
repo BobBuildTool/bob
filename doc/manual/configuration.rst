@@ -508,19 +508,31 @@ build time. If both the keyword with the build time language suffix and without
 a suffix are present then the keyword with the build language suffix takes
 precedence.
 
-The script is subject to file inclusion with the ``$<<path>>`` and
-``$<'path'>`` syntax. The files are included relative to the current recipe.
-The given ``path`` might be a shell globbing pattern. If multiple files are
-matched by ``path`` the files are sorted by name and then concatenated. The
-``$<<path>>`` syntax imports the file(s) as is and replaces the escape pattern
-with a (possibly temporary) file name which has the same content. Similar to
-that, the ``$<'path'>`` syntax includes the file(s) inline as a quoted string.
-In any case, the strings are fully quoted and *not* subject to any parameter
-substitution.
+The script is subject to file inclusion with the ``$<<path>>``, ``$<@path@>``
+and ``$<'path'>`` syntax. The files are included relative to the current
+recipe.  The given ``path`` might be a shell globbing pattern. If multiple
+files are matched by ``path``, the files are sorted by name before being
+processed. Matching no file leads to an error. Depending on the particular
+syntax, the file(s) are included in different ways:
 
-.. note::
-   When including files as quoted strings (``$<'path'>`` syntax), they have to
-   be UTF-8 encoded.
+``$<<path>>``
+    This syntax concatenates the file(s) and replaces the escape pattern with a
+    (possibly temporary) file name which has all the content. The script will
+    always see a single file name.
+
+``$<@path@>``
+    For each matched file, the script will see a (possibly temporary) file with
+    its content. The order of files is still sorted by the original file name.
+    Like the ``$<<path>>`` syntax, the file names are not predictable at
+    runtime and do not resemble the original file names.
+
+``$<'path'>``
+    This syntax concatenates the file(s) and inserts the result as string
+    literal. The strings are fully quoted and *not* subject to any parameter
+    substitution.
+
+    .. note::
+       When including files as quoted strings, they have to be UTF-8 encoded.
 
 The scripts of any classes that are inherited which define
 a script for the same step are joined in front of this script in the order the

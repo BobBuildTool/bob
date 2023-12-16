@@ -1733,8 +1733,8 @@ class IncludeHelper:
         self.__pattern = re.compile(r"""
             \$<(?:
                 (?P<escaped>\$)     |
-                (?P<named>[<'][^'>]+)['>]>  |
-                (?P<braced>[<'][^'>]+)['>]> |
+                (?P<named>[<'@][^'>@]+)[@'>]>  |
+                (?P<braced>[<'@][^'>@]+)[@'>]> |
                 (?P<invalid>)
             )
             """, re.VERBOSE)

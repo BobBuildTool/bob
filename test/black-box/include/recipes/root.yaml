@@ -4,3 +4,8 @@ packageScript: |
     echo $<'inline.txt'> > result.txt
     cat $<<file.txt>> >> result.txt
 
+    i=1
+    for f in $<@many/*.txt@> ; do
+        cp "$f" "many-$i.txt"
+        : $((i++))
+    done
