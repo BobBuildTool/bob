@@ -233,16 +233,16 @@ class UrlScm(Scm):
         })
         return ret
 
-    def _download(self, destination):
+    def _download(self, url, destination):
         headers = {}
         headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
         context = None if self.__sslVerify else sslNoVerifyContext()
-        if os.path.isfile(destination) and self.__url.startswith("http"):
+        if os.path.isfile(destination) and (url.scheme in ["http", "https"]):
             # Try to avoid download if possible
             headers["If-Modified-Since"] = time2HTTPDate(os.stat(destination).st_mtime)
 
         tmpFileName = None
-        req = urllib.request.Request(url=self.__url, headers=headers)
+        req = urllib.request.Request(url=url.geturl(), headers=headers)
         try:
             # Set default signal handler so that KeyboardInterrupt is raised.
             # Needed to gracefully handle ctrl+c.
@@ -284,6 +284,40 @@ class UrlScm(Scm):
 
         return None
 
+    async def _fetch(self, invoker, url, workspaceFile, destination):
+        if url.scheme in ['', 'file']:
+            # Verify that host name is empty or "localhost"
+            if url.netloc not in ['', 'localhost']:
+                invoker.fail("Bad/unsupported URL: invalid host name: " + url.netloc)
+            # Local files: copy only if newer (u), target never is a directory (T)
+            if isYounger(url.path, destination):
+                if os.path.isdir(destination):
+                    invoker.fail("Destination", destination, "is an existing directory!")
+                invoker.trace("<cp>", url.path, workspaceFile)
+                shutil.copy(url.path, destination)
+            return None
+        elif url.scheme in ["http", "https", "ftp"]:
+            retries = self.__retries
+            while True:
+                invoker.trace("<wget>", url.geturl(), ">",
+                        workspaceFile, "retires:", retries)
+                try:
+                    err = await invoker.runInExecutor(UrlScm._download, self, url, destination)
+                    if err:
+                        if retries == 0:
+                            return err
+                    else:
+                        break
+                except (concurrent.futures.CancelledError,
+                        concurrent.futures.process.BrokenProcessPool):
+                    invoker.fail("Download interrupted!")
+                retries -= 1
+                await asyncio.sleep(3)
+
+            return None
+        else:
+            invoker.fail("Unsupported URL scheme: " + url.scheme)
+
     def canSwitch(self, oldSpec):
         diff = self._diffSpec(oldSpec)
 
@@ -311,36 +345,9 @@ class UrlScm(Scm):
             except ValueError as e:
                 invoker.fail(str(e))
 
-            if url.scheme in ['', 'file']:
-                # Verify that host name is empty or "localhost"
-                if url.netloc not in ['', 'localhost']:
-                    invoker.fail("Bad/unsupported URL: invalid host name: " + url.netloc)
-                # Local files: copy only if newer (u), target never is a directory (T)
-                if isYounger(url.path, destination):
-                    if os.path.isdir(destination):
-                        invoker.fail("Destination", destination, "is an existing directory!")
-                    invoker.trace("<cp>", url.path, workspaceFile)
-                    shutil.copy(url.path, destination)
-            elif url.scheme in ["http", "https", "ftp"]:
-                retries = self.__retries
-                while True:
-                    invoker.trace("<wget>", self.__url, ">",
-                            workspaceFile, "retires:", retries)
-                    try:
-                        err = await invoker.runInExecutor(UrlScm._download, self, destination)
-                        if err:
-                            if retries == 0:
-                                invoker.fail(err)
-                        else:
-                            break
-                    except (concurrent.futures.CancelledError,
-                            concurrent.futures.process.BrokenProcessPool):
-                        invoker.fail("Download interrupted!")
-                    retries -= 1
-                    await asyncio.sleep(3)
-            else:
-                invoker.fail("Unsupported URL scheme: " + url.scheme)
-
+            err = await self._fetch(invoker, url, workspaceFile, destination)
+            if err is not None:
+                invoker.fail(err)
 
         # Always verify file hashes
         if self.__digestSha1:
