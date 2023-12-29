@@ -569,6 +569,8 @@ class RecipeSetIR:
         self.__data['archiveSpec'] = recipeSet.archiveSpec()
         self.__data['envWhiteList'] = sorted(recipeSet.envWhiteList())
         self.__data['projectRoot'] = recipeSet.getProjectRoot()
+        self.__data['preMirrors'] = recipeSet.getPreMirrors()
+        self.__data['fallbackMirrors'] = recipeSet.getFallbackMirrors()
         return self
 
     @classmethod
@@ -599,3 +601,9 @@ class RecipeSetIR:
 
     def getProjectRoot(self):
         return self.__data['projectRoot']
+
+    def getPreMirrors(self):
+        return self.__data['preMirrors']
+
+    def getFallbackMirrors(self):
+        return self.__data['fallbackMirrors']

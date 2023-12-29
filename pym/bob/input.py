@@ -3023,6 +3023,9 @@ class RecipeSet:
         'import' : ImportScm.SCHEMA,
     })
 
+    MIRRORS_SCHEMA = ScmValidator({
+    })
+
     _ignoreCmdConfig = False
     @classmethod
     def ignoreCommandCfg(cls):
@@ -3142,7 +3145,12 @@ class RecipeSet:
         self.__buildHooks = {}
         self.__sandboxOpts = {}
         self.__scmDefaults = {}
+        self.__preMirrors = []
+        self.__fallbackMirrors = []
+
         def updateArchive(x): self.__archive = x
+        def updatePreMirror(x) : self.__preMirrors = x
+        def updateFallbackMirror(x) : self.__fallbackMirrors = x
 
         def updateWhiteList(x):
             if self.__platform == "win32":
@@ -3176,12 +3184,22 @@ class RecipeSet:
                 VarDefineValidator("environment"),
                 lambda x: self.__defaultEnv.update(x)
             ),
+            "fallbackMirror" : BuiltinSetting(
+                self.MIRRORS_SCHEMA,
+                updateFallbackMirror,
+                True
+            ),
             "hooks" : BuiltinSetting(
                 schema.Schema({
                     schema.Optional('preBuildHook') : str,
                     schema.Optional('postBuildHook') : str,
                 }),
                 lambda x: self.__buildHooks.update(x)
+            ),
+            "preMirror" : BuiltinSetting(
+                self.MIRRORS_SCHEMA,
+                updatePreMirror,
+                True
             ),
             "rootFilter" : BuiltinSetting(
                 schema.Schema([str]),
@@ -3883,6 +3901,12 @@ class RecipeSet:
         directory.
         """
         return self.__projectRoot
+
+    def getPreMirrors(self):
+        return self.__preMirrors
+
+    def getFallbackMirrors(self):
+        return self.__fallbackMirrors
 
 
 class YamlCache:
