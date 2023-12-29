@@ -1093,8 +1093,15 @@ svn
    numeric ``revision`` Bob considers the SCM as deterministic.
 
 url
-   The ``url`` SCM naturally needs an ``url`` attribute. If a SHA digest is
-   given with ``digestSHA1``, ``digestSHA256`` and/or ``digestSHA512`` the
+   The ``url`` SCM naturally needs an ``url`` attribute. This might be a proper
+   URL (e.g. ``http://foo.bar/baz.tgz``) or a file name. The supported URL
+   schemas depend on Pythons ``urllib`` module but ``http``, ``https``, ``ftp``
+   and ``file`` should work. If a bare file name is specified, tilde expansion
+   is performed. This replaces the initial ``~`` or ``~user`` by the *user*’s
+   home directory.
+
+   If a SHA digest is
+   given with ``digestSHA1``, ``digestSHA256`` and/or ``digestSHA512``, the
    downloaded file will be checked for a matching hash sum. This also makes the
    URL deterministic for Bob. Otherwise the URL will be checked in each build
    for updates. Based on the file name ending, Bob will try to extract the
