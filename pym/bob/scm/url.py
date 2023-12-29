@@ -290,12 +290,15 @@ class UrlScm(Scm):
             if url.netloc not in ['', 'localhost']:
                 invoker.fail("Bad/unsupported URL: invalid host name: " + url.netloc)
             # Local files: copy only if newer (u), target never is a directory (T)
-            if isYounger(url.path, destination):
-                if os.path.isdir(destination):
-                    invoker.fail("Destination", destination, "is an existing directory!")
-                invoker.trace("<cp>", url.path, workspaceFile)
-                shutil.copy(url.path, destination)
-            return None
+            try:
+                if isYounger(url.path, destination):
+                    if os.path.isdir(destination):
+                        invoker.fail("Destination", destination, "is an existing directory!")
+                    invoker.trace("<cp>", url.path, workspaceFile)
+                    shutil.copy(url.path, destination)
+                return None
+            except OSError as e:
+                return "Failed to copy: " + str(e)
         elif url.scheme in ["http", "https", "ftp"]:
             retries = self.__retries
             while True:
