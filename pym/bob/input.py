@@ -1781,7 +1781,7 @@ class ScmValidator:
         if isinstance(data, dict):
             data = [self.__validateScm(data)]
         elif isinstance(data, list):
-            for i in data: self.__validateScm(i)
+            data = [ self.__validateScm(i) for i in data ]
         else:
             raise schema.SchemaUnexpectedTypeError(
                 'checkoutSCM must be a SCM spec or a list threreof',
