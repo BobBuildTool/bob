@@ -77,6 +77,10 @@ def parseUrl(url):
      * file:///\tmp.txt
     """
 
+    # Do tilde expansion on all platforms. If not applicable or if it fails the
+    # url is left unchanged.
+    url = os.path.expanduser(url)
+
     # Only require some special processing on Windows. Unix URLs just work...
     if sys.platform != "win32":
         return urllib.parse.urlparse(url)
