@@ -2399,6 +2399,52 @@ postBuildHook
 
 .. _configuration-config-rootFilter:
 
+preMirror / fallbackMirror
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: Mirror-entry or list of mirror-entries
+
+Define alternate URLs that are checked either before (``preMirror``) or as a
+fallback (``fallbackMirror``) to the primary URL as defined in the SCM.
+Optionally, these mirrors can be populated during the build process. This is
+primarily useful for local ``preMirror``'s so that the files are available on
+the next build and the original server does not need to be used any more,
+saving build time and bandwidth on the upstream server.
+
+Mirrors are only used for fully deterministic SCMs. The reason is that
+otherwise the URL would not be interchangeable because every server could
+provide a different result. For the same reason it is not possible to mirror
+between different methods e.g., use a HTTP URL SCM mirror for a git SCM. It is
+not possible to independently verify the equivalence of the mirror in such a
+case.
+
+Each mirror entry specifies the SCM type (``scm``), a regular expression to
+match the URL (``url``) and a replacement URL (``mirror``). Optionally, it is
+possible to upload to the mirror (``upload``). Currently only the URL SCM is
+supported for mirrors.
+
+Examples::
+
+    fallbackMirror:
+        - scm: url
+          url: "https?://ftp.gnu.org/(pub/)?gnu/(.*)"
+          mirror: "http://mirror.netcologne.de/gnu/\\2"
+        - scm: url
+          url: "https?://ftp.gnu.org/(pub/)?gnu/(.*)"
+          mirror: "http://www.mirrorservice.org/sites/ftp.gnu.org/gnu/\\2"
+
+A typical mirror configuration for the global user configuration could look
+like the following. It mirrors all remote URLs to a local directory::
+
+    preMirror:
+        scm: url
+        url: "https?://.*/(.*)"
+        mirror: "~/.cache/bob/mirror/\\1"
+        upload: True
+
+This will put all downloaded files into a caching directory of the current
+user.
+
 rootFilter
 ~~~~~~~~~~
 
@@ -2453,7 +2499,7 @@ from sharing such shared packages on the same machine.
 Example::
 
     share:
-        path: ~/.cache/bob
+        path: ~/.cache/bob/pkgs
         quota: "5G"
         autoClean: True
 
