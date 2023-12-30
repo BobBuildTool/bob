@@ -53,6 +53,30 @@ def createHttpHandler(repoPath, args):
                 self.wfile.write(f.read())
                 f.close()
 
+        def do_PUT(self):
+            self.stats.putRequests += 1
+            if args.get('noResponse'):
+                self.close_connection = True
+                return
+            if args.get('retries') > 0:
+                self.send_error(500, "internal error")
+                self.end_headers()
+                args['retries'] = args.get('retries') - 1
+                return
+
+            path = repoPath + self.path
+            if os.path.exists(path) and ("If-None-Match" in self.headers):
+                self.send_response(412)
+                self.end_headers()
+                return
+
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            length = int(self.headers['Content-Length'])
+            with open(path, "wb") as f:
+                f.write(self.rfile.read(length))
+            self.send_response(200)
+            self.end_headers()
+
     return Handler
 
 class HttpServerStats:
@@ -60,6 +84,7 @@ class HttpServerStats:
         self.port = port
         self.headRequests = 0
         self.getRequests = 0
+        self.putRequests = 0
 
 class HttpServerMock():
     def __init__(self, repoPath, noResponse=False, retries=0):
