@@ -149,6 +149,7 @@ class UrlScm(Scm):
         'scm' : 'url',
         'url' : re.compile,
         'mirror' : str,
+        schema.Optional('upload') : bool,
     })
 
     EXTENSIONS = [
@@ -225,7 +226,9 @@ class UrlScm(Scm):
         self.__preMirrors = preMirrors
         self.__fallbackMirrors = fallbackMirrors
         self.__preMirrorsUrls = spec.get("preMirrors")
+        self.__preMirrorsUpload = spec.get("__preMirrorsUpload")
         self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
+        self.__fallbackMirrorsUpload = spec.get("__fallbackMirrorsUpload")
 
     def getProperties(self, isJenkins):
         ret = super().getProperties(isJenkins)
@@ -242,7 +245,9 @@ class UrlScm(Scm):
             'sslVerify' : self.__sslVerify,
             'retries' : self.__retries,
             'preMirrors' : self.__getPreMirrorsUrls(),
+            '__preMirrorsUpload' : self.__getPreMirrorsUpload(),
             'fallbackMirrors' : self.__getFallbackMirrorsUrls(),
+            '__fallbackMirrorsUpload' : self.__getFallbackMirrorsUpload(),
         })
         return ret
 
@@ -250,26 +255,40 @@ class UrlScm(Scm):
         if not self.isDeterministic():
             return []
 
-        return [ re.sub(m['url'], m['mirror'], self.__url)
+        return [ (re.sub(m['url'], m['mirror'], self.__url), m.get('upload', False))
                  for m in mirrors
                  if m['scm'] == 'url' and re.match(m['url'], self.__url) ]
 
     def __getPreMirrorsUrls(self):
         ret = self.__preMirrorsUrls
         if ret is None:
-            ret = self.__preMirrorsUrls = self.__applyMirrors(self.__preMirrors)
+            ret = self.__preMirrorsUrls = [ m[0] for m in self.__applyMirrors(self.__preMirrors) ]
+        return ret
+
+    def __getPreMirrorsUpload(self):
+        ret = self.__preMirrorsUpload
+        if ret is None:
+            ret = self.__preMirrorsUpload = [ m[1] for m in self.__applyMirrors(self.__preMirrors) ]
         return ret
 
     def __getFallbackMirrorsUrls(self):
         ret = self.__fallbackMirrorsUrls
         if ret is None:
-            ret = self.__fallbackMirrorsUrls = self.__applyMirrors(self.__fallbackMirrors)
+            ret = self.__fallbackMirrorsUrls = [ m[0] for m in self.__applyMirrors(self.__fallbackMirrors) ]
+        return ret
+
+    def __getFallbackMirrorsUpload(self):
+        ret = self.__fallbackMirrorsUpload
+        if ret is None:
+            ret = self.__fallbackMirrorsUpload = [ m[1] for m in self.__applyMirrors(self.__fallbackMirrors) ]
         return ret
 
     def _getCandidateUrls(self, invoker):
-        ret = self.__getPreMirrorsUrls() + [self.__url] + self.__getFallbackMirrorsUrls()
+        ret = list(zip(self.__getPreMirrorsUrls(), self.__getPreMirrorsUpload())) + \
+              [(self.__url, False)] + \
+              list(zip(self.__getFallbackMirrorsUrls(), self.__getFallbackMirrorsUpload()))
         try:
-            return [ parseUrl(url) for url in ret ]
+            return [ (parseUrl(url), upload) for (url, upload) in ret ]
         except ValueError as e:
             invoker.fail(str(e))
 
@@ -302,7 +321,7 @@ class UrlScm(Scm):
                 if "content-length" in rsp.info():
                     expected = int(rsp.info()["Content-Length"])
                     if expected > read:
-                        return "Response too short: {} < {} (bytes)".format(read, expected)
+                        return False, "Response too short: {} < {} (bytes)".format(read, expected)
 
                 # Atomically move file to destination. Set explicit mode to
                 # retain Bob 0.15 behaviour.
@@ -312,9 +331,12 @@ class UrlScm(Scm):
 
         except urllib.error.HTTPError as e:
             if e.code != 304:
-                return "HTTP error {}: {}".format(e.code, e.reason)
+                return False, "HTTP error {}: {}".format(e.code, e.reason)
+            else:
+                # HTTP 304 Not modifed -> local file up-to-date
+                return False, None
         except HTTPException as e:
-            return "HTTP error: " + str(e)
+            return False, "HTTP error: " + str(e)
         finally:
             if tmpFileName is not None:
                 os.remove(tmpFileName)
@@ -322,7 +344,7 @@ class UrlScm(Scm):
             # to prevent ugly backtraces when user presses ctrl+c.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-        return None
+        return True, None
 
     async def _fetch(self, invoker, url, workspaceFile, destination):
         if url.scheme in ['', 'file']:
@@ -336,21 +358,23 @@ class UrlScm(Scm):
                         invoker.fail("Destination", destination, "is an existing directory!")
                     invoker.trace("<cp>", url.path, workspaceFile)
                     shutil.copy(url.path, destination)
-                return None
+                    return True, None
+                else:
+                    return False, None
             except OSError as e:
                 err = "Failed to copy: " + str(e)
                 invoker.warn("<cp>", err)
-                return err
+                return False, err
         elif url.scheme in ["http", "https", "ftp"]:
             retries = self.__retries
             while True:
                 invoker.trace("<wget>", url.geturl(), ">",
                         workspaceFile, "retires:", retries)
                 try:
-                    err = await invoker.runInExecutor(UrlScm._download, self, url, destination)
+                    updated, err = await invoker.runInExecutor(UrlScm._download, self, url, destination)
                     if err:
                         if retries == 0:
-                            return err
+                            return False, err
                         else:
                             invoker.warn("<wget>", err)
                     else:
@@ -361,7 +385,83 @@ class UrlScm(Scm):
                 retries -= 1
                 await asyncio.sleep(3)
 
-            return None
+            return updated, None
+        else:
+            invoker.fail("Unsupported URL scheme: " + url.scheme)
+
+    def _upload(self, source, url):
+        headers = {}
+        headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
+        context = None if self.__sslVerify else sslNoVerifyContext()
+
+        try:
+            # Set default signal handler so that KeyboardInterrupt is raised.
+            # Needed to gracefully handle ctrl+c.
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+
+            # First check if the file already exists. Only upload if there is a
+            # reason to do so.
+            req = urllib.request.Request(url=url.geturl(), method='HEAD', headers=headers)
+            try:
+                with urllib.request.urlopen(req, context=context) as rsp:
+                    return None
+            except urllib.error.HTTPError as e:
+                if e.code != 404:
+                    return "{}: HTTP error {}: {}".format(url.geturl(), e.code, e.reason)
+
+            # Ok, HEAD returned a 404. Proceed with upload...
+            with open(source, "rb") as f:
+                headers["Content-Length"] = f.seek(0, os.SEEK_END)
+                f.seek(0)
+                req = urllib.request.Request(url=url.geturl(), method='PUT', data=f, headers=headers)
+                with urllib.request.urlopen(req, context=context):
+                    pass
+
+        except urllib.error.URLError as e:
+            return "{}: {}".format(url.geturl(), e.reason)
+        except HTTPException as e:
+            return "{}: HTTP error: {}".format(url.geturl(), str(e))
+        finally:
+            # Restore signals to default so that Ctrl+C kills process. Needed
+            # to prevent ugly backtraces when user presses ctrl+c.
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+        return None
+
+    async def _put(self, invoker, workspaceFile, source, url):
+        if url.scheme in ['', 'file']:
+            # Verify that host name is empty or "localhost"
+            if url.netloc not in ['', 'localhost']:
+                invoker.fail("Bad/unsupported URL: invalid host name: " + url.netloc)
+            # Local files: copy only if newer (u), target never is a directory
+            # (T). Move atomically to let concurrent other Bob instances see
+            # only fully files.
+            if isYounger(source, url.path):
+                if os.path.isdir(url.path):
+                    invoker.fail("Destination", url.path, "is an existing directory!")
+                invoker.trace("<cp>", workspaceFile, url.path)
+                destDir = os.path.dirname(url.path)
+                os.makedirs(destDir, exist_ok=True)
+                with tempfile.TemporaryDirectory(dir=destDir) as tmpDir:
+                    tmpFileName = os.path.join(tmpDir, os.path.basename(url.path))
+                    shutil.copy(source, tmpFileName)
+                    os.replace(tmpFileName, url.path)
+        elif url.scheme in ["http", "https", "ftp"]:
+            retries = self.__retries
+            while True:
+                invoker.trace("<wput>", workspaceFile, ">", url.geturl(), "retires:", retries)
+                try:
+                    err = await invoker.runInExecutor(UrlScm._upload, self, source, url)
+                    if err:
+                        if retries == 0:
+                            invoker.fail(err)
+                    else:
+                        break
+                except (concurrent.futures.CancelledError,
+                        concurrent.futures.process.BrokenProcessPool):
+                    invoker.fail("Upload interrupted!")
+                retries -= 1
+                await asyncio.sleep(3)
         else:
             invoker.fail("Unsupported URL scheme: " + url.scheme)
 
@@ -388,12 +488,15 @@ class UrlScm(Scm):
         # Download only if necessary
         if not self.isDeterministic() or not os.path.isfile(destination):
             urls = self._getCandidateUrls(invoker)
-            for url in urls:
-                err = await self._fetch(invoker, url, workspaceFile, destination)
+            for url, upload in urls:
+                downloaded, err = await self._fetch(invoker, url, workspaceFile, destination)
                 if err is None:
                     break
             else:
                 invoker.fail(err)
+        else:
+            urls = []
+            downloaded = False
 
         # Always verify file hashes
         if self.__digestSha1:
@@ -411,6 +514,13 @@ class UrlScm(Scm):
             d = hashFile(destination, hashlib.sha512).hex()
             if d != self.__digestSha512:
                 invoker.fail("SHA512 digest did not match! expected:", self.__digestSha512, "got:", d)
+
+        # Upload to mirrors that requested it. This is only done for stable
+        # files, though.
+        if downloaded:
+            for url, upload in urls:
+                if upload:
+                    await self._put(invoker, workspaceFile, destination, url)
 
         # Run optional extractors
         extractors = self.__getExtractors()
