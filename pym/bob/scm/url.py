@@ -145,6 +145,12 @@ class UrlScm(Scm):
 
     SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
 
+    MIRRORS_SCHEMA = schema.Schema({
+        'scm' : 'url',
+        'url' : re.compile,
+        'mirror' : str,
+    })
+
     EXTENSIONS = [
         (".tar.gz",    "tar"),
         (".tar.xz",    "tar"),
@@ -182,7 +188,8 @@ class UrlScm(Scm):
         ],
     }
 
-    def __init__(self, spec, overrides=[], tidy=None, stripUser=None):
+    def __init__(self, spec, overrides=[], tidy=None, stripUser=None,
+                 preMirrors=[], fallbackMirrors=[]):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
@@ -215,6 +222,10 @@ class UrlScm(Scm):
         self.__sslVerify = spec.get('sslVerify', True)
         self.__stripUser = stripUser
         self.__retries = spec.get("retries", 0)
+        self.__preMirrors = preMirrors
+        self.__fallbackMirrors = fallbackMirrors
+        self.__preMirrorsUrls = spec.get("preMirrors")
+        self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
 
     def getProperties(self, isJenkins):
         ret = super().getProperties(isJenkins)
@@ -230,8 +241,37 @@ class UrlScm(Scm):
             'stripComponents' : self.__strip,
             'sslVerify' : self.__sslVerify,
             'retries' : self.__retries,
+            'preMirrors' : self.__getPreMirrorsUrls(),
+            'fallbackMirrors' : self.__getFallbackMirrorsUrls(),
         })
         return ret
+
+    def __applyMirrors(self, mirrors):
+        if not self.isDeterministic():
+            return []
+
+        return [ re.sub(m['url'], m['mirror'], self.__url)
+                 for m in mirrors
+                 if m['scm'] == 'url' and re.match(m['url'], self.__url) ]
+
+    def __getPreMirrorsUrls(self):
+        ret = self.__preMirrorsUrls
+        if ret is None:
+            ret = self.__preMirrorsUrls = self.__applyMirrors(self.__preMirrors)
+        return ret
+
+    def __getFallbackMirrorsUrls(self):
+        ret = self.__fallbackMirrorsUrls
+        if ret is None:
+            ret = self.__fallbackMirrorsUrls = self.__applyMirrors(self.__fallbackMirrors)
+        return ret
+
+    def _getCandidateUrls(self, invoker):
+        ret = self.__getPreMirrorsUrls() + [self.__url] + self.__getFallbackMirrorsUrls()
+        try:
+            return [ parseUrl(url) for url in ret ]
+        except ValueError as e:
+            invoker.fail(str(e))
 
     def _download(self, url, destination):
         headers = {}
@@ -298,7 +338,9 @@ class UrlScm(Scm):
                     shutil.copy(url.path, destination)
                 return None
             except OSError as e:
-                return "Failed to copy: " + str(e)
+                err = "Failed to copy: " + str(e)
+                invoker.warn("<cp>", err)
+                return err
         elif url.scheme in ["http", "https", "ftp"]:
             retries = self.__retries
             while True:
@@ -309,6 +351,8 @@ class UrlScm(Scm):
                     if err:
                         if retries == 0:
                             return err
+                        else:
+                            invoker.warn("<wget>", err)
                     else:
                         break
                 except (concurrent.futures.CancelledError,
@@ -343,13 +387,12 @@ class UrlScm(Scm):
 
         # Download only if necessary
         if not self.isDeterministic() or not os.path.isfile(destination):
-            try:
-                url = parseUrl(self.__url)
-            except ValueError as e:
-                invoker.fail(str(e))
-
-            err = await self._fetch(invoker, url, workspaceFile, destination)
-            if err is not None:
+            urls = self._getCandidateUrls(invoker)
+            for url in urls:
+                err = await self._fetch(invoker, url, workspaceFile, destination)
+                if err is None:
+                    break
+            else:
                 invoker.fail(err)
 
         # Always verify file hashes

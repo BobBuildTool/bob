@@ -59,6 +59,8 @@ def getScm(spec, overrides=[], recipeSet=None):
         return CvsScm(spec, overrides)
     elif scm == "url":
         return UrlScm(spec, overrides, recipeSet and recipeSet.getPolicy('tidyUrlScm'),
-            recipeSet and recipeSet.getPolicy('scmIgnoreUser'))
+            recipeSet and recipeSet.getPolicy('scmIgnoreUser'),
+            recipeSet and recipeSet.getPreMirrors(),
+            recipeSet and recipeSet.getFallbackMirrors())
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))

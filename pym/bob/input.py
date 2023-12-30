@@ -3024,6 +3024,7 @@ class RecipeSet:
     })
 
     MIRRORS_SCHEMA = ScmValidator({
+        'url' : UrlScm.MIRRORS_SCHEMA,
     })
 
     _ignoreCmdConfig = False
