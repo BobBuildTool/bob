@@ -33,10 +33,12 @@ def createHttpHandler(repoPath, args):
             return f
 
         def do_HEAD(self):
+            self.stats.headRequests += 1
             f = self.getCommon()
             if f: f.close()
 
         def do_GET(self):
+            self.stats.getRequests += 1
             if args.get('noResponse'):
                 self.close_connection = True
                 return
@@ -53,15 +55,24 @@ def createHttpHandler(repoPath, args):
 
     return Handler
 
+class HttpServerStats:
+    def __init__(self, port):
+        self.port = port
+        self.headRequests = 0
+        self.getRequests = 0
+
 class HttpServerMock():
     def __init__(self, repoPath, noResponse=False, retries=0):
-        self.server = HTTPServer(('localhost', 0), createHttpHandler(repoPath,
-            {'noResponse' : noResponse, 'retries' : retries }))
+        self.handler = createHttpHandler(repoPath,
+            {'noResponse' : noResponse, 'retries' : retries })
+        self.server = HTTPServer(('localhost', 0), self.handler)
 
     def __enter__(self):
         self.thread = Thread(target=self.server.serve_forever)
         self.thread.start()
-        return self.server.server_address[1]
+        stats = HttpServerStats(self.server.server_address[1])
+        self.handler.stats = stats
+        return stats
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.server.shutdown()

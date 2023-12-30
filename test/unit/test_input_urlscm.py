@@ -238,9 +238,9 @@ class TestDownloads(UrlScmTest, TestCase):
 
     def testDownload(self):
         """Simple download via HTTP"""
-        with HttpServerMock(self.dir) as port:
+        with HttpServerMock(self.dir) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(port),
+                "url" : "http://localhost:{}/test.txt".format(srv.port),
             })
             with tempfile.TemporaryDirectory() as workspace:
                 self.invokeScm(workspace, scm)
@@ -248,9 +248,9 @@ class TestDownloads(UrlScmTest, TestCase):
 
     def testDownloadAgain(self):
         """Download existing file again. Should not transfer the file again"""
-        with HttpServerMock(self.dir) as port:
+        with HttpServerMock(self.dir) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(port),
+                "url" : "http://localhost:{}/test.txt".format(srv.port),
             })
             with tempfile.TemporaryDirectory() as workspace:
                 fn = os.path.join(workspace, "test.txt")
@@ -267,9 +267,9 @@ class TestDownloads(UrlScmTest, TestCase):
 
     def testDownloadRetry(self):
         """Test HTTP retry"""
-        with HttpServerMock(self.dir, retries=1) as port:
+        with HttpServerMock(self.dir, retries=1) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(port),
+                "url" : "http://localhost:{}/test.txt".format(srv.port),
                 "retries" : 2
             })
             with tempfile.TemporaryDirectory() as workspace:
@@ -278,9 +278,9 @@ class TestDownloads(UrlScmTest, TestCase):
 
     def testDownloadRetryFailing(self):
         """Test HTTP retry"""
-        with HttpServerMock(self.dir, retries=2) as port:
+        with HttpServerMock(self.dir, retries=2) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(port),
+                "url" : "http://localhost:{}/test.txt".format(srv.port),
                 "retries" : 1
             })
             with tempfile.TemporaryDirectory() as workspace:
@@ -290,9 +290,9 @@ class TestDownloads(UrlScmTest, TestCase):
 
     def testDownloadNotExisting(self):
         """Try to download an invalid file -> 404"""
-        with HttpServerMock(self.dir) as port:
+        with HttpServerMock(self.dir) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/invalid.txt".format(port),
+                "url" : "http://localhost:{}/invalid.txt".format(srv.port),
             })
             with tempfile.TemporaryDirectory() as workspace:
                 with self.assertRaises(InvocationError):
@@ -300,9 +300,9 @@ class TestDownloads(UrlScmTest, TestCase):
 
     def testNoResponse(self):
         """Remote server does not send a response."""
-        with HttpServerMock(self.dir, noResponse=True) as port:
+        with HttpServerMock(self.dir, noResponse=True) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(port),
+                "url" : "http://localhost:{}/test.txt".format(srv.port),
             })
             with tempfile.TemporaryDirectory() as workspace:
                 with self.assertRaises(InvocationError):
