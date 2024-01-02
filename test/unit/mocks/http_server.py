@@ -24,6 +24,7 @@ def createHttpHandler(repoPath, args):
             if "If-Modified-Since" in self.headers:
                 self.send_response(HTTPStatus.NOT_MODIFIED)
                 self.end_headers()
+                f.close()
                 return None
 
             self.send_response(200)
@@ -40,10 +41,11 @@ def createHttpHandler(repoPath, args):
         def do_GET(self):
             self.stats.getRequests += 1
             if args.get('noResponse'):
+                self.log_error("GET: noResponse: drop connection!")
                 self.close_connection = True
                 return
             if args.get('retries') > 0:
-                self.send_error(500, "internal error")
+                self.send_error(500, "internal error (retries={})".format(args['retries']))
                 self.end_headers()
                 args['retries'] = args.get('retries') - 1
                 return
@@ -56,6 +58,7 @@ def createHttpHandler(repoPath, args):
         def do_PUT(self):
             self.stats.putRequests += 1
             if args.get('noResponse'):
+                self.log_error("PUT: noResponse: drop connection!")
                 self.close_connection = True
                 return
             if args.get('retries') > 0:

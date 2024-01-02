@@ -6,7 +6,7 @@
 from binascii import hexlify
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase, skipIf
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import asyncio
 import base64
 import http.server
@@ -21,7 +21,7 @@ import sys
 
 from bob.archive import DummyArchive, SimpleHttpArchive, getArchiver
 from bob.errors import BuildError
-from bob.utils import runInEventLoop
+from bob.utils import runInEventLoop, getProcessPoolExecutor
 
 DOWNLOAD_ARITFACT = b'\x00'*20
 NOT_EXISTS_ARTIFACT = b'\x01'*20
@@ -32,6 +32,17 @@ BROKEN_ARTIFACT = b'\xba\xdc\x0f\xfe'*5
 
 UPLOAD1_ARTIFACT = b'\x10'*20
 UPLOAD2_ARTIFACT = b'\x11'*20
+
+class DummyRecipeSet:
+    def __init__(self, archive, whiteList=[]):
+        self.__archive = archive
+        self.__whiteList = whiteList
+    def archiveSpec(self):
+        return self.__archive
+    def envWhiteList(self):
+        return set(self.__whiteList)
+    def getPolicy(self, policy):
+        return None
 
 class DummyPackage:
     def getName(self):
@@ -131,21 +142,13 @@ class BaseTester:
 
         # We create a multi-archive with a dummy backend and the real one. This
         # way we implicitly test the MultiArchive too.
-        recipes = MagicMock()
-        recipes.archiveSpec = MagicMock()
-        recipes.archiveSpec.return_value = [ { 'backend' : 'none' }, spec ]
-        recipes.envWhiteList = MagicMock()
-        recipes.envWhiteList.return_value = []
+        recipes = DummyRecipeSet([ { 'backend' : 'none' }, spec ])
         return getArchiver(recipes)
 
     def __getSingleArchiveInstance(self, spec):
         # let concrete class amend properties
         self._setArchiveSpec(spec)
-        recipes = MagicMock()
-        recipes.archiveSpec = MagicMock()
-        recipes.archiveSpec.return_value = spec
-        recipes.envWhiteList = MagicMock()
-        recipes.envWhiteList.return_value = []
+        recipes = DummyRecipeSet(spec)
         return getArchiver(recipes)
 
     def setUp(self):
@@ -175,7 +178,10 @@ class BaseTester:
         with open(name, "wb") as f:
             f.write(b'\x00')
 
+        self.executor = getProcessPoolExecutor()
+
     def tearDown(self):
+        self.executor.shutdown()
         self.repo.cleanup()
 
     # standard tests for options
@@ -292,10 +298,10 @@ class BaseTester:
     def testDisabledLocal(self):
         """Disabled local must not do anything"""
         a = self.__getArchiveInstance({})
-        self.assertFalse(run(a.downloadPackage(DummyStep(), b'\xcc'*20, "unused", "unused")))
-        self.assertFalse(run(a.uploadPackage(DummyStep(), b'\xcc'*20, "unused", "unused")))
-        self.assertEqual(run(a.downloadLocalLiveBuildId(DummyStep(), b'\xcc'*20)), None)
-        run(a.uploadLocalLiveBuildId(DummyStep(), b'\xcc'*20, b'\xcc'))
+        self.assertFalse(run(a.downloadPackage(DummyStep(), b'\xcc'*20, "unused", "unused", executor=self.executor)))
+        self.assertFalse(run(a.uploadPackage(DummyStep(), b'\xcc'*20, "unused", "unused", executor=self.executor)))
+        self.assertEqual(run(a.downloadLocalLiveBuildId(DummyStep(), b'\xcc'*20, executor=self.executor)), None)
+        run(a.uploadLocalLiveBuildId(DummyStep(), b'\xcc'*20, b'\xcc', executor=self.executor))
 
     def __testDownload(self, archive):
         self.assertTrue(archive.canDownload())
@@ -303,24 +309,24 @@ class BaseTester:
         with TemporaryDirectory() as tmp:
             audit = os.path.join(tmp, "audit.json.gz")
             content = os.path.join(tmp, "workspace")
-            self.assertTrue(run(archive.downloadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content)))
+            self.assertTrue(run(archive.downloadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content, executor=self.executor)))
             self.__testWorkspace(audit, content)
-            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), DOWNLOAD_ARITFACT)), b'\x00'*20)
+            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), DOWNLOAD_ARITFACT, executor=self.executor)), b'\x00'*20)
 
         # non-existent and erro cases
         with TemporaryDirectory() as tmp:
             audit = os.path.join(tmp, "audit.json.gz")
             content = os.path.join(tmp, "workspace")
-            self.assertFalse(run(archive.downloadPackage(DummyStep(), NOT_EXISTS_ARTIFACT, audit, content)))
-            self.assertFalse(run(archive.downloadPackage(DummyStep(), ERROR_DOWNLOAD_ARTIFACT, audit, content)))
-            self.assertFalse(run(archive.downloadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content)))
-            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), NOT_EXISTS_ARTIFACT)), None)
-            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), ERROR_DOWNLOAD_ARTIFACT)), None)
-            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT)), None)
+            self.assertFalse(run(archive.downloadPackage(DummyStep(), NOT_EXISTS_ARTIFACT, audit, content, executor=self.executor)))
+            self.assertFalse(run(archive.downloadPackage(DummyStep(), ERROR_DOWNLOAD_ARTIFACT, audit, content, executor=self.executor)))
+            self.assertFalse(run(archive.downloadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content, executor=self.executor)))
+            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), NOT_EXISTS_ARTIFACT, executor=self.executor)), None)
+            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), ERROR_DOWNLOAD_ARTIFACT, executor=self.executor)), None)
+            self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, executor=self.executor)), None)
             with self.assertRaises(BuildError):
-                run(archive.downloadPackage(DummyStep(), BROKEN_ARTIFACT, audit, content))
+                run(archive.downloadPackage(DummyStep(), BROKEN_ARTIFACT, audit, content, executor=self.executor))
             with self.assertRaises(BuildError):
-                run(archive.downloadPackage(DummyStep(), WRONG_VERSION_ARTIFACT, audit, content))
+                run(archive.downloadPackage(DummyStep(), WRONG_VERSION_ARTIFACT, audit, content, executor=self.executor))
 
     def __testUploadNormal(self, archive):
         self.assertTrue(archive.canUpload())
@@ -336,30 +342,30 @@ class BaseTester:
                 f.write(b"DATA")
 
             # upload
-            run(archive.uploadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content)) # exists alread
+            run(archive.uploadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content, executor=self.executor)) # exists alread
 
             bid = UPLOAD1_ARTIFACT
-            run(archive.uploadPackage(DummyStep(), bid, audit, content))
+            run(archive.uploadPackage(DummyStep(), bid, audit, content, executor=self.executor))
             self.__testArtifact(bid)
 
             bid = UPLOAD2_ARTIFACT
-            run(archive.uploadPackage(DummyStep(), bid, audit, content))
+            run(archive.uploadPackage(DummyStep(), bid, audit, content, executor=self.executor))
             self.__testArtifact(bid)
 
             # Provoke upload failure
             with self.assertRaises(BuildError):
-                run(archive.uploadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content))
+                run(archive.uploadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content, executor=self.executor))
 
         # regular live-build-id uploads
-        run(archive.uploadLocalLiveBuildId(DummyStep(), DOWNLOAD_ARITFACT, b'\x00')) # exists already
-        run(archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD1_ARTIFACT, b'\x00'))
+        run(archive.uploadLocalLiveBuildId(DummyStep(), DOWNLOAD_ARITFACT, b'\x00', executor=self.executor)) # exists already
+        run(archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD1_ARTIFACT, b'\x00', executor=self.executor))
         self.__testBuildId(UPLOAD1_ARTIFACT, b'\x00')
-        run(archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD2_ARTIFACT, b'\x00'))
+        run(archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD2_ARTIFACT, b'\x00', executor=self.executor))
         self.__testBuildId(UPLOAD2_ARTIFACT, b'\x00')
 
         # provoke upload errors
         with self.assertRaises(BuildError):
-            run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00'))
+            run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00', executor=self.executor))
 
     def __testUploadNoFail(self, archive):
         self.assertTrue(archive.canUpload())
@@ -375,10 +381,10 @@ class BaseTester:
                 f.write(b"DATA")
 
             # must not throw
-            run(archive.uploadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content))
+            run(archive.uploadPackage(DummyStep(), ERROR_UPLOAD_ARTIFACT, audit, content, executor=self.executor))
 
         # also live-build-id upload errors must not throw with nofail
-        run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00'))
+        run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00', executor=self.executor))
 
     def testDownloadLocal(self):
         """Local download tests"""
@@ -427,10 +433,10 @@ class BaseTester:
 
         archive = self.__getSingleArchiveInstance({})
 
-        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
-        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
-        run(archive.uploadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
-        run(archive.uploadLocalLiveBuildId(DummyStep(), b'\x00'*20, b'\x00'*20))
+        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused", executor=self.executor))
+        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20, executor=self.executor)), None)
+        run(archive.uploadPackage(DummyStep(), b'\x00'*20, "unused", "unused", executor=self.executor))
+        run(archive.uploadLocalLiveBuildId(DummyStep(), b'\x00'*20, b'\x00'*20, executor=self.executor))
 
 
 class TestDummyArchive(TestCase):
@@ -559,8 +565,8 @@ class TestHttpArchive(BaseTester, TestCase):
         archive.wantUploadLocal(True)
 
         # Local
-        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
-        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
+        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused", executor=self.executor))
+        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20, executor=self.executor)), None)
 
 class TestHttpBasicAuthArchive(BaseTester, TestCase):
 
@@ -595,8 +601,8 @@ class TestHttpBasicAuthArchive(BaseTester, TestCase):
         archive.wantDownloadLocal(True)
         archive.wantUploadLocal(True)
 
-        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused"))
-        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20)), None)
+        run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused", executor=self.executor))
+        self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20, executor=self.executor)), None)
 
 @skipIf(sys.platform.startswith("win"), "requires POSIX platform")
 class TestCustomArchive(BaseTester, TestCase):

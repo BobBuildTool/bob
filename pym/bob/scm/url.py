@@ -362,9 +362,7 @@ class UrlScm(Scm):
                 else:
                     return False, None
             except OSError as e:
-                err = "Failed to copy: " + str(e)
-                invoker.warn("<cp>", err)
-                return False, err
+                return False, "Failed to copy: " + str(e)
         elif url.scheme in ["http", "https", "ftp"]:
             retries = self.__retries
             while True:
@@ -376,7 +374,7 @@ class UrlScm(Scm):
                         if retries == 0:
                             return False, err
                         else:
-                            invoker.warn("<wget>", err)
+                            invoker.warn(err)
                     else:
                         break
                 except (concurrent.futures.CancelledError,
@@ -488,7 +486,11 @@ class UrlScm(Scm):
         # Download only if necessary
         if not self.isDeterministic() or not os.path.isfile(destination):
             urls = self._getCandidateUrls(invoker)
+            err = None
             for url, upload in urls:
+                if err:
+                    # Output previously failed download attempt as warning
+                    invoker.warn(err)
                 downloaded, err = await self._fetch(invoker, url, workspaceFile, destination)
                 if err is None:
                     break
