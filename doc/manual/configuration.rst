@@ -2197,6 +2197,21 @@ the anonymous access to the container can be used like this::
 The ``flags: [download]`` makes sure that Bob does not try to upload artifacts
 in case other backends are configured too.
 
+.. _configuration-config-archive-prepend-append:
+
+archive{Prepend,Append}
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: Dictionary or list of dictionaries
+
+These keys receive the same archive specification(s) like the :ref:`configuration-config-archive`
+keyword. Compared to the ``archive`` key, which replaces the currently configured
+archives, the ``archivePrepend`` key prepends the given archive(s) to the current list and
+``archiveAppend`` appends to it. See :ref:`configuration-config-archive` for more details.
+
+It is usually advisable to use these keywords instead of ``archive`` to enable
+interoperability between projects, layers and the local user configuration.
+
 .. _configuration-config-scmDefaults:
 
 scmDefaults
