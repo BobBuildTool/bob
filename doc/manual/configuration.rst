@@ -2042,7 +2042,7 @@ invariants of the build. It is no error if any variable specified in this list
 is not set. By default the following environment variables are passed to all
 scripts:
 
-* Linux and other POSIX platforms: ``TERM``, ``SHELL``, ``USER``, ``HOME``
+* Linux and other POSIX platforms: ``PATH``, ``TERM``, ``SHELL``, ``USER``, ``HOME``
 * Windows: ``ALLUSERSPROFILE``, ``APPDATA``, ``COMMONPROGRAMFILES``,
   ``COMMONPROGRAMFILES(X86)``, ``COMSPEC``, ``HOMEDRIVE``, ``HOMEPATH``,
   ``LOCALAPPDATA``, ``PATH``, ``PATHEXT``, ``PROGRAMDATA``, ``PROGRAMFILES``,
