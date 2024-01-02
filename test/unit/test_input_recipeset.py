@@ -229,6 +229,18 @@ class TestUserConfig(RecipesTmp, TestCase):
         self.assertEqual(pruneBuiltin(recipeSet.defaultEnv()),
             {'FOO' : 'default', 'BAR' : 'lower', 'BAZ' : 'higher' })
 
+    def testWhitelistRemove(self):
+        """Test whitelistRemove key"""
+        self.writeDefault({
+                "whitelist" : [ "FOO", "BAR" ],
+                "whitelistRemove" : [ "BAR", "PATH" ],
+            })
+        recipeSet = RecipeSet()
+        recipeSet.parse()
+        self.assertIn("FOO", recipeSet.envWhiteList())
+        self.assertNotIn("BAR", recipeSet.envWhiteList())
+        self.assertNotIn("PATH", recipeSet.envWhiteList())
+
 
 class TestProjectConfiguration(RecipesTmp, TestCase):
     def testInvalid(self):
