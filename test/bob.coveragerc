@@ -3,6 +3,7 @@ parallel = True
 source = $COVERAGE_SOURCES
 data_file = $COVERAGE_OUTPUT
 concurrency = multiprocessing
+disable_warnings = no-data-collected
 
 [report]
 exclude_lines =
