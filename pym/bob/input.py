@@ -3171,7 +3171,11 @@ class RecipeSet:
         def appendArchive(x): self.__archive.extend(x)
         def prependArchive(x): self.__archive[0:0] = x
         def updateArchive(x): self.__archive = x
+        def appendPreMirror(x) : self.__preMirrors.extend(x)
+        def prependPreMirror(x) : self.__preMirrors[0:0] = x
         def updatePreMirror(x) : self.__preMirrors = x
+        def appendFallbackMirror(x) : self.__fallbackMirrors.extend(x)
+        def prependFallbackMirror(x) : self.__fallbackMirrors[0:0] = x
         def updateFallbackMirror(x) : self.__fallbackMirrors = x
 
         def updateWhiteList(x):
@@ -3215,11 +3219,9 @@ class RecipeSet:
                 VarDefineValidator("environment"),
                 lambda x: self.__defaultEnv.update(x)
             ),
-            "fallbackMirror" : BuiltinSetting(
-                self.MIRRORS_SCHEMA,
-                updateFallbackMirror,
-                True
-            ),
+            "fallbackMirror"        : BuiltinSetting(self.MIRRORS_SCHEMA, updateFallbackMirror, True),
+            "fallbackMirrorAppend"  : BuiltinSetting(self.MIRRORS_SCHEMA, appendFallbackMirror, True, 100),
+            "fallbackMirrorPrepend" : BuiltinSetting(self.MIRRORS_SCHEMA, prependFallbackMirror, True, 100),
             "hooks" : BuiltinSetting(
                 schema.Schema({
                     schema.Optional('preBuildHook') : str,
@@ -3227,11 +3229,9 @@ class RecipeSet:
                 }),
                 lambda x: self.__buildHooks.update(x)
             ),
-            "preMirror" : BuiltinSetting(
-                self.MIRRORS_SCHEMA,
-                updatePreMirror,
-                True
-            ),
+            "preMirror"        : BuiltinSetting(self.MIRRORS_SCHEMA, updatePreMirror, True),
+            "preMirrorAppend"  : BuiltinSetting(self.MIRRORS_SCHEMA, appendPreMirror, True, 100),
+            "preMirrorPrepend" : BuiltinSetting(self.MIRRORS_SCHEMA, prependPreMirror, True, 100),
             "rootFilter" : BuiltinSetting(
                 schema.Schema([str]),
                 lambda x: self.__rootFilter.extend(x)
