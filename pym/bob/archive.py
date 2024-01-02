@@ -1182,7 +1182,13 @@ def getArchiver(recipes, jenkins=None):
             archiveSpec = [jenkins] + archiveSpec
         else:
             archiveSpec = [jenkins, archiveSpec]
+
     if isinstance(archiveSpec, list):
-        return MultiArchive([ getSingleArchiver(recipes, i) for i in archiveSpec ])
+        if len(archiveSpec) == 0:
+            return DummyArchive()
+        elif len(archiveSpec) == 1:
+            return getSingleArchiver(recipes, archiveSpec[0])
+        else:
+            return MultiArchive([ getSingleArchiver(recipes, i) for i in archiveSpec ])
     else:
         return getSingleArchiver(recipes, archiveSpec)

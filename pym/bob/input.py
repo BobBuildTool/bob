@@ -284,6 +284,8 @@ class PluginState:
 
 
 class PluginSetting:
+    priority = 50
+
     """Base class for plugin settings.
 
     Plugins can be configured in the user configuration of a project. The
@@ -365,13 +367,24 @@ def pluginStringFunCompat(oldFun):
     return newFun
 
 
+class SentinelSetting(PluginSetting):
+    """Sentinel for "include" and "require" settings"""
+
+    def __init__(self):
+        pass
+
+    def merge(self, other):
+        pass
+
+
 class BuiltinSetting(PluginSetting):
     """Tiny wrapper to define Bob built-in settings"""
 
-    def __init__(self, schema, updater, mangle = False):
+    def __init__(self, schema, updater, mangle = False, priority=50):
         self.__schema = schema
         self.__updater = updater
         self.__mangle = mangle
+        self.priority = priority
 
     def merge(self, other):
         self.__updater(self.__schema.validate(other) if self.__mangle else other)
@@ -2922,8 +2935,14 @@ class ArchiveValidator:
         }
 
     def validate(self, data):
-        self.__validTypes.validate(data)
-        return self.__backends[data['backend']].validate(data)
+        if isinstance(data, dict):
+            self.__validTypes.validate(data)
+            return [ self.__backends[data['backend']].validate(data) ]
+        elif isinstance(data, list):
+            return [ self.__validTypes.validate(i) and self.__backends[i['backend']].validate(i)
+                     for i in data ]
+        else:
+            raise schema.SchemaError(None, "Invalid archive specification!")
 
 class MountValidator:
     def __init__(self):
@@ -3047,7 +3066,7 @@ class RecipeSet:
         self.__aliases = {}
         self.__recipes = {}
         self.__classes = {}
-        self.__archive = { "backend" : "none" }
+        self.__archive = []
         self.__rootFilter = []
         self.__scmOverrides = []
         self.__hooks = {}
@@ -3149,8 +3168,14 @@ class RecipeSet:
         self.__preMirrors = []
         self.__fallbackMirrors = []
 
+        def appendArchive(x): self.__archive.extend(x)
+        def prependArchive(x): self.__archive[0:0] = x
         def updateArchive(x): self.__archive = x
+        def appendPreMirror(x) : self.__preMirrors.extend(x)
+        def prependPreMirror(x) : self.__preMirrors[0:0] = x
         def updatePreMirror(x) : self.__preMirrors = x
+        def appendFallbackMirror(x) : self.__fallbackMirrors.extend(x)
+        def prependFallbackMirror(x) : self.__fallbackMirrors[0:0] = x
         def updateFallbackMirror(x) : self.__fallbackMirrors = x
 
         def updateWhiteList(x):
@@ -3161,18 +3186,27 @@ class RecipeSet:
             else:
                 self.__whiteList.update(x)
 
+        def removeWhiteList(x):
+            if self.__platform == "win32":
+                # Convert to upper case on Windows. The Python interpreter does that
+                # too and the variables are considered case insensitive by Windows.
+                self.__whiteList.difference_update(i.upper() for i in x)
+            else:
+                self.__whiteList.difference_update(x)
+
+        archiveValidator = ArchiveValidator()
+
         self.__settings = {
+            "include" : SentinelSetting(),
+            "require" : SentinelSetting(),
+
             "alias" : BuiltinSetting(
                 schema.Schema({ schema.Regex(r'^[0-9A-Za-z_-]+$') : str }),
                 lambda x: self.__aliases.update(x)
             ),
-            "archive" : BuiltinSetting(
-                schema.Or(
-                    ArchiveValidator(),
-                    schema.Schema( [ArchiveValidator()] )
-                ),
-                updateArchive
-            ),
+            "archive" : BuiltinSetting(archiveValidator, updateArchive, True),
+            "archiveAppend" : BuiltinSetting(archiveValidator, appendArchive, True, 100),
+            "archivePrepend" : BuiltinSetting(archiveValidator, prependArchive, True, 100),
             "command" : BuiltinSetting(
                 schema.Schema({
                     schema.Optional('dev') : self.BUILD_DEV_SCHEMA,
@@ -3185,11 +3219,9 @@ class RecipeSet:
                 VarDefineValidator("environment"),
                 lambda x: self.__defaultEnv.update(x)
             ),
-            "fallbackMirror" : BuiltinSetting(
-                self.MIRRORS_SCHEMA,
-                updateFallbackMirror,
-                True
-            ),
+            "fallbackMirror"        : BuiltinSetting(self.MIRRORS_SCHEMA, updateFallbackMirror, True),
+            "fallbackMirrorAppend"  : BuiltinSetting(self.MIRRORS_SCHEMA, appendFallbackMirror, True, 100),
+            "fallbackMirrorPrepend" : BuiltinSetting(self.MIRRORS_SCHEMA, prependFallbackMirror, True, 100),
             "hooks" : BuiltinSetting(
                 schema.Schema({
                     schema.Optional('preBuildHook') : str,
@@ -3197,11 +3229,9 @@ class RecipeSet:
                 }),
                 lambda x: self.__buildHooks.update(x)
             ),
-            "preMirror" : BuiltinSetting(
-                self.MIRRORS_SCHEMA,
-                updatePreMirror,
-                True
-            ),
+            "preMirror"        : BuiltinSetting(self.MIRRORS_SCHEMA, updatePreMirror, True),
+            "preMirrorAppend"  : BuiltinSetting(self.MIRRORS_SCHEMA, appendPreMirror, True, 100),
+            "preMirrorPrepend" : BuiltinSetting(self.MIRRORS_SCHEMA, prependPreMirror, True, 100),
             "rootFilter" : BuiltinSetting(
                 schema.Schema([str]),
                 lambda x: self.__rootFilter.extend(x)
@@ -3259,6 +3289,11 @@ class RecipeSet:
             "whitelist" : BuiltinSetting(
                 schema.Schema([ schema.Regex(r'^[^=]*$') ]),
                 updateWhiteList
+            ),
+            "whitelistRemove" : BuiltinSetting(
+                schema.Schema([ schema.Regex(r'^[^=]*$') ]),
+                removeWhiteList,
+                priority=100
             ),
         }
 
@@ -3666,8 +3701,9 @@ class RecipeSet:
         if relativeIncludes is None:
             relativeIncludes = self.getPolicy("relativeIncludes")
         cfg = self.loadYaml(fileName, self.__userConfigSchema)
-        for (name, value) in cfg.items():
-            if name != "include" and name != "require": self.__settings[name].merge(value)
+        # merge settings by priority
+        for (name, value) in sorted(cfg.items(), key=lambda i: self.__settings[i[0]].priority):
+            self.__settings[name].merge(value)
         for p in cfg.get("require", []):
             p = (os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p) + ".yaml"
             if not os.path.isfile(p):

@@ -229,6 +229,89 @@ class TestUserConfig(RecipesTmp, TestCase):
         self.assertEqual(pruneBuiltin(recipeSet.defaultEnv()),
             {'FOO' : 'default', 'BAR' : 'lower', 'BAZ' : 'higher' })
 
+    def testWhitelistRemove(self):
+        """Test whitelistRemove key"""
+        self.writeDefault({
+                "whitelist" : [ "FOO", "BAR" ],
+                "whitelistRemove" : [ "BAR", "PATH" ],
+            })
+        recipeSet = RecipeSet()
+        recipeSet.parse()
+        self.assertIn("FOO", recipeSet.envWhiteList())
+        self.assertNotIn("BAR", recipeSet.envWhiteList())
+        self.assertNotIn("PATH", recipeSet.envWhiteList())
+
+    def testArchiveAppendPrepend(self):
+        """Test mirrorAppend/Prepend keywords"""
+        self.writeDefault(
+            {
+                "archivePrepend" : [
+                    {
+                        "backend" : "file",
+                        "path" : "/foo/bar",
+                    },
+                    {
+                        "backend" : "http",
+                        "url" : "http://bob.test/prepend",
+                    },
+                ],
+                "archive" : {
+                    "backend" : "http",
+                    "url" : "http://bob.test/main",
+                },
+                "archiveAppend" : {
+                    "backend" : "http",
+                    "url" : "http://bob.test/append",
+                },
+            })
+        recipeSet = RecipeSet()
+        recipeSet.parse()
+
+        self.assertEqual(
+            [
+                {
+                    "backend" : "file",
+                    "path" : "/foo/bar",
+                },
+                {
+                    "backend" : "http",
+                    "url" : "http://bob.test/prepend",
+                },
+                {
+                    "backend" : "http",
+                    "url" : "http://bob.test/main",
+                },
+                {
+                    "backend" : "http",
+                    "url" : "http://bob.test/append",
+                },
+            ], recipeSet.archiveSpec())
+
+    def testMirrorsAppendPrepend(self):
+        """Test pre/fallbackMirrorAppend/Prepend keywords"""
+        for prefix in ["pre", "fallback"]:
+            self.writeDefault(
+                {
+                    prefix+"MirrorPrepend" : [
+                        { "scm" : "url", "url" : "foo", "mirror" : "prepend-1" },
+                        { "scm" : "url", "url" : "bar", "mirror" : "prepend-2" },
+                    ],
+                    prefix+"Mirror" : { "scm" : "url", "url" : "bar", "mirror" : "main" },
+                    prefix+"MirrorAppend" : { "scm" : "url", "url" : "bar", "mirror" : "append" },
+                })
+
+            recipeSet = RecipeSet()
+            recipeSet.parse()
+
+            self.assertEqual(
+                [
+                    { "scm" : "url", "url" : "foo", "mirror" : "prepend-1" },
+                    { "scm" : "url", "url" : "bar", "mirror" : "prepend-2" },
+                    { "scm" : "url", "url" : "bar", "mirror" : "main" },
+                    { "scm" : "url", "url" : "bar", "mirror" : "append" },
+                ],
+                recipeSet.getPreMirrors() if prefix == "pre" else recipeSet.getFallbackMirrors())
+
 
 class TestProjectConfiguration(RecipesTmp, TestCase):
     def testInvalid(self):
