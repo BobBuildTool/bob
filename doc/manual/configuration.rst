@@ -2058,6 +2058,14 @@ Example::
    # Keep ssh-agent working
    whitelist: ["SSH_AGENT_PID", "SSH_AUTH_SOCK"]
 
+whitelistRemove
+~~~~~~~~~~~~~~~
+
+Type: List of strings
+
+Remove the given names from the ``whitelist``. It is not an error to remove a
+non-existing name. See :ref:`configuration-config-whitelist` for more details.
+
 .. _configuration-config-archive:
 
 archive
