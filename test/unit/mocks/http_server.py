@@ -24,6 +24,7 @@ def createHttpHandler(repoPath, args):
             if "If-Modified-Since" in self.headers:
                 self.send_response(HTTPStatus.NOT_MODIFIED)
                 self.end_headers()
+                f.close()
                 return None
 
             self.send_response(200)
