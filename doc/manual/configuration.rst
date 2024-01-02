@@ -2009,62 +2009,19 @@ found::
 
 Required include files have a lower precedence that optional include files.
 
-.. _configuration-config-environment:
-
-environment
-~~~~~~~~~~~
+alias
+~~~~~
 
 Type: Dictionary (String -> String)
 
-Specifies default environment variables. Example::
+Aliases allow a string to be substituted for the first step of a
+:ref:`relative location path <manpage-bobpaths-locationpath>`::
 
-   environment:
-      # Number of make jobs is determined by the number of available processors
-      # (nproc).  If desired it can be set to a specific number, e.g. "2". See
-      # classes/make.yaml for details.
-      MAKE_JOBS: "nproc"
+   alias:
+      myApp: "host/files/group/app42"
+      allTests: "//*-unittest"
 
-If the :ref:`policies-cleanEnvironment` policy is enabled then these variables
-are subject to :ref:`configuration-principle-subst` with the current OS
-environment. This allows to take over certain variables from the OS environment
-in a controlled fashion.
-
-.. _configuration-config-whitelist:
-
-whitelist
-~~~~~~~~~
-
-Type: List of Strings
-
-Specifies a list of environment variable keys that should be passed unchanged
-to all scripts during execution. The content of these variables are considered
-invariants of the build. It is no error if any variable specified in this list
-is not set. By default the following environment variables are passed to all
-scripts:
-
-* Linux and other POSIX platforms: ``PATH``, ``TERM``, ``SHELL``, ``USER``, ``HOME``
-* Windows: ``ALLUSERSPROFILE``, ``APPDATA``, ``COMMONPROGRAMFILES``,
-  ``COMMONPROGRAMFILES(X86)``, ``COMSPEC``, ``HOMEDRIVE``, ``HOMEPATH``,
-  ``LOCALAPPDATA``, ``PATH``, ``PATHEXT``, ``PROGRAMDATA``, ``PROGRAMFILES``,
-  ``PROGRAMFILES(X86)``, ``SYSTEMDRIVE``, ``SYSTEMROOT``, ``TEMP``, ``TMP``,
-  ``WINDIR``
-* MSYS2: Union of POSIX and Windows white list
-
-The names given with ``whitelist`` are *added* to the list and does not replace
-the default list.
-
-Example::
-
-   # Keep ssh-agent working
-   whitelist: ["SSH_AGENT_PID", "SSH_AUTH_SOCK"]
-
-whitelistRemove
-~~~~~~~~~~~~~~~
-
-Type: List of strings
-
-Remove the given names from the ``whitelist``. It is not an error to remove a
-non-existing name. See :ref:`configuration-config-whitelist` for more details.
+See :ref:`manpage-bobpaths-aliases` for the rules that apply to aliases.
 
 .. _configuration-config-archive:
 
@@ -2212,89 +2169,6 @@ archives, the ``archivePrepend`` key prepends the given archive(s) to the curren
 It is usually advisable to use these keywords instead of ``archive`` to enable
 interoperability between projects, layers and the local user configuration.
 
-.. _configuration-config-scmDefaults:
-
-scmDefaults
-~~~~~~~~~~~
-
-Type: Dict of SCM dicts
-
-Default settings for SCMs are applied if the value is not set in the
-recipe. Useable values are marked with `(*)` in (:ref:`configuration-recipes-scm`).
-
-Example::
-
-   scmDefaults:
-      git:
-         branch: "main"
-         singleBranch: True
-         retries: 3
-      url:
-         extract: False
-
-.. _configuration-config-scmOverrides:
-
-scmOverrides
-~~~~~~~~~~~~
-
-Type: List of override specifications
-
-SCM overrides allow the user to alter any attribute of SCMs
-(:ref:`configuration-recipes-scm`) without touching the recipes. They are quite
-useful to change e.g. the server url or to override the branch of some SCMs. Overrides
-are applied after string substitution. The general syntax looks like the following::
-
-    scmOverrides:
-      -
-        match:
-          url: "git@acme.com:/foo/repo.git"
-        del: [commit, tag]
-        set:
-          branch: develop
-        replace:
-          url:
-            pattern: "foo"
-            replacement: "bar"
-        if: !expr |
-          "${BOB_RECIPE_NAME}" == "foo"
-
-The ``scmOverrides`` key takes a list of one or more override specifications.
-You can select overrides using a ``if`` expression. If ``if`` condition evaluates to true
-the override is first matched via pattens that are in the ``match`` section.
-All entries under ``match`` must be matching for the override to apply. The
-right side of a match entry can use shell globbing patterns.
-
-If an override is matching the actions are then applied in the following order:
-
- * ``del``: The list of attributes that are removed.
- * ``set``: The attributes and their values are taken, overwriting previous values.
- * ``replace``: Performs a substitution based on regular expressions. This
-   section can hold any number of attributes with a ``pattern`` and a
-   ``replacement``. Each occurrence of ``pattern`` is replaced by
-   ``replacement``.
-
-All overrides values are mangled through :ref:`configuration-principle-subst`. Mangling is
-performed during calculation of the checkoutStep so that the full environment for this step is
-available for substitution.
-
-When an override is applied the ``overridden`` property of the SCM is set to
-true. This property can be used with the ``matchScm`` function in package
-queries to find packages whose SCM(s) have been overridden.
-
-alias
-~~~~~
-
-Type: Dictionary (String -> String)
-
-Aliases allow a string to be substituted for the first step of a
-:ref:`relative location path <manpage-bobpaths-locationpath>`::
-
-   alias:
-      myApp: "host/files/group/app42"
-      allTests: "//*-unittest"
-
-See :ref:`manpage-bobpaths-aliases` for the rules that apply to aliases.
-
 .. _configuration-config-commands:
 
 command
@@ -2379,6 +2253,26 @@ type            "d3" or "dot"
 max_depth       Integer
 =============== ===================================================================
 
+.. _configuration-config-environment:
+
+environment
+~~~~~~~~~~~
+
+Type: Dictionary (String -> String)
+
+Specifies default environment variables. Example::
+
+   environment:
+      # Number of make jobs is determined by the number of available processors
+      # (nproc).  If desired it can be set to a specific number, e.g. "2". See
+      # classes/make.yaml for details.
+      MAKE_JOBS: "nproc"
+
+If the :ref:`policies-cleanEnvironment` policy is enabled then these variables
+are subject to :ref:`configuration-principle-subst` with the current OS
+environment. This allows to take over certain variables from the OS environment
+in a controlled fashion.
+
 .. _configuration-config-hooks:
 
 hooks
@@ -2419,8 +2313,6 @@ postBuildHook
     results as further arguments.
 
     The return status of the hook is ignored.
-
-.. _configuration-config-rootFilter:
 
 {pre,fallback}Mirror[{Prepend,Append}]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2476,6 +2368,8 @@ like the following. It mirrors all remote URLs to a local directory::
 This will put all downloaded files into a caching directory of the current
 user.
 
+.. _configuration-config-rootFilter:
+
 rootFilter
 ~~~~~~~~~~
 
@@ -2517,6 +2411,75 @@ The example above will mount the ``bin`` directory of the users home directory
 as ``/mnt`` inside the sandbox. The ``/mnt`` directory will be in ``$PATH``
 before any other search directory of the sandbox but still after any used tool
 (if any).
+
+.. _configuration-config-scmDefaults:
+
+scmDefaults
+~~~~~~~~~~~
+
+Type: Dict of SCM dicts
+
+Default settings for SCMs are applied if the value is not set in the
+recipe. Useable values are marked with `(*)` in (:ref:`configuration-recipes-scm`).
+
+Example::
+
+   scmDefaults:
+      git:
+         branch: "main"
+         singleBranch: True
+         retries: 3
+      url:
+         extract: False
+
+.. _configuration-config-scmOverrides:
+
+scmOverrides
+~~~~~~~~~~~~
+
+Type: List of override specifications
+
+SCM overrides allow the user to alter any attribute of SCMs
+(:ref:`configuration-recipes-scm`) without touching the recipes. They are quite
+useful to change e.g. the server url or to override the branch of some SCMs. Overrides
+are applied after string substitution. The general syntax looks like the following::
+
+    scmOverrides:
+      -
+        match:
+          url: "git@acme.com:/foo/repo.git"
+        del: [commit, tag]
+        set:
+          branch: develop
+        replace:
+          url:
+            pattern: "foo"
+            replacement: "bar"
+        if: !expr |
+          "${BOB_RECIPE_NAME}" == "foo"
+
+The ``scmOverrides`` key takes a list of one or more override specifications.
+You can select overrides using a ``if`` expression. If ``if`` condition evaluates to true
+the override is first matched via pattens that are in the ``match`` section.
+All entries under ``match`` must be matching for the override to apply. The
+right side of a match entry can use shell globbing patterns.
+
+If an override is matching the actions are then applied in the following order:
+
+ * ``del``: The list of attributes that are removed.
+ * ``set``: The attributes and their values are taken, overwriting previous values.
+ * ``replace``: Performs a substitution based on regular expressions. This
+   section can hold any number of attributes with a ``pattern`` and a
+   ``replacement``. Each occurrence of ``pattern`` is replaced by
+   ``replacement``.
+
+All overrides values are mangled through :ref:`configuration-principle-subst`. Mangling is
+performed during calculation of the checkoutStep so that the full environment for this step is
+available for substitution.
+
+When an override is applied the ``overridden`` property of the SCM is set to
+true. This property can be used with the ``matchScm`` function in package
+queries to find packages whose SCM(s) have been overridden.
 
 .. _configuration-config-share:
 
@@ -2599,3 +2562,40 @@ queryMode
 
     ``nullfail``
         An empty set of packages is always treated as an error.
+
+.. _configuration-config-whitelist:
+
+whitelist
+~~~~~~~~~
+
+Type: List of Strings
+
+Specifies a list of environment variable keys that should be passed unchanged
+to all scripts during execution. The content of these variables are considered
+invariants of the build. It is no error if any variable specified in this list
+is not set. By default the following environment variables are passed to all
+scripts:
+
+* Linux and other POSIX platforms: ``PATH``, ``TERM``, ``SHELL``, ``USER``, ``HOME``
+* Windows: ``ALLUSERSPROFILE``, ``APPDATA``, ``COMMONPROGRAMFILES``,
+  ``COMMONPROGRAMFILES(X86)``, ``COMSPEC``, ``HOMEDRIVE``, ``HOMEPATH``,
+  ``LOCALAPPDATA``, ``PATH``, ``PATHEXT``, ``PROGRAMDATA``, ``PROGRAMFILES``,
+  ``PROGRAMFILES(X86)``, ``SYSTEMDRIVE``, ``SYSTEMROOT``, ``TEMP``, ``TMP``,
+  ``WINDIR``
+* MSYS2: Union of POSIX and Windows white list
+
+The names given with ``whitelist`` are *added* to the list and does not replace
+the default list.
+
+Example::
+
+   # Keep ssh-agent working
+   whitelist: ["SSH_AGENT_PID", "SSH_AUTH_SOCK"]
+
+whitelistRemove
+~~~~~~~~~~~~~~~
+
+Type: List of strings
+
+Remove the given names from the ``whitelist``. It is not an error to remove a
+non-existing name. See :ref:`configuration-config-whitelist` for more details.
