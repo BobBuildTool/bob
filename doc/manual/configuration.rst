@@ -2422,8 +2422,8 @@ postBuildHook
 
 .. _configuration-config-rootFilter:
 
-preMirror / fallbackMirror
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+{pre,fallback}Mirror[{Prepend,Append}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Type: Mirror-entry or list of mirror-entries
 
@@ -2440,6 +2440,14 @@ provide a different result. For the same reason it is not possible to mirror
 between different methods e.g., use a HTTP URL SCM mirror for a git SCM. It is
 not possible to independently verify the equivalence of the mirror in such a
 case.
+
+When used without suffix (i.e. ``preMirror`` or ``fallbackMirror``), the
+currently configured list of mirrors is replaced. By using the ``Prepend``
+suffix, e.g. ``preMirrorPrepend``, the given mirror(s) is/are prepended to the
+configured list of mirrors. Likewise, the ``Append`` suffix (e.g.
+``fallbackMirrorAppend``) appends to the list of mirrors. It is advised to use
+these suffixes instead of the bare ``preMirror``/``fallbackMirror`` to enable
+interoperability between projects, layers and the local user configuration.
 
 Each mirror entry specifies the SCM type (``scm``), a regular expression to
 match the URL (``url``) and a replacement URL (``mirror``). Optionally, it is
@@ -2459,7 +2467,7 @@ Examples::
 A typical mirror configuration for the global user configuration could look
 like the following. It mirrors all remote URLs to a local directory::
 
-    preMirror:
+    preMirrorPrepend:
         scm: url
         url: "https?://.*/(.*)"
         mirror: "~/.cache/bob/mirror/\\1"
