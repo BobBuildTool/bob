@@ -189,8 +189,8 @@ if [[ -n $RUN_COVERAGE ]] ; then
     if $RUN_PYTHON3 -c "import coverage" 2>/dev/null; then
         export COVERAGE_SOURCES="$PWD/pym"
 	export COVERAGE_OUTPUT="$PWD/test/.coverage"
-	export COVERAGE_PROCESS_START="$PWD/test/subprocess.coveragerc"
-        RUN_PYTHON3_COV="$RUN_COVERAGE run --rcfile=$PWD/test/unittest.coveragerc"
+	export COVERAGE_PROCESS_START="$PWD/test/bob.coveragerc"
+        RUN_PYTHON3_COV="$RUN_COVERAGE run --rcfile=$PWD/test/bob.coveragerc"
     else
         echo "coverage3 is installed but not usable!" >&2
 	exit 1
@@ -270,8 +270,8 @@ if [[ -n $RUN_COVERAGE ]]; then
 	unset PYTHONDEVMODE
 	unset PYTHONASYNCIODEBUG
 	unset PYTHONWARNINGS
-	$RUN_COVERAGE combine --rcfile=test/subprocess.coveragerc
-	$RUN_COVERAGE $COVERAGE --rcfile=test/subprocess.coveragerc
+	$RUN_COVERAGE combine --rcfile=test/bob.coveragerc
+	$RUN_COVERAGE $COVERAGE --rcfile=test/bob.coveragerc
 fi
 
 if [[ $FAILED -gt 127 ]] ; then
