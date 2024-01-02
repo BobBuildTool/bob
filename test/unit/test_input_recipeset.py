@@ -241,6 +241,52 @@ class TestUserConfig(RecipesTmp, TestCase):
         self.assertNotIn("BAR", recipeSet.envWhiteList())
         self.assertNotIn("PATH", recipeSet.envWhiteList())
 
+    def testArchiveAppendPrepend(self):
+        """Test mirrorAppend/Prepend keywords"""
+        self.writeDefault(
+            {
+                "archivePrepend" : [
+                    {
+                        "backend" : "file",
+                        "path" : "/foo/bar",
+                    },
+                    {
+                        "backend" : "http",
+                        "url" : "http://bob.test/prepend",
+                    },
+                ],
+                "archive" : {
+                    "backend" : "http",
+                    "url" : "http://bob.test/main",
+                },
+                "archiveAppend" : {
+                    "backend" : "http",
+                    "url" : "http://bob.test/append",
+                },
+            })
+        recipeSet = RecipeSet()
+        recipeSet.parse()
+
+        self.assertEqual(
+            [
+                {
+                    "backend" : "file",
+                    "path" : "/foo/bar",
+                },
+                {
+                    "backend" : "http",
+                    "url" : "http://bob.test/prepend",
+                },
+                {
+                    "backend" : "http",
+                    "url" : "http://bob.test/main",
+                },
+                {
+                    "backend" : "http",
+                    "url" : "http://bob.test/append",
+                },
+            ], recipeSet.archiveSpec())
+
 
 class TestProjectConfiguration(RecipesTmp, TestCase):
     def testInvalid(self):
