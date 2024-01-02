@@ -2935,8 +2935,14 @@ class ArchiveValidator:
         }
 
     def validate(self, data):
-        self.__validTypes.validate(data)
-        return self.__backends[data['backend']].validate(data)
+        if isinstance(data, dict):
+            self.__validTypes.validate(data)
+            return [ self.__backends[data['backend']].validate(data) ]
+        elif isinstance(data, list):
+            return [ self.__validTypes.validate(i) and self.__backends[i['backend']].validate(i)
+                     for i in data ]
+        else:
+            raise schema.SchemaError(None, "Invalid archive specification!")
 
 class MountValidator:
     def __init__(self):
@@ -3060,7 +3066,7 @@ class RecipeSet:
         self.__aliases = {}
         self.__recipes = {}
         self.__classes = {}
-        self.__archive = { "backend" : "none" }
+        self.__archive = []
         self.__rootFilter = []
         self.__scmOverrides = []
         self.__hooks = {}
@@ -3162,6 +3168,8 @@ class RecipeSet:
         self.__preMirrors = []
         self.__fallbackMirrors = []
 
+        def appendArchive(x): self.__archive.extend(x)
+        def prependArchive(x): self.__archive[0:0] = x
         def updateArchive(x): self.__archive = x
         def updatePreMirror(x) : self.__preMirrors = x
         def updateFallbackMirror(x) : self.__fallbackMirrors = x
@@ -3182,6 +3190,8 @@ class RecipeSet:
             else:
                 self.__whiteList.difference_update(x)
 
+        archiveValidator = ArchiveValidator()
+
         self.__settings = {
             "include" : SentinelSetting(),
             "require" : SentinelSetting(),
@@ -3190,13 +3200,9 @@ class RecipeSet:
                 schema.Schema({ schema.Regex(r'^[0-9A-Za-z_-]+$') : str }),
                 lambda x: self.__aliases.update(x)
             ),
-            "archive" : BuiltinSetting(
-                schema.Or(
-                    ArchiveValidator(),
-                    schema.Schema( [ArchiveValidator()] )
-                ),
-                updateArchive
-            ),
+            "archive" : BuiltinSetting(archiveValidator, updateArchive, True),
+            "archiveAppend" : BuiltinSetting(archiveValidator, appendArchive, True, 100),
+            "archivePrepend" : BuiltinSetting(archiveValidator, prependArchive, True, 100),
             "command" : BuiltinSetting(
                 schema.Schema({
                     schema.Optional('dev') : self.BUILD_DEV_SCHEMA,
