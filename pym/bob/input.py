@@ -284,6 +284,8 @@ class PluginState:
 
 
 class PluginSetting:
+    priority = 50
+
     """Base class for plugin settings.
 
     Plugins can be configured in the user configuration of a project. The
@@ -365,13 +367,24 @@ def pluginStringFunCompat(oldFun):
     return newFun
 
 
+class SentinelSetting(PluginSetting):
+    """Sentinel for "include" and "require" settings"""
+
+    def __init__(self):
+        pass
+
+    def merge(self, other):
+        pass
+
+
 class BuiltinSetting(PluginSetting):
     """Tiny wrapper to define Bob built-in settings"""
 
-    def __init__(self, schema, updater, mangle = False):
+    def __init__(self, schema, updater, mangle = False, priority=50):
         self.__schema = schema
         self.__updater = updater
         self.__mangle = mangle
+        self.priority = priority
 
     def merge(self, other):
         self.__updater(self.__schema.validate(other) if self.__mangle else other)
@@ -3162,6 +3175,9 @@ class RecipeSet:
                 self.__whiteList.update(x)
 
         self.__settings = {
+            "include" : SentinelSetting(),
+            "require" : SentinelSetting(),
+
             "alias" : BuiltinSetting(
                 schema.Schema({ schema.Regex(r'^[0-9A-Za-z_-]+$') : str }),
                 lambda x: self.__aliases.update(x)
@@ -3666,8 +3682,9 @@ class RecipeSet:
         if relativeIncludes is None:
             relativeIncludes = self.getPolicy("relativeIncludes")
         cfg = self.loadYaml(fileName, self.__userConfigSchema)
-        for (name, value) in cfg.items():
-            if name != "include" and name != "require": self.__settings[name].merge(value)
+        # merge settings by priority
+        for (name, value) in sorted(cfg.items(), key=lambda i: self.__settings[i[0]].priority):
+            self.__settings[name].merge(value)
         for p in cfg.get("require", []):
             p = (os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p) + ".yaml"
             if not os.path.isfile(p):
