@@ -287,6 +287,31 @@ class TestUserConfig(RecipesTmp, TestCase):
                 },
             ], recipeSet.archiveSpec())
 
+    def testMirrorsAppendPrepend(self):
+        """Test pre/fallbackMirrorAppend/Prepend keywords"""
+        for prefix in ["pre", "fallback"]:
+            self.writeDefault(
+                {
+                    prefix+"MirrorPrepend" : [
+                        { "scm" : "url", "url" : "foo", "mirror" : "prepend-1" },
+                        { "scm" : "url", "url" : "bar", "mirror" : "prepend-2" },
+                    ],
+                    prefix+"Mirror" : { "scm" : "url", "url" : "bar", "mirror" : "main" },
+                    prefix+"MirrorAppend" : { "scm" : "url", "url" : "bar", "mirror" : "append" },
+                })
+
+            recipeSet = RecipeSet()
+            recipeSet.parse()
+
+            self.assertEqual(
+                [
+                    { "scm" : "url", "url" : "foo", "mirror" : "prepend-1" },
+                    { "scm" : "url", "url" : "bar", "mirror" : "prepend-2" },
+                    { "scm" : "url", "url" : "bar", "mirror" : "main" },
+                    { "scm" : "url", "url" : "bar", "mirror" : "append" },
+                ],
+                recipeSet.getPreMirrors() if prefix == "pre" else recipeSet.getFallbackMirrors())
+
 
 class TestProjectConfiguration(RecipesTmp, TestCase):
     def testInvalid(self):
