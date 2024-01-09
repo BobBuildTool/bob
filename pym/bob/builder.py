@@ -65,6 +65,17 @@ def hashWorkspace(step):
     return hashDirectory(step.getStoragePath(),
         os.path.join(os.path.dirname(step.getWorkspacePath()), "cache.bin"))
 
+class HashOnce:
+    def __init__(self, step):
+        self.step = step
+        self.result = None
+    def hashWorkspace(self):
+        if self.result is None:
+            self.result = hashWorkspace(self.step)
+        return self.result
+    def invalidate(self):
+        self.result = None
+
 CHECKOUT_STATE_VARIANT_ID = None    # Key in checkout directory state for step variant-id
 CHECKOUT_STATE_BUILD_ONLY = 1       # Key for checkout state of build-only builds
 
@@ -1104,9 +1115,10 @@ cd {ROOT}
         checkoutState = checkoutStep.getScmDirectories().copy()
         checkoutState[CHECKOUT_STATE_VARIANT_ID] = (checkoutDigest, None)
         checkoutState[CHECKOUT_STATE_BUILD_ONLY] = checkoutBuildOnlyState(checkoutStep, checkoutInputHashes)
+        currentResultHash = HashOnce(checkoutStep)
         if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
             inputChanged = checkoutBuildOnlyStateChanged(checkoutState, oldCheckoutState)
-            rehash = lambda: hashWorkspace(checkoutStep)
+            rehash = currentResultHash.hashWorkspace
             if checkoutStep.mayUpdate(inputChanged, BobState().getResultHash(prettySrcPath), rehash):
                 if checkoutBuildOnlyStateCompatible(checkoutState, oldCheckoutState):
                     with stepExec(checkoutStep, "UPDATE",
@@ -1115,6 +1127,7 @@ cd {ROOT}
                     newCheckoutState = oldCheckoutState.copy()
                     newCheckoutState[CHECKOUT_STATE_BUILD_ONLY] = checkoutState[CHECKOUT_STATE_BUILD_ONLY]
                     BobState().setDirectoryState(prettySrcPath, newCheckoutState)
+                    currentResultHash.invalidate() # force recalculation
                 else:
                     stepMessage(checkoutStep, "UPDATE", "WARNING: recipe changed - cannot update ({})"
                         .format(prettySrcPath), WARNING)
@@ -1138,10 +1151,13 @@ cd {ROOT}
                         # Do not use None here to distinguish it from a non-existent directory.
                         oldCheckoutState[scmDir] = (False, scmSpec)
 
+            oldResultHash = BobState().getResultHash(prettySrcPath)
             if (self.__force or (not checkoutStep.isDeterministic()) or
-                (BobState().getResultHash(prettySrcPath) is None) or
+                (oldResultHash is None) or
                 not compareDirectoryState(checkoutState, oldCheckoutState) or
-                (checkoutInputHashes != BobState().getInputHashes(prettySrcPath))):
+                (checkoutInputHashes != BobState().getInputHashes(prettySrcPath)) or
+                ( (checkoutStep.getMainScript() or checkoutStep.getPostRunCmds())
+                  and (oldResultHash != currentResultHash.hashWorkspace())) ):
                 # Switch or move away old or changed source directories. In
                 # case of nested SCMs the loop relies on the property of
                 # checkoutsFromState() to return the directories in a top-down
@@ -1223,6 +1239,7 @@ cd {ROOT}
                     await self._runShell(checkoutStep, "checkout", a)
                 self.__statistic.checkouts += 1
                 checkoutExecuted = True
+                currentResultHash.invalidate() # force recalculation
                 # reflect new checkout state
                 BobState().setDirectoryState(prettySrcPath, checkoutState)
                 BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
@@ -1233,7 +1250,7 @@ cd {ROOT}
 
         # We always have to rehash the directory as the user might have
         # changed the source code manually.
-        checkoutHash = hashWorkspace(checkoutStep)
+        checkoutHash = currentResultHash.hashWorkspace()
 
         # Generate audit trail before setResultHash() to force re-generation if
         # the audit trail fails.
