@@ -1152,12 +1152,20 @@ cd {ROOT}
                         oldCheckoutState[scmDir] = (False, scmSpec)
 
             oldResultHash = BobState().getResultHash(prettySrcPath)
-            if (self.__force or (not checkoutStep.isDeterministic()) or
-                (oldResultHash is None) or
-                not compareDirectoryState(checkoutState, oldCheckoutState) or
-                (checkoutInputHashes != BobState().getInputHashes(prettySrcPath)) or
-                ( (checkoutStep.getMainScript() or checkoutStep.getPostRunCmds())
-                  and (oldResultHash != currentResultHash.hashWorkspace())) ):
+            checkoutReason = None
+            if self.__force:
+                checkoutReason = "forced"
+            elif not checkoutStep.isDeterministic():
+                checkoutReason = "indeterminsitic"
+            elif not compareDirectoryState(checkoutState, oldCheckoutState):
+                checkoutReason = "recipe changed"
+            elif (checkoutInputHashes != BobState().getInputHashes(prettySrcPath)):
+                checkoutReason = "input changed"
+            elif (checkoutStep.getMainScript() or checkoutStep.getPostRunCmds()) \
+                 and (oldResultHash != currentResultHash.hashWorkspace()):
+                checkoutReason = "workspace changed"
+
+            if checkoutReason:
                 # Switch or move away old or changed source directories. In
                 # case of nested SCMs the loop relies on the property of
                 # checkoutsFromState() to return the directories in a top-down
@@ -1235,7 +1243,7 @@ cd {ROOT}
                     BobState().setResultHash(prettySrcPath, oldCheckoutHash)
 
                 with stepExec(checkoutStep, "CHECKOUT",
-                              "{} {}".format(prettySrcPath, overridesString)) as a:
+                              "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
                     await self._runShell(checkoutStep, "checkout", a)
                 self.__statistic.checkouts += 1
                 checkoutExecuted = True
