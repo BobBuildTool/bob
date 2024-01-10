@@ -617,16 +617,11 @@ cd {ROOT}
             self.__workspaceLocks[path] = ret = asyncio.Lock()
         return ret
 
-    async def _generateAudit(self, step, depth, resultHash, executed=True):
+    async def _generateAudit(self, step, depth, resultHash, buildId, executed=True):
         auditPath = os.path.join(os.path.dirname(step.getWorkspacePath()), "audit.json.gz")
         if os.path.lexists(auditPath): removePath(auditPath)
         if not self.__audit:
             return None
-
-        if step.isCheckoutStep():
-            buildId = resultHash
-        else:
-            buildId = await self._getBuildId(step, depth)
 
         def auditOf(s):
             return os.path.join(os.path.dirname(s.getWorkspacePath()), "audit.json.gz")
@@ -1020,7 +1015,8 @@ cd {ROOT}
                 async with self.__workspaceLock(step):
                     if not self._wasAlreadyRun(step, checkoutOnly):
                         if not checkoutOnly:
-                            await self._cookBuildStep(step, depth)
+                            buildId = await self._getBuildId(step, depth)
+                            await self._cookBuildStep(step, depth, buildId)
                         self._setAlreadyRun(step, False, checkoutOnly)
             else:
                 assert step.isPackageStep()
@@ -1265,7 +1261,10 @@ cd {ROOT}
         # Generate audit trail before setResultHash() to force re-generation if
         # the audit trail fails.
         if checkoutHash != oldCheckoutHash or self.__force:
-            await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutExecuted)
+            # Contrary to build- and package-steps, the hash of the checkout
+            # workspace is it's build-id.
+            checkoutBuildId = checkoutHash
+            await self._generateAudit(checkoutStep, depth, checkoutHash, checkoutBuildId, checkoutExecuted)
             BobState().setResultHash(prettySrcPath, checkoutHash)
 
         # upload live build-id cache in case of fresh checkout
@@ -1288,7 +1287,7 @@ cd {ROOT}
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
 
-    async def _cookBuildStep(self, buildStep, depth):
+    async def _cookBuildStep(self, buildStep, depth, buildBuildId):
         # Add the execution path of the build step to the buildDigest to
         # detect changes between sandbox and non-sandbox builds. This is
         # necessary in any build mode. Include the actual directories of
@@ -1335,7 +1334,7 @@ cd {ROOT}
                 # build it
                 await self._runShell(buildStep, "build", a, self.__cleanBuild)
                 buildHash = hashWorkspace(buildStep)
-            await self._generateAudit(buildStep, depth, buildHash)
+            await self._generateAudit(buildStep, depth, buildHash, buildBuildId)
             BobState().setResultHash(prettyBuildPath, buildHash)
             BobState().setVariantId(prettyBuildPath, buildDigest[0])
             BobState().setInputHashes(prettyBuildPath, buildInputHashes)
@@ -1586,7 +1585,7 @@ cd {ROOT}
                 packageDigest = await self.__getIncrementalVariantId(packageStep)
                 workspaceChanged = True
                 self.__statistic.packagesBuilt += 1
-            audit = await self._generateAudit(packageStep, depth, packageHash)
+            audit = await self._generateAudit(packageStep, depth, packageHash, packageBuildId)
 
         # Rehash directory if content was changed
         if workspaceChanged:
