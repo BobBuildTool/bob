@@ -656,7 +656,7 @@ cd {ROOT}
                         if dep.isValid(): audit.addArg(auditOf(dep))
                 except BobError as e:
                     a.fail(e.slogan, WARNING)
-                    if self.__verbose < INFO:
+                    if not a.visible:
                         stepMessage(step, "AUDIT", "{}: failed: {}"
                                             .format(step.getWorkspacePath(), e.slogan),
                                     WARNING)
@@ -1325,16 +1325,18 @@ cd {ROOT}
             if not self.__cleanBuild:
                 BobState().setResultHash(prettyBuildPath, hashWorkspace(buildStep))
         else:
-            with stepExec(buildStep, "BUILD", prettyBuildPath) as a:
+            with stepExec(buildStep, "BUILD", prettyBuildPath, (ALWAYS, NORMAL)) as fullAction:
                 # Squash state because running the step will change the
                 # content. If the execution fails we have nothing reliable
                 # left and we _must_ run it again.
                 BobState().delInputHashes(prettyBuildPath)
                 BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
                 # build it
-                await self._runShell(buildStep, "build", a, self.__cleanBuild)
+                with stepExec(buildStep, "BUILD", prettyBuildPath, INFO) as buildAction:
+                    visibleAction = fullAction if fullAction.visible else buildAction
+                    await self._runShell(buildStep, "build", visibleAction, self.__cleanBuild)
                 buildHash = hashWorkspace(buildStep)
-            await self._generateAudit(buildStep, depth, buildHash, buildBuildId)
+                await self._generateAudit(buildStep, depth, buildHash, buildBuildId)
             BobState().setResultHash(prettyBuildPath, buildHash)
             BobState().setVariantId(prettyBuildPath, buildDigest[0])
             BobState().setInputHashes(prettyBuildPath, buildInputHashes)
@@ -1576,16 +1578,18 @@ cd {ROOT}
                 SKIPPED, IMPORTANT)
             audit = os.path.join(os.path.dirname(prettyPackagePath), "audit.json.gz")
         else:
-            with stepExec(packageStep, "PACKAGE", prettyPackagePath) as a:
+            with stepExec(packageStep, "PACKAGE", prettyPackagePath, (ALWAYS, NORMAL)) as fullAction:
                 # invalidate result because folder will be cleared
                 BobState().delInputHashes(prettyPackagePath)
                 BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
-                await self._runShell(packageStep, "package", a)
+                with stepExec(packageStep, "PACKAGE", prettyPackagePath, INFO) as packageAction:
+                    visibleAction = fullAction if fullAction.visible else packageAction
+                    await self._runShell(packageStep, "package", visibleAction)
                 packageHash = hashWorkspace(packageStep)
                 packageDigest = await self.__getIncrementalVariantId(packageStep)
                 workspaceChanged = True
                 self.__statistic.packagesBuilt += 1
-            audit = await self._generateAudit(packageStep, depth, packageHash, packageBuildId)
+                audit = await self._generateAudit(packageStep, depth, packageHash, packageBuildId)
 
         # Rehash directory if content was changed
         if workspaceChanged:
