@@ -1753,14 +1753,14 @@ cd {ROOT}
                                       step, False, self.__buildIdTasks, False)
                 for step in steps
             ]
-            ret = await self.__yieldJobWhile(gatherTasks(tasks), True)
+            ret = await self.__yieldJobWhile(gatherTasks(tasks))
         else:
             tasks = []
             for step in steps:
                 task = self.__createCookTask(lambda s=step: self.__getBuildIdTask(s, depth),
                                              step, False, self.__buildIdTasks, False)
                 tasks.append(task)
-                await self.__yieldJobWhile(asyncio.wait({task}), True)
+                await self.__yieldJobWhile(asyncio.wait({task}))
             # retrieve results as last step to --keep-going
             ret = [ t.result() for t in tasks ]
         return ret
@@ -1842,7 +1842,7 @@ cd {ROOT}
 
         return await step.getDigestCoro(lambda x: getStoredVId(x))
 
-    async def __yieldJobWhile(self, coro, ignoreExecutionStop = False):
+    async def __yieldJobWhile(self, coro):
         """Yield the job slot while waiting for a coroutine.
 
         Handles the dirty details of cancellation. Might throw CancelledError
@@ -1859,7 +1859,7 @@ cd {ROOT}
                     acquired = True
                 except asyncio.CancelledError:
                     pass
-        if not self.__running and not ignoreExecutionStop: raise CancelBuildException
+        if not self.__running: raise CancelBuildException
         return ret
 
     async def _getFingerprint(self, step, depth):
@@ -1899,7 +1899,7 @@ cd {ROOT}
                 fingerprintTask = self.__createFingerprintTask(
                     lambda: self.__calcFingerprintTask(step, sandbox, key, depth),
                     step, key)
-                await self.__yieldJobWhile(asyncio.wait({fingerprintTask}), True)
+                await self.__yieldJobWhile(asyncio.wait({fingerprintTask}))
                 fingerprint = fingerprintTask.result()
         else:
             fingerprint = b''
