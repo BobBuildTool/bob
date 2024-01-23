@@ -88,6 +88,7 @@ class WarnOnce(Warn):
 ###############################################################################
 
 class BaseTUIAction:
+    visible = True
 
     def __init__(self, showDetails):
         self.showDetails = showDetails
@@ -136,6 +137,8 @@ class BaseTUI:
             return (low <= self.__verbosity) and (self.__verbosity <= high)
 
 class DummyTUIAction(BaseTUIAction):
+    visible = False
+
     def __init__(self):
         super().__init__(3)
 
