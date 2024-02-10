@@ -469,7 +469,7 @@ class UrlScm(Scm):
             return False
 
         # Filter irrelevant properties
-        diff -= {"sslVerify"}
+        diff -= { "sslVerify", "retries" }
 
         # Adding, changing or removing hash sums is ok as long as the url stays
         # the same.
