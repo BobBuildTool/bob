@@ -230,7 +230,7 @@ class UrlScm(Scm):
         self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
         self.__fallbackMirrorsUpload = spec.get("__fallbackMirrorsUpload")
 
-    def getProperties(self, isJenkins):
+    def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins)
         ret.update({
             'scm' : 'url',

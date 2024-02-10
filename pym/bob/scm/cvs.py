@@ -35,7 +35,7 @@ class CvsScm(Scm):
         self.__rev = spec.get("rev")
         self.__dir = spec.get("dir", ".")
 
-    def getProperties(self, isJenkins):
+    def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins)
         ret.update({
             'scm' : 'cvs',

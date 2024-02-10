@@ -133,7 +133,7 @@ class GitScm(Scm):
             self.__resolvedReferences = [ ref for ref in [__resolveReferences(self, a) for a in
                 self.__references]]
 
-    def getProperties(self, isJenkins):
+    def getProperties(self, isJenkins, pretty=False):
         properties = super().getProperties(isJenkins)
         properties.update({
             'scm' : 'git',
