@@ -745,18 +745,26 @@ class TestFileMode(UrlScmTest, TestCase):
             self.invokeScm(workspace, self.createUrlScm())
             self.assertMode(os.path.join(workspace, self.fn), 0o764)
 
+    def testNewDefaultFileMode(self):
+        """Test new behaviour of defaultFileMode policy"""
+        os.chmod(self.path, 0o764)
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, self.createUrlScm(defaultFileMode=True))
+            self.assertMode(os.path.join(workspace, self.fn), 0o600)
+
     def testFileModeOverride(self):
         """Test that fileMode attribute takes precedence"""
         os.chmod(self.path, 0o777)
         with tempfile.TemporaryDirectory() as workspace:
-            scm = self.createUrlScm({ "fileMode" : 0o640 })
+            scm = self.createUrlScm({ "fileMode" : 0o640 },
+                                    defaultFileMode=True)
             self.invokeScm(workspace, scm)
             self.assertMode(os.path.join(workspace, self.fn), 0o640)
 
     def testSwitch(self):
         os.chmod(self.path, 0o777)
         with tempfile.TemporaryDirectory() as workspace:
-            oldScm = self.createUrlScm({ "fileMode" : 0o640 })
+            oldScm = self.createUrlScm({ "fileMode" : 0o640 }, defaultFileMode=True)
 
             self.invokeScm(workspace, oldScm)
             self.assertMode(os.path.join(workspace, self.fn), 0o640)
