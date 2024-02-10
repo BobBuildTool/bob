@@ -357,7 +357,10 @@ class UrlScm(Scm):
                     if os.path.isdir(destination):
                         invoker.fail("Destination", destination, "is an existing directory!")
                     invoker.trace("<cp>", url.path, workspaceFile)
-                    shutil.copy(url.path, destination)
+                    with tempfile.TemporaryDirectory(dir=os.path.dirname(destination)) as tmpDir:
+                        tmpFile = os.path.join(tmpDir, self.__fn)
+                        shutil.copy(url.path, tmpFile)
+                        replacePath(tmpFile, destination)
                     return True, None
                 else:
                     return False, None
