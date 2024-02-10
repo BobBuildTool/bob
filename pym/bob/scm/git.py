@@ -511,7 +511,7 @@ class GitScm(Scm):
         # Filter irrelevant properties
         diff -= {"sslVerify", 'singleBranch', 'shallow',
                 'shallowSubmodules', "useBranchAndCommit",
-                "references", "dissociate"}
+                "references", "dissociate", "retries"}
 
         diff = set(prop for prop in diff if not prop.startswith("remote-"))
 
