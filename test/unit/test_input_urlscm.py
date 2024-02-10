@@ -19,7 +19,7 @@ from mocks.http_server import HttpServerMock
 from bob.input import UrlScm
 from bob.scm.url import parseMode, dumpMode
 from bob.invoker import Invoker, InvocationError
-from bob.errors import ParseError
+from bob.errors import ParseError, BuildError
 from bob.utils import asHexStr, runInEventLoop, getProcessPoolExecutor, isWindows
 
 INVALID_FILE = "C:\\does\\not\\exist" if sys.platform == "win32" else "/does/not/exist/"
@@ -43,7 +43,34 @@ class DummyStep:
     def getPackage(self):
         return DummyPackage()
 
-class UrlScmTest:
+class UrlScmExecutor:
+
+    def invokeScm(self, workspace, scm, switch=False, oldScm=None):
+        executor = getProcessPoolExecutor()
+        try:
+            spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+            invoker = Invoker(spec, False, True, True, True, True, False,
+                              executor=executor)
+            if switch:
+                runInEventLoop(scm.switch(invoker, oldScm))
+            else:
+                runInEventLoop(scm.invoke(invoker))
+        finally:
+            executor.shutdown()
+
+    def createUrlScm(self, spec = {}, preMirrors=[], fallbackMirrors=[],
+                     defaultFileMode=None):
+        s = {
+            'scm' : 'url',
+            'url' : self.url,
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        s.update(spec)
+        return UrlScm(s, preMirrors=preMirrors, fallbackMirrors=fallbackMirrors,
+                      defaultFileMode=defaultFileMode)
+
+class UrlScmTest(UrlScmExecutor):
 
     @classmethod
     def setUpClass(cls):
@@ -74,26 +101,6 @@ class UrlScmTest:
     @classmethod
     def tearDownClass(cls):
         cls.__repodir.cleanup()
-
-    def invokeScm(self, workspace, scm):
-        executor = getProcessPoolExecutor()
-        try:
-            spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
-            invoker = Invoker(spec, False, True, True, True, True, False,
-                              executor=executor)
-            runInEventLoop(scm.invoke(invoker))
-        finally:
-            executor.shutdown()
-
-    def createUrlScm(self, spec = {}, preMirrors=[], fallbackMirrors=[]):
-        s = {
-            'scm' : 'url',
-            'url' : self.url,
-            'recipe' : "foo.yaml#0",
-            '__source' : "Recipe foo",
-        }
-        s.update(spec)
-        return UrlScm(s, preMirrors=preMirrors, fallbackMirrors=fallbackMirrors)
 
     def assertContent(self, fn):
         with open(fn, "rb") as f:
@@ -808,3 +815,77 @@ class TestFileModeParsing(TestCase):
         self.assertEqual(dumpMode(0o600), "u=rw")
         self.assertEqual(dumpMode(0o400), "u=r")
         self.assertEqual(dumpMode(0o755), "u=rwx,g=rx,o=rx")
+
+
+class TestExtraction(UrlScmExecutor, TestCase):
+
+    def assertFileMd5(self, fn, digest):
+        with open(fn, "rb") as f:
+            d = hashlib.md5()
+            d.update(f.read())
+        self.assertEqual(digest, asHexStr(d.digest()))
+
+    def assertTree(self, workspace, prefix="foo-1.2.3"):
+        self.assertFileMd5(os.path.join(workspace, prefix, "configure"),
+                           "394cded5228db39cb4d040e866134252")
+        self.assertFileMd5(os.path.join(workspace, prefix, "src/main.c"),
+                           "0790c8c6a3871d0c3bed428b4ae240c4")
+
+    def testArchive(self):
+        for ext in ("tar", "tar.bz2", "tar.gz", "tar.xz", "zip"):
+            with self.subTest(extension=ext):
+                self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3." + ext))
+                with tempfile.TemporaryDirectory() as workspace:
+                    scm = self.createUrlScm()
+                    self.invokeScm(workspace, scm)
+                    self.assertTree(workspace)
+
+    def testStripComponents(self):
+        self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
+        with tempfile.TemporaryDirectory() as workspace:
+            scm = self.createUrlScm({ "stripComponents" : 1 })
+            self.invokeScm(workspace, scm)
+            self.assertTree(workspace, "")
+
+    def testStripComponentsUnsupported(self):
+        self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.zip"))
+        with tempfile.TemporaryDirectory() as workspace:
+            scm = self.createUrlScm({ "stripComponents" : 1 })
+            with self.assertRaises(BuildError):
+                self.invokeScm(workspace, scm)
+
+    @skipIf(isWindows(), "requires UNIX platform")
+    def testSingleFile(self):
+        for ext in ("gz", "xz"):
+            with self.subTest(extension=ext):
+                self.url = makeFileUrl(os.path.abspath("data/url-scm/test.txt." + ext))
+                with tempfile.TemporaryDirectory() as workspace:
+                    scm = self.createUrlScm()
+                    self.invokeScm(workspace, scm)
+                    self.assertTrue(os.path.exists(os.path.join(workspace, "test.txt." + ext)))
+                    self.assertFileMd5(os.path.join(workspace, "test.txt"),
+                                       "d3b07384d113edec49eaa6238ad5ff00")
+
+    def testNoExtrace(self):
+        self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
+        for extract in ("no", False):
+            with self.subTest(mode=extract):
+                with tempfile.TemporaryDirectory() as workspace:
+                    scm = self.createUrlScm({ "extract" : extract })
+                    self.invokeScm(workspace, scm)
+                    self.assertTrue(os.path.exists(os.path.join(workspace, "foo-1.2.3.tar")))
+                    self.assertFalse(os.path.isdir(os.path.join(workspace, "foo-1.2.3")))
+
+    def testSpecificExtract(self):
+        self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
+        with tempfile.TemporaryDirectory() as workspace:
+            scm = self.createUrlScm({ "extract" : "tar" })
+            self.invokeScm(workspace, scm)
+            self.assertTree(workspace)
+
+    def testWrongSpecificExtract(self):
+        self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
+        with tempfile.TemporaryDirectory() as workspace:
+            scm = self.createUrlScm({ "extract" : "zip" })
+            with self.assertRaises(InvocationError):
+                self.invokeScm(workspace, scm)
