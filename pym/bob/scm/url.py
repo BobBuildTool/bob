@@ -359,7 +359,9 @@ class UrlScm(Scm):
                     invoker.trace("<cp>", url.path, workspaceFile)
                     with tempfile.TemporaryDirectory(dir=os.path.dirname(destination)) as tmpDir:
                         tmpFile = os.path.join(tmpDir, self.__fn)
-                        shutil.copy(url.path, tmpFile)
+                        # Keep mtime when copying. Otherwise we would update
+                        # mirrors bacause our file appears newer.
+                        shutil.copy2(url.path, tmpFile)
                         replacePath(tmpFile, destination)
                     return True, None
                 else:
@@ -445,7 +447,7 @@ class UrlScm(Scm):
                 os.makedirs(destDir, exist_ok=True)
                 with tempfile.TemporaryDirectory(dir=destDir) as tmpDir:
                     tmpFileName = os.path.join(tmpDir, os.path.basename(url.path))
-                    shutil.copy(source, tmpFileName)
+                    shutil.copy2(source, tmpFileName)
                     os.replace(tmpFileName, url.path)
         elif url.scheme in ["http", "https", "ftp"]:
             retries = self.__retries
