@@ -10,6 +10,7 @@ from .errors import BobError, BuildError, MultiBobError
 from .input import RecipeSet
 from .invoker import Invoker, InvocationMode
 from .languages import StepSpec
+from .scm import getScm
 from .state import BobState
 from .stringparser import Env
 from .tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit, \
@@ -1183,7 +1184,7 @@ cd {ROOT}
                     elif scmDigest != checkoutState.get(scmDir, (None, None))[0]:
                         canSwitch = (scmDir in scmMap) and scmDigest and \
                                      scmSpec is not None and \
-                                     scmMap[scmDir].canSwitch(scmSpec) and \
+                                     scmMap[scmDir].canSwitch(getScm(scmSpec)) and \
                                      os.path.exists(scmPath)
                         didSwitch = False
                         if canSwitch:

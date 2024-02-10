@@ -503,8 +503,10 @@ class GitScm(Scm):
                 await self.__updateSubmodulesPost(invoker, subMods[p],
                                                   os.path.join(base, p))
 
-    def canSwitch(self, oldSpec):
-        diff = self._diffSpec(oldSpec)
+    def canSwitch(self, oldScm):
+        diff = self._diffSpec(oldScm)
+        if "scm" in diff:
+            return False
 
         # Filter irrelevant properties
         diff -= {"sslVerify", 'singleBranch', 'shallow',
@@ -515,9 +517,9 @@ class GitScm(Scm):
 
         # Enabling "submodules" and/or "recurseSubmodules" is ok. The
         # additional content will be checked out in invoke().
-        if not oldSpec.get("submodules", False) and self.__submodules:
+        if not oldScm.__submodules and self.__submodules:
             diff.discard("submodules")
-        if not oldSpec.get("recurseSubmodules", False) and self.__recurseSubmodules:
+        if not oldScm.__recurseSubmodules and self.__recurseSubmodules:
             diff.discard("recurseSubmodules")
 
         # Without submodules the recurseSubmodules property is irrelevant
@@ -535,7 +537,7 @@ class GitScm(Scm):
             return False
         return True
 
-    async def switch(self, invoker, oldSpec):
+    async def switch(self, invoker, oldScm):
         # Special handling for repositories that are in a detached HEAD state.
         # While it is technically ok to make an inline switch, the user can
         # only recover his old commit(s) from the reflog. This is confusing and
@@ -546,7 +548,8 @@ class GitScm(Scm):
         if detached:
             # The only exception to the above rule is when a tag or commit
             # was checked out and the repo is still at this commit.
-            _, oldTag, oldCommit = getBranchTagCommit(oldSpec)
+            oldTag = oldScm.__tag
+            oldCommit = oldScm.__commit
             if oldCommit:
                 pass # just compare this commit
             elif oldTag:

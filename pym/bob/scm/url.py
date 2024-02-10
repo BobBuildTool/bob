@@ -463,8 +463,10 @@ class UrlScm(Scm):
         else:
             invoker.fail("Unsupported URL scheme: " + url.scheme)
 
-    def canSwitch(self, oldSpec):
-        diff = self._diffSpec(oldSpec)
+    def canSwitch(self, oldScm):
+        diff = self._diffSpec(oldScm)
+        if "scm" in diff:
+            return False
 
         # Filter irrelevant properties
         diff -= {"sslVerify"}
@@ -473,7 +475,7 @@ class UrlScm(Scm):
         # the same.
         return diff.issubset({"digestSHA1", "digestSHA256", "digestSHA512"})
 
-    async def switch(self, invoker, oldSpec):
+    async def switch(self, invoker, oldScm):
         # The real work is done in invoke() below. It will fail if the file
         # does not match.
         return True

@@ -486,7 +486,7 @@ class Invoker:
         try:
             self.__openLog("SCM inline switch")
             try:
-                await scm.switch(self, oldSpec)
+                await scm.switch(self, getScm(oldSpec))
             except CmdFailedError as e:
                 self.error(scm.getSource(), "failed")
                 self.error(e.what)
