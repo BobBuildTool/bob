@@ -945,6 +945,7 @@ url    | ``url``: File that should be downloaded
        | ``digestSHA512``: Expected SHA512 digest of the file (optional)
        | ``extract`` (\*): Extract directive (optional, default: auto)
        | ``fileName`` (\*): Local file name (optional, default: url file name)
+       | ``fileMode`` (\*): File mode (optional, default depends on :ref:`policies-defaultFileMode` policy)
        | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
        | ``stripComponents`` (\*): Number of leading components stripped from file name
        |                           (optional, tar files only)
@@ -1121,6 +1122,11 @@ url
        directory where the file is downloaded is claimed by the SCM. It is not
        possible to fetch multiple files in the same directory. This is done to
        separate possibly extracted files safely from other checkouts.
+
+   The file mode of the downloaded or copied file can be set with the
+   ``fileMode`` attribute. Two formats are supported: bit masks (as
+   octal number) or a symbolic string mode.  Both formats follow the ``chmod``
+   command syntax. Examples: ``0764``, ``"u=rwx,g=rw,o=r"``.
 
 .. _configuration-recipes-checkoutUpdateIf:
 
