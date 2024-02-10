@@ -223,7 +223,7 @@ class UrlScm(Scm):
     }
 
     def __init__(self, spec, overrides=[], tidy=None, stripUser=None,
-                 preMirrors=[], fallbackMirrors=[]):
+                 preMirrors=[], fallbackMirrors=[], defaultFileMode=None):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
@@ -262,7 +262,7 @@ class UrlScm(Scm):
         self.__preMirrorsUpload = spec.get("__preMirrorsUpload")
         self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
         self.__fallbackMirrorsUpload = spec.get("__fallbackMirrorsUpload")
-        self.__fileMode = spec.get("fileMode")
+        self.__fileMode = spec.get("fileMode", 0o600 if defaultFileMode else None)
 
     def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins)
