@@ -1126,7 +1126,9 @@ url
    The file mode of the downloaded or copied file can be set with the
    ``fileMode`` attribute. Two formats are supported: bit masks (as
    octal number) or a symbolic string mode.  Both formats follow the ``chmod``
-   command syntax. Examples: ``0764``, ``"u=rwx,g=rw,o=r"``.
+   command syntax. Examples: ``0764``, ``"u=rwx,g=rw,o=r"``. The ``fileMode``
+   defaults to ``0600``/``"u=rw"`` unless the :ref:`policies-defaultFileMode`
+   policy is configured for the old behaviour.
 
 .. _configuration-recipes-checkoutUpdateIf:
 

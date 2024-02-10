@@ -592,3 +592,32 @@ Old behavior
 New behavior
    Changes to the ``dir`` attribute of an ``import`` SCM behave the same as for
    any other SCM.
+
+.. _policies-defaultFileMode:
+
+defaultFileMode
+~~~~~~~~~~~~~~~
+
+Introduced in: 0.24
+
+The URL SCM applies a file mode of ``0600`` (user read/write only) to all files
+that are fetched via HTTP(S) or FTP. For locally copied files (``file://``
+URLs or bare file names) though, the file mode of the source file is retained.
+This can lead to unstable builds, e.g. if the file source is overridden by an
+``scmOverrides`` entry or if a mirror is used. Bob also did not consider the
+file mode to be part of the :term:`Variant-Id` even though it influences the
+build result.
+
+Starting with Bob 0.24, the file mode can be specified by the ``fileMode``
+attribute. It is then also part of the :term:`Variant-Id` and will trigger
+rebuilds if changed. This policy governs the default of the ``fileMode``
+attribute to enable a consistent behavior, regardless of the URL schema.
+
+Old behavior
+    The mode of files coped from ``file://`` URLs or bare file names is
+    retained from the source unless the ``fileMode`` attribute overrides
+    it explicitly.
+
+New behavior
+    The ``fileMode`` attribute is default initialized to ``0600``. All files
+    will get the same mode, regardless of the URL schema.
