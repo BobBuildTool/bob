@@ -346,7 +346,7 @@ class UrlScm(Scm):
 
         return True, None
 
-    async def _fetch(self, invoker, url, workspaceFile, destination):
+    async def _fetch(self, invoker, url, workspaceFile, destination, mode):
         if url.scheme in ['', 'file']:
             # Verify that host name is empty or "localhost"
             if url.netloc not in ['', 'localhost']:
@@ -362,6 +362,7 @@ class UrlScm(Scm):
                         # Keep mtime when copying. Otherwise we would update
                         # mirrors bacause our file appears newer.
                         shutil.copy2(url.path, tmpFile)
+                        if mode is not None: os.chmod(tmpFile, mode)
                         replacePath(tmpFile, destination)
                     return True, None
                 else:
@@ -501,12 +502,17 @@ class UrlScm(Scm):
         # Download only if necessary
         if not self.isDeterministic() or not os.path.isfile(destination):
             urls = self._getCandidateUrls(invoker)
+            mode = None
+            if any(self.__url.startswith(s) for s in ("http://", "https://", "ftp://")):
+                # Set explicit mode of downloaded files to retain Bob 0.15
+                # behaviour. This must apply to fetches from local mirrors too.
+                mode = 0o600
             err = None
             for url, upload in urls:
                 if err:
                     # Output previously failed download attempt as warning
                     invoker.warn(err)
-                downloaded, err = await self._fetch(invoker, url, workspaceFile, destination)
+                downloaded, err = await self._fetch(invoker, url, workspaceFile, destination, mode)
                 if err is None:
                     break
             else:
