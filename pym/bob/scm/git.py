@@ -133,7 +133,7 @@ class GitScm(Scm):
             self.__resolvedReferences = [ ref for ref in [__resolveReferences(self, a) for a in
                 self.__references]]
 
-    def getProperties(self, isJenkins):
+    def getProperties(self, isJenkins, pretty=False):
         properties = super().getProperties(isJenkins)
         properties.update({
             'scm' : 'git',
@@ -503,26 +503,28 @@ class GitScm(Scm):
                 await self.__updateSubmodulesPost(invoker, subMods[p],
                                                   os.path.join(base, p))
 
-    def canSwitch(self, oldSpec):
-        diff = self._diffSpec(oldSpec)
+    def canSwitch(self, oldScm):
+        diff = self._diffSpec(oldScm)
+        if "scm" in diff:
+            return False
 
         # Filter irrelevant properties
         diff -= {"sslVerify", 'singleBranch', 'shallow',
                 'shallowSubmodules', "useBranchAndCommit",
-                "references", "dissociate"}
+                "references", "dissociate", "retries"}
 
         diff = set(prop for prop in diff if not prop.startswith("remote-"))
 
         # Enabling "submodules" and/or "recurseSubmodules" is ok. The
         # additional content will be checked out in invoke().
-        if not oldSpec.get("submodules", False) and self.__submodules:
+        if not oldScm.__submodules and self.__submodules:
             diff.discard("submodules")
-        if not oldSpec.get("recursiveSubmodules", False) and self.__recurseSubmodules:
-            diff.discard("recursiveSubmodules")
+        if not oldScm.__recurseSubmodules and self.__recurseSubmodules:
+            diff.discard("recurseSubmodules")
 
-        # Without submodules the recursiveSubmodules property is irrelevant
+        # Without submodules the recurseSubmodules property is irrelevant
         if not self.__submodules:
-            diff.discard("recursiveSubmodules")
+            diff.discard("recurseSubmodules")
 
         # For the rest we can try a inline switch. Git does not handle
         # vanishing submodules well and neither do we. So if submodules are
@@ -535,7 +537,7 @@ class GitScm(Scm):
             return False
         return True
 
-    async def switch(self, invoker, oldSpec):
+    async def switch(self, invoker, oldScm):
         # Special handling for repositories that are in a detached HEAD state.
         # While it is technically ok to make an inline switch, the user can
         # only recover his old commit(s) from the reflog. This is confusing and
@@ -546,7 +548,8 @@ class GitScm(Scm):
         if detached:
             # The only exception to the above rule is when a tag or commit
             # was checked out and the repo is still at this commit.
-            _, oldTag, oldCommit = getBranchTagCommit(oldSpec)
+            oldTag = oldScm.__tag
+            oldCommit = oldScm.__commit
             if oldCommit:
                 pass # just compare this commit
             elif oldTag:

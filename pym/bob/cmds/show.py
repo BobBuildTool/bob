@@ -46,7 +46,7 @@ def dumpPackage(package):
         doc["meta"]["checkoutVariantId"] = asHexStr(checkoutStep.getVariantId())
         doc["checkoutDeterministic"] = checkoutStep.isDeterministic()
         doc["checkoutSCM"] = [
-            { k:v for k,v in s.getProperties(False).items() if not k.startswith("__") }
+            { k:v for k,v in s.getProperties(False, True).items() if not k.startswith("__") }
             for s in checkoutStep.getScmList()
         ]
         doc["checkoutAssert"] = [

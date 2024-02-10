@@ -219,7 +219,8 @@ class Scm(metaclass=ABCMeta):
         self.__recipe = spec["recipe"]
         self.__overrides = overrides
 
-    def _diffSpec(self, oldSpec):
+    def _diffSpec(self, oldScm):
+        oldSpec = oldScm.getProperties(False)
         newSpec = self.getProperties(False)
         ret = set()
         for k in sorted(set(oldSpec.keys()) | set(newSpec.keys())):
@@ -250,12 +251,12 @@ class Scm(metaclass=ABCMeta):
         handling and so on...
         """
 
-    def canSwitch(self, oldSpec):
-        """Determine if an inline switch of a checkout from oldSpec is
+    def canSwitch(self, oldScm):
+        """Determine if an inline switch of a checkout from oldScm is
         possible.
 
         The judgement is purely done on the specification of this SCM and
-        oldSpec. If the SCM supports a switch from oldSpec then this method
+        oldScm. If the SCM supports a switch from oldScm then this method
         may return True. It must return False in any other case. In case it
         returns True the Scm.switch() method will be invoked to do the acutal
         switch in the workspace. This might still fail if the workspace is in
@@ -263,8 +264,8 @@ class Scm(metaclass=ABCMeta):
         """
         return False
 
-    async def switch(self, workspacePath, oldSpec):
-        """Try to switch the checkout in the workspace from oldSpec.
+    async def switch(self, workspacePath, oldScm):
+        """Try to switch the checkout in the workspace from oldScm.
 
         If the switch succeeds then the checkout won't be moved to the attic.
         The SCM has to make sure that the result is the same as if the SCM was

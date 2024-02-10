@@ -37,7 +37,7 @@ class SvnScm(Scm):
         self.__revision = spec.get("revision")
         self.__sslVerify = spec.get('sslVerify', True)
 
-    def getProperties(self, isJenkins):
+    def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins)
         ret.update({
             'scm' : 'svn',

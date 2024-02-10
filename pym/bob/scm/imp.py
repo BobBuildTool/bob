@@ -136,7 +136,7 @@ class ImportScm(Scm):
         self.__projectRoot = spec.get("__projectRoot", projectRoot)
         self.__fixDigestBug = fixDigestBug
 
-    def getProperties(self, isJenkins):
+    def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins)
         ret.update({
             'scm' : 'import',

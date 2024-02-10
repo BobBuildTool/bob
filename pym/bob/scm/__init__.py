@@ -61,6 +61,7 @@ def getScm(spec, overrides=[], recipeSet=None):
         return UrlScm(spec, overrides, recipeSet and recipeSet.getPolicy('tidyUrlScm'),
             recipeSet and recipeSet.getPolicy('scmIgnoreUser'),
             recipeSet and recipeSet.getPreMirrors(),
-            recipeSet and recipeSet.getFallbackMirrors())
+            recipeSet and recipeSet.getFallbackMirrors(),
+            recipeSet and recipeSet.getPolicy('defaultFileMode'))
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))
