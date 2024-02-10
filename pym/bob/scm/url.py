@@ -120,6 +120,38 @@ def parseUrl(url):
     # looks legit
     return urllib.parse.ParseResult(url.scheme, url.netloc,path, '', '', '')
 
+RIGHT_TO_VAL = { 'r' : 4, 'w' : 2, 'x' : 1 }
+SUBJECT_TO_SHIFT = { 'u' : 6, 'g' : 3, 'o' : 0 }
+
+def parseMode(mode):
+    if isinstance(mode, int):
+        return mode
+    if not isinstance(mode, str):
+        raise ValueError("mode must be a string or integer")
+    ret = 0
+    for m in mode.split(","):
+        subject, right = m.split("=")
+        num_right = 0
+        for r in right: num_right |= RIGHT_TO_VAL[r]
+        for s in subject:
+            ret &= ~(7 << SUBJECT_TO_SHIFT[s])
+            ret |= num_right << SUBJECT_TO_SHIFT[s]
+    return ret
+
+def dumpMode(mode):
+    if mode is None:
+        return None
+
+    ret = []
+    for s in "ugo":
+        m = mode >> SUBJECT_TO_SHIFT[s]
+        if m & 7:
+            entry = s + "="
+            for i in "rwx":
+                if m & RIGHT_TO_VAL[i]:
+                    entry += i
+            ret.append(entry)
+    return ",".join(ret)
 
 isWin32 = sys.platform == "win32"
 
@@ -131,6 +163,7 @@ class UrlScm(Scm):
         schema.Optional('stripComponents') : int,
         schema.Optional('sslVerify') : bool,
         schema.Optional('retries') : schema.And(int, lambda n: n >= 0, error="Invalid retries attribute"),
+        schema.Optional('fileMode') : schema.And(schema.Use(parseMode), lambda m: m & 0o777, error="Invalid fileMode attr"),
     }
 
     __SCHEMA = {
@@ -229,6 +262,7 @@ class UrlScm(Scm):
         self.__preMirrorsUpload = spec.get("__preMirrorsUpload")
         self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
         self.__fallbackMirrorsUpload = spec.get("__fallbackMirrorsUpload")
+        self.__fileMode = spec.get("fileMode")
 
     def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins)
@@ -248,6 +282,7 @@ class UrlScm(Scm):
             '__preMirrorsUpload' : self.__getPreMirrorsUpload(),
             'fallbackMirrors' : self.__getFallbackMirrorsUrls(),
             '__fallbackMirrorsUpload' : self.__getFallbackMirrorsUpload(),
+            'fileMode' : dumpMode(self.__fileMode) if pretty else self.__fileMode,
         })
         return ret
 
@@ -292,7 +327,7 @@ class UrlScm(Scm):
         except ValueError as e:
             invoker.fail(str(e))
 
-    def _download(self, url, destination):
+    def _download(self, url, destination, mode):
         headers = {}
         headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
         context = None if self.__sslVerify else sslNoVerifyContext()
@@ -323,9 +358,9 @@ class UrlScm(Scm):
                     if expected > read:
                         return False, "Response too short: {} < {} (bytes)".format(read, expected)
 
-                # Atomically move file to destination. Set explicit mode to
-                # retain Bob 0.15 behaviour.
-                os.chmod(tmpFileName, stat.S_IREAD|stat.S_IWRITE)
+                # Atomically move file to destination. Set mode to 0600 to
+                # retain Bob 0.15 behaviour if no explicit mode was configured.
+                os.chmod(tmpFileName, mode or 0o600)
                 replacePath(tmpFileName, destination)
                 tmpFileName = None
 
@@ -375,7 +410,7 @@ class UrlScm(Scm):
                 invoker.trace("<wget>", url.geturl(), ">",
                         workspaceFile, "retires:", retries)
                 try:
-                    updated, err = await invoker.runInExecutor(UrlScm._download, self, url, destination)
+                    updated, err = await invoker.runInExecutor(UrlScm._download, self, url, destination, mode)
                     if err:
                         if retries == 0:
                             return False, err
@@ -486,10 +521,17 @@ class UrlScm(Scm):
             diff -= { "url" }
 
         # Adding, changing or removing hash sums is ok as long as the url stays
-        # the same.
-        return diff.issubset({"digestSHA1", "digestSHA256", "digestSHA512"})
+        # the same. Changing the fileMode is also trivial.
+        return diff.issubset({"digestSHA1", "digestSHA256", "digestSHA512", "fileMode"})
 
     async def switch(self, invoker, oldScm):
+        # Update fileMode here because invoke() does not touch the file if it
+        # already exists.
+        if self.__fileMode is not None and self.__fileMode != oldScm.__fileMode:
+            destination = invoker.joinPath(self.__dir, self.__fn)
+            if os.path.isfile(destination):
+                os.chmod(destination, self.__fileMode)
+
         # The real work is done in invoke() below. It will fail if the file
         # does not match.
         return True
@@ -502,8 +544,8 @@ class UrlScm(Scm):
         # Download only if necessary
         if not self.isDeterministic() or not os.path.isfile(destination):
             urls = self._getCandidateUrls(invoker)
-            mode = None
-            if any(self.__url.startswith(s) for s in ("http://", "https://", "ftp://")):
+            mode = self.__fileMode
+            if mode is None and any(self.__url.startswith(s) for s in ("http://", "https://", "ftp://")):
                 # Set explicit mode of downloaded files to retain Bob 0.15
                 # behaviour. This must apply to fetches from local mirrors too.
                 mode = 0o600
@@ -574,7 +616,8 @@ class UrlScm(Scm):
         return ( self.__digestSha512 or self.__digestSha256 or
                  self.__digestSha1 or filt(self.__url)
                ) + " " + posixpath.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
-               ( " s{}".format(self.__strip) if self.__strip > 0 else "" )
+               ( " s{}".format(self.__strip) if self.__strip > 0 else "" ) + \
+               ( " m{}".format(self.__fileMode) if self.__fileMode is not None else "")
 
     def getDirectory(self):
         return self.__dir if self.__tidy else os.path.join(self.__dir, self.__fn)
