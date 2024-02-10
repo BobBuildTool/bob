@@ -472,6 +472,13 @@ class UrlScm(Scm):
         diff -= { "sslVerify", "retries", 'preMirrors', '__preMirrorsUpload',
                   'fallbackMirrors', '__fallbackMirrorsUpload' }
 
+        # As long as the SCM is deterministic and the hashes have not changed,
+        # the concrete URL is irrelevant.
+        if self.isDeterministic() and self.__digestSha1   == oldScm.__digestSha1   \
+                                  and self.__digestSha256 == oldScm.__digestSha256 \
+                                  and self.__digestSha512 == oldScm.__digestSha512:
+            diff -= { "url" }
+
         # Adding, changing or removing hash sums is ok as long as the url stays
         # the same.
         return diff.issubset({"digestSHA1", "digestSHA256", "digestSHA512"})
