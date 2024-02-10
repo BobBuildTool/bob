@@ -517,12 +517,12 @@ class GitScm(Scm):
         # additional content will be checked out in invoke().
         if not oldSpec.get("submodules", False) and self.__submodules:
             diff.discard("submodules")
-        if not oldSpec.get("recursiveSubmodules", False) and self.__recurseSubmodules:
-            diff.discard("recursiveSubmodules")
+        if not oldSpec.get("recurseSubmodules", False) and self.__recurseSubmodules:
+            diff.discard("recurseSubmodules")
 
-        # Without submodules the recursiveSubmodules property is irrelevant
+        # Without submodules the recurseSubmodules property is irrelevant
         if not self.__submodules:
-            diff.discard("recursiveSubmodules")
+            diff.discard("recurseSubmodules")
 
         # For the rest we can try a inline switch. Git does not handle
         # vanishing submodules well and neither do we. So if submodules are
