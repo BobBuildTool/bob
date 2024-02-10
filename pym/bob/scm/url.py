@@ -676,7 +676,7 @@ class UrlScm(Scm):
             ret.append([extractor[1]] + [a.format(self.__fn) for a in extractor[2]] + strip)
 
         if not ret:
-            raise ParseError("Extractor does not support 'stripComponents'!")
+            raise BuildError("Extractor does not support 'stripComponents'!")
 
         return ret
 
