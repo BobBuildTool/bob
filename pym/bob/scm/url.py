@@ -469,7 +469,8 @@ class UrlScm(Scm):
             return False
 
         # Filter irrelevant properties
-        diff -= { "sslVerify", "retries" }
+        diff -= { "sslVerify", "retries", 'preMirrors', '__preMirrorsUpload',
+                  'fallbackMirrors', '__fallbackMirrorsUpload' }
 
         # Adding, changing or removing hash sums is ok as long as the url stays
         # the same.
