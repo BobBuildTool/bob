@@ -4,10 +4,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from shlex import quote
-from unittest import TestCase
+from unittest import TestCase, skipIf
 from unittest.mock import MagicMock, patch
 import asyncio
-import os
+import os, stat
 import subprocess
 import shutil
 import tempfile
@@ -17,9 +17,10 @@ import sys
 from mocks.http_server import HttpServerMock
 
 from bob.input import UrlScm
+from bob.scm.url import parseMode, dumpMode
 from bob.invoker import Invoker, InvocationError
 from bob.errors import ParseError
-from bob.utils import asHexStr, runInEventLoop, getProcessPoolExecutor
+from bob.utils import asHexStr, runInEventLoop, getProcessPoolExecutor, isWindows
 
 INVALID_FILE = "C:\\does\\not\\exist" if sys.platform == "win32" else "/does/not/exist/"
 
@@ -99,6 +100,10 @@ class UrlScmTest:
             d = hashlib.sha1()
             d.update(f.read())
         self.assertEqual(self.urlSha1, asHexStr(d.digest()))
+
+    def assertMode(self, fn, mode=(0o666 if isWindows() else 0o600)):
+        fm = stat.S_IMODE(os.lstat(fn).st_mode)
+        self.assertEqual(fm, mode)
 
 class TestLiveBuildId(UrlScmTest, TestCase):
 
@@ -253,7 +258,9 @@ class TestDownloads(UrlScmTest, TestCase):
             })
             with tempfile.TemporaryDirectory() as workspace:
                 self.invokeScm(workspace, scm)
-                self.assertContent(os.path.join(workspace, "test.txt"))
+                fn = os.path.join(workspace, "test.txt")
+                self.assertContent(fn)
+                self.assertMode(fn)
 
     def testDownloadAgain(self):
         """Download existing file again. Should not transfer the file again"""
@@ -265,6 +272,7 @@ class TestDownloads(UrlScmTest, TestCase):
                 fn = os.path.join(workspace, "test.txt")
                 self.invokeScm(workspace, scm)
                 self.assertContent(fn)
+                self.assertMode(fn)
                 fs1 = os.stat(fn)
                 self.invokeScm(workspace, scm)
                 fs2 = os.stat(fn)
@@ -725,3 +733,70 @@ class TestMirrors(UrlScmTest, TestCase):
                     self.invokeScm(workspace, scm)
 
             self.assertNotExists(mirrorPath)
+
+
+@skipIf(isWindows(), "requires UNIX platform")
+class TestFileMode(UrlScmTest, TestCase):
+
+    def testOldDefaultFileMode(self):
+        """Test old behaviour of defaultFileMode policy"""
+        os.chmod(self.path, 0o764)
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeScm(workspace, self.createUrlScm())
+            self.assertMode(os.path.join(workspace, self.fn), 0o764)
+
+    def testFileModeOverride(self):
+        """Test that fileMode attribute takes precedence"""
+        os.chmod(self.path, 0o777)
+        with tempfile.TemporaryDirectory() as workspace:
+            scm = self.createUrlScm({ "fileMode" : 0o640 })
+            self.invokeScm(workspace, scm)
+            self.assertMode(os.path.join(workspace, self.fn), 0o640)
+
+    def testSwitch(self):
+        os.chmod(self.path, 0o777)
+        with tempfile.TemporaryDirectory() as workspace:
+            oldScm = self.createUrlScm({ "fileMode" : 0o640 })
+
+            self.invokeScm(workspace, oldScm)
+            self.assertMode(os.path.join(workspace, self.fn), 0o640)
+
+            newScm = self.createUrlScm({ "fileMode" : 0o444 })
+
+            self.assertTrue(newScm.canSwitch(oldScm))
+            self.invokeScm(workspace, newScm, switch=True, oldScm=oldScm)
+            self.assertMode(os.path.join(workspace, self.fn), 0o444)
+
+
+class TestFileModeParsing(TestCase):
+    def testParseInvalid(self):
+        with self.assertRaises(ValueError):
+            parseMode({})
+        with self.assertRaises(ValueError):
+            parseMode(None)
+
+        with self.assertRaises(ValueError):
+            parseMode("r+x")
+        with self.assertRaises(KeyError):
+            parseMode("f=rw")
+        with self.assertRaises(ValueError):
+            parseMode("u,g")
+        with self.assertRaises(ValueError):
+            parseMode("g=rw,")
+        with self.assertRaises(ValueError):
+            parseMode("u=rw=x")
+
+    def testParse(self):
+        self.assertEqual(parseMode(42), 42)
+
+        self.assertEqual(parseMode("u="), 0)
+        self.assertEqual(parseMode("u=rw"), 0o600)
+        self.assertEqual(parseMode("u=rw,u=r"), 0o400)
+        self.assertEqual(parseMode("u=rwx,g=rx,o=rx"), 0o755)
+
+    def testDump(self):
+        self.assertEqual(dumpMode(None), None)
+        self.assertEqual(dumpMode(0), "")
+        self.assertEqual(dumpMode(0o600), "u=rw")
+        self.assertEqual(dumpMode(0o400), "u=r")
+        self.assertEqual(dumpMode(0o755), "u=rwx,g=rx,o=rx")
