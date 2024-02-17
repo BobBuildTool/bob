@@ -26,7 +26,8 @@ Available sub-commands:
     bob jenkins add [-h] [-n NODES] [-o OPTIONS]
                     [--host-platform {linux,msys,win32}] [-w] [-p PREFIX]
                     [-r ROOT] [-D DEFINES] [--keep] [--download] [--upload]
-                    [--no-sandbox] [--credentials CREDENTIALS] [--clean]
+                    [--no-sandbox] [--credentials CREDENTIALS]
+                    [--clean | --incremental]
                     [--shortdescription | --longdescription]
                     name url
     bob jenkins export [-h] name dir
@@ -94,14 +95,14 @@ Options
     configuration will be able to trigger a build.
 
 ``--clean``
-    Do clean builds.
+    Do clean builds. This is the default.
 
     Whenever a Jenkins job is triggered, the workspace is erased first. This
     will cause a fresh checkout of the sources and a clean (re)build of all
     packages in the job.
 
     Use this option to ensure reproducibility at the expense of speed.
-    Disabled by default. See ``--incremental`` for the opposite switch.
+    Enabled by default. See ``--incremental`` for the opposite switch.
 
 ``--credentials CREDENTIALS``
     Credentials ID for git/svn SCM checkouts.
@@ -158,7 +159,7 @@ Options
     operating system.
 
 ``--incremental``
-    Reuse workspace for incremental builds. This is the default.
+    Reuse workspace for incremental builds.
 
     Bob will still apply the internal heuristics to make clean builds where
     recipes or any of the dependencies were changed. Use ``--clean`` to always
