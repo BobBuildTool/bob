@@ -385,7 +385,7 @@ class BaseArchive(TarHelper):
 
     def cachePackage(self, buildId, workspace):
         try:
-            return self._openUploadFile(buildId, ARTIFACT_SUFFIX)
+            return self._openUploadFile(buildId, ARTIFACT_SUFFIX, False)
         except ArtifactExistsError:
             return None
         except (ArtifactUploadError, OSError) as e:
@@ -455,7 +455,7 @@ class BaseArchive(TarHelper):
             # to prevent ugly backtraces when user presses ctrl+c.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, overwrite):
         raise ArtifactUploadError("not implemented")
 
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
@@ -483,7 +483,7 @@ class BaseArchive(TarHelper):
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
-            with self._openUploadFile(buildId, suffix) as (name, fileobj):
+            with self._openUploadFile(buildId, suffix, False) as (name, fileobj):
                 self._pack(name, fileobj, audit, content)
         except ArtifactExistsError:
             return ("skipped ({} exists in archive)".format(content), SKIPPED)
@@ -516,10 +516,10 @@ class BaseArchive(TarHelper):
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
-            with self._openUploadFile(key, suffix) as (name, fileobj):
+            # Meta data file uploads overwrite their targets. Thus we should
+            # never see an ArtifactExistsError.
+            with self._openUploadFile(key, suffix, True) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, content)
-        except ArtifactExistsError:
-            return ("skipped (exists in archive)", SKIPPED)
         except (ArtifactUploadError, OSError) as e:
             if self.__ignoreErrors:
                 return ("error ("+str(e)+")", ERROR)
@@ -668,9 +668,9 @@ class LocalArchive(BaseArchive):
         else:
             raise ArtifactNotFoundError()
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, overwrite):
         (packageResultPath, packageResultFile) = self._getPath(buildId, suffix)
-        if os.path.isfile(packageResultFile):
+        if not overwrite and os.path.isfile(packageResultFile):
             raise ArtifactExistsError()
 
         # open temporary file in destination directory
@@ -684,8 +684,7 @@ class LocalArchive(BaseArchive):
                     os.umask(oldMask)
         return LocalArchiveUploader(
             NamedTemporaryFile(dir=packageResultPath, delete=False),
-            self.__fileMode,
-            packageResultFile)
+            self.__fileMode, packageResultFile, overwrite)
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -700,19 +699,23 @@ class LocalArchiveDownloader:
         return False
 
 class LocalArchiveUploader:
-    def __init__(self, tmp, fileMode, destination):
+    def __init__(self, tmp, fileMode, destination, overwrite):
         self.tmp = tmp
         self.fileMode = fileMode
         self.destination = destination
+        self.overwrite = overwrite
     def __enter__(self):
         return (None, self.tmp)
     def __exit__(self, exc_type, exc_value, traceback):
         self.tmp.close()
         # atomically move file to destination at end of upload
         if exc_type is None:
-            if not isWindows():
-                if self.fileMode is not None:
-                    os.chmod(self.tmp.name, self.fileMode)
+            if not isWindows() and self.fileMode is not None:
+                os.chmod(self.tmp.name, self.fileMode)
+
+            if self.overwrite:
+                os.replace(self.tmp.name, self.destination)
+            elif not isWindows():
                 # Cannot use os.rename() because it will unconditionally
                 # replace an existing file. Instead we link the file at the
                 # destination and unlink the temporary file.
@@ -812,44 +815,47 @@ class SimpleHttpArchive(BaseArchive):
                 raise ArtifactDownloadError("{} {}".format(response.status,
                                                            response.reason))
 
-    def _openUploadFile(self, buildId, suffix):
-        (ok, result) = self.__retry(lambda: self.__openUploadFile(buildId, suffix))
+    def _openUploadFile(self, buildId, suffix, overwrite):
+        (ok, result) = self.__retry(lambda: self.__openUploadFile(buildId, suffix, overwrite))
         if ok:
             return result
         else:
             raise ArtifactUploadError(str(result))
 
-    def __openUploadFile(self, buildId, suffix):
+    def __openUploadFile(self, buildId, suffix, overwrite):
         connection = self._getConnection()
         url = self._makeUrl(buildId, suffix)
 
         # check if already there
-        connection.request("HEAD", url, headers=self._getHeaders())
-        response = connection.getresponse()
-        response.read()
-        if response.status == 200:
-            raise ArtifactExistsError()
-        elif response.status != 404:
-            raise ArtifactUploadError("HEAD {} {}".format(response.status, response.reason))
+        if not overwrite:
+            connection.request("HEAD", url, headers=self._getHeaders())
+            response = connection.getresponse()
+            response.read()
+            if response.status == 200:
+                raise ArtifactExistsError()
+            elif response.status != 404:
+                raise ArtifactUploadError("HEAD {} {}".format(response.status, response.reason))
 
         # create temporary file
-        return SimpleHttpUploader(self, url)
+        return SimpleHttpUploader(self, url, overwrite)
 
-    def _putUploadFile(self, url, tmp):
-        (ok, result) = self.__retry(lambda: self.__putUploadFile(url, tmp))
+    def _putUploadFile(self, url, tmp, overwrite):
+        (ok, result) = self.__retry(lambda: self.__putUploadFile(url, tmp, overwrite))
         if ok:
             return result
         else:
             raise ArtifactUploadError(str(result))
 
-    def __putUploadFile(self, url, tmp):
+    def __putUploadFile(self, url, tmp, overwrite):
         # Determine file length outself and add a "Content-Length" header. This
         # used to work in Python 3.5 automatically but was removed later.
         tmp.seek(0, os.SEEK_END)
         length = str(tmp.tell())
         tmp.seek(0)
         headers = self._getHeaders()
-        headers.update({ 'Content-Length' : length, 'If-None-Match' : '*' })
+        headers.update({ 'Content-Length' : length })
+        if not overwrite:
+            headers.update({ 'If-None-Match' : '*' })
         connection = self._getConnection()
         connection.request("PUT", url, tmp, headers=headers)
         response = connection.getresponse()
@@ -873,17 +879,18 @@ class SimpleHttpDownloader:
         return False
 
 class SimpleHttpUploader:
-    def __init__(self, archiver, url):
+    def __init__(self, archiver, url, overwrite):
         self.archiver = archiver
         self.tmp = TemporaryFile()
         self.url = url
+        self.overwrite = overwrite
     def __enter__(self):
         return (None, self.tmp)
     def __exit__(self, exc_type, exc_value, traceback):
         try:
             # do actual upload on regular handle close
             if exc_type is None:
-                self.archiver._putUploadFile(self.url, self.tmp)
+                self.archiver._putUploadFile(self.url, self.tmp, self.overwrite)
         finally:
             self.tmp.close()
         return False
@@ -932,11 +939,11 @@ class CustomArchive(BaseArchive):
         finally:
             if tmpName is not None: os.unlink(tmpName)
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, overwrite):
         (tmpFd, tmpName) = mkstemp()
         os.close(tmpFd)
         return CustomUploader(tmpName, self._makeUrl(buildId, suffix), self.__whiteList,
-            self.__uploadCmd)
+            self.__uploadCmd, overwrite)
 
 class CustomDownloader:
     def __init__(self, name):
@@ -948,11 +955,12 @@ class CustomDownloader:
         return False
 
 class CustomUploader:
-    def __init__(self, name, remoteName, whiteList, uploadCmd):
+    def __init__(self, name, remoteName, whiteList, uploadCmd, overwrite):
         self.name = name
         self.remoteName = remoteName
         self.whiteList = whiteList
         self.uploadCmd = uploadCmd
+        self.overwrite = overwrite
 
     def __enter__(self):
         return (self.name, None)
@@ -963,6 +971,8 @@ class CustomUploader:
                 env = { k:v for (k,v) in os.environ.items() if k in self.whiteList }
                 env["BOB_LOCAL_ARTIFACT"] = self.name
                 env["BOB_REMOTE_ARTIFACT"] = self.remoteName
+                if self.overwrite:
+                    env["BOB_REMOTE_OVERWRITE"] = "1"
                 ret = subprocess.call([getBashPath(), "-ec", self.uploadCmd],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                     cwd=gettempdir(), env=env)
@@ -1034,16 +1044,16 @@ class AzureArchive(BaseArchive):
         finally:
             if client is not None: client.close()
 
-    def _openUploadFile(self, buildId, suffix):
+    def _openUploadFile(self, buildId, suffix, overwrite):
         containerClient = self.__getClient()
         from azure.core.exceptions import AzureError
         blobName = self.__makeBlobName(buildId, suffix)
         blobClient = None
         try:
             blobClient = containerClient.get_blob_client(blobName)
-            if blobClient.exists():
+            if not overwrite and blobClient.exists():
                 raise ArtifactExistsError()
-            ret = AzureUploader(containerClient, blobClient)
+            ret = AzureUploader(containerClient, blobClient, overwrite)
             containerClient = blobClient = None
             return ret
         except AzureError as e:
@@ -1063,9 +1073,10 @@ class AzureDownloader:
         return False
 
 class AzureUploader:
-    def __init__(self, containerClient, blobClient):
+    def __init__(self, containerClient, blobClient, overwrite):
         self.__containerClient = containerClient
         self.__blobClient = blobClient
+        self.__overwrite = overwrite
 
     def __enter__(self):
         self.__tmp = TemporaryFile()
@@ -1087,7 +1098,7 @@ class AzureUploader:
             self.__tmp.seek(0, os.SEEK_END)
             length = self.__tmp.tell()
             self.__tmp.seek(0)
-            self.__blobClient.upload_blob(self.__tmp, length=length, overwrite=False)
+            self.__blobClient.upload_blob(self.__tmp, length=length, overwrite=self.__overwrite)
         except ResourceExistsError:
             raise ArtifactExistsError()
         except AzureError as e:
