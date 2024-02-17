@@ -54,7 +54,7 @@ class JenkinsConfig:
         self.upload = config.get("upload", False)
         self.sandbox = config.get("sandbox", True)
         self.credentials = config.get("credentials", None)
-        self.clean = config.get("clean", False)
+        self.clean = config.get("clean", True)
         self.keep = config.get("keep", False)
         self.authtoken = config.get("authtoken", None)
         self.shortdescription = config.get("shortdescription", False)
@@ -99,7 +99,7 @@ class JenkinsConfig:
         self.upload = False
         self.sandbox = True
         self.credentials = None
-        self.clean = False
+        self.clean = True
         self.keep = False
         self.authtoken = None
         self.shortdescription = False
