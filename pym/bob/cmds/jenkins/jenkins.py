@@ -442,6 +442,7 @@ class JenkinsJob:
             "upload=" + ("1" if self.__upload else "0"),
             "copy=" + config.artifactsCopy,
             "share=" + config.sharedDir,
+            "always-checkout=" + ("1" if config.scmAlwaysCheckout else "0"),
         ])
         if config.sharedQuota:
             execCmds.append("quota=" + config.sharedQuota)

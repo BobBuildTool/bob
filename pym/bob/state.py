@@ -161,6 +161,9 @@ class JenkinsConfig:
         elif key == "jobs.update":
             if value not in ("always", "description", "lazy"):
                 errorHandler("'jobs.update' extended option has unsupported value!");
+        elif key == "scm.always-checkout":
+            if value.lower() not in ("0", "false", "1", "true"):
+                errorHandler("scm.always-checkout must be any of: 0/false/1/true")
         elif key == "scm.git.shallow":
             try:
                 num = int(value)
@@ -233,6 +236,10 @@ class JenkinsConfig:
     @property
     def jobsUpdate(self):
         return self.__options.get('jobs.update', "always")
+
+    @property
+    def scmAlwaysCheckout(self):
+        return isTrue(self.__options.get("scm.always-checkout", "1"))
 
     @property
     def scmGitShallow(self):
