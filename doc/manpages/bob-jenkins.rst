@@ -532,6 +532,17 @@ jobs.update
         otherwise. This will provide considerable speed improvements at the
         expense of an outdated description of the unchanged jobs.
 
+scm.always-checkout
+    Boolean option (possible values: '0' or 'false' resp. '1' or 'true') that
+    forces the execution of checkout steps. This option is enabled by default.
+    If disabled, the checkout might be skipped if a matching binary artifact
+    can be found.
+
+    Disabling this option can increase the build speed. On the other hand, it
+    might hide problems in recipes where the checkout step is not
+    deterministic. Note that git and svn SCMs are checked out regardless of
+    this option. For release builds it is best to keep the option enabled.
+
 scm.git.shallow
     Instruct the Jenkins git plugin to create shallow clones with a history
     truncated to the specified number of commits. If the parameter is unset
