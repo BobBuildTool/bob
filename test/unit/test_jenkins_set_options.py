@@ -50,7 +50,7 @@ class TestJenkinsSetOptions(JenkinsTests, TestCase):
             "--credentials", "credentials",
             "--authtoken", "authtoken",
             "--shortdescription",
-            "--keep", "--download", "--upload", "--no-sandbox", "--clean",
+            "--keep", "--download", "--upload", "--no-sandbox", "--incremental",
         ]
         self.executeBobJenkinsCmd("set-options test " + " ".join(opts))
 
@@ -67,7 +67,7 @@ class TestJenkinsSetOptions(JenkinsTests, TestCase):
         self.assertTrue(c.download)
         self.assertTrue(c.upload)
         self.assertFalse(c.sandbox)
-        self.assertTrue(c.clean)
+        self.assertFalse(c.clean)
 
     def testReset(self):
         self.testAllOptions()
@@ -85,4 +85,4 @@ class TestJenkinsSetOptions(JenkinsTests, TestCase):
         self.assertFalse(c.download)
         self.assertFalse(c.upload)
         self.assertTrue(c.sandbox)
-        self.assertFalse(c.clean)
+        self.assertTrue(c.clean)

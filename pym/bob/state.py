@@ -54,7 +54,7 @@ class JenkinsConfig:
         self.upload = config.get("upload", False)
         self.sandbox = config.get("sandbox", True)
         self.credentials = config.get("credentials", None)
-        self.clean = config.get("clean", False)
+        self.clean = config.get("clean", True)
         self.keep = config.get("keep", False)
         self.authtoken = config.get("authtoken", None)
         self.shortdescription = config.get("shortdescription", False)
@@ -99,7 +99,7 @@ class JenkinsConfig:
         self.upload = False
         self.sandbox = True
         self.credentials = None
-        self.clean = False
+        self.clean = True
         self.keep = False
         self.authtoken = None
         self.shortdescription = False
@@ -161,6 +161,9 @@ class JenkinsConfig:
         elif key == "jobs.update":
             if value not in ("always", "description", "lazy"):
                 errorHandler("'jobs.update' extended option has unsupported value!");
+        elif key == "scm.always-checkout":
+            if value.lower() not in ("0", "false", "1", "true"):
+                errorHandler("scm.always-checkout must be any of: 0/false/1/true")
         elif key == "scm.git.shallow":
             try:
                 num = int(value)
@@ -233,6 +236,10 @@ class JenkinsConfig:
     @property
     def jobsUpdate(self):
         return self.__options.get('jobs.update', "always")
+
+    @property
+    def scmAlwaysCheckout(self):
+        return isTrue(self.__options.get("scm.always-checkout", "1"))
 
     @property
     def scmGitShallow(self):

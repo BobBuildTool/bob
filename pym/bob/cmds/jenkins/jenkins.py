@@ -442,6 +442,7 @@ class JenkinsJob:
             "upload=" + ("1" if self.__upload else "0"),
             "copy=" + config.artifactsCopy,
             "share=" + config.sharedDir,
+            "always-checkout=" + ("1" if config.scmAlwaysCheckout else "0"),
         ])
         if config.sharedQuota:
             execCmds.append("quota=" + config.sharedQuota)
@@ -809,8 +810,11 @@ def doJenkinsAdd(recipes, argv):
     parser.add_argument('--no-sandbox', action='store_false', dest='sandbox', default=True,
         help="Disable sandboxing")
     parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
-    parser.add_argument('--clean', action='store_true', default=False,
-        help="Do clean builds (clear workspace)")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--clean', action='store_true', default=True,
+        help="Do clean builds (clear workspace, default)")
+    group.add_argument('--incremental', action='store_false', dest='clean',
+        help="Reuse workspace for incremental builds")
     parser.add_argument("name", help="Symbolic name for server")
     parser.add_argument("url", help="Server URL")
     group = parser.add_mutually_exclusive_group()

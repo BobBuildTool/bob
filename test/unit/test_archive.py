@@ -363,6 +363,10 @@ class BaseTester:
         run(archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD2_ARTIFACT, b'\x00', executor=self.executor))
         self.__testBuildId(UPLOAD2_ARTIFACT, b'\x00')
 
+        # Live-build-id can be replaced
+        run(archive.uploadLocalLiveBuildId(DummyStep(), UPLOAD2_ARTIFACT, b'\x11', executor=self.executor))
+        self.__testBuildId(UPLOAD2_ARTIFACT, b'\x11')
+
         # provoke upload errors
         with self.assertRaises(BuildError):
             run(archive.uploadLocalLiveBuildId(DummyStep(), ERROR_UPLOAD_ARTIFACT, b'\x00', executor=self.executor))

@@ -26,7 +26,8 @@ Available sub-commands:
     bob jenkins add [-h] [-n NODES] [-o OPTIONS]
                     [--host-platform {linux,msys,win32}] [-w] [-p PREFIX]
                     [-r ROOT] [-D DEFINES] [--keep] [--download] [--upload]
-                    [--no-sandbox] [--credentials CREDENTIALS] [--clean]
+                    [--no-sandbox] [--credentials CREDENTIALS]
+                    [--clean | --incremental]
                     [--shortdescription | --longdescription]
                     name url
     bob jenkins export [-h] name dir
@@ -94,14 +95,14 @@ Options
     configuration will be able to trigger a build.
 
 ``--clean``
-    Do clean builds.
+    Do clean builds. This is the default.
 
     Whenever a Jenkins job is triggered, the workspace is erased first. This
     will cause a fresh checkout of the sources and a clean (re)build of all
     packages in the job.
 
     Use this option to ensure reproducibility at the expense of speed.
-    Disabled by default. See ``--incremental`` for the opposite switch.
+    Enabled by default. See ``--incremental`` for the opposite switch.
 
 ``--credentials CREDENTIALS``
     Credentials ID for git/svn SCM checkouts.
@@ -158,7 +159,7 @@ Options
     operating system.
 
 ``--incremental``
-    Reuse workspace for incremental builds. This is the default.
+    Reuse workspace for incremental builds.
 
     Bob will still apply the internal heuristics to make clean builds where
     recipes or any of the dependencies were changed. Use ``--clean`` to always
@@ -531,6 +532,17 @@ jobs.update
         The description and audit trail information will be left unchanged
         otherwise. This will provide considerable speed improvements at the
         expense of an outdated description of the unchanged jobs.
+
+scm.always-checkout
+    Boolean option (possible values: '0' or 'false' resp. '1' or 'true') that
+    forces the execution of checkout steps. This option is enabled by default.
+    If disabled, the checkout might be skipped if a matching binary artifact
+    can be found.
+
+    Disabling this option can increase the build speed. On the other hand, it
+    might hide problems in recipes where the checkout step is not
+    deterministic. Note that git and svn SCMs are checked out regardless of
+    this option. For release builds it is best to keep the option enabled.
 
 scm.git.shallow
     Instruct the Jenkins git plugin to create shallow clones with a history

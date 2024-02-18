@@ -63,6 +63,8 @@ class Spec:
             self.shareQuota = v
         elif k == "platform":
             self.platform = v
+        elif k == "always-checkout":
+            self.scmAlwaysCheckout = isTrue(v)
         else:
             raise AssertionError(line)
 
@@ -233,6 +235,8 @@ def doJenkinsExecuteRun(argv, bobRoot):
             builder.setShareHandler(getShare({ 'path' : path,
                                                 'quota' : spec.shareQuota }))
             builder.setShareMode(True, True)
+        if spec.scmAlwaysCheckout:
+            builder.setAlwaysCheckout([".*"])
         builder.cook(ir.getRoots(), False, loop)
 
     return 0

@@ -348,8 +348,8 @@ often than others, though:
 
 * ``--download``, ``--upload``: These are usually enabled so that the binary
   archive is populated by the Jenkins centrally.
-* ``--clean``: increases build times but will make sure that indeterminism in
-  recipes is suppressed.
+* ``--incremental``: optimize build times but flaky recipes might cause build
+  problems.
 * ``-p PREFIX, --prefix PREFIX``: you should almost always give the jobs of
   each project a unique prefix.
 * ``--shortdescription``: shortens job descriptions and may dramatically
