@@ -1152,14 +1152,16 @@ cd {ROOT}
 
             oldResultHash = BobState().getResultHash(prettySrcPath)
             checkoutReason = None
-            if self.__force:
+            if created:
+                checkoutReason = "initial checkout"
+            elif self.__force:
                 checkoutReason = "forced"
             elif not checkoutStep.isDeterministic():
                 checkoutReason = "indeterminsitic"
             elif not compareDirectoryState(checkoutState, oldCheckoutState):
                 checkoutReason = "recipe changed"
             elif (checkoutInputHashes != BobState().getInputHashes(prettySrcPath)):
-                checkoutReason = "input changed"
+                checkoutReason = "dependency changed"
             elif (checkoutStep.getMainScript() or checkoutStep.getPostRunCmds()) \
                  and (oldResultHash != currentResultHash.hashWorkspace()):
                 checkoutReason = "workspace changed"
