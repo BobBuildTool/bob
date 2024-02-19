@@ -39,6 +39,8 @@ warnDepends = WarnOnce("The same package is named multiple times as dependency!"
     help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
 warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
 warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
+warnPrjMinimumVersion = Warn("Your project is too old. Support for versions before 0.16 will be removed soon.")
+warnPluginMinimumVersion = Warn("Plugin API too old. Support for versions before 0.15 will be removed soon.")
 
 def isPrefixPath(p1, p2):
     """Check if the initial elements of ``p2`` equal ``p1``.
@@ -3351,6 +3353,8 @@ class RecipeSet:
         if compareVersion(BOB_VERSION, apiVersion) < 0:
             raise ParseError("Your Bob is too old. Plugin '"+fileName+"' requires at least version "+apiVersion+"!")
         toolsAbiBreak = compareVersion(apiVersion, "0.15") < 0
+        if toolsAbiBreak:
+            warnPluginMinimumVersion.warn(fileName)
 
         hooks = manifest.get('hooks', {})
         if not isinstance(hooks, dict):
@@ -3640,6 +3644,8 @@ class RecipeSet:
         if compareVersion(maxVer, minVer) < 0:
             raise ParseError("Layer '{}' reqires a higher Bob version than root project!"
                                 .format("/".join(layer)))
+        if compareVersion(minVer, "0.16") < 0:
+            warnPrjMinimumVersion.warn("/".join(layer))
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
 
         # Determine policies. The root layer determines the default settings
