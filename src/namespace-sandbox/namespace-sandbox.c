@@ -69,6 +69,9 @@ struct Options {
   const char *host_name;     // Host name (-H)
 };
 
+// forward declaration
+static int CreateTarget(const char *path, bool is_directory);
+
 // Child function used by CheckNamespacesSupported() in call to clone().
 static int CheckNamespacesSupportedChild(void *arg) { return 0; }
 
@@ -149,7 +152,7 @@ static void AddMountSource(char *source, struct Options *opt) {
   // should be mounted in the sandbox in the same path as outside.
   if (opt->mount_sources[opt->num_mounts] != NULL) {
     opt->mount_targets[opt->num_mounts] = opt->mount_sources[opt->num_mounts];
-	opt->mount_rw[opt->num_mounts] = false;
+    opt->mount_rw[opt->num_mounts] = false;
     opt->num_mounts++;
   }
   if (source != NULL) {
@@ -296,9 +299,9 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
         if (opt->mount_sources[opt->num_mounts] == NULL) {
           Usage(argc, argv, "The -m option must be preceded by an -M option.");
         }
-		opt->mount_rw[opt->num_mounts] = false;
+        opt->mount_rw[opt->num_mounts] = false;
         opt->mount_targets[opt->num_mounts] = optarg;
-		opt->num_mounts++;
+        opt->num_mounts++;
         break;
       case 'w':
         if (optarg[0] != '/') {
@@ -308,9 +311,9 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
         if (opt->mount_sources[opt->num_mounts] == NULL) {
           Usage(argc, argv, "The -w option must be preceded by an -M option.");
         }
-		opt->mount_rw[opt->num_mounts] = true;
+        opt->mount_rw[opt->num_mounts] = true;
         opt->mount_targets[opt->num_mounts] = optarg;
-		opt->num_mounts++;
+        opt->num_mounts++;
         break;
       case 'n':
         opt->create_netns = 1;
@@ -415,6 +418,11 @@ static void SetupDevices() {
     CreateFile(devs[i] + 1);
     CHECK_CALL(mount(devs[i], devs[i] + 1, NULL, MS_BIND, NULL));
   }
+
+  // devtps mount with ptmx symlink for pseudoterminals
+  CreateTarget("dev/pts", true);
+  CHECK_CALL(mount("devpts", "dev/pts", "devpts", MS_NOSUID | MS_NOEXEC, "ptmxmode=0666"));
+  CHECK_CALL(symlink("pts/ptmx", "dev/ptmx"));
 
   CHECK_CALL(symlink("/proc/self/fd", "dev/fd"));
 }
@@ -534,7 +542,7 @@ static void SetupDirectories(struct Options *opt, uid_t uid) {
         strcat(user_friendly_mount_target, opt->mount_targets[i]);
         PRINT_DEBUG("mount: %s -> %s (%s)\n", opt->mount_sources[i],
                     user_friendly_mount_target,
-					opt->mount_rw[i] ? "rw" : "ro");
+                    opt->mount_rw[i] ? "rw" : "ro");
         free(user_friendly_mount_target);
       }
     }
