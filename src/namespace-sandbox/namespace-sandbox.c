@@ -152,7 +152,7 @@ static void AddMountSource(char *source, struct Options *opt) {
   // should be mounted in the sandbox in the same path as outside.
   if (opt->mount_sources[opt->num_mounts] != NULL) {
     opt->mount_targets[opt->num_mounts] = opt->mount_sources[opt->num_mounts];
-	opt->mount_rw[opt->num_mounts] = false;
+    opt->mount_rw[opt->num_mounts] = false;
     opt->num_mounts++;
   }
   if (source != NULL) {
@@ -299,9 +299,9 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
         if (opt->mount_sources[opt->num_mounts] == NULL) {
           Usage(argc, argv, "The -m option must be preceded by an -M option.");
         }
-		opt->mount_rw[opt->num_mounts] = false;
+        opt->mount_rw[opt->num_mounts] = false;
         opt->mount_targets[opt->num_mounts] = optarg;
-		opt->num_mounts++;
+        opt->num_mounts++;
         break;
       case 'w':
         if (optarg[0] != '/') {
@@ -311,9 +311,9 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
         if (opt->mount_sources[opt->num_mounts] == NULL) {
           Usage(argc, argv, "The -w option must be preceded by an -M option.");
         }
-		opt->mount_rw[opt->num_mounts] = true;
+        opt->mount_rw[opt->num_mounts] = true;
         opt->mount_targets[opt->num_mounts] = optarg;
-		opt->num_mounts++;
+        opt->num_mounts++;
         break;
       case 'n':
         opt->create_netns = 1;
@@ -542,7 +542,7 @@ static void SetupDirectories(struct Options *opt, uid_t uid) {
         strcat(user_friendly_mount_target, opt->mount_targets[i]);
         PRINT_DEBUG("mount: %s -> %s (%s)\n", opt->mount_sources[i],
                     user_friendly_mount_target,
-					opt->mount_rw[i] ? "rw" : "ro");
+                    opt->mount_rw[i] ? "rw" : "ro");
         free(user_friendly_mount_target);
       }
     }
