@@ -1,0 +1,180 @@
+Bob 0.24 Release Notes
+======================
+
+Changes made since Bob 0.23.0 include the following.
+
+Upcoming 1.0 release
+--------------------
+
+In preparation for a 1.0 release, the following changes are planned:
+
+* :ref:`configuration-bobMinimumVersion` will be raised to ``0.16``. Projects
+  with a lower version will be rejected.
+* All policies up-to and including version ``0.16`` will be removed.
+* Plugins targeting API versions before ``0.15`` will refuse to load.
+* The :ref:`configuration-recipes-filter` keyword will be removed.
+
+Bob will now issue a warning if a project or any of its plugin targets a too
+old version. Starting with the 0.25 development cycle, the above changes will
+be applied.
+
+New features
+------------
+
+* Added support for mirrors for URL SCMs.
+
+  In the user configuration, any number of mirrors can be added. There are two
+  types of mirrors: *pre-mirrors* which are checked before the primary location
+  of the recipe and *fallback-mirrors* that are used if the primary location
+  failed. Such mirrors are only used for deterministic URL SCMs, though.
+
+  Optionally, Bob can also upload files to the mirror(s) during the build.
+  This is especially useful when configuring a local directory in the per-user
+  Bob configuration to cache external downloads locally across multiple
+  projects.
+
+  See :ref:`configuration-config-mirrors` for more details. (:issue:`360`)
+* Bob gained support for nested SCMs.
+
+  This adds support to checkout an SCM into a subdirectory of another SCM in
+  the same recipe. This requires that the SCM with the upper directory is first
+  in the list before any other SCMs in subdirectories. Additionally, SCMs that
+  are natively supported by Jenkins plugins (git, svn), cannot be nested into
+  the other SCMs (cvs, import, url). The reason is that Jenkins SCM plugins
+  always execute before anything else in a Jenkins job.
+  
+  This relaxes the rules that did not allow any nesting before. There are some
+  drawbacks of such setups. Namely, if an SCM is moved to the attic, all their
+  nested SCMs are affected too.
+* Recipes and classes can use a new file inclusion syntax: ``$<@...@>``. For
+  each matched file, the script will see a (possibly temporary) file with its
+  content. The order of files is sorted by the original file name. See
+  :ref:`configuration-recipes-scripts` for more details.
+* Bare file names in URL SCMs now undergo tilde expansion. This replaces the
+  initial ``~`` or ``~user`` by the *user*’s home directory.
+* A number of user configuration entries can now be changed incrementally
+  instead of replacing them completely:
+
+  * Added support to remove builtin :ref:`configuration-config-whitelist`
+    entries. The new :ref:`configuration-config-whitelistremove` key in
+    default.yaml removes entries from the whitelist. It has a higher precedence
+    than adding whitelist entries. It is not an error to remove non-existent
+    whitelist entries. (:issue:`534`)
+  * The new :ref:`configuration-config-archive-prepend-append` keys update the
+    archive list by either prepending to the current list or appending to it.
+    The previously defined archives are retained.
+
+* The file mode of downloaded file with the URL SCM can now be specified by the
+  ``fileMode`` attribute. Because the handling was inconsistent between local
+  and network files, a new policy was introduced:
+  :ref:`policies-defaultFileMode`. If set to the new behaviour, also locally
+  copied files will get a predictable file mode (``0600``) instead of retaining
+  the source file mode.
+* Bob gained an extended option to always checkout in Jenkins jobs.
+
+  The "scm.always-checkout" extended option has been added which defaults to
+  "true". If enabled, checkout steps will always be executed. This knob is
+  intended to increase the robustness and eagerly expose problems in recipes
+  whose checkout is not fully stable.  If the user wants to rely defer
+  checkouts until necessary to speed up builds, the scm.always-checkout option
+  can disabled manually. (:ref:`bob-jenkins-extended-options`)
+
+
+Improvements
+------------
+
+* Better handling of git recipe changes when commit and branch are both
+  specified. Unless the recipe is changed, Bob will not compare the
+  current commit any more in existing checkouts. This makes sure that
+  temporary changes during development do not fail the build.
+
+  If the recipe is changed, Bob now compares the configured commit just with
+  with state of the workspace if the repository was already cloned. The check
+  whether the commit is also on the branch is only done on the initial clone.
+  This makes it easier for a developer to adapt the repository and the recipe
+  without being forced to push the commit already upstream.
+
+  See :pull:`532`.
+* Made checkout behaviour more robust if ``checkoutSCM`` *and* a
+  ``checkoutScript``/``checkoutAssert`` is used. Specifically, if the workspace
+  was changed since the last time, Bob now re-runs the checkout with the
+  ``checkoutScript``/``checkoutAssert``.
+  
+  This fixes a problem on Jenkins builds when the checkoutScript modifies a git
+  repository. This change will be squashed by the Jenkins git plugin every time
+  the job runs. Now, if the script was marked deterministic, Bob still has to
+  run it again to re-apply any modifications.
+  
+  Another example are code generators that should probably be run again if the
+  workspace has changed. In fact, if the script was enabled for checkout-only
+  updates (:ref:`configuration-recipes-checkoutUpdateIf`), then such
+  modifications would already trigger the re-run if the workspace was modified.
+* No empty build/dist workspaces are created any more in case of
+  ``--checkout-only`` builds.
+* The parallel build scheduling and audit step visibility has been improved.
+
+  If a checkout/build/package-script finishes, the whole step is not yet
+  complete until the audit record has been created. Unfortunately, older
+  versions ob Bob did schedule other steps before doing the final audit part.
+  This had the unpleasant effect that, even though the script has finished,
+  interrupting Bob at this stage leads to a full re-execution of the whole step
+  later on. This has been rectified. See :issue:`539` for more details.
+* The URL SCM, if given a bare file name or ``file://`` url, now copies files
+  atomically. Previously a partially copied file could have remained in the
+  workspace if Bob was interrupted. The copy will now also retain the file
+  modification time.
+* Some caching data structures in the binary artifact repository that defer
+  checkouts until really necessary are now always updated. These caching data
+  structures are prone to incorrect data e.g., if some checkout is not really
+  deterministic (e.g. git influenced by global git config). The old behaviour
+  was to never replace the files which sets the very first execution result
+  into stone. If that was incorrect, there are no tools to purge the wrong
+  cache except deleting the whole binary archive.
+
+  Now this checkout information is always updated. These files are small so
+  there should be no performance impact.
+* The sandbox environment now provides a working pseudo tty environment. This
+  is important when using tools like ``script``, ``screen`` or ``ssh`` inside
+  a sandbox. (:issue:`554`)
+
+Backwards incompatible changes
+------------------------------
+
+* The default Jenkins build mode has been changed to "clean build". This should
+  improve robustness at the expense of speed. If desired, incremental builds
+  can be enabled explicitly. See the Jenkins :ref:`manpage-bob-jenkins-options`
+  ``--clean`` and ``--incremental``.
+
+Bug fixes
+---------
+
+* Fixed crash when invoking generators with the filter option (:pull:`525`)
+* Fixed crash on PowerShell fingerprint script (:issue:`527`)
+* Fixed PowerShell fingerprint script support. When the default language is
+  set to PowerShell, any script without the language suffix should apply to
+  PowerShell. Specifically, the ``fingerprintScript`` should be executed as
+  PowerShell script if ``fingerprintScriptPwsh`` is not set. This was not
+  working, though.
+* Fixed the ``bob-libc-version`` built-in fingerprint helper for current
+  MSYS2 versions (:pull:`526`)
+* Made Bob more robust against package cache corruptions. A corrupt cache
+  will be rebuilt instead of crashing. (:issue:`529`)
+* Fixed git SCM switch when going back to older revision. If gitCommitOnBranch
+  is active and commit and branch are configured in the recipe changing the
+  commit back to a older one did not update the sources back to the configured
+  version. Instead they remained on the current version. (:pull:`531`)
+* Fixed inline git SCM switch if the ``references`` or ``dissociate`` property
+  changes. (:pull:`537`)
+* Fixed crash in URL SCM if no extractor is installed e.g., if ``unzip`` is
+  missing. (:pull:`538`)
+* Fixed ``$PATH`` handling in sandbox environments. When using a sandbox, the
+  interpreter (bash or pwsh) must be found using the defined sandbox paths.
+  Older versions of Bob relied on the host ``$PATH`` which is not correct and
+  might not necessarily cover the installation path of bash/pwsh in the
+  sandbox.
+* Removed hard coded path of ``rm`` in Bob generated wrapper scripts.
+* SCM switches are now more robust when moving between Bob versions. It
+  could happen that SCMs are moved to the attic just because the initial
+  checkout was done by an older version of Bob. This should not happen any more.
+* Some SCM attributes (e.g.  ``retries``, ``recurseSubmodules``) previously
+  would trigger moves to the attic. This has been rectified.

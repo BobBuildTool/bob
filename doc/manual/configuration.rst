@@ -2326,6 +2326,8 @@ postBuildHook
 
     The return status of the hook is ignored.
 
+.. _configuration-config-mirrors:
+
 {pre,fallback}Mirror[{Prepend,Append}]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -2603,6 +2605,8 @@ Example::
 
    # Keep ssh-agent working
    whitelist: ["SSH_AGENT_PID", "SSH_AUTH_SOCK"]
+
+.. _configuration-config-whitelistremove:
 
 whitelistRemove
 ~~~~~~~~~~~~~~~
