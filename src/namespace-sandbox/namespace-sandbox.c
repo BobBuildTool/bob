@@ -69,6 +69,9 @@ struct Options {
   const char *host_name;     // Host name (-H)
 };
 
+// forward declaration
+static int CreateTarget(const char *path, bool is_directory);
+
 // Child function used by CheckNamespacesSupported() in call to clone().
 static int CheckNamespacesSupportedChild(void *arg) { return 0; }
 
@@ -415,6 +418,11 @@ static void SetupDevices() {
     CreateFile(devs[i] + 1);
     CHECK_CALL(mount(devs[i], devs[i] + 1, NULL, MS_BIND, NULL));
   }
+
+  // devtps mount with ptmx symlink for pseudoterminals
+  CreateTarget("dev/pts", true);
+  CHECK_CALL(mount("devpts", "dev/pts", "devpts", MS_NOSUID | MS_NOEXEC, "ptmxmode=0666"));
+  CHECK_CALL(symlink("pts/ptmx", "dev/ptmx"));
 
   CHECK_CALL(symlink("/proc/self/fd", "dev/fd"));
 }
