@@ -34,7 +34,6 @@ try:
 except ImportError:
     from yaml import load as yamlLoad, SafeLoader as YamlSafeLoader
 
-warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
 warnDepends = WarnOnce("The same package is named multiple times as dependency!",
     help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
 warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
@@ -1776,13 +1775,6 @@ class IncludeHelper:
         else:
             return (None, None)
 
-def mergeFilter(left, right):
-    if left is None:
-        return right
-    if right is None:
-        return left
-    return left + right
-
 class ScmValidator:
     def __init__(self, scmSpecs):
         self.__scmSpecs = scmSpecs
@@ -2045,11 +2037,6 @@ class Recipe(object):
         self.__anonBaseClass = anonBaseClass
         self.__defaultScriptLanguage = scriptLanguage
         self.__deps = list(Recipe.Dependency.parseEntries(recipe.get("depends", [])))
-        filt = recipe.get("filter", {})
-        if filt: warnFilter.warn(baseName)
-        self.__filterEnv = maybeGlob(filt.get("environment"))
-        self.__filterTools = maybeGlob(filt.get("tools"))
-        self.__filterSandbox = maybeGlob(filt.get("sandbox"))
         self.__packageName = packageName
         self.__baseName = baseName
         self.__root = recipe.get("root")
@@ -2215,9 +2202,6 @@ class Recipe(object):
         for cls in reversed(inherit):
             self.__sources.extend(cls.__sources)
             self.__deps[0:0] = cls.__deps
-            self.__filterEnv = mergeFilter(self.__filterEnv, cls.__filterEnv)
-            self.__filterTools = mergeFilter(self.__filterTools, cls.__filterTools)
-            self.__filterSandbox = mergeFilter(self.__filterSandbox, cls.__filterSandbox)
             if self.__root is None: self.__root = cls.__root
             if self.__shared is None: self.__shared = cls.__shared
             if self.__relocatable is None: self.__relocatable = cls.__relocatable
@@ -2378,28 +2362,17 @@ class Recipe(object):
 
         # make copies because we will modify them
         sandbox = inputSandbox
-        if self.__filterTools is None:
-            inputTools = inputTools.copy()
-        else:
-            oldInputTools = set(inputTools.inspect().keys())
-            inputTools = inputTools.filter(self.__filterTools)
-            newInputTools = set(inputTools.inspect().keys())
-            for t in (oldInputTools - newInputTools): diffTools[t] = None
+        inputTools = inputTools.copy()
         inputTools.touchReset()
         tools = inputTools.derive()
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
         inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
             "__tools" : tools })
-        env = inputEnv.filter(self.__filterEnv)
+        env = inputEnv.derive()
         for i in self.__varSelf:
             env = env.derive({ key : env.substitute(value, "environment::"+key)
                                for key, value in i.items() })
-        if sandbox is not None:
-            name = sandbox.coreStep.corePackage.getName()
-            if not checkGlobList(name, self.__filterSandbox):
-                sandbox = None
-                diffSandbox = None
         states = { n : s.copy() for (n,s) in inputStates.items() }
 
         # update plugin states
@@ -3792,11 +3765,6 @@ class RecipeSet:
             schema.Optional('checkoutAssert') : [ CheckoutAssert.SCHEMA ],
             schema.Optional('depends') : dependsClause,
             schema.Optional('environment') : VarDefineValidator("environment"),
-            schema.Optional('filter') : schema.Schema({
-                schema.Optional('environment') : [ varFilterSchema ],
-                schema.Optional('tools') : [ recipeFilterSchema ],
-                schema.Optional('sandbox') : [ recipeFilterSchema ]
-            }),
             schema.Optional('inherit') : [str],
             schema.Optional('privateEnvironment') : VarDefineValidator("privateEnvironment"),
             schema.Optional('metaEnvironment') : VarDefineValidator("metaEnvironment"),
