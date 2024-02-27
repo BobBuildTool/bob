@@ -3164,7 +3164,7 @@ class RecipeSet:
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#fiximportscmvariant for more information.")
             ),
             "defaultFileMode": (
-                "0.24",
+                "0.24rc1",
                 InfoOnce("defaultFileMode policy not set. File mode of URL SCMs not set for locally copied files.",
                     help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#defaultfilemode for more information.")
             ),
