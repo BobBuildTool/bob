@@ -1320,32 +1320,7 @@ See also :ref:`configuration-recipes-privateenv`.
 filter
 ~~~~~~
 
-Type: Dictionary ( "environment" | "sandbox" | "tools" -> List of Strings)
-
-The filter keyword allows to restrict the environment variables, tools and
-sandboxes inherited from downstream recipes. This way a recipe can effectively
-restrict the number of package variants.
-
-The filters specifications may use shell globbing patterns. As a special
-extension there is also a negative match if the pattern starts with a "!". Such
-patterns will filter out entries that have been otherwise included by previous
-patterns in the list (e.g. by inherited classes).
-
-Example::
-
-    filter:
-        environment: [ "*_MIRROR" ]
-        tools: [ "*toolchain*", "!host-toolchain" ]
-        sandbox: [ "*" ]
-
-In the above example the recipe would inherit only environment variables that
-end with "_MIRROR". All other variables are unset. Likewise all tools that have
-"toolchain" in their name are inherited, except the "host-toolchain". Anything
-is accepted as sandbox which would also be the default if left out.
-
-.. warning::
-   The filter keyword is still experimental and may change in the future or
-   might be removed completely.
+Removed in version 0.25.
 
 
 .. _configuration-recipes-fingerprintScript:
@@ -2389,10 +2364,25 @@ rootFilter
 
 Type: List of Strings
 
-Filter root recipes. The effect of this is a faster package parsing due to
-the fact, that the tree is not build for filtered roots.
+Filter root recipes. The effect of this is a faster package parsing due to the
+fact, that the package tree is not calculated for filtered roots.
 
-Works like the :ref:`configuration-recipes-filter` keyword.
+The filter specification may use shell globbing patterns. As a special
+extension there is also a negative match if the pattern starts with a "!". Such
+patterns will filter out entries that have been otherwise included by previous
+patterns in the list.
+
+Example::
+
+    rootFilter:
+        - "foo"
+        - "bar"
+        - "baz"
+        - "!*r"
+
+In the above example the root recipes ``foo`` and ``baz`` are included. The
+``bar`` root recipe is included initially but later rejected by the negative
+``!*r`` match.
 
 .. _configuration-config-sandbox:
 
