@@ -202,12 +202,6 @@ or set certain variables from the command line. Such variables are always taken
 over verbatim. The so calculated set of variables is the starting point for
 each root recipe.
 
-.. note::
-    Depending on the :ref:`policies-cleanEnvironment` policy the initial
-    environment may first be populated with the whitelisted variables named by
-    :ref:`configuration-config-whitelist` from the current OS environment. The
-    new behaviour (i.e. enabled policy) is to start with a clean environment.
-
 The next steps are repeated for each recipe as the dependency tree is traversed.
 A copy of the environment is inherited from the downstream recipe.
 
@@ -2248,10 +2242,9 @@ Specifies default environment variables. Example::
       # classes/make.yaml for details.
       MAKE_JOBS: "nproc"
 
-If the :ref:`policies-cleanEnvironment` policy is enabled then these variables
-are subject to :ref:`configuration-principle-subst` with the current OS
-environment. This allows to take over certain variables from the OS environment
-in a controlled fashion.
+These variables are subject to :ref:`configuration-principle-subst` with the
+current OS environment. This allows to take over certain variables from the OS
+environment in a controlled fashion.
 
 .. _configuration-config-hooks:
 
