@@ -3027,6 +3027,7 @@ class RecipeSet:
                 schema.Optional('pruneImportScm') : bool,
                 schema.Optional('gitCommitOnBranch') : bool,
                 schema.Optional('fixImportScmVariant') : bool,
+                schema.Optional('defaultFileMode') : bool,
             },
             error="Invalid policy specified! Maybe your Bob is too old?"
         ),
