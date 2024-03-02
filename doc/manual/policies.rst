@@ -116,32 +116,6 @@ behavior for a particular policy. This overrides any defaults that were set by
 Defined policies
 ----------------
 
-.. _policies-relativeIncludes:
-
-relativeIncludes
-~~~~~~~~~~~~~~~~
-
-Introduced in: 0.13
-
-User configuration files (e.g. ``default.yaml`` or files passed by ``-c`` on
-the command line) can include other configuration files in the ``include``
-section. Versions of Bob before 0.13 included these files always relative to
-the root of the project configuration.
-
-Starting with Bob 0.13 it is possible to have global and user specific
-configuration files too. To allow inclusion of further files from these
-configuration files the include location was changed to "file relative"
-includes. That is, any included file is seared relative to the currently
-processed file.
-
-Old behaviour
-    Include further files from ``default.yaml`` and command line passed files
-    relative to the project root directory. Global configuration files use the
-    new policy in any case.
-
-New behaviour
-    All files are included relative to the currently processed file.
-
 .. _policies-cleanEnvironment:
 
 cleanEnvironment
@@ -621,3 +595,35 @@ Old behavior
 New behavior
     The ``fileMode`` attribute is default initialized to ``0600``. All files
     will get the same mode, regardless of the URL schema.
+
+Obsolete policies
+-----------------
+
+The following policies have been removed. Starting with the version where they
+have been removed, the respective policy can only be set to the new behaviour.
+
+.. _policies-relativeIncludes:
+
+relativeIncludes
+~~~~~~~~~~~~~~~~
+
+Introduced in: 0.13 / Removed in: 0.25
+
+User configuration files (e.g. ``default.yaml`` or files passed by ``-c`` on
+the command line) can include other configuration files in the ``include``
+section. Versions of Bob before 0.13 included these files always relative to
+the root of the project configuration.
+
+Starting with Bob 0.13 it is possible to have global and user specific
+configuration files too. To allow inclusion of further files from these
+configuration files the include location was changed to "file relative"
+includes. That is, any included file is seared relative to the currently
+processed file.
+
+Old behaviour
+    Include further files from ``default.yaml`` and command line passed files
+    relative to the project root directory. Global configuration files use the
+    new policy in any case.
+
+New behaviour
+    All files are included relative to the currently processed file.

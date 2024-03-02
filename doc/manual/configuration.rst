@@ -1921,9 +1921,9 @@ of all policies and their rationale.
 Example::
 
     policies:
-        relativeIncludes: False
+        defaultFileMode: False
 
-This will explicitly request old behaviour for the `relativeIncludes` policy.
+This will explicitly request old behaviour for the ``defaultFileMode`` policy.
 
 .. _configuration-config-scriptLanguage:
 
@@ -1964,6 +1964,7 @@ possible to locally override global settings.::
         Workspace-specific configuration file.
 
 User configuration files may optionally include other configuration files.
+Files are included relative to the currently processed file.
 These includes are parsed *after* the current file, meaning that options of
 included configuration files take precedence over the current one. Included
 files do not need to exist and are silently ignored if missing. Includes are
@@ -1971,14 +1972,6 @@ specified without the .yaml extension::
 
     include:
         - overrides
-
-.. note::
-    Depending on the :ref:`policies-relativeIncludes` policy the base directory
-    from where includes are resolved is different. Normally files are included
-    relative to the currently processed file unless the
-    :ref:`policies-relativeIncludes` policy is disabled. In this case files
-    included by ``default.yaml`` and by the command line use the project root
-    directory as base directory.
 
 It is possible for plugins to define additional settings. See
 :ref:`extending-settings` for more information. Their meaning and typing is
