@@ -201,9 +201,6 @@ class TestUserConfig(RecipesTmp, TestCase):
         """Test relative includes work"""
         os.makedirs("some/sub/dirs")
         os.makedirs("other/directories")
-        with open("config.yaml", "w") as f:
-            f.write("policies:\n")
-            f.write("  relativeIncludes: True\n")
         with open("default.yaml", "w") as f:
             f.write("include:\n")
             f.write("    - some/first\n")

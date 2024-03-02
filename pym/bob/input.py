@@ -2986,7 +2986,7 @@ class RecipeSet:
         schema.Optional('plugins') : [str],
         schema.Optional('policies') : schema.Schema(
             {
-                schema.Optional('relativeIncludes') : bool,
+                schema.Optional('relativeIncludes') : schema.Schema(True, "Cannot set old behaviour of relativeIncludes policy!"),
                 schema.Optional('cleanEnvironment') : bool,
                 schema.Optional('tidyUrlScm') : bool,
                 schema.Optional('allRelocatable') : bool,
@@ -3004,7 +3004,7 @@ class RecipeSet:
                 schema.Optional('fixImportScmVariant') : bool,
                 schema.Optional('defaultFileMode') : bool,
             },
-            error="Invalid policy specified! Maybe your Bob is too old?"
+            error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
         schema.Optional('layers') : [str],
         schema.Optional('scriptLanguage',
@@ -3059,11 +3059,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'relativeIncludes' : (
-                "0.13",
-                InfoOnce("relativeIncludes policy not set. Using project root directory as base for all includes!",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#relativeincludes for more information.")
-            ),
             'cleanEnvironment' : (
                 "0.13",
                 InfoOnce("cleanEnvironment policy not set. Initial environment tainted by whitelisted variables!",
@@ -3545,16 +3540,16 @@ class RecipeSet:
 
         # global user config(s)
         if not DEBUG['ngd']:
-            self.__parseUserConfig("/etc/bobdefault.yaml", True)
+            self.__parseUserConfig("/etc/bobdefault.yaml")
             self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
-                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
+                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
         self.__parseLayer([], "9999", recipesRoot)
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
-            self.__parseUserConfig("default.yaml", True)
+            self.__parseUserConfig("default.yaml")
 
         # config files overrule everything else
         for c in self.__configFiles:
@@ -3648,8 +3643,6 @@ class RecipeSet:
         self.__createSchemas()
 
         # project user config(s)
-        if layer and not self.getPolicy("relativeIncludes"):
-            raise ParseError("Layers require the relativeIncludes policy to be set to the new behaviour!")
         self.__parseUserConfig(os.path.join(rootDir, "default.yaml"))
 
         # color mode provided in cmd line takes precedence
@@ -3684,22 +3677,20 @@ class RecipeSet:
                     e.pushFrame(path)
                     raise
 
-    def __parseUserConfig(self, fileName, relativeIncludes=None):
-        if relativeIncludes is None:
-            relativeIncludes = self.getPolicy("relativeIncludes")
+    def __parseUserConfig(self, fileName):
         cfg = self.loadYaml(fileName, self.__userConfigSchema)
         # merge settings by priority
         for (name, value) in sorted(cfg.items(), key=lambda i: self.__settings[i[0]].priority):
             self.__settings[name].merge(value)
         for p in cfg.get("require", []):
-            p = (os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p) + ".yaml"
+            p = os.path.join(os.path.dirname(fileName), p) + ".yaml"
             if not os.path.isfile(p):
                 raise ParseError("Include file '{}' (required by '{}') does not exist!"
                                     .format(p, fileName))
-            self.__parseUserConfig(p, relativeIncludes)
+            self.__parseUserConfig(p)
         for p in cfg.get("include", []):
-            p = os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p
-            self.__parseUserConfig(p + ".yaml", relativeIncludes)
+            p = os.path.join(os.path.dirname(fileName), p)
+            self.__parseUserConfig(p + ".yaml")
 
     def __createSchemas(self):
         varNameUseSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
