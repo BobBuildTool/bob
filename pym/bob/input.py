@@ -2988,7 +2988,7 @@ class RecipeSet:
             {
                 schema.Optional('relativeIncludes') : schema.Schema(True, "Cannot set old behaviour of relativeIncludes policy!"),
                 schema.Optional('cleanEnvironment') : schema.Schema(True, "Cannot set old behaviour of cleanEnvironment policy!"),
-                schema.Optional('tidyUrlScm') : bool,
+                schema.Optional('tidyUrlScm') : schema.Schema(True, "Cannot set old behaviour of tidyUrlScm policy!"),
                 schema.Optional('allRelocatable') : bool,
                 schema.Optional('offlineBuild') : bool,
                 schema.Optional('sandboxInvariant') : bool,
@@ -3059,11 +3059,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'tidyUrlScm' : (
-                "0.14",
-                InfoOnce("tidyUrlScm policy not set. Updating URL SCMs in develop build mode is not entirely safe!",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#tidyurlscm for more information.")
-            ),
             'allRelocatable' : (
                 "0.14",
                 InfoOnce("allRelocatable policy not set. Packages that define tools are not up- or downloaded.",

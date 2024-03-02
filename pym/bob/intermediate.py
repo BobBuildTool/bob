@@ -567,7 +567,6 @@ class RecipeSetIR:
             'pruneImportScm' : recipeSet.getPolicy('pruneImportScm'),
             'scmIgnoreUser' : recipeSet.getPolicy('scmIgnoreUser'),
             'secureSSL' : recipeSet.getPolicy('secureSSL'),
-            'tidyUrlScm' : recipeSet.getPolicy('tidyUrlScm'),
             'sandboxFingerprints' : recipeSet.getPolicy('sandboxFingerprints'),
             'gitCommitOnBranch' : recipeSet.getPolicy('gitCommitOnBranch'),
             'fixImportScmVariant' : recipeSet.getPolicy('fixImportScmVariant'),

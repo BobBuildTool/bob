@@ -58,7 +58,7 @@ def getScm(spec, overrides=[], recipeSet=None):
     elif scm == "cvs":
         return CvsScm(spec, overrides)
     elif scm == "url":
-        return UrlScm(spec, overrides, recipeSet and recipeSet.getPolicy('tidyUrlScm'),
+        return UrlScm(spec, overrides,
             recipeSet and recipeSet.getPolicy('scmIgnoreUser'),
             recipeSet.getPreMirrors() if recipeSet else [],
             recipeSet.getFallbackMirrors() if recipeSet else [],

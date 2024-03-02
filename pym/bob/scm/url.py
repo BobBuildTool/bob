@@ -222,7 +222,7 @@ class UrlScm(Scm):
         ],
     }
 
-    def __init__(self, spec, overrides=[], tidy=None, stripUser=None,
+    def __init__(self, spec, overrides=[], stripUser=None,
                  preMirrors=[], fallbackMirrors=[], defaultFileMode=None):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
@@ -251,7 +251,6 @@ class UrlScm(Scm):
                 url = url.replace('\\', '/')
             self.__fn = url.split("/")[-1]
         self.__extract = spec.get("extract", "auto")
-        self.__tidy = tidy
         self.__strip = spec.get("stripComponents", 0)
         self.__sslVerify = spec.get('sslVerify', True)
         self.__stripUser = stripUser
@@ -620,7 +619,7 @@ class UrlScm(Scm):
                ( " m{}".format(self.__fileMode) if self.__fileMode is not None else "")
 
     def getDirectory(self):
-        return self.__dir if self.__tidy else os.path.join(self.__dir, self.__fn)
+        return self.__dir
 
     def isDeterministic(self):
         return (self.__digestSha1 is not None) or \
