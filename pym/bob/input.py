@@ -2987,7 +2987,7 @@ class RecipeSet:
         schema.Optional('policies') : schema.Schema(
             {
                 schema.Optional('relativeIncludes') : schema.Schema(True, "Cannot set old behaviour of relativeIncludes policy!"),
-                schema.Optional('cleanEnvironment') : bool,
+                schema.Optional('cleanEnvironment') : schema.Schema(True, "Cannot set old behaviour of cleanEnvironment policy!"),
                 schema.Optional('tidyUrlScm') : bool,
                 schema.Optional('allRelocatable') : bool,
                 schema.Optional('offlineBuild') : bool,
@@ -3059,11 +3059,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'cleanEnvironment' : (
-                "0.13",
-                InfoOnce("cleanEnvironment policy not set. Initial environment tainted by whitelisted variables!",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#cleanenvironment for more information.")
-            ),
             'tidyUrlScm' : (
                 "0.14",
                 InfoOnce("tidyUrlScm policy not set. Updating URL SCMs in develop build mode is not entirely safe!",
@@ -3559,14 +3554,10 @@ class RecipeSet:
             self.__parseUserConfig(c)
 
         # calculate start environment
-        if self.getPolicy("cleanEnvironment"):
-            osEnv = Env(os.environ)
-            osEnv.setFuns(self.__stringFunctions)
-            env = Env({ k : osEnv.substitute(v, k) for (k, v) in
-                self.__defaultEnv.items() })
-        else:
-            env = Env(os.environ).prune(self.__whiteList)
-            env.update(self.__defaultEnv)
+        osEnv = Env(os.environ)
+        osEnv.setFuns(self.__stringFunctions)
+        env = Env({ k : osEnv.substitute(v, k) for (k, v) in
+            self.__defaultEnv.items() })
         env.setFuns(self.__stringFunctions)
         env.update(envOverrides)
         env["BOB_HOST_PLATFORM"] = platform
