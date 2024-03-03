@@ -754,11 +754,6 @@ such access is still needed a recipe may set the ``buildNetAccess`` or the
    external state that changes the behavior of the build. Unless the input of a
    package changes (sources, dependencies) Bob will not re-build a package.
 
-.. note::
-    Before Bob 0.14 (see :ref:`policies-offlineBuild` policy) the network
-    access was always possible. The policy will determine the default value of
-    this property.
-
 To configure the network access based on the actually used tools by a recipe
 you can set the ``netAccess`` property in
 :ref:`configuration-recipes-provideTools`. The ``{build,package}NetAccess``
