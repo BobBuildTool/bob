@@ -964,9 +964,6 @@ class CoreStep(CoreItem):
 
         return h.digest()
 
-    def getSandboxVariantId(self):
-        return self.variantId
-
     @property
     def fingerprintMask(self):
         raise NotImplementedError
@@ -1106,9 +1103,6 @@ class Step:
         subsequent builds might yield different results (e.g. when building
         from branches)."""
         return self._coreStep.variantId
-
-    def _getSandboxVariantId(self):
-        return self._coreStep.getSandboxVariantId()
 
     def getSandbox(self, forceSandbox=False):
         """Return Sandbox used in this Step.

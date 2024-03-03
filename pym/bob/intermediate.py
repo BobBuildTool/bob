@@ -99,7 +99,6 @@ class StepIR(AbstractIR):
                     for s in step.getScmList()
                 ]
                 self.__data['scmDirectories'] = { d : (h.hex(), p) for (d, (h, p)) in step.getScmDirectories().items() }
-            self.__data['sandboxVariantId'] = step._getSandboxVariantId().hex()
             self.__data['toolKeysWeak'] = sorted(step._coreStep._getToolKeysWeak())
             self.__data['digestEnv'] = step._coreStep.digestEnv
 
@@ -302,9 +301,6 @@ class StepIR(AbstractIR):
             return True
         return rehash() != oldHash
 
-    def _getSandboxVariantId(self):
-        return bytes.fromhex(self.__data['sandboxVariantId'])
-
     async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher,
                             fingerprint=None, platform=b'', relaxTools=False):
         h = hasher()
@@ -364,7 +360,7 @@ class StepIR(AbstractIR):
             return None
         h = hashlib.sha1()
         h.update(getPlatformTag())
-        h.update(self._getSandboxVariantId())
+        h.update(self.getVariantId())
         for s in self.getScmList():
             liveBId = await s.predictLiveBuildId(self)
             if liveBId is None: return None
@@ -378,7 +374,7 @@ class StepIR(AbstractIR):
         workspacePath = self.getWorkspacePath()
         h = hashlib.sha1()
         h.update(getPlatformTag())
-        h.update(self._getSandboxVariantId())
+        h.update(self.getVariantId())
         for s in self.getScmList():
             liveBId = s.calcLiveBuildId(workspacePath)
             if liveBId is None: return None

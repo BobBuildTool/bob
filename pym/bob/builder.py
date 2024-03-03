@@ -1656,7 +1656,7 @@ cd {ROOT}
         performed.
         """
 
-        key = b'\x00' + step._getSandboxVariantId()
+        key = b'\x00' + step.getVariantId()
         if self.__buildOnly:
             liveBId = BobState().getBuildId(key)
             if liveBId is not None: return liveBId
@@ -1669,7 +1669,7 @@ cd {ROOT}
     def __invalidateLiveBuildId(self, step):
         """Invalidate last live build-id of a step."""
 
-        key = b'\x00' + step._getSandboxVariantId()
+        key = b'\x00' + step.getVariantId()
         liveBId = BobState().getBuildId(key)
         if liveBId is not None:
             BobState().delBuildId(key)
