@@ -798,7 +798,7 @@ class CoreStep(CoreItem):
         self.env = env.detach()
         self.args = args
         self.deterministic = deterministic and all(
-            arg.isDeterministic() for arg in self.getAllDepCoreSteps(True))
+            arg.isDeterministic() for arg in self.getAllDepCoreSteps())
         self.variantId = self.getDigest(lambda coreStep: coreStep.variantId)
         self.providedEnv = {}
         self.providedTools = {}
@@ -867,7 +867,7 @@ class CoreStep(CoreItem):
         else:
             return None
 
-    def getAllDepCoreSteps(self, forceSandbox=False):
+    def getAllDepCoreSteps(self):
         sandbox = self.getSandbox()
         return [ a.refGetDestination() for a in self.args ] + \
             [ d.coreStep for n,d in sorted(self.getTools().items()) ] + (
@@ -1158,14 +1158,11 @@ class Step:
                             self.__pathFormatter, refCache)
                     for a in self._coreStep.args ]
 
-    def getAllDepSteps(self, forceSandbox=False):
+    def getAllDepSteps(self):
         """Get all dependent steps of this Step.
 
         This includes the direct input to the Step as well as indirect inputs
         such as the used tools or the sandbox.
-
-        :param bool forceSandbox: Deprecated. Include sandbox even though user
-                                  disabled it.
         """
         sandbox = self.getSandbox()
         return self.getArguments() + [ d.step for n,d in sorted(self.getTools().items()) ] + (
@@ -1633,14 +1630,11 @@ class Package(object):
                             self.__pathFormatter, refCache)
                     for d in self.__corePackage.indirectDepSteps ]
 
-    def getAllDepSteps(self, forceSandbox=False):
+    def getAllDepSteps(self):
         """Return list of all dependencies of the package.
 
         This list includes all direct and indirect dependencies. Additionally
         the used sandbox and tools are included too.
-
-        :param bool forceSandbox: Deprecated. Include sandbox even though user
-                                  disabled it.
         """
         allDeps = set(self.getDirectDepSteps())
         allDeps |= set(self.getIndirectDepSteps())

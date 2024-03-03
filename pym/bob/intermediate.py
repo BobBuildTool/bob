@@ -70,10 +70,7 @@ class StepIR(AbstractIR):
             self.__data['digestScript'] = step.getDigestScript()
             self.__data['tools'] = { name : graph.addTool(tool) for name, tool in step.getTools().items() }
             self.__data['arguments'] = [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getArguments() ]
-            self.__data['allDepSteps'] = (
-                [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getAllDepSteps(False) ],
-                [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getAllDepSteps(True) ]
-            )
+            self.__data['allDepSteps'] = [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getAllDepSteps() ]
             self.__data['env'] = step.getEnv()
             if self.JENKINS:
                 self.__data['preRunCmds'] = step.getJenkinsPreRunCmds()
@@ -207,9 +204,8 @@ class StepIR(AbstractIR):
     def getArguments(self):
         return [ self.mungeStep(arg) for arg in self.__data['arguments'] ]
 
-    def getAllDepSteps(self, forceSandbox=False):
-        return [ self.mungeStep(dep) for dep in
-                    self.__data['allDepSteps'][1 if forceSandbox else 0] ]
+    def getAllDepSteps(self):
+        return [ self.mungeStep(dep) for dep in self.__data['allDepSteps'] ]
 
     def getEnv(self):
         return self.__data['env']
