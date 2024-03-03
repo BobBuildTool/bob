@@ -116,33 +116,6 @@ behavior for a particular policy. This overrides any defaults that were set by
 Defined policies
 ----------------
 
-.. _policies-uniqueDependency:
-
-uniqueDependency
-~~~~~~~~~~~~~~~~
-
-Introduced in: 0.14
-
-Traditionally it was allowed to name a dependency more than once in a recipe.
-On the other hand the semantics were not well defined. The result was picked up
-only once. Due to the multiple references different variants of the dependency
-could be created, though. This was detected only if the result of the
-dependencies was used. Otherwise this created unaddressable packages that
-cannot be built individually.  It is also possible that, even if the packages
-themself are of the same variant, they might provide different dependencies or
-variables upwards. This is handled but not easily detectable by the user.
-
-Old behavior
-    Listing a dependency more than once in a recipe is tolerated. The result is
-    only picked up once, though. Anything else (environment, tools, ...) is
-    picked up at each instance again, possibly replacing previous definitions.
-
-New behavior
-    A dependency must only be named once. This is enforced *after* evaluating
-    the ``if`` condition of the dependencies. It is therefore still possible to
-    have multiple references to the same package given that only one reference
-    is active. Everything else will result in a parsing error.
-
 .. _policies-mergeEnvironment:
 
 mergeEnvironment
@@ -626,3 +599,30 @@ a sandbox is used or not. This is and has always been a fundamental assumption
 of Bob with respect to binary artifacts. If the result of a recipe depends on
 the host environment then an appropriate environment variable defined by the
 sandbox should be used to let Bob detect this.
+
+.. _policies-uniqueDependency:
+
+uniqueDependency
+~~~~~~~~~~~~~~~~
+
+Introduced in: 0.14 / Removed in: 0.25
+
+Traditionally it was allowed to name a dependency more than once in a recipe.
+On the other hand the semantics were not well defined. The result was picked up
+only once. Due to the multiple references different variants of the dependency
+could be created, though. This was detected only if the result of the
+dependencies was used. Otherwise this created unaddressable packages that
+cannot be built individually.  It is also possible that, even if the packages
+themself are of the same variant, they might provide different dependencies or
+variables upwards. This is handled but not easily detectable by the user.
+
+Old behavior
+    Listing a dependency more than once in a recipe is tolerated. The result is
+    only picked up once, though. Anything else (environment, tools, ...) is
+    picked up at each instance again, possibly replacing previous definitions.
+
+New behavior
+    A dependency must only be named once. This is enforced *after* evaluating
+    the ``if`` condition of the dependencies. It is therefore still possible to
+    have multiple references to the same package given that only one reference
+    is active. Everything else will result in a parsing error.
