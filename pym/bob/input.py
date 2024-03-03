@@ -2264,13 +2264,8 @@ class Recipe(object):
         self.__toolDepPackageWeak -= self.__toolDepPackage
         self.__toolDepPackage |= self.__toolDepPackageWeak
 
-        # Either 'relocatable' was set in the recipe/class(es) or it defaults
-        # to True unless a tool is defined. This was the legacy behaviour
-        # before Bob 0.14. If the allRelocatable policy is enabled we always
-        # default to True.
         if self.__relocatable is None:
-            self.__relocatable = self.__recipeSet.getPolicy('allRelocatable') \
-                or not self.__provideTools
+            self.__relocatable = True
 
         if self.__jobServer is None:
             self.__jobServer = False
@@ -2989,7 +2984,7 @@ class RecipeSet:
                 schema.Optional('relativeIncludes') : schema.Schema(True, "Cannot set old behaviour of relativeIncludes policy!"),
                 schema.Optional('cleanEnvironment') : schema.Schema(True, "Cannot set old behaviour of cleanEnvironment policy!"),
                 schema.Optional('tidyUrlScm') : schema.Schema(True, "Cannot set old behaviour of tidyUrlScm policy!"),
-                schema.Optional('allRelocatable') : bool,
+                schema.Optional('allRelocatable') : schema.Schema(True, "Cannot set old behaviour of allRelocatable policy!"),
                 schema.Optional('offlineBuild') : bool,
                 schema.Optional('sandboxInvariant') : bool,
                 schema.Optional('uniqueDependency') : bool,
@@ -3059,11 +3054,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'allRelocatable' : (
-                "0.14",
-                InfoOnce("allRelocatable policy not set. Packages that define tools are not up- or downloaded.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#allrelocatable for more information.")
-            ),
             'offlineBuild' : (
                 "0.14",
                 InfoOnce("offlineBuild policy not set. Network access still allowed during build steps.",

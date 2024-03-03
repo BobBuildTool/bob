@@ -1024,12 +1024,6 @@ cd {ROOT}
                 assert step.isPackageStep()
                 self._preparePackageStep(step)
 
-                # Prohibit up-/download if we are on the old allRelocatable
-                # policy and the package is not explicitly relocatable and
-                # built outside the sandbox.
-                mayUpOrDownload = step.getPackage().getRecipe().getRecipeSet().getPolicy('allRelocatable') or \
-                    step.isRelocatable() or (step.getSandbox() is not None)
-
                 # Calculate build-id and fingerprint of expected artifact if
                 # needed. Must be done without the workspace lock because it
                 # recurses.
@@ -1050,7 +1044,7 @@ cd {ROOT}
                 # once per invocation! Might download to a shared (temporary)
                 # location if sharing is possible for this package.
                 downloaded = False
-                if not shared and mayUpOrDownload and not checkoutOnly:
+                if not shared and not checkoutOnly:
                     async with self.__workspaceLock(step):
                         if not self._wasDownloadTried(step):
                             downloaded, audit = await self._downloadPackage(step, depth, buildId)
@@ -1071,8 +1065,7 @@ cd {ROOT}
 
                 # Upload package if it was built. On Jenkins we always upload
                 # because it is essential that the tgz/buildid exists.
-                if (built or step.JENKINS) and mayUpOrDownload and self.__archive.canUpload() \
-                   and (depth <= self.__uploadDepth):
+                if (built or step.JENKINS) and self.__archive.canUpload() and (depth <= self.__uploadDepth):
                     await self.__archive.uploadPackage(step, buildId,
                         audit, step.getStoragePath(), executor=self.__executor)
 
@@ -1879,8 +1872,7 @@ cd {ROOT}
 
         # A relocatable step with no fingerprinting is easy
         isFingerprinted = step._isFingerprinted()
-        trackRelocation = step.isPackageStep() and not step.isRelocatable() and \
-            step.getPackage().getRecipe().getRecipeSet().getPolicy('allRelocatable')
+        trackRelocation = step.isPackageStep() and not step.isRelocatable()
         if not isFingerprinted and not trackRelocation:
             return b''
 

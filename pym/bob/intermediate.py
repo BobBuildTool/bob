@@ -563,7 +563,6 @@ class RecipeSetIR:
         self.__data['sandboxFingerprints'] = recipeSet.sandboxFingerprints
         self.__data['policies'] = {
             # FIXME: lazily query policies and only add them all in toData()
-            'allRelocatable' : recipeSet.getPolicy('allRelocatable'),
             'pruneImportScm' : recipeSet.getPolicy('pruneImportScm'),
             'scmIgnoreUser' : recipeSet.getPolicy('scmIgnoreUser'),
             'secureSSL' : recipeSet.getPolicy('secureSSL'),

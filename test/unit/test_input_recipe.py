@@ -194,13 +194,13 @@ class RecipeCommon:
         r.setdefault("checkoutUpdateIf", False)
         return r
 
-    def parseAndPrepare(self, recipe, classes={}, allRelocatable=None, name="foo"):
+    def parseAndPrepare(self, recipe, classes={}, name="foo"):
 
         cwd = os.getcwd()
         recipeSet = MagicMock()
         recipeSet.loadBinary = MagicMock()
         recipeSet.scriptLanguage = self.SCRIPT_LANGUAGE
-        recipeSet.getPolicy = lambda x: allRelocatable if x == 'allRelocatable' else None
+        recipeSet.getPolicy = lambda x: None
 
         cc = { n : Recipe(recipeSet, self.applyRecipeDefaults(r), [], n+".yaml",
                           cwd, n, n, {}, False)
@@ -226,8 +226,8 @@ class TestRelocatable(RecipeCommon, TestCase):
         p = self.parseAndPrepare(recipe)
         self.assertTrue(p.isRelocatable())
 
-    def testToolsNonRelocatable(self):
-        """Recipes providing tools are not relocatable by default"""
+    def testToolsRelocatable(self):
+        """Recipes providing tools are relocatable by default"""
 
         recipe = {
             "packageScript" : "asdf",
@@ -236,7 +236,7 @@ class TestRelocatable(RecipeCommon, TestCase):
             }
         }
         p = self.parseAndPrepare(recipe)
-        self.assertFalse(p.isRelocatable())
+        self.assertTrue(p.isRelocatable())
 
     def testCheckoutAndBuildStep(self):
         """Checkout and build steps are never relocatable"""
@@ -251,18 +251,18 @@ class TestRelocatable(RecipeCommon, TestCase):
         self.assertFalse(p.getBuildStep().isRelocatable())
         self.assertTrue(p.getPackageStep().isRelocatable())
 
-    def testToolRelocatable(self):
-        """Test that tool can be marked relocable"""
+    def testToolNonRelocatable(self):
+        """Test that tool can be marked as non-relocable"""
 
         recipe = {
             "packageScript" : "asdf",
             "provideTools" : {
                 "foo" : "bar"
             },
-            "relocatable" : True
+            "relocatable" : False
         }
         p = self.parseAndPrepare(recipe)
-        self.assertTrue(p.isRelocatable())
+        self.assertFalse(p.isRelocatable())
 
     def testNotRelocatable(self):
         """Normal recipes can be marked as not relocatable"""
@@ -326,26 +326,6 @@ class TestRelocatable(RecipeCommon, TestCase):
             "relocatable" : True,
         }
         p = self.parseAndPrepare(recipe, classes)
-        self.assertTrue(p.isRelocatable())
-
-    def testAllRelocatablePolicy(self):
-        """Setting allRelocatable policy will make all packages relocatable"""
-
-        # normal package
-        recipe = {
-            "packageScript" : "asdf"
-        }
-        p = self.parseAndPrepare(recipe, allRelocatable=True)
-        self.assertTrue(p.isRelocatable())
-
-        # tool package
-        recipe = {
-            "packageScript" : "asdf",
-            "provideTools" : {
-                "foo" : "bar"
-            }
-        }
-        p = self.parseAndPrepare(recipe, allRelocatable=True)
         self.assertTrue(p.isRelocatable())
 
 
