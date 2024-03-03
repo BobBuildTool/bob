@@ -873,7 +873,7 @@ class CoreStep(CoreItem):
             [ d.coreStep for n,d in sorted(self.getTools().items()) ] + (
             [ sandbox.coreStep] if sandbox else [])
 
-    def getDigest(self, calculate, forceSandbox=False):
+    def getDigest(self, calculate):
         h = DigestHasher()
         if self.isFingerprinted() and self.getSandbox():
             # Add the full variant-id (including fingerprint part!) to the

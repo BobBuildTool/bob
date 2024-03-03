@@ -294,7 +294,7 @@ class StepIR(AbstractIR):
             return True
         return rehash() != oldHash
 
-    async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher,
+    async def getDigestCoro(self, calculate, hasher=DigestHasher,
                             fingerprint=None, platform=b'', relaxTools=False):
         h = hasher()
         h.update(platform)
