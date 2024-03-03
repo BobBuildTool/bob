@@ -63,10 +63,7 @@ class StepIR(AbstractIR):
         self.__data['isPackageStep']  = step.isPackageStep()
         self.__data['isRelocatable'] = step.isRelocatable()
         self.__data['isShared'] = step.isShared()
-        self.__data['sandbox'] = (
-            graph.addSandbox(step.getSandbox(False)),
-            graph.addSandbox(step.getSandbox(True))
-        )
+        self.__data['sandbox'] = graph.addSandbox(step.getSandbox())
 
         if not partial:
             self.__data['isFingerprinted'] = step._isFingerprinted()
@@ -180,8 +177,8 @@ class StepIR(AbstractIR):
         else:
             return self.getWorkspacePath()
 
-    def getSandbox(self, forceSandbox=False):
-        return self.mungeSandbox(self.__data['sandbox'][1 if forceSandbox else 0])
+    def getSandbox(self):
+        return self.mungeSandbox(self.__data['sandbox'])
 
     def getVariantId(self):
         return bytes.fromhex(self.__data['variantId'])

@@ -697,7 +697,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, upload, download, seenPackages, 
                 _genJenkinsJobs(toolStep, jobs, nameCalculator, upload, download,
                                 seenPackages, allVariantIds, shortdescription)
 
-        sandbox = step.getSandbox(True)
+        sandbox = step.getSandbox()
         if sandbox is not None:
             sandboxStep = sandbox.getStep()
             stack = "/".join(sandboxStep.getPackage().getStack())

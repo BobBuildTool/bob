@@ -860,7 +860,7 @@ class CoreStep(CoreItem):
         else:
             return {}
 
-    def getSandbox(self, forceSandbox=False):
+    def getSandbox(self):
         sandbox = self.corePackage.sandbox
         if sandbox and sandbox.enabled and self.isValid:
             return sandbox
@@ -868,7 +868,7 @@ class CoreStep(CoreItem):
             return None
 
     def getAllDepCoreSteps(self, forceSandbox=False):
-        sandbox = self.getSandbox(forceSandbox)
+        sandbox = self.getSandbox()
         return [ a.refGetDestination() for a in self.args ] + \
             [ d.coreStep for n,d in sorted(self.getTools().items()) ] + (
             [ sandbox.coreStep] if sandbox else [])
@@ -1104,13 +1104,10 @@ class Step:
         from branches)."""
         return self._coreStep.variantId
 
-    def getSandbox(self, forceSandbox=False):
+    def getSandbox(self):
         """Return Sandbox used in this Step.
 
         Returns a Sandbox object or None if this Step is built without one.
-
-        :param bool forceSandbox: Deprecated. Return sandbox even though user
-                                  disabled it.
         """
         sandbox = self.__package._getSandboxRaw()
         if sandbox and sandbox.isEnabled() and self._coreStep.isValid:
@@ -1170,7 +1167,7 @@ class Step:
         :param bool forceSandbox: Deprecated. Include sandbox even though user
                                   disabled it.
         """
-        sandbox = self.getSandbox(forceSandbox)
+        sandbox = self.getSandbox()
         return self.getArguments() + [ d.step for n,d in sorted(self.getTools().items()) ] + (
             [sandbox.getStep()] if sandbox else [])
 
