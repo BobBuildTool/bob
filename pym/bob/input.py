@@ -789,7 +789,7 @@ class Sandbox:
 class CoreStep(CoreItem):
     __slots__ = ( "corePackage", "digestEnv", "env", "args",
         "providedEnv", "providedTools", "providedDeps", "providedSandbox",
-        "variantId", "sbxVarId", "deterministic", "isValid" )
+        "variantId", "deterministic", "isValid" )
 
     def __init__(self, corePackage, isValid, deterministic, digestEnv, env, args):
         self.corePackage = corePackage
@@ -861,12 +861,8 @@ class CoreStep(CoreItem):
             return {}
 
     def getSandbox(self, forceSandbox=False):
-        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
-        # set or disabled.
-        forceSandbox = forceSandbox and \
-            not self.corePackage.recipe.getRecipeSet().sandboxInvariant
         sandbox = self.corePackage.sandbox
-        if sandbox and (sandbox.enabled or forceSandbox) and self.isValid:
+        if sandbox and sandbox.enabled and self.isValid:
             return sandbox
         else:
             return None
@@ -885,16 +881,7 @@ class CoreStep(CoreItem):
             # builds for separate sandboxes, including sandboxes that are
             # itself fingerprinted.
             h.fingerprint(calculate(self.getSandbox().coreStep))
-        sandbox = not self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
-            self.getSandbox(forceSandbox)
-        if sandbox:
-            h.update(DigestHasher.sliceRecipes(calculate(sandbox.coreStep)))
-            h.update(struct.pack("<I", len(sandbox.paths)))
-            for p in sandbox.paths:
-                h.update(struct.pack("<I", len(p)))
-                h.update(p.encode('utf8'))
-        else:
-            h.update(b'\x00' * 20)
+        h.update(b'\x00' * 20) # historically the sandbox digest, see sandboxInvariant policy pre-0.25
         script = self.getDigestScript()
         if script:
             h.update(struct.pack("<I", len(script)))
@@ -932,11 +919,9 @@ class CoreStep(CoreItem):
         h.update(struct.pack("<I", len(args)))
         for arg in args:
             h.update(arg.getResultId())
-        # Include used sandbox in case sandboxInvariant policy is active.
-        # Prevents merging of identical packages that are defined under
-        # different sandboxes.
-        sandbox = self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
-            self.getSandbox()
+        # Include used sandbox. Prevents merging of identical packages that
+        # are defined under different sandboxes.
+        sandbox = self.getSandbox()
         if sandbox:
             h.update(sandbox.coreStep.variantId)
             h.update(struct.pack("<I", len(sandbox.paths)))
@@ -980,18 +965,7 @@ class CoreStep(CoreItem):
         return h.digest()
 
     def getSandboxVariantId(self):
-        # This is a special variant to calculate the variant-id as if the
-        # sandbox was enabled. This is used for live build-ids and on the
-        # jenkins where the build-id of the sandbox must always be calculated.
-        # But this is all obsolte if the sandboxInvariant policy is enabled.
-        try:
-            ret = self.sbxVarId
-        except AttributeError:
-            ret = self.sbxVarId = self.getDigest(
-                lambda step: step.getSandboxVariantId(),
-                True) if not self.corePackage.recipe.getRecipeSet().sandboxInvariant \
-                      else self.variantId
-        return ret
+        return self.variantId
 
     @property
     def fingerprintMask(self):
@@ -1144,12 +1118,8 @@ class Step:
         :param bool forceSandbox: Deprecated. Return sandbox even though user
                                   disabled it.
         """
-        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
-        # set or disabled.
-        forceSandbox = forceSandbox and \
-            not self.__package.getRecipe().getRecipeSet().sandboxInvariant
         sandbox = self.__package._getSandboxRaw()
-        if sandbox and (sandbox.isEnabled() or forceSandbox) and self._coreStep.isValid:
+        if sandbox and sandbox.isEnabled() and self._coreStep.isValid:
             return sandbox
         else:
             return None
@@ -1681,13 +1651,9 @@ class Package(object):
         :param bool forceSandbox: Deprecated. Include sandbox even though user
                                   disabled it.
         """
-        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
-        # set or disabled.
-        forceSandbox = forceSandbox and \
-            not self.getRecipe().getRecipeSet().sandboxInvariant
         allDeps = set(self.getDirectDepSteps())
         allDeps |= set(self.getIndirectDepSteps())
-        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
+        if self.__sandbox and self.__sandbox.isEnabled():
             allDeps.add(self.__sandbox.getStep())
         for i in self.getPackageStep().getTools().values(): allDeps.add(i.getStep())
         return sorted(allDeps)
@@ -2988,7 +2954,7 @@ class RecipeSet:
                 schema.Optional('tidyUrlScm') : schema.Schema(True, "Cannot set old behaviour of tidyUrlScm policy!"),
                 schema.Optional('allRelocatable') : schema.Schema(True, "Cannot set old behaviour of allRelocatable policy!"),
                 schema.Optional('offlineBuild') : schema.Schema(True, "Cannot set old behaviour of offlineBuild policy!"),
-                schema.Optional('sandboxInvariant') : bool,
+                schema.Optional('sandboxInvariant') : schema.Schema(True, "Cannot set old behaviour of sandboxInvariant policy!"),
                 schema.Optional('uniqueDependency') : bool,
                 schema.Optional('mergeEnvironment') : bool,
                 schema.Optional('secureSSL') : bool,
@@ -3056,11 +3022,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'sandboxInvariant' : (
-                "0.14",
-                InfoOnce("sandboxInvariant policy not set. Inconsistent sandbox handling for binary artifacts.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxinvariant for more information.")
-            ),
             'uniqueDependency' : (
                 "0.14",
                 InfoOnce("uniqueDependency policy not set. Naming same dependency multiple times is deprecated.",
@@ -3859,14 +3820,6 @@ class RecipeSet:
         if policy is None:
             warning.show(location)
         return policy
-
-    @property
-    def sandboxInvariant(self):
-        try:
-            return self.__sandboxInvariant
-        except AttributeError:
-            self.__sandboxInvariant = self.getPolicy("sandboxInvariant")
-            return self.__sandboxInvariant
 
     @property
     def sandboxFingerprints(self):

@@ -321,17 +321,7 @@ class StepIR(AbstractIR):
             # Variant-Id calculation with fingerprint in sandbox
             [d] = await calculate([self.getSandbox().getStep()])
             h.fingerprint(d)
-        sandbox = not self.getPackage().getRecipe().getRecipeSet().sandboxInvariant and \
-            self.getSandbox(forceSandbox)
-        if sandbox:
-            [d] = await calculate([sandbox.getStep()])
-            h.update(hasher.sliceRecipes(d))
-            h.update(struct.pack("<I", len(sandbox.getPaths())))
-            for p in sandbox.getPaths():
-                h.update(struct.pack("<I", len(p)))
-                h.update(p.encode('utf8'))
-        else:
-            h.update(b'\x00' * 20)
+        h.update(b'\x00' * 20) # historically the sandbox digest, see sandboxInvariant policy pre-0.25
         script = self.getDigestScript()
         if script:
             h.update(struct.pack("<I", len(script)))
@@ -559,7 +549,6 @@ class RecipeSetIR:
     def fromRecipeSet(cls, recipeSet):
         self = cls()
         self.__data = {}
-        self.__data['sandboxInvariant'] = recipeSet.sandboxInvariant
         self.__data['sandboxFingerprints'] = recipeSet.sandboxFingerprints
         self.__data['policies'] = {
             # FIXME: lazily query policies and only add them all in toData()
@@ -586,10 +575,6 @@ class RecipeSetIR:
 
     def toData(self):
         return self.__data
-
-    @property
-    def sandboxInvariant(self):
-        return self.__data['sandboxInvariant']
 
     @property
     def sandboxFingerprints(self):
