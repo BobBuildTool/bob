@@ -116,42 +116,6 @@ behavior for a particular policy. This overrides any defaults that were set by
 Defined policies
 ----------------
 
-.. _policies-sandboxInvariant:
-
-sandboxInvariant
-~~~~~~~~~~~~~~~~
-
-Introduced in: 0.14
-
-Traditionally the impact of a sandbox to the build has not been handled
-consistently. On one hand the actual usage of a sandbox was not relevant for
-binary artifacts. As such, an artifact that was built inside a sandbox was also
-used when building without the sandbox (and vice versa). On the other hand Bob
-did rebuild everything from scratch when switching between sandbox/non-sandbox
-builds. This inconsistent behavior is rectified by the ``sandboxInvariant``
-policy that consistently declares builds as invariant of the sandbox.
-
-Old behavior
-    The sandbox is handled inconsistently. Bob will use binary artifacts across
-    sandbox/non-sandbox builds but will rebuild clean if doing so. Changing the
-    sandbox recipe will invalidate binary artifacts even when not using the
-    sandbox.
-
-New behavior
-    The build result is always an invariant of the sandbox, that is the sandbox
-    content and its usage makes no difference for Bob. This means that binary
-    artifacts are used across sandbox/non-sandbox builds. Moving between
-    sandbox/non-sandbox builds just triggers incremental builds of the affected
-    packages. Changing the sandbox content will also trigger just incremental
-    builds of affected packages.
-
-In any case a recipe shall produce the same result regardless of the fact that
-a sandbox is used or not. This is and has always been a fundamental assumption
-of Bob with respect to binary artifacts. If the result of a recipe depends on
-the host environment then an appropriate environment variable defined by the
-sandbox should be used to let Bob detect this.
-
-
 .. _policies-uniqueDependency:
 
 uniqueDependency
@@ -627,3 +591,38 @@ New behavior
     building inside a sandbox the network will be isolated during build and
     package steps by default. A recipe might override this to still allow
     network access if required.
+
+.. _policies-sandboxInvariant:
+
+sandboxInvariant
+~~~~~~~~~~~~~~~~
+
+Introduced in: 0.14 / Removed in: 0.25
+
+Traditionally the impact of a sandbox to the build has not been handled
+consistently. On one hand the actual usage of a sandbox was not relevant for
+binary artifacts. As such, an artifact that was built inside a sandbox was also
+used when building without the sandbox (and vice versa). On the other hand Bob
+did rebuild everything from scratch when switching between sandbox/non-sandbox
+builds. This inconsistent behavior is rectified by the ``sandboxInvariant``
+policy that consistently declares builds as invariant of the sandbox.
+
+Old behavior
+    The sandbox is handled inconsistently. Bob will use binary artifacts across
+    sandbox/non-sandbox builds but will rebuild clean if doing so. Changing the
+    sandbox recipe will invalidate binary artifacts even when not using the
+    sandbox.
+
+New behavior
+    The build result is always an invariant of the sandbox, that is the sandbox
+    content and its usage makes no difference for Bob. This means that binary
+    artifacts are used across sandbox/non-sandbox builds. Moving between
+    sandbox/non-sandbox builds just triggers incremental builds of the affected
+    packages. Changing the sandbox content will also trigger just incremental
+    builds of affected packages.
+
+In any case a recipe shall produce the same result regardless of the fact that
+a sandbox is used or not. This is and has always been a fundamental assumption
+of Bob with respect to binary artifacts. If the result of a recipe depends on
+the host environment then an appropriate environment variable defined by the
+sandbox should be used to let Bob detect this.

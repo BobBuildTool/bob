@@ -1694,9 +1694,9 @@ that should hold a list of paths. This will completely replace ``$PATH`` of
 the host for consuming recipes.
 
 .. attention::
-    The build result is considered to be an invariant of such a sandbox (see
-    :ref:`policies-sandboxInvariant` policy). This implies that recipes shall
-    produce the same result whether the sandbox is used or not.
+    The build result is considered to be an invariant of such a sandbox. This
+    implies that recipes shall produce the same result, regardless whether the
+    sandbox is used or not.
 
 Optionally there can be a ``mount`` keyword. With ``mount`` it is possible to
 specify additional paths of the host that are mounted read only in the sandbox.
