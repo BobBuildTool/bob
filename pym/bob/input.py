@@ -1462,7 +1462,7 @@ class CoreBuildStep(CoreStep):
 class BuildStep(Step):
 
     def hasNetAccess(self):
-        return self.getPackage().getRecipe()._getBuildNetAccess() or any(
+        return self.getPackage().getRecipe().buildNetAccess or any(
             t.getNetAccess() for t in self.getTools().values())
 
 
@@ -1519,7 +1519,7 @@ class PackageStep(Step):
         return self.getPackage().isRelocatable()
 
     def hasNetAccess(self):
-        return self.getPackage().getRecipe()._getPackageNetAccess() or any(
+        return self.getPackage().getRecipe().packageNetAccess or any(
             t.getNetAccess() for t in self.getTools().values())
 
 
@@ -2676,15 +2676,17 @@ class Recipe(object):
 
         return p, subTreePackages
 
-    def _getBuildNetAccess(self):
+    @property
+    def buildNetAccess(self):
         if self.__buildNetAccess is None:
-            return not self.__recipeSet.getPolicy("offlineBuild")
+            return False
         else:
             return self.__buildNetAccess
 
-    def _getPackageNetAccess(self):
+    @property
+    def packageNetAccess(self):
         if self.__packageNetAccess is None:
-            return not self.__recipeSet.getPolicy("offlineBuild")
+            return False
         else:
             return self.__packageNetAccess
 
@@ -2985,7 +2987,7 @@ class RecipeSet:
                 schema.Optional('cleanEnvironment') : schema.Schema(True, "Cannot set old behaviour of cleanEnvironment policy!"),
                 schema.Optional('tidyUrlScm') : schema.Schema(True, "Cannot set old behaviour of tidyUrlScm policy!"),
                 schema.Optional('allRelocatable') : schema.Schema(True, "Cannot set old behaviour of allRelocatable policy!"),
-                schema.Optional('offlineBuild') : bool,
+                schema.Optional('offlineBuild') : schema.Schema(True, "Cannot set old behaviour of offlineBuild policy!"),
                 schema.Optional('sandboxInvariant') : bool,
                 schema.Optional('uniqueDependency') : bool,
                 schema.Optional('mergeEnvironment') : bool,
@@ -3054,11 +3056,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'offlineBuild' : (
-                "0.14",
-                InfoOnce("offlineBuild policy not set. Network access still allowed during build steps.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#offlinebuild for more information.")
-            ),
             'sandboxInvariant' : (
                 "0.14",
                 InfoOnce("sandboxInvariant policy not set. Inconsistent sandbox handling for binary artifacts.",
