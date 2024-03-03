@@ -34,8 +34,6 @@ try:
 except ImportError:
     from yaml import load as yamlLoad, SafeLoader as YamlSafeLoader
 
-warnDepends = WarnOnce("The same package is named multiple times as dependency!",
-    help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
 warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
 warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
 warnPluginMinimumVersion = Warn("Plugin API too old. Support for versions before 0.15 will be removed soon.")
@@ -2393,11 +2391,9 @@ class Recipe(object):
                 directPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
                 self.__raiseIncompatibleLocal(depCoreStep)
-            elif self.__recipeSet.getPolicy('uniqueDependency'):
+            else:
                 raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
                                     .format(recipe))
-            else:
-                warnDepends.show("{} -> {}".format(self.__packageName, recipe))
 
             # Remember dependency diffs before changing them
             origDepDiffTools = thisDepDiffTools
@@ -2940,7 +2936,7 @@ class RecipeSet:
                 schema.Optional('allRelocatable') : schema.Schema(True, "Cannot set old behaviour of allRelocatable policy!"),
                 schema.Optional('offlineBuild') : schema.Schema(True, "Cannot set old behaviour of offlineBuild policy!"),
                 schema.Optional('sandboxInvariant') : schema.Schema(True, "Cannot set old behaviour of sandboxInvariant policy!"),
-                schema.Optional('uniqueDependency') : bool,
+                schema.Optional('uniqueDependency') : schema.Schema(True, "Cannot set old behaviour of uniqueDependency policy!"),
                 schema.Optional('mergeEnvironment') : bool,
                 schema.Optional('secureSSL') : bool,
                 schema.Optional('sandboxFingerprints') : bool,
@@ -3007,11 +3003,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'uniqueDependency' : (
-                "0.14",
-                InfoOnce("uniqueDependency policy not set. Naming same dependency multiple times is deprecated.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#uniquedependency for more information.")
-            ),
             'mergeEnvironment' : (
                 "0.15",
                 InfoOnce("mergeEnvironment policy not set. Recipe and classes (private)environments overwrite each other instead of being merged.",
