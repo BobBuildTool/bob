@@ -1299,8 +1299,28 @@ Example::
    environment:
       PKG_VERSION: "1.2.3"
 
-The environment of the recipe and inherited classes are merged together. The
-exact way of merging is subject to the :ref:`policies-mergeEnvironment` policy.
+All environment keys are eligible to variable substitution. The environment of
+the recipe and inherited classes are merged together. Suppose the project has
+the following simple recipe/class structure::
+
+    recipes/foo.yaml:
+        inherit: [asan, werror]
+        environment:
+            CFLAGS: "${CFLAGS:-} -DFOO=1"
+
+    classes/asan.yaml:
+        environment:
+            CFLAGS: "${CFLAGS:-} -fsanitize=address"
+
+    classes/werror.yaml:
+        environment:
+            CFLAGS: "${CFLAGS:-} -Werror"
+
+The definitions of the recipe has the highest precedence (i.e. it is
+substituted last). Declarations of classes are substituted in their
+inheritance order, that is, the last inherited class has the highest
+precedence. Given the above example, the resulting ``CFLAGS`` would be
+``${CFLAGS:-} -fsanitize=address -Werror -DFOO=1``
 
 See also :ref:`configuration-recipes-privateenv`.
 
@@ -1556,11 +1576,9 @@ Example::
    privateEnvironment:
       APPLY_FOO_PATCH: "no"
 
-The privateEnvironment of the recipe and inherited classes are merged together.
-The exact way of merging is subject to the :ref:`policies-mergeEnvironment`
-policy.
-
-See also :ref:`configuration-recipes-env`.
+The ``privateEnvironment`` of the recipe and inherited classes are merged
+together.  See :ref:`configuration-recipes-env` for the merge and string
+substitution behaviour.
 
 .. _configuration-recipes-providedeps:
 
