@@ -89,8 +89,7 @@ class GitScm(Scm):
     SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
     REMOTE_PREFIX = "remote-"
 
-    def __init__(self, spec, overrides=[], secureSSL=None, stripUser=None,
-            useBranchAndCommit=False):
+    def __init__(self, spec, overrides=[], stripUser=None, useBranchAndCommit=False):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
@@ -103,7 +102,7 @@ class GitScm(Scm):
                 if stripped_key == "origin":
                     raise ParseError("Invalid remote name: " + stripped_key)
                 self.__remotes.update({stripped_key : val})
-        self.__sslVerify = spec.get('sslVerify', secureSSL)
+        self.__sslVerify = spec.get('sslVerify', True)
         self.__singleBranch = spec.get('singleBranch')
         self.__shallow = spec.get('shallow')
         self.__submodules = spec.get('submodules', False)

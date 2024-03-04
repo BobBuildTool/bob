@@ -2923,7 +2923,7 @@ class RecipeSet:
                 schema.Optional('sandboxInvariant') : schema.Schema(True, "Cannot set old behaviour of sandboxInvariant policy!"),
                 schema.Optional('uniqueDependency') : schema.Schema(True, "Cannot set old behaviour of uniqueDependency policy!"),
                 schema.Optional('mergeEnvironment') : schema.Schema(True, "Cannot set old behaviour of mergeEnvironment policy!"),
-                schema.Optional('secureSSL') : bool,
+                schema.Optional('secureSSL') : schema.Schema(True, "Cannot set old behaviour of secureSSL policy!"),
                 schema.Optional('sandboxFingerprints') : bool,
                 schema.Optional('fingerprintVars') : bool,
                 schema.Optional('noUndefinedTools') : bool,
@@ -2988,11 +2988,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'secureSSL' : (
-                "0.15",
-                InfoOnce("secureSSL policy not set. Bob will ignore SSL certificate errors.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#securessl for more information.")
-            ),
             'sandboxFingerprints' : (
                 "0.16rc1",
                 InfoOnce("sandboxFingerprints policy not set. Sandbox builds of fingerprinted packages are not shared with regular builds.",

@@ -543,7 +543,6 @@ class RecipeSetIR:
             # FIXME: lazily query policies and only add them all in toData()
             'pruneImportScm' : recipeSet.getPolicy('pruneImportScm'),
             'scmIgnoreUser' : recipeSet.getPolicy('scmIgnoreUser'),
-            'secureSSL' : recipeSet.getPolicy('secureSSL'),
             'sandboxFingerprints' : recipeSet.getPolicy('sandboxFingerprints'),
             'gitCommitOnBranch' : recipeSet.getPolicy('gitCommitOnBranch'),
             'fixImportScmVariant' : recipeSet.getPolicy('fixImportScmVariant'),
