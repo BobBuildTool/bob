@@ -953,10 +953,9 @@ or to show additional information.
 .. _Svn: http://subversion.apache.org/
 
 Most SCMs support the ``sslVerify`` attribute. This is a boolean that controls
-whether to verify the SSL certificate when fetching. It defaults to ``True``
-with the notable exception of ``git`` before Bob 0.15 which was rectified by
-the introduction of the :ref:`policies-secureSSL` policy. If at all possible,
-fixing a certificate problem is preferable to using this option.
+whether to verify the SSL certificate when fetching. If unset, it defaults to
+``True``.  If at all possible, fixing a certificate problem is preferable to
+using this option.
 
 cvs
    The CVS SCM requires a ``cvsroot``, which is what you would normally put in
