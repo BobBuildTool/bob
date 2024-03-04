@@ -194,7 +194,7 @@ class RecipeCommon:
         r.setdefault("checkoutUpdateIf", False)
         return r
 
-    def parseAndPrepare(self, recipe, classes={}, name="foo"):
+    def parseAndPrepare(self, recipe, classes={}, name="foo", env={}):
 
         cwd = os.getcwd()
         recipeSet = MagicMock()
@@ -207,7 +207,7 @@ class RecipeCommon:
             for n, r in classes.items() }
         recipeSet.getClass = lambda x, cc=cc: cc[x]
 
-        env = Env()
+        env = Env(env)
         env.funs = DEFAULT_STRING_FUNS
         ret = Recipe(recipeSet, self.applyRecipeDefaults(recipe), [], name+".yaml",
                      cwd, name, name, {})
@@ -648,3 +648,80 @@ class TestSCMs(RecipeCommon, TestCase):
         }
         with self.assertRaises(ParseError):
             self.parseAndPrepare(recipe)
+
+
+class TestEnvironment(RecipeCommon, TestCase):
+
+    def testMergeEnvironment(self):
+        """The 'environment' and 'privateEnvironment' keys are merged during inheritence"""
+
+        for key in ("environment", "privateEnvironment"):
+            with self.subTest(key=key):
+                recipe = {
+                    "inherit" : ["a", "b"],
+                    key : {
+                        "A" : "<lib>${A:-}",
+                        "B" : "<lib>${B:-}",
+                        "C" : "<lib>${C:-}",
+                    },
+                    "packageVars" : ["A", "B", "C"]
+                }
+                classes = {
+                    "a" : {
+                        key : {
+                            "A" : "${A:-}<a>",
+                            "B" : "<a>",
+                        },
+                    },
+                    "b" : {
+                        key : {
+                            "B" : "${B:-}<b>",
+                            "C" : "<b>",
+                        },
+                    },
+                }
+                env = {
+                    "A" : "a",
+                    "B" : "b",
+                }
+                p = self.parseAndPrepare(recipe, classes, env=env).getPackageStep()
+                self.assertEqual(p.getEnv(), {
+                    "A" : "<lib>a<a>",
+                    "B" : "<lib><a><b>",
+                    "C" : "<lib><b>",
+                })
+
+    def testMetaEnvrionmentNoSubstitution(self):
+        """metaEnvironment values are not substituted but merged on a key-by-key basis"""
+        recipe = {
+            "inherit" : ["a", "b"],
+            "metaEnvironment" : {
+                "A" : "<lib>${A:-}",
+                "B" : "<lib>${B:-}",
+            },
+            "packageVars" : ["A", "B", "C"]
+        }
+        classes = {
+            "a" : {
+                "metaEnvironment" : {
+                    "A" : "${A:-}<a>",
+                    "B" : "<a>",
+                },
+            },
+            "b" : {
+                "metaEnvironment" : {
+                    "B" : "${B:-}<b>",
+                    "C" : "<b>",
+                },
+            },
+        }
+        env = {
+            "A" : "a",
+            "B" : "b",
+        }
+        p = self.parseAndPrepare(recipe, classes, env=env).getPackageStep()
+        self.assertEqual(p.getEnv(), {
+            "A" : "<lib>${A:-}",
+            "B" : "<lib>${B:-}",
+            "C" : "<b>",
+        })

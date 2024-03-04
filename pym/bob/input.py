@@ -2099,10 +2099,8 @@ class Recipe(object):
         inheritAll = inherit + [self]
 
         # prepare environment merge list
-        mergeEnvironment = self.__recipeSet.getPolicy('mergeEnvironment')
-        if mergeEnvironment:
-            self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
-            self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
+        self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
+        self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
 
         # first pass: calculate used scripting language
         scriptLanguage = None
@@ -2163,16 +2161,8 @@ class Recipe(object):
             self.__provideVars = tmp
             self.__provideDeps |= cls.__provideDeps
             if self.__provideSandbox is None: self.__provideSandbox = cls.__provideSandbox
-            if mergeEnvironment:
-                if cls.__varSelf: self.__varSelf.insert(0, cls.__varSelf)
-                if cls.__varPrivate: self.__varPrivate.insert(0, cls.__varPrivate)
-            else:
-                tmp = cls.__varSelf.copy()
-                tmp.update(self.__varSelf)
-                self.__varSelf = tmp
-                tmp = cls.__varPrivate.copy()
-                tmp.update(self.__varPrivate)
-                self.__varPrivate = tmp
+            if cls.__varSelf: self.__varSelf.insert(0, cls.__varSelf)
+            if cls.__varPrivate: self.__varPrivate.insert(0, cls.__varPrivate)
             self.__checkoutVars |= cls.__checkoutVars
             tmp = cls.__metaEnv.copy()
             tmp.update(self.__metaEnv)
@@ -2192,11 +2182,6 @@ class Recipe(object):
             if self.__packageNetAccess is None: self.__packageNetAccess = cls.__packageNetAccess
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
-
-        # finalize environment merge list
-        if not mergeEnvironment:
-            self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
-            self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
 
         # the package step must always be valid
         if self.__package[1] is None:
@@ -2937,7 +2922,7 @@ class RecipeSet:
                 schema.Optional('offlineBuild') : schema.Schema(True, "Cannot set old behaviour of offlineBuild policy!"),
                 schema.Optional('sandboxInvariant') : schema.Schema(True, "Cannot set old behaviour of sandboxInvariant policy!"),
                 schema.Optional('uniqueDependency') : schema.Schema(True, "Cannot set old behaviour of uniqueDependency policy!"),
-                schema.Optional('mergeEnvironment') : bool,
+                schema.Optional('mergeEnvironment') : schema.Schema(True, "Cannot set old behaviour of mergeEnvironment policy!"),
                 schema.Optional('secureSSL') : bool,
                 schema.Optional('sandboxFingerprints') : bool,
                 schema.Optional('fingerprintVars') : bool,
@@ -3003,11 +2988,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'mergeEnvironment' : (
-                "0.15",
-                InfoOnce("mergeEnvironment policy not set. Recipe and classes (private)environments overwrite each other instead of being merged.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#mergeenvironment for more information.")
-            ),
             'secureSSL' : (
                 "0.15",
                 InfoOnce("secureSSL policy not set. Bob will ignore SSL certificate errors.",
