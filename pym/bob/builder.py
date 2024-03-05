@@ -787,7 +787,8 @@ cd {ROOT}
                 logger.setError(invoker.getStdio().strip())
             raise BuildError("{} returned with {}"
                                 .format(absRunFile, ret),
-                             help="You may resume at this point with '--resume' after fixing the error.")
+                             help="You may resume at this point with '--resume' after fixing the error.",
+                             returncode=ret)
 
     def getStatistic(self):
         return self.__statistic
