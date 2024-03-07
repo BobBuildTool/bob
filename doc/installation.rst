@@ -132,6 +132,28 @@ setuptools_scm, wheel,...
 Linux/POSIX platform notes
 ==========================
 
+Recommended configuration
+-------------------------
+
+It is recommended to create a user global Bob configuration file which applies
+to all projects. The following settings will ensure that shareable packages are
+put into a common location and that downloaded source tarballs are mirrored
+locally::
+
+    preMirrorPrepend:
+        scm: url
+        url: "https?://.*/(.*)"
+        mirror: "~/.cache/bob/mirror/\\1"
+        upload: True
+    share:
+        path: ~/.cache/bob/pkgs
+        quota: "5G"
+        autoClean: True
+
+The above configuration should be stored as ``~/.config/bob/default.yaml``. See
+:ref:`configuration-config-mirrors` and :ref:`configuration-config-share` for
+more details.
+
 Shell completion
 ----------------
 
