@@ -19,31 +19,25 @@ it must not be overwritten. The backend should make sure that even on
 concurrent uploads the artifact must appear atomically for unrelated readers.
 """
 
-from . import BOB_VERSION
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
-from .utils import asHexStr, removePath, isWindows, sslNoVerifyContext, \
-    getBashPath, tarfileOpen
+from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen
+from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
 from shlex import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
-import argparse
 import asyncio
-import base64
 import concurrent.futures
 import concurrent.futures.process
 import gzip
-import hashlib
 import http.client
 import io
 import os
 import os.path
 import shutil
 import signal
-import ssl
 import subprocess
 import tarfile
-import textwrap
 import urllib.parse
 
 ARCHIVE_GENERATION = '-1'
@@ -390,7 +384,7 @@ class BaseArchive(TarHelper):
             return self._openUploadFile(buildId, ARTIFACT_SUFFIX, False)
         except ArtifactExistsError:
             return None
-        except (ArtifactUploadError, OSError) as e:
+        except (ArtifactUploadError, HttpUploadError, OSError) as e:
             if self.__ignoreErrors:
                 return None
             else:
@@ -406,10 +400,12 @@ class BaseArchive(TarHelper):
                 with Tee(name, fileobj, buildId, caches, workspace) as fo:
                     self._extract(fo, audit, content)
             return (True, None, None)
-        except ArtifactNotFoundError:
+        except (ArtifactNotFoundError, HttpNotFoundError):
             return (False, "not found", WARNING)
-        except ArtifactDownloadError as e:
+        except (ArtifactDownloadError, HttpDownloadError) as e:
             return (False, e.reason, WARNING)
+        except ConnectionRefusedError:
+            return (False, "connection failed", WARNING)
         except BuildError as e:
             raise
         except OSError as e:
@@ -444,10 +440,12 @@ class BaseArchive(TarHelper):
             with self._openDownloadFile(key, suffix) as (name, fileobj):
                 ret = readFileOrHandle(name, fileobj)
             return (ret, None, None)
-        except ArtifactNotFoundError:
+        except (ArtifactNotFoundError, HttpNotFoundError):
             return (None, "not found", WARNING)
-        except ArtifactDownloadError as e:
+        except (ArtifactDownloadError, HttpDownloadError) as e:
             return (None, e.reason, WARNING)
+        except ConnectionRefusedError:
+            return (None, "connection failed", WARNING)
         except BuildError as e:
             raise
         except OSError as e:
@@ -487,9 +485,9 @@ class BaseArchive(TarHelper):
         try:
             with self._openUploadFile(buildId, suffix, False) as (name, fileobj):
                 self._pack(name, fileobj, audit, content)
-        except ArtifactExistsError:
+        except (ArtifactExistsError, HttpAlreadyExistsError):
             return ("skipped ({} exists in archive)".format(content), SKIPPED)
-        except (ArtifactUploadError, tarfile.TarError, OSError) as e:
+        except (ArtifactUploadError, HttpUploadError, tarfile.TarError, OSError) as e:
             if self.__ignoreErrors:
                 return ("error ("+str(e)+")", ERROR)
             else:
@@ -522,7 +520,7 @@ class BaseArchive(TarHelper):
             # never see an ArtifactExistsError.
             with self._openUploadFile(key, suffix, True) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, content)
-        except (ArtifactUploadError, OSError) as e:
+        except (ArtifactUploadError, HttpUploadError, OSError) as e:
             if self.__ignoreErrors:
                 return ("error ("+str(e)+")", ERROR)
             else:
@@ -737,118 +735,66 @@ class LocalArchiveUploader:
         return False
 
 
-class SimpleHttpArchive(BaseArchive):
+class HttpArchive(BaseArchive):
     def __init__(self, spec):
         super().__init__(spec)
         self.__url = urllib.parse.urlparse(spec["url"])
-        self.__connection = None
-        self.__sslVerify = spec.get("sslVerify", True)
+        self._webdav = WebDav(self.__url, spec.get("sslVerify", True))
 
     def __retry(self, request):
         retry = True
         while True:
             try:
                 return (True, request())
-            except (http.client.HTTPException, OSError) as e:
-                self._resetConnection()
+            except (HTTPException, OSError) as e:
+                self._webdav._resetConnection()
                 if not retry: return (False, e)
                 retry = False
 
-    def _makeUrl(self, buildId, suffix):
+    def _resetConnection(self):
+        self._webdav._resetConnection()
+
+    def _makePath(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
         return "/".join([self.__url.path, packageResultId[0:2], packageResultId[2:4],
             packageResultId[4:] + suffix])
 
+    def _makeParentDirs(self, path):
+        (dirs, _, _) = path.rpartition("/")
+        (ok, result) = self.__retry(lambda: self._webdav.mkdir(dirs, dirs.count("/")))
+        if ok:
+            return result
+        else:
+            raise result
+
     def _remoteName(self, buildId, suffix):
         url = self.__url
-        return urllib.parse.urlunparse((url.scheme, url.netloc, self._makeUrl(buildId, suffix), '', '', ''))
+        return urllib.parse.urlunparse((url.scheme, url.netloc, self._makePath(buildId, suffix), '', '', ''))
 
-    def _getConnection(self):
-        if self.__connection is not None:
-            return self.__connection
-
-        url = self.__url
-        if url.scheme == 'http':
-            connection = http.client.HTTPConnection(url.hostname, url.port)
-        elif url.scheme == 'https':
-            ctx = None if self.__sslVerify else sslNoVerifyContext()
-            connection = http.client.HTTPSConnection(url.hostname, url.port,
-                                                     context=ctx)
+    def _exists(self, path):
+        (ok, result) = self.__retry(lambda: self._webdav.exists(path))
+        if ok:
+            return result
         else:
-            raise BuildError("Unsupported URL scheme: '{}'".format(url.schema))
-
-        self.__connection = connection
-        return connection
-
-    def _resetConnection(self):
-        if self.__connection is not None:
-            self.__connection.close()
-            self.__connection = None
-
-    def _getHeaders(self):
-        headers = { 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) }
-        if self.__url.username is not None:
-            username = urllib.parse.unquote(self.__url.username)
-            passwd = urllib.parse.unquote(self.__url.password)
-            userPass = username + ":" + passwd
-            headers['Authorization'] = 'Basic ' + base64.b64encode(
-                userPass.encode("utf-8")).decode("ascii")
-        return headers
+            raise result
 
     def _openDownloadFile(self, buildId, suffix):
-        (ok, result) = self.__retry(lambda: self.__openDownloadFile(buildId, suffix))
+        path = self._makePath(buildId, suffix)
+        (ok, result) = self.__retry(lambda: self.__openDownloadFile(path))
         if ok:
             return result
         else:
-            raise ArtifactDownloadError(str(result))
+            raise result
 
-    def __openDownloadFile(self, buildId, suffix):
-        connection = self._getConnection()
-        url = self._makeUrl(buildId, suffix)
-        connection.request("GET", url, headers=self._getHeaders())
-        response = connection.getresponse()
-        if response.status == 200:
-            return SimpleHttpDownloader(self, response)
-        else:
-            response.read()
-            if response.status == 404:
-                raise ArtifactNotFoundError()
-            else:
-                raise ArtifactDownloadError("{} {}".format(response.status,
-                                                           response.reason))
+    def __openDownloadFile(self, path):
+        return HttpDownloader(self, self._webdav.download(path))
 
     def _openUploadFile(self, buildId, suffix, overwrite):
-        (ok, result) = self.__retry(lambda: self.__openUploadFile(buildId, suffix, overwrite))
-        if ok:
-            return result
-        else:
-            raise ArtifactUploadError(str(result))
-
-    def __openUploadFile(self, buildId, suffix, overwrite):
-        connection = self._getConnection()
-        url = self._makeUrl(buildId, suffix)
-
+        path = self._makePath(buildId, suffix)
         # check if already there
         if not overwrite:
-            connection.request("HEAD", url, headers=self._getHeaders())
-            response = connection.getresponse()
-            response.read()
-            if response.status == 200:
+            if self._exists(path):
                 raise ArtifactExistsError()
-            elif response.status != 404:
-                raise ArtifactUploadError("HEAD {} {}".format(response.status, response.reason))
-
-        # create temporary file
-        return SimpleHttpUploader(self, url, overwrite)
-
-    def _putUploadFile(self, url, tmp, overwrite):
-        (ok, result) = self.__retry(lambda: self.__putUploadFile(url, tmp, overwrite))
-        if ok:
-            return result
-        else:
-            raise ArtifactUploadError(str(result))
-
-    def __putUploadFile(self, url, tmp, overwrite):
         # Quoting RFC 4918:
         #
         #   A PUT that would result in the creation of a resource without an
@@ -857,62 +803,18 @@ class SimpleHttpArchive(BaseArchive):
         #
         # We don't want to waste bandwith by uploading big artifacts into a
         # missing directory. Thus make sure the directory always exists.
-        self.__makeParentDirs(url)
+        self._makeParentDirs(path)
+        return HttpUploader(self, path, overwrite)
 
-        # Determine file length outself and add a "Content-Length" header. This
-        # used to work in Python 3.5 automatically but was removed later.
-        tmp.seek(0, os.SEEK_END)
-        length = str(tmp.tell())
-        tmp.seek(0)
-        headers = self._getHeaders()
-        headers.update({ 'Content-Length' : length })
-        if not overwrite:
-            headers.update({ 'If-None-Match' : '*' })
-        connection = self._getConnection()
-        connection.request("PUT", url, tmp, headers=headers)
-        response = connection.getresponse()
-        response.read()
-        if response.status == 412:
-            # precondition failed -> lost race with other upload
-            raise ArtifactExistsError()
-        elif response.status not in [200, 201, 204]:
-            raise ArtifactUploadError("PUT {} {}".format(response.status, response.reason))
+    def _putUploadFile(self, path, tmp, overwrite):
+        (ok, result) = self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
+        if ok:
+            return result
+        else:
+            raise result
 
-    def __makeParentDirs(self, url, depth=0):
-        """Create parent directories.
 
-        Our artifacts are stored directory levels deep. Only do the MKCOL up
-        to the base level.
-        """
-        (dirs, _, _) = url.rpartition("/")
-        if not dirs:
-            return
-
-        response = self.__mkcol(dirs)
-        if response.status == 409 and depth < 2:
-            # 409 Conflict - Parent collection does not exist.
-            self.__makeParentDirs(dirs, depth + 1)
-            response = self.__mkcol(dirs)
-
-        # We expect to create the directory (201) or it already existed (405).
-        # If the server does not support MKCOL we'd expect a 405 too and hope
-        # for the best...
-        if response.status not in [201, 405]:
-            raise ArtifactUploadError("MKCOL {} {}".format(response.status, response.reason))
-
-    def __mkcol(self, url):
-        # MKCOL resources must have a trailing slash because they are
-        # directories. Otherwise Apache might send a HTTP 301. Nginx refuses to
-        # create the directory with a 409 which looks odd.
-        if not url.endswith("/"):
-            url += "/"
-        connection = self._getConnection()
-        connection.request("MKCOL", url, headers=self._getHeaders())
-        response = connection.getresponse()
-        response.read()
-        return response
-
-class SimpleHttpDownloader:
+class HttpDownloader:
     def __init__(self, archiver, response):
         self.archiver = archiver
         self.response = response
@@ -924,7 +826,8 @@ class SimpleHttpDownloader:
             self.archiver._resetConnection()
         return False
 
-class SimpleHttpUploader:
+
+class HttpUploader:
     def __init__(self, archiver, url, overwrite):
         self.archiver = archiver
         self.tmp = TemporaryFile()
@@ -1218,7 +1121,7 @@ def getSingleArchiver(recipes, archiveSpec):
     if archiveBackend == "file":
         return LocalArchive(archiveSpec)
     elif archiveBackend == "http":
-        return SimpleHttpArchive(archiveSpec)
+        return HttpArchive(archiveSpec)
     elif archiveBackend == "shell":
         return CustomArchive(archiveSpec, recipes.envWhiteList())
     elif archiveBackend == "azure":
