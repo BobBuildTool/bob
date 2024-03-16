@@ -1231,8 +1231,7 @@ class Step:
                 varSet.update(v)
             mask >>= 2
         env = self.getEnv()
-        if recipe.getRecipeSet().getPolicy('fingerprintVars'):
-            env = { k : v for k,v in env.items() if k in varSet }
+        env = { k : v for k,v in env.items() if k in varSet }
         return recipe.scriptLanguage.mangleFingerprints(ret, env)
 
 
@@ -2925,7 +2924,7 @@ class RecipeSet:
                 schema.Optional('mergeEnvironment') : schema.Schema(True, "Cannot set old behaviour of mergeEnvironment policy!"),
                 schema.Optional('secureSSL') : schema.Schema(True, "Cannot set old behaviour of secureSSL policy!"),
                 schema.Optional('sandboxFingerprints') : schema.Schema(True, "Cannot set old behaviour of sandboxFingerprints policy!"),
-                schema.Optional('fingerprintVars') : bool,
+                schema.Optional('fingerprintVars') : schema.Schema(True, "Cannot set old behaviour of fingerprintVars policy!"),
                 schema.Optional('noUndefinedTools') : bool,
                 schema.Optional('scmIgnoreUser') : bool,
                 schema.Optional('pruneImportScm') : bool,
@@ -2988,11 +2987,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'fingerprintVars' : (
-                "0.16rc1",
-                InfoOnce("fingerprintVars policy not set. Fingerprint scripts may be run more often than needed.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#fingerprintvars for more information.")
-            ),
             'noUndefinedTools' : (
                 "0.17.3.dev57",
                 InfoOnce("noUndefinedTools policy not set. Included but undefined tools are not detected at parsing time.",
