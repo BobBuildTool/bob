@@ -881,9 +881,12 @@ class CoreStep(CoreItem):
 
     def getDigest(self, calculate, forceSandbox=False):
         h = DigestHasher()
-        if self.isFingerprinted() and self.getSandbox() \
-                and not self.corePackage.recipe.getRecipeSet().sandboxFingerprints:
-            h.fingerprint(DigestHasher.sliceRecipes(calculate(self.getSandbox().coreStep)))
+        if self.isFingerprinted() and self.getSandbox():
+            # Add the full variant-id (including fingerprint part!) to the
+            # fingerprint of this package. This is important to make separate
+            # builds for separate sandboxes, including sandboxes that are
+            # itself fingerprinted.
+            h.fingerprint(calculate(self.getSandbox().coreStep))
         sandbox = not self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
             self.getSandbox(forceSandbox)
         if sandbox:

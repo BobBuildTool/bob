@@ -309,12 +309,18 @@ class StepIR(AbstractIR):
                             fingerprint=None, platform=b'', relaxTools=False):
         h = hasher()
         h.update(platform)
-        if self._isFingerprinted() and self.getSandbox() \
-                and not self.getPackage().getRecipe().getRecipeSet().sandboxFingerprints:
+        if fingerprint is not None:
+            # Build-Id calculation
+            if self._isFingerprinted() and self.getSandbox() \
+                    and not self.getPackage().getRecipe().getRecipeSet().sandboxFingerprints:
+                [d] = await calculate([self.getSandbox().getStep()])
+                h.fingerprint(hasher.sliceRecipes(d))
+            else:
+                h.fingerprint(fingerprint)
+        elif self._isFingerprinted() and self.getSandbox():
+            # Variant-Id calculation with fingerprint in sandbox
             [d] = await calculate([self.getSandbox().getStep()])
-            h.fingerprint(hasher.sliceRecipes(d))
-        elif fingerprint:
-            h.fingerprint(fingerprint)
+            h.fingerprint(d)
         sandbox = not self.getPackage().getRecipe().getRecipeSet().sandboxInvariant and \
             self.getSandbox(forceSandbox)
         if sandbox:
