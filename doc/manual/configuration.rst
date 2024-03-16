@@ -1461,12 +1461,6 @@ variables that are selected by :ref:`configuration-recipes-vars` can be used.
 It is not an error that a variable listed here is unset. The variables will
 only be set if the corresponding ``fingerprintScript`` is enabled too.
 
-.. note::
-    Before Bob 0.16 (see :ref:`policies-fingerprintVars` policy) all
-    environment variables of the affected package were set during the execution
-    of the ``fingerprintScript``. If the policy is set to the old behaviour
-    then this key will be ignored and has no effect.
-
 inherit
 ~~~~~~~
 
