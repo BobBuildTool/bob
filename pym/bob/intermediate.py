@@ -300,12 +300,7 @@ class StepIR(AbstractIR):
         h.update(platform)
         if fingerprint is not None:
             # Build-Id calculation
-            if self._isFingerprinted() and self.getSandbox() \
-                    and not self.getPackage().getRecipe().getRecipeSet().sandboxFingerprints:
-                [d] = await calculate([self.getSandbox().getStep()])
-                h.fingerprint(hasher.sliceRecipes(d))
-            else:
-                h.fingerprint(fingerprint)
+            h.fingerprint(fingerprint)
         elif self._isFingerprinted() and self.getSandbox():
             # Variant-Id calculation with fingerprint in sandbox
             [d] = await calculate([self.getSandbox().getStep()])
@@ -538,12 +533,10 @@ class RecipeSetIR:
     def fromRecipeSet(cls, recipeSet):
         self = cls()
         self.__data = {}
-        self.__data['sandboxFingerprints'] = recipeSet.sandboxFingerprints
         self.__data['policies'] = {
             # FIXME: lazily query policies and only add them all in toData()
             'pruneImportScm' : recipeSet.getPolicy('pruneImportScm'),
             'scmIgnoreUser' : recipeSet.getPolicy('scmIgnoreUser'),
-            'sandboxFingerprints' : recipeSet.getPolicy('sandboxFingerprints'),
             'gitCommitOnBranch' : recipeSet.getPolicy('gitCommitOnBranch'),
             'fixImportScmVariant' : recipeSet.getPolicy('fixImportScmVariant'),
             'defaultFileMode' : recipeSet.getPolicy('defaultFileMode'),
@@ -563,10 +556,6 @@ class RecipeSetIR:
 
     def toData(self):
         return self.__data
-
-    @property
-    def sandboxFingerprints(self):
-        return self.__data['sandboxFingerprints']
 
     def archiveSpec(self):
         return self.__data['archiveSpec']

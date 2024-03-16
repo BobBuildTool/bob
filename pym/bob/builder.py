@@ -1860,16 +1860,6 @@ cd {ROOT}
         return ret
 
     async def _getFingerprint(self, step, depth):
-        # Use a shortcut when the sandboxFingerprints policy is not set and the
-        # step is built inside a sandbox. In this case the variant-id and
-        # build-id are already tied directly to the sandbox variant-id by
-        # getDigest(). This is pessimistic but easier than calculating the
-        # fingerprint inside the sandbox and has been the default before Bob
-        # 0.16.
-        sandbox = (step.getSandbox() is not None) and step.getSandbox().getStep()
-        if sandbox and not step.getPackage().getRecipe().getRecipeSet().getPolicy('sandboxFingerprints'):
-            return b''
-
         # A relocatable step with no fingerprinting is easy
         isFingerprinted = step._isFingerprinted()
         trackRelocation = step.isPackageStep() and not step.isRelocatable()
@@ -1879,6 +1869,7 @@ cd {ROOT}
         # Execute the fingerprint script (or use cached result)
         if isFingerprinted:
             # Cache based on the script digest.
+            sandbox = (step.getSandbox() is not None) and step.getSandbox().getStep()
             key = hashlib.sha1(step._getFingerprintScript().encode('utf8')).digest()
             if sandbox:
                 # Add the sandbox build-id to the cache key to distinguish

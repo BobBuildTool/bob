@@ -2924,7 +2924,7 @@ class RecipeSet:
                 schema.Optional('uniqueDependency') : schema.Schema(True, "Cannot set old behaviour of uniqueDependency policy!"),
                 schema.Optional('mergeEnvironment') : schema.Schema(True, "Cannot set old behaviour of mergeEnvironment policy!"),
                 schema.Optional('secureSSL') : schema.Schema(True, "Cannot set old behaviour of secureSSL policy!"),
-                schema.Optional('sandboxFingerprints') : bool,
+                schema.Optional('sandboxFingerprints') : schema.Schema(True, "Cannot set old behaviour of sandboxFingerprints policy!"),
                 schema.Optional('fingerprintVars') : bool,
                 schema.Optional('noUndefinedTools') : bool,
                 schema.Optional('scmIgnoreUser') : bool,
@@ -2988,11 +2988,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'sandboxFingerprints' : (
-                "0.16rc1",
-                InfoOnce("sandboxFingerprints policy not set. Sandbox builds of fingerprinted packages are not shared with regular builds.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxfingerprints for more information.")
-            ),
             'fingerprintVars' : (
                 "0.16rc1",
                 InfoOnce("fingerprintVars policy not set. Fingerprint scripts may be run more often than needed.",
@@ -3771,14 +3766,6 @@ class RecipeSet:
         if policy is None:
             warning.show(location)
         return policy
-
-    @property
-    def sandboxFingerprints(self):
-        try:
-            return self.__sandboxFingerprints
-        except AttributeError:
-            self.__sandboxFingerprints = self.getPolicy("sandboxFingerprints")
-            return self.__sandboxFingerprints
 
     def getProjectRoot(self):
         """Get project root directory.
