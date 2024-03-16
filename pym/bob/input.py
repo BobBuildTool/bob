@@ -34,9 +34,6 @@ try:
 except ImportError:
     from yaml import load as yamlLoad, SafeLoader as YamlSafeLoader
 
-warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
-warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
-warnPluginMinimumVersion = Warn("Plugin API too old. Support for versions before 0.15 will be removed soon.")
 
 def isPrefixPath(p1, p2):
     """Check if the initial elements of ``p2`` equal ``p1``.
@@ -340,29 +337,6 @@ class PluginSetting:
         :return: True if data has expected type, otherwise False.
         """
         return True
-
-
-def pluginStateCompat(cls):
-    """Small compat decorator to roughly support <0.15 plugins"""
-
-    _onEnter = cls.onEnter
-    _onFinish = cls.onFinish
-
-    def onEnter(self, env, properties):
-        _onEnter(self, env, {}, properties)
-    def onFinish(self, env, properties):
-        _onFinish(self, env, {}, properties, None)
-
-    # wrap overridden methods
-    if cls.onEnter is not PluginState.onEnter:
-        cls.onEnter = onEnter
-    if cls.onFinish is not PluginState.onFinish:
-        cls.onFinish = onFinish
-
-def pluginStringFunCompat(oldFun):
-    def newFun(args, **kwargs):
-        return oldFun(args, tools={}, **kwargs)
-    return newFun
 
 
 class SentinelSetting(PluginSetting):
@@ -3202,8 +3176,6 @@ class RecipeSet:
         if compareVersion(BOB_VERSION, apiVersion) < 0:
             raise ParseError("Your Bob is too old. Plugin '"+fileName+"' requires at least version "+apiVersion+"!")
         toolsAbiBreak = compareVersion(apiVersion, "0.15") < 0
-        if toolsAbiBreak:
-            warnPluginMinimumVersion.warn(fileName)
 
         hooks = manifest.get('hooks', {})
         if not isinstance(hooks, dict):
@@ -3258,8 +3230,7 @@ class RecipeSet:
             if i in self.__states:
                 raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' already defined by other plugin!")
         if states and toolsAbiBreak:
-            warnDeprecatedPluginState.show(fileName)
-            for i in states.values(): pluginStateCompat(i)
+            raise ParseError("Plugin '"+fileName+"': state requires at least apiVersion 0.15!")
         self.__states.update(states)
 
         funs = manifest.get('stringFunctions', {})
@@ -3271,8 +3242,7 @@ class RecipeSet:
             if i in self.__stringFunctions:
                 raise ParseError("Plugin '"+fileName+"': string function '" +i+"' already defined by other plugin!")
         if funs and toolsAbiBreak:
-            warnDeprecatedStringFn.show(fileName)
-            funs = { i : pluginStringFunCompat(j) for i, j in funs.items() }
+            raise ParseError("Plugin '"+fileName+"': stringFunctions requires at least apiVersion 0.15!")
         self.__stringFunctions.update(funs)
 
         settings = manifest.get('settings', {})
