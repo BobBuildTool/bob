@@ -30,7 +30,9 @@ runSpecific()
 # create exactly one artifact.
 
 cat >config.yaml <<EOF
-bobMinimumVersion: "0.15"
+bobMinimumVersion: "0.24rc1"
+policies:
+    fingerprintVars: False
 EOF
 
 runSpecific allUnset1
@@ -54,7 +56,7 @@ cleanup
 rm -rf output
 
 cat >config.yaml <<EOF
-bobMinimumVersion: "0.15"
+bobMinimumVersion: "0.24rc1"
 policies:
     fingerprintVars: True
 EOF

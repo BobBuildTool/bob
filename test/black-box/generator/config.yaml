@@ -1,4 +1,4 @@
-bobMinimumVersion: "0.4"
+bobMinimumVersion: "0.24rc1"
 
 plugins:
     - "generator"

@@ -734,19 +734,10 @@ class TestDependencyEnv(RecipesTmp, TestCase):
 
 class TestNetAccess(RecipesTmp, TestCase):
 
-    def testOldPolicy(self):
-        """Test that network access is enbled by default for old projects"""
-        self.writeRecipe("root", """\
-            root: True
-            """)
-        p = self.generate().walkPackagePath("root")
-        self.assertTrue(p.getBuildStep().hasNetAccess())
-        self.assertTrue(p.getPackageStep().hasNetAccess())
-
-    def testNewPolicy(self):
+    def testDefaultPolicy(self):
         """Test that network access is disabled by default"""
         self.writeConfig({
-            "bobMinimumVersion" : "0.15",
+            "bobMinimumVersion" : "0.24",
         })
         self.writeRecipe("root", """\
             root: True
@@ -758,7 +749,7 @@ class TestNetAccess(RecipesTmp, TestCase):
     def testBuildNetAccess(self):
         """Test that a recipe can request network access for build step"""
         self.writeConfig({
-            "bobMinimumVersion" : "0.15",
+            "bobMinimumVersion" : "0.24",
         })
         self.writeRecipe("root1", """\
             root: True
@@ -781,7 +772,7 @@ class TestNetAccess(RecipesTmp, TestCase):
         """Test that a tool can force network access for build step."""
 
         self.writeConfig({
-            "bobMinimumVersion" : "0.15",
+            "bobMinimumVersion" : "0.24",
         })
         self.writeRecipe("root", """\
             root: True
@@ -807,7 +798,7 @@ class TestNetAccess(RecipesTmp, TestCase):
         """Test that a tool can force network access for package step."""
 
         self.writeConfig({
-            "bobMinimumVersion" : "0.15",
+            "bobMinimumVersion" : "0.24",
         })
         self.writeRecipe("root", """\
             root: True
@@ -1207,7 +1198,7 @@ class TestLayers(RecipesTmp, TestCase):
     def setUp(self):
         super().setUp()
         self.writeConfig({
-            "bobMinimumVersion" : "0.15",
+            "bobMinimumVersion" : "0.24",
             "layers" : [ "l1_n1", "l1_n2" ],
         })
         self.writeRecipe("root", """\
@@ -1220,7 +1211,7 @@ class TestLayers(RecipesTmp, TestCase):
             """)
 
         self.writeConfig({
-            "bobMinimumVersion" : "0.15",
+            "bobMinimumVersion" : "0.24",
             "layers" : [ "l2" ],
         }, layer=["l1_n1"])
         self.writeRecipe("foo", """\
@@ -1267,7 +1258,7 @@ class TestLayers(RecipesTmp, TestCase):
     def testMinimumVersion(self):
         """Test that (sub-)layers cannot request a higher minimum version"""
         self.writeConfig({
-            "bobMinimumVersion" : "0.14",
+            "bobMinimumVersion" : "0.16",
             "layers" : [ "l1_n1", "l1_n2" ],
         })
         self.assertRaises(ParseError, self.generate)
@@ -1622,7 +1613,7 @@ class TestScmDefaults(RecipesTmp, TestCase):
         pkg = self.generate().walkPackagePath("root")
         props = pkg.getCheckoutStep().getScmList()[0].getProperties(False)
         self.assertEqual(props["branch"], "master")
-        self.assertEqual(props["sslVerify"], None)
+        self.assertEqual(props["sslVerify"], True)
         self.assertEqual(props["shallow"], None)
         self.assertEqual(props["singleBranch"], None)
         self.assertFalse(props["submodules"])

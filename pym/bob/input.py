@@ -39,7 +39,6 @@ warnDepends = WarnOnce("The same package is named multiple times as dependency!"
     help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
 warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
 warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
-warnPrjMinimumVersion = Warn("Your project is too old. Support for versions before 0.16 will be removed soon.")
 warnPluginMinimumVersion = Warn("Plugin API too old. Support for versions before 0.15 will be removed soon.")
 
 def isPrefixPath(p1, p2):
@@ -3634,7 +3633,7 @@ class RecipeSet:
         def preValidate(data):
             if not isinstance(data, dict):
                 raise ParseError("{}: invalid format".format(configYaml))
-            minVer = data.get("bobMinimumVersion", "0.1")
+            minVer = data.get("bobMinimumVersion", "0.16")
             if not isinstance(minVer, str):
                 raise ParseError("{}: bobMinimumVersion must be a string".format(configYaml))
             if not re.fullmatch(r'^[0-9]+(\.[0-9]+){0,2}(rc[0-9]+)?(.dev[0-9]+)?$', minVer):
@@ -3644,12 +3643,12 @@ class RecipeSet:
 
         config = self.loadYaml(configYaml, (RecipeSet.STATIC_CONFIG_SCHEMA, b''),
             preValidate=preValidate)
-        minVer = config.get("bobMinimumVersion", "0.1")
+        minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
             raise ParseError("Layer '{}' reqires a higher Bob version than root project!"
                                 .format("/".join(layer)))
         if compareVersion(minVer, "0.16") < 0:
-            warnPrjMinimumVersion.warn("/".join(layer))
+            raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
 
         # Determine policies. The root layer determines the default settings
