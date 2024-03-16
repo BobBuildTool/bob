@@ -116,38 +116,6 @@ behavior for a particular policy. This overrides any defaults that were set by
 Defined policies
 ----------------
 
-.. _policies-sandboxFingerprints:
-
-sandboxFingerprints
-~~~~~~~~~~~~~~~~~~~
-
-Introduced in: 0.16
-
-When :ref:`configuration-principle-fingerprinting` was introduced, Bob
-initially used a shortcut and did not execute fingerprint scripts in the
-sandbox. This saved a bit of complexity and also relieved the build logic from
-the need to build the sandbox just to execute the fingerprint script. While the
-old approach was not producing wrong results it was overly pessimistic. It
-prevents sharing of any fingerprinted artifacts between sandbox and non-sandbox
-builds even if the fingerprint is the same.
-
-Old behavior
-   Fingerprint scripts are not executed in sandbox builds. Instead the sandbox
-   image as a whole is used as fingerprint. This prevents the exchange of
-   fingerprinted artifacts between sandbox- and non-sandbox-builds.
-
-New behaviour
-   Bob will execute fingerprint scripts in the sandbox too. Fingerprinted
-   artifacts will be shared between sandbox- and non-sandbox-builds given the
-   :ref:`configuration-recipes-fingerprintScript` yields the same result.
-   Fingerprint results for sandbox builds are cached in the binary artifact
-   cache if available. This reduces the need to build the sandbox just to
-   calculate the fingerprint.
-
-   Old artifacts that were built in a sandbox will not be found anymore in the
-   artifact cache. They will have to be built again. Non-sandbox build
-   artifacts are not affected.
-
 .. _policies-fingerprintVars:
 
 fingerprintVars
@@ -626,3 +594,35 @@ New behavior
     Whenever a secure connection is used the certificate is checked. May be
     disabled selectively by setting the corresponding ``sslVerify`` option to
     ``False``.
+
+.. _policies-sandboxFingerprints:
+
+sandboxFingerprints
+~~~~~~~~~~~~~~~~~~~
+
+Introduced in: 0.16  / Removed in 0.25
+
+When :ref:`configuration-principle-fingerprinting` was introduced, Bob
+initially used a shortcut and did not execute fingerprint scripts in the
+sandbox. This saved a bit of complexity and also relieved the build logic from
+the need to build the sandbox just to execute the fingerprint script. While the
+old approach was not producing wrong results it was overly pessimistic. It
+prevents sharing of any fingerprinted artifacts between sandbox and non-sandbox
+builds even if the fingerprint is the same.
+
+Old behavior
+   Fingerprint scripts are not executed in sandbox builds. Instead the sandbox
+   image as a whole is used as fingerprint. This prevents the exchange of
+   fingerprinted artifacts between sandbox- and non-sandbox-builds.
+
+New behaviour
+   Bob will execute fingerprint scripts in the sandbox too. Fingerprinted
+   artifacts will be shared between sandbox- and non-sandbox-builds given the
+   :ref:`configuration-recipes-fingerprintScript` yields the same result.
+   Fingerprint results for sandbox builds are cached in the binary artifact
+   cache if available. This reduces the need to build the sandbox just to
+   calculate the fingerprint.
+
+   Old artifacts that were built in a sandbox will not be found anymore in the
+   artifact cache. They will have to be built again. Non-sandbox build
+   artifacts are not affected.
