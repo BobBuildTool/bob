@@ -56,17 +56,17 @@ expect_output "" run_bob status root -r
 run_bob status -r --show-overrides root | tee log-status.txt
 grep -q 'O.\+[/\]git' log-status.txt
 grep -q 'O.\+[/\]svn' log-status.txt
-grep -q 'O.\+[/\]url[/\]test2.dat' log-status.txt
+grep -q 'O.\+[/\]url' log-status.txt
 
 # test if expressions on overrides
 run_bob status -r --show-overrides -DSCM=url  root | tee log-status.txt
 grep -q 'O.\+[/\]git' log-status.txt
 if grep -q 'O.\+[/\]svn' log-status.txt; then exit 1; fi
-grep -q 'O.\+[/\]url[/\]test2.dat' log-status.txt
+grep -q 'O.\+[/\]url' log-status.txt
 run_bob status -r --show-overrides -DSCM=svn  root | tee log-status.txt
 grep -q 'O.\+[/\]git' log-status.txt
 grep -q 'O.\+[/\]svn' log-status.txt
-if grep -q 'O.\+[/\]url[/\]test2.dat' log-status.txt; then exit 1; fi
+if grep -q 'O.\+[/\]url' log-status.txt; then exit 1; fi
 
 # Temporary override to simulate recipe changes. Old git/svn directories should
 # be moved to attic and new ones are about to be created. We simulate a

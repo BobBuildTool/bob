@@ -22,28 +22,6 @@ runSpecific()
 	run_bob dev --upload "root-$1"
 }
 
-# Test old behaviour of fingerprintVars policy
-# ============================================
-#
-# All available variables are passed to the fingerprintScript. For this test
-# case we should thus see no difference between the different variations and
-# create exactly one artifact.
-
-cat >config.yaml <<EOF
-bobMinimumVersion: "0.15"
-EOF
-
-runSpecific allUnset1
-runSpecific allUnset2
-runSpecific allUnset3
-runSpecific subSet1
-runSpecific subSet2
-runSpecific subSet3
-if [[ $(countArtifacts) -ne 1 ]] ; then
-	echo "Expected only one fingerprinted artifact" >&2
-	exit 1
-fi
-
 # Test new behaviour of fingerprintVars policy
 # ============================================
 #
@@ -54,7 +32,7 @@ cleanup
 rm -rf output
 
 cat >config.yaml <<EOF
-bobMinimumVersion: "0.15"
+bobMinimumVersion: "0.24rc1"
 policies:
     fingerprintVars: True
 EOF

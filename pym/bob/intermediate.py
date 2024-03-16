@@ -63,20 +63,14 @@ class StepIR(AbstractIR):
         self.__data['isPackageStep']  = step.isPackageStep()
         self.__data['isRelocatable'] = step.isRelocatable()
         self.__data['isShared'] = step.isShared()
-        self.__data['sandbox'] = (
-            graph.addSandbox(step.getSandbox(False)),
-            graph.addSandbox(step.getSandbox(True))
-        )
+        self.__data['sandbox'] = graph.addSandbox(step.getSandbox())
 
         if not partial:
             self.__data['isFingerprinted'] = step._isFingerprinted()
             self.__data['digestScript'] = step.getDigestScript()
             self.__data['tools'] = { name : graph.addTool(tool) for name, tool in step.getTools().items() }
             self.__data['arguments'] = [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getArguments() ]
-            self.__data['allDepSteps'] = (
-                [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getAllDepSteps(False) ],
-                [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getAllDepSteps(True) ]
-            )
+            self.__data['allDepSteps'] = [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getAllDepSteps() ]
             self.__data['env'] = step.getEnv()
             if self.JENKINS:
                 self.__data['preRunCmds'] = step.getJenkinsPreRunCmds()
@@ -99,7 +93,6 @@ class StepIR(AbstractIR):
                     for s in step.getScmList()
                 ]
                 self.__data['scmDirectories'] = { d : (h.hex(), p) for (d, (h, p)) in step.getScmDirectories().items() }
-            self.__data['sandboxVariantId'] = step._getSandboxVariantId().hex()
             self.__data['toolKeysWeak'] = sorted(step._coreStep._getToolKeysWeak())
             self.__data['digestEnv'] = step._coreStep.digestEnv
 
@@ -181,8 +174,8 @@ class StepIR(AbstractIR):
         else:
             return self.getWorkspacePath()
 
-    def getSandbox(self, forceSandbox=False):
-        return self.mungeSandbox(self.__data['sandbox'][1 if forceSandbox else 0])
+    def getSandbox(self):
+        return self.mungeSandbox(self.__data['sandbox'])
 
     def getVariantId(self):
         return bytes.fromhex(self.__data['variantId'])
@@ -211,9 +204,8 @@ class StepIR(AbstractIR):
     def getArguments(self):
         return [ self.mungeStep(arg) for arg in self.__data['arguments'] ]
 
-    def getAllDepSteps(self, forceSandbox=False):
-        return [ self.mungeStep(dep) for dep in
-                    self.__data['allDepSteps'][1 if forceSandbox else 0] ]
+    def getAllDepSteps(self):
+        return [ self.mungeStep(dep) for dep in self.__data['allDepSteps'] ]
 
     def getEnv(self):
         return self.__data['env']
@@ -302,30 +294,18 @@ class StepIR(AbstractIR):
             return True
         return rehash() != oldHash
 
-    def _getSandboxVariantId(self):
-        return bytes.fromhex(self.__data['sandboxVariantId'])
-
-    async def getDigestCoro(self, calculate, forceSandbox=False, hasher=DigestHasher,
+    async def getDigestCoro(self, calculate, hasher=DigestHasher,
                             fingerprint=None, platform=b'', relaxTools=False):
         h = hasher()
         h.update(platform)
-        if self._isFingerprinted() and self.getSandbox() \
-                and not self.getPackage().getRecipe().getRecipeSet().sandboxFingerprints:
-            [d] = await calculate([self.getSandbox().getStep()])
-            h.fingerprint(hasher.sliceRecipes(d))
-        elif fingerprint:
+        if fingerprint is not None:
+            # Build-Id calculation
             h.fingerprint(fingerprint)
-        sandbox = not self.getPackage().getRecipe().getRecipeSet().sandboxInvariant and \
-            self.getSandbox(forceSandbox)
-        if sandbox:
-            [d] = await calculate([sandbox.getStep()])
-            h.update(hasher.sliceRecipes(d))
-            h.update(struct.pack("<I", len(sandbox.getPaths())))
-            for p in sandbox.getPaths():
-                h.update(struct.pack("<I", len(p)))
-                h.update(p.encode('utf8'))
-        else:
-            h.update(b'\x00' * 20)
+        elif self._isFingerprinted() and self.getSandbox():
+            # Variant-Id calculation with fingerprint in sandbox
+            [d] = await calculate([self.getSandbox().getStep()])
+            h.fingerprint(d)
+        h.update(b'\x00' * 20) # historically the sandbox digest, see sandboxInvariant policy pre-0.25
         script = self.getDigestScript()
         if script:
             h.update(struct.pack("<I", len(script)))
@@ -368,7 +348,7 @@ class StepIR(AbstractIR):
             return None
         h = hashlib.sha1()
         h.update(getPlatformTag())
-        h.update(self._getSandboxVariantId())
+        h.update(self.getVariantId())
         for s in self.getScmList():
             liveBId = await s.predictLiveBuildId(self)
             if liveBId is None: return None
@@ -382,7 +362,7 @@ class StepIR(AbstractIR):
         workspacePath = self.getWorkspacePath()
         h = hashlib.sha1()
         h.update(getPlatformTag())
-        h.update(self._getSandboxVariantId())
+        h.update(self.getVariantId())
         for s in self.getScmList():
             liveBId = s.calcLiveBuildId(workspacePath)
             if liveBId is None: return None
@@ -553,16 +533,10 @@ class RecipeSetIR:
     def fromRecipeSet(cls, recipeSet):
         self = cls()
         self.__data = {}
-        self.__data['sandboxInvariant'] = recipeSet.sandboxInvariant
-        self.__data['sandboxFingerprints'] = recipeSet.sandboxFingerprints
         self.__data['policies'] = {
             # FIXME: lazily query policies and only add them all in toData()
-            'allRelocatable' : recipeSet.getPolicy('allRelocatable'),
             'pruneImportScm' : recipeSet.getPolicy('pruneImportScm'),
             'scmIgnoreUser' : recipeSet.getPolicy('scmIgnoreUser'),
-            'secureSSL' : recipeSet.getPolicy('secureSSL'),
-            'tidyUrlScm' : recipeSet.getPolicy('tidyUrlScm'),
-            'sandboxFingerprints' : recipeSet.getPolicy('sandboxFingerprints'),
             'gitCommitOnBranch' : recipeSet.getPolicy('gitCommitOnBranch'),
             'fixImportScmVariant' : recipeSet.getPolicy('fixImportScmVariant'),
             'defaultFileMode' : recipeSet.getPolicy('defaultFileMode'),
@@ -582,14 +556,6 @@ class RecipeSetIR:
 
     def toData(self):
         return self.__data
-
-    @property
-    def sandboxInvariant(self):
-        return self.__data['sandboxInvariant']
-
-    @property
-    def sandboxFingerprints(self):
-        return self.__data['sandboxFingerprints']
 
     def archiveSpec(self):
         return self.__data['archiveSpec']

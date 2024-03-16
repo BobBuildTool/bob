@@ -194,20 +194,20 @@ class RecipeCommon:
         r.setdefault("checkoutUpdateIf", False)
         return r
 
-    def parseAndPrepare(self, recipe, classes={}, allRelocatable=None, name="foo"):
+    def parseAndPrepare(self, recipe, classes={}, name="foo", env={}):
 
         cwd = os.getcwd()
         recipeSet = MagicMock()
         recipeSet.loadBinary = MagicMock()
         recipeSet.scriptLanguage = self.SCRIPT_LANGUAGE
-        recipeSet.getPolicy = lambda x: allRelocatable if x == 'allRelocatable' else None
+        recipeSet.getPolicy = lambda x: None
 
         cc = { n : Recipe(recipeSet, self.applyRecipeDefaults(r), [], n+".yaml",
                           cwd, n, n, {}, False)
             for n, r in classes.items() }
         recipeSet.getClass = lambda x, cc=cc: cc[x]
 
-        env = Env()
+        env = Env(env)
         env.funs = DEFAULT_STRING_FUNS
         ret = Recipe(recipeSet, self.applyRecipeDefaults(recipe), [], name+".yaml",
                      cwd, name, name, {})
@@ -226,8 +226,8 @@ class TestRelocatable(RecipeCommon, TestCase):
         p = self.parseAndPrepare(recipe)
         self.assertTrue(p.isRelocatable())
 
-    def testToolsNonRelocatable(self):
-        """Recipes providing tools are not relocatable by default"""
+    def testToolsRelocatable(self):
+        """Recipes providing tools are relocatable by default"""
 
         recipe = {
             "packageScript" : "asdf",
@@ -236,7 +236,7 @@ class TestRelocatable(RecipeCommon, TestCase):
             }
         }
         p = self.parseAndPrepare(recipe)
-        self.assertFalse(p.isRelocatable())
+        self.assertTrue(p.isRelocatable())
 
     def testCheckoutAndBuildStep(self):
         """Checkout and build steps are never relocatable"""
@@ -251,18 +251,18 @@ class TestRelocatable(RecipeCommon, TestCase):
         self.assertFalse(p.getBuildStep().isRelocatable())
         self.assertTrue(p.getPackageStep().isRelocatable())
 
-    def testToolRelocatable(self):
-        """Test that tool can be marked relocable"""
+    def testToolNonRelocatable(self):
+        """Test that tool can be marked as non-relocable"""
 
         recipe = {
             "packageScript" : "asdf",
             "provideTools" : {
                 "foo" : "bar"
             },
-            "relocatable" : True
+            "relocatable" : False
         }
         p = self.parseAndPrepare(recipe)
-        self.assertTrue(p.isRelocatable())
+        self.assertFalse(p.isRelocatable())
 
     def testNotRelocatable(self):
         """Normal recipes can be marked as not relocatable"""
@@ -326,26 +326,6 @@ class TestRelocatable(RecipeCommon, TestCase):
             "relocatable" : True,
         }
         p = self.parseAndPrepare(recipe, classes)
-        self.assertTrue(p.isRelocatable())
-
-    def testAllRelocatablePolicy(self):
-        """Setting allRelocatable policy will make all packages relocatable"""
-
-        # normal package
-        recipe = {
-            "packageScript" : "asdf"
-        }
-        p = self.parseAndPrepare(recipe, allRelocatable=True)
-        self.assertTrue(p.isRelocatable())
-
-        # tool package
-        recipe = {
-            "packageScript" : "asdf",
-            "provideTools" : {
-                "foo" : "bar"
-            }
-        }
-        p = self.parseAndPrepare(recipe, allRelocatable=True)
         self.assertTrue(p.isRelocatable())
 
 
@@ -668,3 +648,80 @@ class TestSCMs(RecipeCommon, TestCase):
         }
         with self.assertRaises(ParseError):
             self.parseAndPrepare(recipe)
+
+
+class TestEnvironment(RecipeCommon, TestCase):
+
+    def testMergeEnvironment(self):
+        """The 'environment' and 'privateEnvironment' keys are merged during inheritence"""
+
+        for key in ("environment", "privateEnvironment"):
+            with self.subTest(key=key):
+                recipe = {
+                    "inherit" : ["a", "b"],
+                    key : {
+                        "A" : "<lib>${A:-}",
+                        "B" : "<lib>${B:-}",
+                        "C" : "<lib>${C:-}",
+                    },
+                    "packageVars" : ["A", "B", "C"]
+                }
+                classes = {
+                    "a" : {
+                        key : {
+                            "A" : "${A:-}<a>",
+                            "B" : "<a>",
+                        },
+                    },
+                    "b" : {
+                        key : {
+                            "B" : "${B:-}<b>",
+                            "C" : "<b>",
+                        },
+                    },
+                }
+                env = {
+                    "A" : "a",
+                    "B" : "b",
+                }
+                p = self.parseAndPrepare(recipe, classes, env=env).getPackageStep()
+                self.assertEqual(p.getEnv(), {
+                    "A" : "<lib>a<a>",
+                    "B" : "<lib><a><b>",
+                    "C" : "<lib><b>",
+                })
+
+    def testMetaEnvrionmentNoSubstitution(self):
+        """metaEnvironment values are not substituted but merged on a key-by-key basis"""
+        recipe = {
+            "inherit" : ["a", "b"],
+            "metaEnvironment" : {
+                "A" : "<lib>${A:-}",
+                "B" : "<lib>${B:-}",
+            },
+            "packageVars" : ["A", "B", "C"]
+        }
+        classes = {
+            "a" : {
+                "metaEnvironment" : {
+                    "A" : "${A:-}<a>",
+                    "B" : "<a>",
+                },
+            },
+            "b" : {
+                "metaEnvironment" : {
+                    "B" : "${B:-}<b>",
+                    "C" : "<b>",
+                },
+            },
+        }
+        env = {
+            "A" : "a",
+            "B" : "b",
+        }
+        p = self.parseAndPrepare(recipe, classes, env=env).getPackageStep()
+        self.assertEqual(p.getEnv(), {
+            "A" : "<lib>${A:-}",
+            "B" : "<lib>${B:-}",
+            "C" : "<b>",
+        })

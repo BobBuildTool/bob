@@ -34,13 +34,6 @@ try:
 except ImportError:
     from yaml import load as yamlLoad, SafeLoader as YamlSafeLoader
 
-warnFilter = WarnOnce("The filter keyword is experimental and might change or vanish in the future.")
-warnDepends = WarnOnce("The same package is named multiple times as dependency!",
-    help="Only the first such incident is reported. This behavior will be treated as an error in the future.")
-warnDeprecatedPluginState = Warn("Plugin uses deprecated 'bob.input.PluginState' API!")
-warnDeprecatedStringFn = Warn("Plugin uses deprecated 'stringFunctions' API!")
-warnPrjMinimumVersion = Warn("Your project is too old. Support for versions before 0.16 will be removed soon.")
-warnPluginMinimumVersion = Warn("Plugin API too old. Support for versions before 0.15 will be removed soon.")
 
 def isPrefixPath(p1, p2):
     """Check if the initial elements of ``p2`` equal ``p1``.
@@ -344,29 +337,6 @@ class PluginSetting:
         :return: True if data has expected type, otherwise False.
         """
         return True
-
-
-def pluginStateCompat(cls):
-    """Small compat decorator to roughly support <0.15 plugins"""
-
-    _onEnter = cls.onEnter
-    _onFinish = cls.onFinish
-
-    def onEnter(self, env, properties):
-        _onEnter(self, env, {}, properties)
-    def onFinish(self, env, properties):
-        _onFinish(self, env, {}, properties, None)
-
-    # wrap overridden methods
-    if cls.onEnter is not PluginState.onEnter:
-        cls.onEnter = onEnter
-    if cls.onFinish is not PluginState.onFinish:
-        cls.onFinish = onFinish
-
-def pluginStringFunCompat(oldFun):
-    def newFun(args, **kwargs):
-        return oldFun(args, tools={}, **kwargs)
-    return newFun
 
 
 class SentinelSetting(PluginSetting):
@@ -791,7 +761,7 @@ class Sandbox:
 class CoreStep(CoreItem):
     __slots__ = ( "corePackage", "digestEnv", "env", "args",
         "providedEnv", "providedTools", "providedDeps", "providedSandbox",
-        "variantId", "sbxVarId", "deterministic", "isValid" )
+        "variantId", "deterministic", "isValid" )
 
     def __init__(self, corePackage, isValid, deterministic, digestEnv, env, args):
         self.corePackage = corePackage
@@ -800,7 +770,7 @@ class CoreStep(CoreItem):
         self.env = env.detach()
         self.args = args
         self.deterministic = deterministic and all(
-            arg.isDeterministic() for arg in self.getAllDepCoreSteps(True))
+            arg.isDeterministic() for arg in self.getAllDepCoreSteps())
         self.variantId = self.getDigest(lambda coreStep: coreStep.variantId)
         self.providedEnv = {}
         self.providedTools = {}
@@ -862,38 +832,28 @@ class CoreStep(CoreItem):
         else:
             return {}
 
-    def getSandbox(self, forceSandbox=False):
-        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
-        # set or disabled.
-        forceSandbox = forceSandbox and \
-            not self.corePackage.recipe.getRecipeSet().sandboxInvariant
+    def getSandbox(self):
         sandbox = self.corePackage.sandbox
-        if sandbox and (sandbox.enabled or forceSandbox) and self.isValid:
+        if sandbox and sandbox.enabled and self.isValid:
             return sandbox
         else:
             return None
 
-    def getAllDepCoreSteps(self, forceSandbox=False):
-        sandbox = self.getSandbox(forceSandbox)
+    def getAllDepCoreSteps(self):
+        sandbox = self.getSandbox()
         return [ a.refGetDestination() for a in self.args ] + \
             [ d.coreStep for n,d in sorted(self.getTools().items()) ] + (
             [ sandbox.coreStep] if sandbox else [])
 
-    def getDigest(self, calculate, forceSandbox=False):
+    def getDigest(self, calculate):
         h = DigestHasher()
-        if self.isFingerprinted() and self.getSandbox() \
-                and not self.corePackage.recipe.getRecipeSet().sandboxFingerprints:
-            h.fingerprint(DigestHasher.sliceRecipes(calculate(self.getSandbox().coreStep)))
-        sandbox = not self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
-            self.getSandbox(forceSandbox)
-        if sandbox:
-            h.update(DigestHasher.sliceRecipes(calculate(sandbox.coreStep)))
-            h.update(struct.pack("<I", len(sandbox.paths)))
-            for p in sandbox.paths:
-                h.update(struct.pack("<I", len(p)))
-                h.update(p.encode('utf8'))
-        else:
-            h.update(b'\x00' * 20)
+        if self.isFingerprinted() and self.getSandbox():
+            # Add the full variant-id (including fingerprint part!) to the
+            # fingerprint of this package. This is important to make separate
+            # builds for separate sandboxes, including sandboxes that are
+            # itself fingerprinted.
+            h.fingerprint(calculate(self.getSandbox().coreStep))
+        h.update(b'\x00' * 20) # historically the sandbox digest, see sandboxInvariant policy pre-0.25
         script = self.getDigestScript()
         if script:
             h.update(struct.pack("<I", len(script)))
@@ -931,11 +891,9 @@ class CoreStep(CoreItem):
         h.update(struct.pack("<I", len(args)))
         for arg in args:
             h.update(arg.getResultId())
-        # Include used sandbox in case sandboxInvariant policy is active.
-        # Prevents merging of identical packages that are defined under
-        # different sandboxes.
-        sandbox = self.corePackage.recipe.getRecipeSet().sandboxInvariant and \
-            self.getSandbox()
+        # Include used sandbox. Prevents merging of identical packages that
+        # are defined under different sandboxes.
+        sandbox = self.getSandbox()
         if sandbox:
             h.update(sandbox.coreStep.variantId)
             h.update(struct.pack("<I", len(sandbox.paths)))
@@ -977,20 +935,6 @@ class CoreStep(CoreItem):
             h.update(b'\x00' * 20)
 
         return h.digest()
-
-    def getSandboxVariantId(self):
-        # This is a special variant to calculate the variant-id as if the
-        # sandbox was enabled. This is used for live build-ids and on the
-        # jenkins where the build-id of the sandbox must always be calculated.
-        # But this is all obsolte if the sandboxInvariant policy is enabled.
-        try:
-            ret = self.sbxVarId
-        except AttributeError:
-            ret = self.sbxVarId = self.getDigest(
-                lambda step: step.getSandboxVariantId(),
-                True) if not self.corePackage.recipe.getRecipeSet().sandboxInvariant \
-                      else self.variantId
-        return ret
 
     @property
     def fingerprintMask(self):
@@ -1132,23 +1076,13 @@ class Step:
         from branches)."""
         return self._coreStep.variantId
 
-    def _getSandboxVariantId(self):
-        return self._coreStep.getSandboxVariantId()
-
-    def getSandbox(self, forceSandbox=False):
+    def getSandbox(self):
         """Return Sandbox used in this Step.
 
         Returns a Sandbox object or None if this Step is built without one.
-
-        :param bool forceSandbox: Deprecated. Return sandbox even though user
-                                  disabled it.
         """
-        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
-        # set or disabled.
-        forceSandbox = forceSandbox and \
-            not self.__package.getRecipe().getRecipeSet().sandboxInvariant
         sandbox = self.__package._getSandboxRaw()
-        if sandbox and (sandbox.isEnabled() or forceSandbox) and self._coreStep.isValid:
+        if sandbox and sandbox.isEnabled() and self._coreStep.isValid:
             return sandbox
         else:
             return None
@@ -1196,16 +1130,13 @@ class Step:
                             self.__pathFormatter, refCache)
                     for a in self._coreStep.args ]
 
-    def getAllDepSteps(self, forceSandbox=False):
+    def getAllDepSteps(self):
         """Get all dependent steps of this Step.
 
         This includes the direct input to the Step as well as indirect inputs
         such as the used tools or the sandbox.
-
-        :param bool forceSandbox: Deprecated. Include sandbox even though user
-                                  disabled it.
         """
-        sandbox = self.getSandbox(forceSandbox)
+        sandbox = self.getSandbox()
         return self.getArguments() + [ d.step for n,d in sorted(self.getTools().items()) ] + (
             [sandbox.getStep()] if sandbox else [])
 
@@ -1274,8 +1205,7 @@ class Step:
                 varSet.update(v)
             mask >>= 2
         env = self.getEnv()
-        if recipe.getRecipeSet().getPolicy('fingerprintVars'):
-            env = { k : v for k,v in env.items() if k in varSet }
+        env = { k : v for k,v in env.items() if k in varSet }
         return recipe.scriptLanguage.mangleFingerprints(ret, env)
 
 
@@ -1461,7 +1391,7 @@ class CoreBuildStep(CoreStep):
 class BuildStep(Step):
 
     def hasNetAccess(self):
-        return self.getPackage().getRecipe()._getBuildNetAccess() or any(
+        return self.getPackage().getRecipe().buildNetAccess or any(
             t.getNetAccess() for t in self.getTools().values())
 
 
@@ -1518,7 +1448,7 @@ class PackageStep(Step):
         return self.getPackage().isRelocatable()
 
     def hasNetAccess(self):
-        return self.getPackage().getRecipe()._getPackageNetAccess() or any(
+        return self.getPackage().getRecipe().packageNetAccess or any(
             t.getNetAccess() for t in self.getTools().values())
 
 
@@ -1671,22 +1601,15 @@ class Package(object):
                             self.__pathFormatter, refCache)
                     for d in self.__corePackage.indirectDepSteps ]
 
-    def getAllDepSteps(self, forceSandbox=False):
+    def getAllDepSteps(self):
         """Return list of all dependencies of the package.
 
         This list includes all direct and indirect dependencies. Additionally
         the used sandbox and tools are included too.
-
-        :param bool forceSandbox: Deprecated. Include sandbox even though user
-                                  disabled it.
         """
-        # Forcing the sandbox is only allowed if sandboxInvariant policy is not
-        # set or disabled.
-        forceSandbox = forceSandbox and \
-            not self.getRecipe().getRecipeSet().sandboxInvariant
         allDeps = set(self.getDirectDepSteps())
         allDeps |= set(self.getIndirectDepSteps())
-        if self.__sandbox and (self.__sandbox.isEnabled() or forceSandbox):
+        if self.__sandbox and self.__sandbox.isEnabled():
             allDeps.add(self.__sandbox.getStep())
         for i in self.getPackageStep().getTools().values(): allDeps.add(i.getStep())
         return sorted(allDeps)
@@ -1773,13 +1696,6 @@ class IncludeHelper:
             return resolver.resolve(ret)
         else:
             return (None, None)
-
-def mergeFilter(left, right):
-    if left is None:
-        return right
-    if right is None:
-        return left
-    return left + right
 
 class ScmValidator:
     def __init__(self, scmSpecs):
@@ -2043,11 +1959,6 @@ class Recipe(object):
         self.__anonBaseClass = anonBaseClass
         self.__defaultScriptLanguage = scriptLanguage
         self.__deps = list(Recipe.Dependency.parseEntries(recipe.get("depends", [])))
-        filt = recipe.get("filter", {})
-        if filt: warnFilter.warn(baseName)
-        self.__filterEnv = maybeGlob(filt.get("environment"))
-        self.__filterTools = maybeGlob(filt.get("tools"))
-        self.__filterSandbox = maybeGlob(filt.get("sandbox"))
         self.__packageName = packageName
         self.__baseName = baseName
         self.__root = recipe.get("root")
@@ -2161,10 +2072,8 @@ class Recipe(object):
         inheritAll = inherit + [self]
 
         # prepare environment merge list
-        mergeEnvironment = self.__recipeSet.getPolicy('mergeEnvironment')
-        if mergeEnvironment:
-            self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
-            self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
+        self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
+        self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
 
         # first pass: calculate used scripting language
         scriptLanguage = None
@@ -2213,9 +2122,6 @@ class Recipe(object):
         for cls in reversed(inherit):
             self.__sources.extend(cls.__sources)
             self.__deps[0:0] = cls.__deps
-            self.__filterEnv = mergeFilter(self.__filterEnv, cls.__filterEnv)
-            self.__filterTools = mergeFilter(self.__filterTools, cls.__filterTools)
-            self.__filterSandbox = mergeFilter(self.__filterSandbox, cls.__filterSandbox)
             if self.__root is None: self.__root = cls.__root
             if self.__shared is None: self.__shared = cls.__shared
             if self.__relocatable is None: self.__relocatable = cls.__relocatable
@@ -2228,16 +2134,8 @@ class Recipe(object):
             self.__provideVars = tmp
             self.__provideDeps |= cls.__provideDeps
             if self.__provideSandbox is None: self.__provideSandbox = cls.__provideSandbox
-            if mergeEnvironment:
-                if cls.__varSelf: self.__varSelf.insert(0, cls.__varSelf)
-                if cls.__varPrivate: self.__varPrivate.insert(0, cls.__varPrivate)
-            else:
-                tmp = cls.__varSelf.copy()
-                tmp.update(self.__varSelf)
-                self.__varSelf = tmp
-                tmp = cls.__varPrivate.copy()
-                tmp.update(self.__varPrivate)
-                self.__varPrivate = tmp
+            if cls.__varSelf: self.__varSelf.insert(0, cls.__varSelf)
+            if cls.__varPrivate: self.__varPrivate.insert(0, cls.__varPrivate)
             self.__checkoutVars |= cls.__checkoutVars
             tmp = cls.__metaEnv.copy()
             tmp.update(self.__metaEnv)
@@ -2258,11 +2156,6 @@ class Recipe(object):
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
 
-        # finalize environment merge list
-        if not mergeEnvironment:
-            self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
-            self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
-
         # the package step must always be valid
         if self.__package[1] is None:
             self.__package = (None, "", 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
@@ -2278,13 +2171,8 @@ class Recipe(object):
         self.__toolDepPackageWeak -= self.__toolDepPackage
         self.__toolDepPackage |= self.__toolDepPackageWeak
 
-        # Either 'relocatable' was set in the recipe/class(es) or it defaults
-        # to True unless a tool is defined. This was the legacy behaviour
-        # before Bob 0.14. If the allRelocatable policy is enabled we always
-        # default to True.
         if self.__relocatable is None:
-            self.__relocatable = self.__recipeSet.getPolicy('allRelocatable') \
-                or not self.__provideTools
+            self.__relocatable = True
 
         if self.__jobServer is None:
             self.__jobServer = False
@@ -2376,28 +2264,17 @@ class Recipe(object):
 
         # make copies because we will modify them
         sandbox = inputSandbox
-        if self.__filterTools is None:
-            inputTools = inputTools.copy()
-        else:
-            oldInputTools = set(inputTools.inspect().keys())
-            inputTools = inputTools.filter(self.__filterTools)
-            newInputTools = set(inputTools.inspect().keys())
-            for t in (oldInputTools - newInputTools): diffTools[t] = None
+        inputTools = inputTools.copy()
         inputTools.touchReset()
         tools = inputTools.derive()
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
         inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
             "__tools" : tools })
-        env = inputEnv.filter(self.__filterEnv)
+        env = inputEnv.derive()
         for i in self.__varSelf:
             env = env.derive({ key : env.substitute(value, "environment::"+key)
                                for key, value in i.items() })
-        if sandbox is not None:
-            name = sandbox.coreStep.corePackage.getName()
-            if not checkGlobList(name, self.__filterSandbox):
-                sandbox = None
-                diffSandbox = None
         states = { n : s.copy() for (n,s) in inputStates.items() }
 
         # update plugin states
@@ -2472,11 +2349,9 @@ class Recipe(object):
                 directPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
                 self.__raiseIncompatibleLocal(depCoreStep)
-            elif self.__recipeSet.getPolicy('uniqueDependency'):
+            else:
                 raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
                                     .format(recipe))
-            else:
-                warnDepends.show("{} -> {}".format(self.__packageName, recipe))
 
             # Remember dependency diffs before changing them
             origDepDiffTools = thisDepDiffTools
@@ -2706,15 +2581,17 @@ class Recipe(object):
 
         return p, subTreePackages
 
-    def _getBuildNetAccess(self):
+    @property
+    def buildNetAccess(self):
         if self.__buildNetAccess is None:
-            return not self.__recipeSet.getPolicy("offlineBuild")
+            return False
         else:
             return self.__buildNetAccess
 
-    def _getPackageNetAccess(self):
+    @property
+    def packageNetAccess(self):
         if self.__packageNetAccess is None:
-            return not self.__recipeSet.getPolicy("offlineBuild")
+            return False
         else:
             return self.__packageNetAccess
 
@@ -3011,17 +2888,17 @@ class RecipeSet:
         schema.Optional('plugins') : [str],
         schema.Optional('policies') : schema.Schema(
             {
-                schema.Optional('relativeIncludes') : bool,
-                schema.Optional('cleanEnvironment') : bool,
-                schema.Optional('tidyUrlScm') : bool,
-                schema.Optional('allRelocatable') : bool,
-                schema.Optional('offlineBuild') : bool,
-                schema.Optional('sandboxInvariant') : bool,
-                schema.Optional('uniqueDependency') : bool,
-                schema.Optional('mergeEnvironment') : bool,
-                schema.Optional('secureSSL') : bool,
-                schema.Optional('sandboxFingerprints') : bool,
-                schema.Optional('fingerprintVars') : bool,
+                schema.Optional('relativeIncludes') : schema.Schema(True, "Cannot set old behaviour of relativeIncludes policy!"),
+                schema.Optional('cleanEnvironment') : schema.Schema(True, "Cannot set old behaviour of cleanEnvironment policy!"),
+                schema.Optional('tidyUrlScm') : schema.Schema(True, "Cannot set old behaviour of tidyUrlScm policy!"),
+                schema.Optional('allRelocatable') : schema.Schema(True, "Cannot set old behaviour of allRelocatable policy!"),
+                schema.Optional('offlineBuild') : schema.Schema(True, "Cannot set old behaviour of offlineBuild policy!"),
+                schema.Optional('sandboxInvariant') : schema.Schema(True, "Cannot set old behaviour of sandboxInvariant policy!"),
+                schema.Optional('uniqueDependency') : schema.Schema(True, "Cannot set old behaviour of uniqueDependency policy!"),
+                schema.Optional('mergeEnvironment') : schema.Schema(True, "Cannot set old behaviour of mergeEnvironment policy!"),
+                schema.Optional('secureSSL') : schema.Schema(True, "Cannot set old behaviour of secureSSL policy!"),
+                schema.Optional('sandboxFingerprints') : schema.Schema(True, "Cannot set old behaviour of sandboxFingerprints policy!"),
+                schema.Optional('fingerprintVars') : schema.Schema(True, "Cannot set old behaviour of fingerprintVars policy!"),
                 schema.Optional('noUndefinedTools') : bool,
                 schema.Optional('scmIgnoreUser') : bool,
                 schema.Optional('pruneImportScm') : bool,
@@ -3029,7 +2906,7 @@ class RecipeSet:
                 schema.Optional('fixImportScmVariant') : bool,
                 schema.Optional('defaultFileMode') : bool,
             },
-            error="Invalid policy specified! Maybe your Bob is too old?"
+            error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
         schema.Optional('layers') : [str],
         schema.Optional('scriptLanguage',
@@ -3084,61 +2961,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__policies = {
-            'relativeIncludes' : (
-                "0.13",
-                InfoOnce("relativeIncludes policy not set. Using project root directory as base for all includes!",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#relativeincludes for more information.")
-            ),
-            'cleanEnvironment' : (
-                "0.13",
-                InfoOnce("cleanEnvironment policy not set. Initial environment tainted by whitelisted variables!",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#cleanenvironment for more information.")
-            ),
-            'tidyUrlScm' : (
-                "0.14",
-                InfoOnce("tidyUrlScm policy not set. Updating URL SCMs in develop build mode is not entirely safe!",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#tidyurlscm for more information.")
-            ),
-            'allRelocatable' : (
-                "0.14",
-                InfoOnce("allRelocatable policy not set. Packages that define tools are not up- or downloaded.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#allrelocatable for more information.")
-            ),
-            'offlineBuild' : (
-                "0.14",
-                InfoOnce("offlineBuild policy not set. Network access still allowed during build steps.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#offlinebuild for more information.")
-            ),
-            'sandboxInvariant' : (
-                "0.14",
-                InfoOnce("sandboxInvariant policy not set. Inconsistent sandbox handling for binary artifacts.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxinvariant for more information.")
-            ),
-            'uniqueDependency' : (
-                "0.14",
-                InfoOnce("uniqueDependency policy not set. Naming same dependency multiple times is deprecated.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#uniquedependency for more information.")
-            ),
-            'mergeEnvironment' : (
-                "0.15",
-                InfoOnce("mergeEnvironment policy not set. Recipe and classes (private)environments overwrite each other instead of being merged.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#mergeenvironment for more information.")
-            ),
-            'secureSSL' : (
-                "0.15",
-                InfoOnce("secureSSL policy not set. Bob will ignore SSL certificate errors.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#securessl for more information.")
-            ),
-            'sandboxFingerprints' : (
-                "0.16rc1",
-                InfoOnce("sandboxFingerprints policy not set. Sandbox builds of fingerprinted packages are not shared with regular builds.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#sandboxfingerprints for more information.")
-            ),
-            'fingerprintVars' : (
-                "0.16rc1",
-                InfoOnce("fingerprintVars policy not set. Fingerprint scripts may be run more often than needed.",
-                    help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#fingerprintvars for more information.")
-            ),
             'noUndefinedTools' : (
                 "0.17.3.dev57",
                 InfoOnce("noUndefinedTools policy not set. Included but undefined tools are not detected at parsing time.",
@@ -3354,8 +3176,6 @@ class RecipeSet:
         if compareVersion(BOB_VERSION, apiVersion) < 0:
             raise ParseError("Your Bob is too old. Plugin '"+fileName+"' requires at least version "+apiVersion+"!")
         toolsAbiBreak = compareVersion(apiVersion, "0.15") < 0
-        if toolsAbiBreak:
-            warnPluginMinimumVersion.warn(fileName)
 
         hooks = manifest.get('hooks', {})
         if not isinstance(hooks, dict):
@@ -3410,8 +3230,7 @@ class RecipeSet:
             if i in self.__states:
                 raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' already defined by other plugin!")
         if states and toolsAbiBreak:
-            warnDeprecatedPluginState.show(fileName)
-            for i in states.values(): pluginStateCompat(i)
+            raise ParseError("Plugin '"+fileName+"': state requires at least apiVersion 0.15!")
         self.__states.update(states)
 
         funs = manifest.get('stringFunctions', {})
@@ -3423,8 +3242,7 @@ class RecipeSet:
             if i in self.__stringFunctions:
                 raise ParseError("Plugin '"+fileName+"': string function '" +i+"' already defined by other plugin!")
         if funs and toolsAbiBreak:
-            warnDeprecatedStringFn.show(fileName)
-            funs = { i : pluginStringFunCompat(j) for i, j in funs.items() }
+            raise ParseError("Plugin '"+fileName+"': stringFunctions requires at least apiVersion 0.15!")
         self.__stringFunctions.update(funs)
 
         settings = manifest.get('settings', {})
@@ -3570,16 +3388,16 @@ class RecipeSet:
 
         # global user config(s)
         if not DEBUG['ngd']:
-            self.__parseUserConfig("/etc/bobdefault.yaml", True)
+            self.__parseUserConfig("/etc/bobdefault.yaml")
             self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
-                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'), True)
+                os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
         self.__parseLayer([], "9999", recipesRoot)
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
-            self.__parseUserConfig("default.yaml", True)
+            self.__parseUserConfig("default.yaml")
 
         # config files overrule everything else
         for c in self.__configFiles:
@@ -3589,14 +3407,10 @@ class RecipeSet:
             self.__parseUserConfig(c)
 
         # calculate start environment
-        if self.getPolicy("cleanEnvironment"):
-            osEnv = Env(os.environ)
-            osEnv.setFuns(self.__stringFunctions)
-            env = Env({ k : osEnv.substitute(v, k) for (k, v) in
-                self.__defaultEnv.items() })
-        else:
-            env = Env(os.environ).prune(self.__whiteList)
-            env.update(self.__defaultEnv)
+        osEnv = Env(os.environ)
+        osEnv.setFuns(self.__stringFunctions)
+        env = Env({ k : osEnv.substitute(v, k) for (k, v) in
+            self.__defaultEnv.items() })
         env.setFuns(self.__stringFunctions)
         env.update(envOverrides)
         env["BOB_HOST_PLATFORM"] = platform
@@ -3631,7 +3445,7 @@ class RecipeSet:
         def preValidate(data):
             if not isinstance(data, dict):
                 raise ParseError("{}: invalid format".format(configYaml))
-            minVer = data.get("bobMinimumVersion", "0.1")
+            minVer = data.get("bobMinimumVersion", "0.16")
             if not isinstance(minVer, str):
                 raise ParseError("{}: bobMinimumVersion must be a string".format(configYaml))
             if not re.fullmatch(r'^[0-9]+(\.[0-9]+){0,2}(rc[0-9]+)?(.dev[0-9]+)?$', minVer):
@@ -3641,12 +3455,12 @@ class RecipeSet:
 
         config = self.loadYaml(configYaml, (RecipeSet.STATIC_CONFIG_SCHEMA, b''),
             preValidate=preValidate)
-        minVer = config.get("bobMinimumVersion", "0.1")
+        minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
             raise ParseError("Layer '{}' reqires a higher Bob version than root project!"
                                 .format("/".join(layer)))
         if compareVersion(minVer, "0.16") < 0:
-            warnPrjMinimumVersion.warn("/".join(layer))
+            raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
 
         # Determine policies. The root layer determines the default settings
@@ -3673,8 +3487,6 @@ class RecipeSet:
         self.__createSchemas()
 
         # project user config(s)
-        if layer and not self.getPolicy("relativeIncludes"):
-            raise ParseError("Layers require the relativeIncludes policy to be set to the new behaviour!")
         self.__parseUserConfig(os.path.join(rootDir, "default.yaml"))
 
         # color mode provided in cmd line takes precedence
@@ -3709,22 +3521,20 @@ class RecipeSet:
                     e.pushFrame(path)
                     raise
 
-    def __parseUserConfig(self, fileName, relativeIncludes=None):
-        if relativeIncludes is None:
-            relativeIncludes = self.getPolicy("relativeIncludes")
+    def __parseUserConfig(self, fileName):
         cfg = self.loadYaml(fileName, self.__userConfigSchema)
         # merge settings by priority
         for (name, value) in sorted(cfg.items(), key=lambda i: self.__settings[i[0]].priority):
             self.__settings[name].merge(value)
         for p in cfg.get("require", []):
-            p = (os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p) + ".yaml"
+            p = os.path.join(os.path.dirname(fileName), p) + ".yaml"
             if not os.path.isfile(p):
                 raise ParseError("Include file '{}' (required by '{}') does not exist!"
                                     .format(p, fileName))
-            self.__parseUserConfig(p, relativeIncludes)
+            self.__parseUserConfig(p)
         for p in cfg.get("include", []):
-            p = os.path.join(os.path.dirname(fileName), p) if relativeIncludes else p
-            self.__parseUserConfig(p + ".yaml", relativeIncludes)
+            p = os.path.join(os.path.dirname(fileName), p)
+            self.__parseUserConfig(p + ".yaml")
 
     def __createSchemas(self):
         varNameUseSchema = schema.Regex(r'^[A-Za-z_][A-Za-z0-9_]*$')
@@ -3790,11 +3600,6 @@ class RecipeSet:
             schema.Optional('checkoutAssert') : [ CheckoutAssert.SCHEMA ],
             schema.Optional('depends') : dependsClause,
             schema.Optional('environment') : VarDefineValidator("environment"),
-            schema.Optional('filter') : schema.Schema({
-                schema.Optional('environment') : [ varFilterSchema ],
-                schema.Optional('tools') : [ recipeFilterSchema ],
-                schema.Optional('sandbox') : [ recipeFilterSchema ]
-            }),
             schema.Optional('inherit') : [str],
             schema.Optional('privateEnvironment') : VarDefineValidator("privateEnvironment"),
             schema.Optional('metaEnvironment') : VarDefineValidator("metaEnvironment"),
@@ -3925,22 +3730,6 @@ class RecipeSet:
         if policy is None:
             warning.show(location)
         return policy
-
-    @property
-    def sandboxInvariant(self):
-        try:
-            return self.__sandboxInvariant
-        except AttributeError:
-            self.__sandboxInvariant = self.getPolicy("sandboxInvariant")
-            return self.__sandboxInvariant
-
-    @property
-    def sandboxFingerprints(self):
-        try:
-            return self.__sandboxFingerprints
-        except AttributeError:
-            self.__sandboxFingerprints = self.getPolicy("sandboxFingerprints")
-            return self.__sandboxFingerprints
 
     def getProjectRoot(self):
         """Get project root directory.

@@ -15,8 +15,6 @@ class MockRecipeSet:
     def scmOverrides(self):
         return []
 
-    sandboxInvariant = True
-
 class MockRecipe:
     def getRecipeSet(self):
         return MockRecipeSet()

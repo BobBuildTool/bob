@@ -11,10 +11,10 @@ from ...utils import runInEventLoop
 def getJenkinsVariantId(step):
     """Get the variant-id of a step with it's sandbox dependency.
 
-    Even though the sandbox is considered an invariant of the build
-    (sandboxInvariant policy) it still needs to be respected when building the
-    packages. Because the Jenkins logic cannot rely on lazy evaluation like the
-    local builds we need to regard the sandbox as real dependency.
+    Even though the sandbox is considered an invariant of the build, it still
+    needs to be respected when building the packages. Because the Jenkins logic
+    cannot rely on lazy evaluation like the local builds we need to regard the
+    sandbox as real dependency.
 
     This is only relevant when calculating the job graph. The actual build
     result still uses the original variant- and build-id.

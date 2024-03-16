@@ -155,7 +155,7 @@ class JenkinsJob:
             if vid in self.__deps: del self.__deps[vid]
 
             # add dependencies unless they are built by this job or invalid
-            for dep in step.getAllDepSteps(True):
+            for dep in step.getAllDepSteps():
                 if not dep.isValid(): continue
                 vid = getJenkinsVariantId(dep)
                 if vid in self.__steps: continue
@@ -565,7 +565,7 @@ class JobNameCalculator:
                     job = parentJob
 
                 # recurse on dependencies
-                for d in step.getAllDepSteps(True):
+                for d in step.getAllDepSteps():
                     job.childs |= addStep(d, job)
             else:
                 job.parents |= parentJob.pkgs
@@ -697,7 +697,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, upload, download, seenPackages, 
                 _genJenkinsJobs(toolStep, jobs, nameCalculator, upload, download,
                                 seenPackages, allVariantIds, shortdescription)
 
-        sandbox = step.getSandbox(True)
+        sandbox = step.getSandbox()
         if sandbox is not None:
             sandboxStep = sandbox.getStep()
             stack = "/".join(sandboxStep.getPackage().getStack())

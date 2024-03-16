@@ -202,12 +202,6 @@ or set certain variables from the command line. Such variables are always taken
 over verbatim. The so calculated set of variables is the starting point for
 each root recipe.
 
-.. note::
-    Depending on the :ref:`policies-cleanEnvironment` policy the initial
-    environment may first be populated with the whitelisted variables named by
-    :ref:`configuration-config-whitelist` from the current OS environment. The
-    new behaviour (i.e. enabled policy) is to start with a clean environment.
-
 The next steps are repeated for each recipe as the dependency tree is traversed.
 A copy of the environment is inherited from the downstream recipe.
 
@@ -760,11 +754,6 @@ such access is still needed a recipe may set the ``buildNetAccess`` or the
    external state that changes the behavior of the build. Unless the input of a
    package changes (sources, dependencies) Bob will not re-build a package.
 
-.. note::
-    Before Bob 0.14 (see :ref:`policies-offlineBuild` policy) the network
-    access was always possible. The policy will determine the default value of
-    this property.
-
 To configure the network access based on the actually used tools by a recipe
 you can set the ``netAccess`` property in
 :ref:`configuration-recipes-provideTools`. The ``{build,package}NetAccess``
@@ -964,10 +953,9 @@ or to show additional information.
 .. _Svn: http://subversion.apache.org/
 
 Most SCMs support the ``sslVerify`` attribute. This is a boolean that controls
-whether to verify the SSL certificate when fetching. It defaults to ``True``
-with the notable exception of ``git`` before Bob 0.15 which was rectified by
-the introduction of the :ref:`policies-secureSSL` policy. If at all possible,
-fixing a certificate problem is preferable to using this option.
+whether to verify the SSL certificate when fetching. If unset, it defaults to
+``True``.  If at all possible, fixing a certificate problem is preferable to
+using this option.
 
 cvs
    The CVS SCM requires a ``cvsroot``, which is what you would normally put in
@@ -1310,8 +1298,28 @@ Example::
    environment:
       PKG_VERSION: "1.2.3"
 
-The environment of the recipe and inherited classes are merged together. The
-exact way of merging is subject to the :ref:`policies-mergeEnvironment` policy.
+All environment keys are eligible to variable substitution. The environment of
+the recipe and inherited classes are merged together. Suppose the project has
+the following simple recipe/class structure::
+
+    recipes/foo.yaml:
+        inherit: [asan, werror]
+        environment:
+            CFLAGS: "${CFLAGS:-} -DFOO=1"
+
+    classes/asan.yaml:
+        environment:
+            CFLAGS: "${CFLAGS:-} -fsanitize=address"
+
+    classes/werror.yaml:
+        environment:
+            CFLAGS: "${CFLAGS:-} -Werror"
+
+The definitions of the recipe has the highest precedence (i.e. it is
+substituted last). Declarations of classes are substituted in their
+inheritance order, that is, the last inherited class has the highest
+precedence. Given the above example, the resulting ``CFLAGS`` would be
+``${CFLAGS:-} -fsanitize=address -Werror -DFOO=1``
 
 See also :ref:`configuration-recipes-privateenv`.
 
@@ -1320,32 +1328,7 @@ See also :ref:`configuration-recipes-privateenv`.
 filter
 ~~~~~~
 
-Type: Dictionary ( "environment" | "sandbox" | "tools" -> List of Strings)
-
-The filter keyword allows to restrict the environment variables, tools and
-sandboxes inherited from downstream recipes. This way a recipe can effectively
-restrict the number of package variants.
-
-The filters specifications may use shell globbing patterns. As a special
-extension there is also a negative match if the pattern starts with a "!". Such
-patterns will filter out entries that have been otherwise included by previous
-patterns in the list (e.g. by inherited classes).
-
-Example::
-
-    filter:
-        environment: [ "*_MIRROR" ]
-        tools: [ "*toolchain*", "!host-toolchain" ]
-        sandbox: [ "*" ]
-
-In the above example the recipe would inherit only environment variables that
-end with "_MIRROR". All other variables are unset. Likewise all tools that have
-"toolchain" in their name are inherited, except the "host-toolchain". Anything
-is accepted as sandbox which would also be the default if left out.
-
-.. warning::
-   The filter keyword is still experimental and may change in the future or
-   might be removed completely.
+Removed in version 0.25.
 
 
 .. _configuration-recipes-fingerprintScript:
@@ -1478,12 +1461,6 @@ variables that are selected by :ref:`configuration-recipes-vars` can be used.
 It is not an error that a variable listed here is unset. The variables will
 only be set if the corresponding ``fingerprintScript`` is enabled too.
 
-.. note::
-    Before Bob 0.16 (see :ref:`policies-fingerprintVars` policy) all
-    environment variables of the affected package were set during the execution
-    of the ``fingerprintScript``. If the policy is set to the old behaviour
-    then this key will be ignored and has no effect.
-
 inherit
 ~~~~~~~
 
@@ -1592,11 +1569,9 @@ Example::
    privateEnvironment:
       APPLY_FOO_PATCH: "no"
 
-The privateEnvironment of the recipe and inherited classes are merged together.
-The exact way of merging is subject to the :ref:`policies-mergeEnvironment`
-policy.
-
-See also :ref:`configuration-recipes-env`.
+The ``privateEnvironment`` of the recipe and inherited classes are merged
+together.  See :ref:`configuration-recipes-env` for the merge and string
+substitution behaviour.
 
 .. _configuration-recipes-providedeps:
 
@@ -1730,9 +1705,9 @@ that should hold a list of paths. This will completely replace ``$PATH`` of
 the host for consuming recipes.
 
 .. attention::
-    The build result is considered to be an invariant of such a sandbox (see
-    :ref:`policies-sandboxInvariant` policy). This implies that recipes shall
-    produce the same result whether the sandbox is used or not.
+    The build result is considered to be an invariant of such a sandbox. This
+    implies that recipes shall produce the same result, regardless whether the
+    sandbox is used or not.
 
 Optionally there can be a ``mount`` keyword. With ``mount`` it is possible to
 specify additional paths of the host that are mounted read only in the sandbox.
@@ -1801,17 +1776,14 @@ relocatable
 
 Type: Boolean
 
-If ``True`` Bob can assume that the package result is independent of the actual
-location in the file system. Usually all packages should be relocatable as this
+If ``True``, Bob can assume that the package result is independent of the actual
+location in the file system. Usually, all packages should be relocatable as this
 is a fundamental assumption of Bob's working model. There might be particular
 tools, though, that depend on their installed location. For such tools the
 property should be set to ``False``.
 
-If the property is not set the default will be ``True`` unless the recipe
-defines at least one tool. In this case the default value is ``False`` if the
-:ref:`policies-allRelocatable` policy is unset or disabled. If the policy is
-set the default value is always ``True``.  Inherited values from a class will
-be overwritten by the recipe or inheriting class.
+If the property is not set, the default will be ``True``.  Inherited values
+from a class will be overwritten by the recipe or inheriting class.
 
 .. _configuration-recipes-root:
 
@@ -1946,9 +1918,9 @@ of all policies and their rationale.
 Example::
 
     policies:
-        relativeIncludes: False
+        defaultFileMode: False
 
-This will explicitly request old behaviour for the `relativeIncludes` policy.
+This will explicitly request old behaviour for the ``defaultFileMode`` policy.
 
 .. _configuration-config-scriptLanguage:
 
@@ -1989,6 +1961,7 @@ possible to locally override global settings.::
         Workspace-specific configuration file.
 
 User configuration files may optionally include other configuration files.
+Files are included relative to the currently processed file.
 These includes are parsed *after* the current file, meaning that options of
 included configuration files take precedence over the current one. Included
 files do not need to exist and are silently ignored if missing. Includes are
@@ -1996,14 +1969,6 @@ specified without the .yaml extension::
 
     include:
         - overrides
-
-.. note::
-    Depending on the :ref:`policies-relativeIncludes` policy the base directory
-    from where includes are resolved is different. Normally files are included
-    relative to the currently processed file unless the
-    :ref:`policies-relativeIncludes` policy is disabled. In this case files
-    included by ``default.yaml`` and by the command line use the project root
-    directory as base directory.
 
 It is possible for plugins to define additional settings. See
 :ref:`extending-settings` for more information. Their meaning and typing is
@@ -2280,10 +2245,9 @@ Specifies default environment variables. Example::
       # classes/make.yaml for details.
       MAKE_JOBS: "nproc"
 
-If the :ref:`policies-cleanEnvironment` policy is enabled then these variables
-are subject to :ref:`configuration-principle-subst` with the current OS
-environment. This allows to take over certain variables from the OS environment
-in a controlled fashion.
+These variables are subject to :ref:`configuration-principle-subst` with the
+current OS environment. This allows to take over certain variables from the OS
+environment in a controlled fashion.
 
 .. _configuration-config-hooks:
 
@@ -2389,10 +2353,25 @@ rootFilter
 
 Type: List of Strings
 
-Filter root recipes. The effect of this is a faster package parsing due to
-the fact, that the tree is not build for filtered roots.
+Filter root recipes. The effect of this is a faster package parsing due to the
+fact, that the package tree is not calculated for filtered roots.
 
-Works like the :ref:`configuration-recipes-filter` keyword.
+The filter specification may use shell globbing patterns. As a special
+extension there is also a negative match if the pattern starts with a "!". Such
+patterns will filter out entries that have been otherwise included by previous
+patterns in the list.
+
+Example::
+
+    rootFilter:
+        - "foo"
+        - "bar"
+        - "baz"
+        - "!*r"
+
+In the above example the root recipes ``foo`` and ``baz`` are included. The
+``bar`` root recipe is included initially but later rejected by the negative
+``!*r`` match.
 
 .. _configuration-config-sandbox:
 

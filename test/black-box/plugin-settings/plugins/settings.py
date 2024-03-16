@@ -9,7 +9,7 @@ def getSettings(args, **options):
     return pluginSetting.getSettings()
 
 manifest = {
-    'apiVersion' : "0.13",
+    'apiVersion' : "0.15",
     'stringFunctions' : {
         "get-settings" : getSettings,
     },

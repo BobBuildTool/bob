@@ -45,7 +45,7 @@ def auditFromData(data):
 def getScm(spec, overrides=[], recipeSet=None):
     scm = spec["scm"]
     if scm == "git":
-        return GitScm(spec, overrides, recipeSet and recipeSet.getPolicy('secureSSL'),
+        return GitScm(spec, overrides,
             recipeSet and recipeSet.getPolicy('scmIgnoreUser'),
             recipeSet and recipeSet.getPolicy('gitCommitOnBranch'))
     elif scm == "import":
@@ -58,7 +58,7 @@ def getScm(spec, overrides=[], recipeSet=None):
     elif scm == "cvs":
         return CvsScm(spec, overrides)
     elif scm == "url":
-        return UrlScm(spec, overrides, recipeSet and recipeSet.getPolicy('tidyUrlScm'),
+        return UrlScm(spec, overrides,
             recipeSet and recipeSet.getPolicy('scmIgnoreUser'),
             recipeSet.getPreMirrors() if recipeSet else [],
             recipeSet.getFallbackMirrors() if recipeSet else [],

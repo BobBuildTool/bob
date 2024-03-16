@@ -1024,12 +1024,6 @@ cd {ROOT}
                 assert step.isPackageStep()
                 self._preparePackageStep(step)
 
-                # Prohibit up-/download if we are on the old allRelocatable
-                # policy and the package is not explicitly relocatable and
-                # built outside the sandbox.
-                mayUpOrDownload = step.getPackage().getRecipe().getRecipeSet().getPolicy('allRelocatable') or \
-                    step.isRelocatable() or (step.getSandbox() is not None)
-
                 # Calculate build-id and fingerprint of expected artifact if
                 # needed. Must be done without the workspace lock because it
                 # recurses.
@@ -1050,7 +1044,7 @@ cd {ROOT}
                 # once per invocation! Might download to a shared (temporary)
                 # location if sharing is possible for this package.
                 downloaded = False
-                if not shared and mayUpOrDownload and not checkoutOnly:
+                if not shared and not checkoutOnly:
                     async with self.__workspaceLock(step):
                         if not self._wasDownloadTried(step):
                             downloaded, audit = await self._downloadPackage(step, depth, buildId)
@@ -1071,8 +1065,7 @@ cd {ROOT}
 
                 # Upload package if it was built. On Jenkins we always upload
                 # because it is essential that the tgz/buildid exists.
-                if (built or step.JENKINS) and mayUpOrDownload and self.__archive.canUpload() \
-                   and (depth <= self.__uploadDepth):
+                if (built or step.JENKINS) and self.__archive.canUpload() and (depth <= self.__uploadDepth):
                     await self.__archive.uploadPackage(step, buildId,
                         audit, step.getStoragePath(), executor=self.__executor)
 
@@ -1663,7 +1656,7 @@ cd {ROOT}
         performed.
         """
 
-        key = b'\x00' + step._getSandboxVariantId()
+        key = b'\x00' + step.getVariantId()
         if self.__buildOnly:
             liveBId = BobState().getBuildId(key)
             if liveBId is not None: return liveBId
@@ -1676,7 +1669,7 @@ cd {ROOT}
     def __invalidateLiveBuildId(self, step):
         """Invalidate last live build-id of a step."""
 
-        key = b'\x00' + step._getSandboxVariantId()
+        key = b'\x00' + step.getVariantId()
         liveBId = BobState().getBuildId(key)
         if liveBId is not None:
             BobState().delBuildId(key)
@@ -1788,7 +1781,7 @@ cd {ROOT}
             if ret is None:
                 fingerprint = await self._getFingerprint(step, depth)
                 ret = await step.getDigestCoro(lambda x: self.__getBuildIdList(x, depth+1),
-                    True, fingerprint=fingerprint, platform=getPlatformTag(),
+                    fingerprint=fingerprint, platform=getPlatformTag(),
                     relaxTools=True)
                 self.__buildDistBuildIds[path] = ret
 
@@ -1867,26 +1860,16 @@ cd {ROOT}
         return ret
 
     async def _getFingerprint(self, step, depth):
-        # Use a shortcut when the sandboxFingerprints policy is not set and the
-        # step is built inside a sandbox. In this case the variant-id and
-        # build-id are already tied directly to the sandbox variant-id by
-        # getDigest(). This is pessimistic but easier than calculating the
-        # fingerprint inside the sandbox and has been the default before Bob
-        # 0.16.
-        sandbox = (step.getSandbox() is not None) and step.getSandbox().getStep()
-        if sandbox and not step.getPackage().getRecipe().getRecipeSet().getPolicy('sandboxFingerprints'):
-            return b''
-
         # A relocatable step with no fingerprinting is easy
         isFingerprinted = step._isFingerprinted()
-        trackRelocation = step.isPackageStep() and not step.isRelocatable() and \
-            step.getPackage().getRecipe().getRecipeSet().getPolicy('allRelocatable')
+        trackRelocation = step.isPackageStep() and not step.isRelocatable()
         if not isFingerprinted and not trackRelocation:
             return b''
 
         # Execute the fingerprint script (or use cached result)
         if isFingerprinted:
             # Cache based on the script digest.
+            sandbox = (step.getSandbox() is not None) and step.getSandbox().getStep()
             key = hashlib.sha1(step._getFingerprintScript().encode('utf8')).digest()
             if sandbox:
                 # Add the sandbox build-id to the cache key to distinguish
