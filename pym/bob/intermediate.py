@@ -315,8 +315,11 @@ class StepIR(AbstractIR):
         tools = self.getTools()
         weakTools = set(self.__data['toolKeysWeak']) if relaxTools else []
         h.update(struct.pack("<I", len(tools)))
+        args = [ a for a in self.getArguments() if a.isValid() ]
         tools = sorted(tools.items(), key=lambda t: t[0])
-        toolsDigests = await calculate([ tool.getStep() for name,tool in tools ])
+        allDigests = await calculate(args + [ tool.getStep() for name,tool in tools ])
+        argsDigests = allDigests[:len(args)]
+        toolsDigests = allDigests[len(args):]
         for ((name, tool), d) in zip(tools, toolsDigests):
             if name in weakTools:
                 h.update(name.encode('utf8'))
@@ -331,8 +334,6 @@ class StepIR(AbstractIR):
         for (key, val) in sorted(self.__data['digestEnv'].items()):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
-        args = [ a for a in self.getArguments() if a.isValid() ]
-        argsDigests = await calculate(args)
         h.update(struct.pack("<I", len(args)))
         for d in argsDigests:
             h.update(hasher.sliceRecipes(d))
