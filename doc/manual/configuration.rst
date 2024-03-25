@@ -903,6 +903,7 @@ git    | ``url``: URL of remote repository
        | ``branch`` (\*): Branch to check out (optional, default: master)
        | ``tag``: Checkout this tag (optional, overrides branch attribute)
        | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
+       | ``rebase`` (\*): Rebase local branch instead of fast-forward merge update (optional, defaults to false)
        | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
        | ``remote-*``: additional remote repositories (optional, see below)
        | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
@@ -977,6 +978,15 @@ git
 
    .. note:: The default branch of the remote repository is not used. Bob will
       always checkout "master" unless ``branch``, ``tag`` or ``commit`` is given.
+
+   If neiter a commit, nor a tag is specified, Bob will try to track the
+   upstream branch with fast forward merges. This implies that updates will
+   fail if the upstream repository has been rebased or there are local
+   conflicting changes or commits. Set the ``rebase`` property to ``True`` to
+   handle upstream rebases or local commits.
+
+   .. attention:: Rebasing is a potentially dangerous operation. Make sure you
+      read and understood the git rebase manpage before using this option.
 
    The ``rev`` property of the ``git`` SCM unifies the specification of the
    desired branch/tag/commit into one single property. If present it will be

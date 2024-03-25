@@ -74,6 +74,7 @@ class GitScm(Scm):
             })]),
         schema.Optional('dissociate') : bool,
         schema.Optional('retries') : schema.And(int, lambda n: n >= 0, error="Invalid retries attribute"),
+        schema.Optional('rebase') : bool,
     }
 
     __SCHEMA = {
@@ -114,6 +115,7 @@ class GitScm(Scm):
         self.__resolvedReferences = []
         self.__useBranchAndCommit = spec.get('useBranchAndCommit', useBranchAndCommit)
         self.__retries = spec.get('retries', 0)
+        self.__rebase = spec.get('rebase', False)
 
         def __resolveReferences(self, alt):
             # if the reference is a string it's used as optional reference
@@ -155,6 +157,7 @@ class GitScm(Scm):
             'references' : self.__references,
             'dissociate' : self.__dissociate,
             'useBranchAndCommit' : self.__useBranchAndCommit,
+            'rebase' : self.__rebase,
         })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
@@ -348,6 +351,16 @@ class GitScm(Scm):
             await self.__checkoutSubmodules(invoker)
 
     async def __checkoutBranch(self, invoker, fetchCmd, switch):
+        oldUpstreamCommit = None
+        if self.__rebase:
+            # In case of rebasing, we have to remember the original state of
+            # the remote tracking branch. This is the rebase base. Otherwise
+            # non-local commits might be accidentally rebased or resurrected.
+            remote = await invoker.runCommand(
+                ["git", "rev-parse", "--verify", "-q", "refs/remotes/origin/"+self.__branch],
+                stdout=True, cwd=self.__dir)
+            if remote.returncode == 0:
+                oldUpstreamCommit = remote.stdout.rstrip()
         await invoker.checkCommand(fetchCmd, retries=self.__retries, cwd=self.__dir)
         if await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
                        stdout=False, cwd=self.__dir):
@@ -375,10 +388,34 @@ class GitScm(Scm):
         elif (await invoker.checkOutputCommand(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.__dir)) == self.__branch:
             # pull only if on original branch
             preUpdate = await self.__updateSubmodulesPre(invoker)
-            await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "merge", "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
+            await self.__forwardBranch(invoker, oldUpstreamCommit)
             await self.__updateSubmodulesPost(invoker, preUpdate)
         else:
             invoker.warn("Not updating", self.__dir, "because branch was changed manually...")
+
+    async def __forwardBranch(self, invoker, oldUpstreamCommit):
+        if self.__rebase:
+            # Ok, the upstream branch may be rebased. Try to rebase local
+            # commits on the newly fetched upstream.
+            if oldUpstreamCommit is not None:
+                await invoker.checkCommand(
+                    ["git", "-c", "submodule.recurse=0", "rebase", "--onto",
+                     "refs/remotes/origin/"+self.__branch, oldUpstreamCommit],
+                    cwd=self.__dir)
+            else:
+                # That's bad. We don't know how upstream moved. Try to rebase
+                # anyway.
+                invoker.warn("Rebasing", self.__dir, "but old upstream commit not known! Please check result.")
+                await invoker.checkCommand(
+                    ["git", "-c", "submodule.recurse=0", "rebase",
+                     "refs/remotes/origin/"+self.__branch],
+                    cwd=self.__dir)
+        else:
+            # Just do a fast-forward only merge.
+            await invoker.checkCommand(
+                ["git", "-c", "submodule.recurse=0", "merge", "--ff-only",
+                 "refs/remotes/origin/"+self.__branch],
+                cwd=self.__dir)
 
     async def __checkoutSubmodules(self, invoker):
         if not self.__submodules: return

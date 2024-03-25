@@ -872,3 +872,140 @@ class TestSubmodules(TestCase):
         with tempfile.TemporaryDirectory() as workspace:
             with self.assertRaises(CmdFailedError):
                 self.invokeGit(workspace, scm)
+
+
+class TestRebase(TestCase):
+
+    def setUp(self):
+        self.__repodir = tempfile.TemporaryDirectory()
+        self.repodir = self.__repodir.name
+
+        cmds = """\
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo -n "hello world" > test.txt
+            git add test.txt
+            git commit -m "first commit"
+        """
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
+
+    def tearDown(self):
+        self.__repodir.cleanup()
+
+    def createGitScm(self, spec = {}):
+        s = {
+            'scm' : "git",
+            'url' : "file://" + os.path.abspath(self.repodir),
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+            "rebase" : True,
+        }
+        s.update(spec)
+        return GitScm(s)
+
+    def invokeGit(self, workspace, scm):
+        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+        invoker = Invoker(spec, True, True, True, True, True, False)
+        runInEventLoop(scm.invoke(invoker))
+
+    def verify(self, workspace, content, file="test.txt"):
+        with open(os.path.join(workspace, file)) as f:
+            self.assertEqual(f.read(), content)
+
+    def testNoChange(self):
+        """Test rebase without upstream changes"""
+        scm = self.createGitScm()
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+
+    def testFastForwardRebase(self):
+        """Test fast forward upstream movement"""
+        scm = self.createGitScm()
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+
+            # update upstream repository
+            cmds = """\
+                echo -n changed > test.txt
+                git commit -a -m "commit 2"
+            """
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
+
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "changed")
+
+    def testRebaseNoLocalChange(self):
+        """Test update if upstream rebased without local commits"""
+
+        scm = self.createGitScm()
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+
+            # update upstream repository
+            cmds = """\
+                echo -n changed > test.txt
+                git commit -a --amend --no-edit
+            """
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
+
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "changed")
+
+    def testRebaseWithLocalChange(self):
+        """Test update if upstream rebased with additional local commits"""
+
+        scm = self.createGitScm()
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+
+            # make some local commit
+            cmds = """\
+                git config user.email "bob@bob.bob"
+                git config user.name test
+                echo -n foo > additional.txt
+                git add additional.txt
+                git commit -m 'local commit'
+            """
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=workspace)
+
+            # update upstream repository
+            cmds = """\
+                echo -n changed > test.txt
+                git commit -a --amend --no-edit
+            """
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
+
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "changed")
+            self.verify(workspace, "foo", "additional.txt")
+
+    def testFastForwardUnknownTrackingOldState(self):
+        """Test update if upstream ff'ed *and* old upstream commit is unknown"""
+
+        scm = self.createGitScm()
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+
+            # delete local remote tracking branch
+            cmds = """\
+                git branch -d -r origin/master
+            """
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=workspace)
+
+            # update upstream repository
+            cmds = """\
+                echo -n changed > test.txt
+                git commit -a -m 'new commit'
+            """
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
+
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "changed")
