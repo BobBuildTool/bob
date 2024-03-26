@@ -665,7 +665,7 @@ class Tool:
 
 class CoreSandbox(CoreItem):
     __slots__ = ("coreStep", "enabled", "paths", "mounts", "environment",
-        "resultId")
+        "resultId", "user")
 
     def __init__(self, coreStep, env, enabled, spec):
         recipeSet = coreStep.corePackage.recipe.getRecipeSet()
@@ -686,6 +686,11 @@ class CoreSandbox(CoreItem):
             for (k, v) in spec.get('environment', {}).items()
         }
 
+        self.user = {
+            k : env.substitute(v, "providedSandbox::user")
+            for (k, v) in spec.get('user', {}).items()
+        }
+
         # Calculate a "resultId" so that only identical sandboxes match
         h = hashlib.sha1()
         h.update(self.coreStep.variantId)
@@ -701,6 +706,9 @@ class CoreSandbox(CoreItem):
         for (key, val) in sorted(self.environment.items()):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
+        for (key, val) in sorted(self.user.items()):
+            h.update(struct.pack("<II", len(key), len(val)))
+            h.update((key+val).encode('utf8'))
         self.resultId = h.digest()
 
     def __eq__(self, other):
@@ -709,7 +717,8 @@ class CoreSandbox(CoreItem):
             (self.enabled == other.enabled) and \
             (self.paths == other.paths) and \
             (self.mounts == other.mounts) and \
-            (self.environment == other.environment)
+            (self.environment == other.environment) and \
+            (self.user == other.user)
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -756,6 +765,14 @@ class Sandbox:
     def isEnabled(self):
         """Return True if the sandbox is used in the current build configuration."""
         return self.coreSandbox.enabled
+
+    def getUser(self):
+        """Get user variables.
+
+        Returns the dictionary of user variables that are defined by the
+        sandbox.
+        """
+        return self.coreSandbox.user
 
 
 class CoreStep(CoreItem):
@@ -2845,6 +2862,12 @@ class MountValidator:
 
         raise schema.SchemaError(None, "Mount entry must be a string or a two/three items list!")
 
+class UserValidator:
+    def validate(self, data):
+        if isinstance(data, dict):
+            return ({data[0]:data[1]})
+        raise schema.SchemaError(None, "User entry must be a dictionary type list!")
+
 class RecipeSet:
     """The RecipeSet corresponds to the project root directory.
 
@@ -3070,6 +3093,7 @@ class RecipeSet:
                 schema.Schema({
                     schema.Optional('mount') : schema.Schema([ MountValidator() ]),
                     schema.Optional('paths') : [str],
+                    schema.Optional('user') : schema.Schema([ UserValidator() ]),
                 }),
                 lambda x: updateDicRecursive(self.__sandboxOpts, x),
                 True
@@ -3626,6 +3650,7 @@ class RecipeSet:
                 schema.Optional('mount') : schema.Schema([ MountValidator() ],
                     error="provideSandbox: invalid 'mount' property"),
                 schema.Optional('environment') : VarDefineValidator("provideSandbox::environment"),
+                schema.Optional('user') : VarDefineValidator("provideSandbox::user"),
             }),
             schema.Optional('root') : schema.Or(bool, str, IfExpression),
             schema.Optional('shared') : bool,

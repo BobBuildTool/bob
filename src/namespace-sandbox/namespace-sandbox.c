@@ -65,6 +65,8 @@ struct Options {
   char **create_dirs;        // empty dirs to create (-d)
   int num_create_dirs;       // How many empty dirs to create were specified
   int fake_root;             // Pretend to be root inside the namespace.
+  uid_t custom_uid;           // Specify a specific user ID
+  uid_t custom_gid;           // Specify a specific user group ID
   int create_netns;          // If 1, create a new network namespace.
   const char *host_name;     // Host name (-H)
 };
@@ -138,6 +140,8 @@ static void Usage(int argc, char *const *argv, const char *fmt, ...) {
       "  -n if set, a new network namespace will be created\n"
       "  -r if set, make the uid/gid be root, otherwise use nobody\n"
       "  -H <name> set host name\n"
+      "  -U <uid> set custom uid\n"
+      "  -G <gid> set custom gid\n"
       "  -D  if set, debug info will be printed\n"
       "  -l <file>  redirect stdout to a file\n"
       "  -L <file>  redirect stderr to a file\n"
@@ -240,6 +244,20 @@ static void ParseOptionsFile(const char *filename, struct Options *opt) {
   ParseCommandLine(sub_argc, sub_argv, opt);
 }
 
+// Function to check if a string is a numeric string
+bool IsNumeric(const char *str) {
+    if (str == NULL || *str == '\0') {
+        return false;
+    }
+    while (*str) {
+        if (*str < '0' || *str > '9') {
+            return false;
+        }
+        str++;
+    }
+    return true;
+}
+
 // Parse the command line flags and return the result in an Options structure
 // passed as argument.
 static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
@@ -247,7 +265,7 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
   extern int optind, optopt;
   int c;
 
-  while ((c = getopt(argc, argv, ":CDd:l:L:m:M:nrS:W:w:H:")) != -1) {
+  while ((c = getopt(argc, argv, ":CDd:l:L:m:M:nrS:W:w:H:U:G:")) != -1) {
     switch (c) {
       case 'C':
         // Shortcut for the "does this system support sandboxing" check.
@@ -323,6 +341,20 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
         break;
       case 'H':
         opt->host_name = optarg;
+        break;
+      case 'U':
+        if (IsNumeric(optarg)) {
+          opt->custom_uid = atoi(optarg);
+        } else {
+          Usage(argc, argv, "The -U option must be a numeric string.");
+        }
+        break;
+      case 'G':
+        if (IsNumeric(optarg)) {
+          opt->custom_gid = atoi(optarg);
+        } else {
+          Usage(argc, argv, "The -G option must be a numeric string.");
+        }
         break;
       case 'D':
         global_debug = true;
@@ -580,9 +612,10 @@ static void SetupDirectories(struct Options *opt, uid_t uid) {
     fclose(passwd);
 
     if (entry == NULL) {
-      DIE("User not found in /etc/passwd of sandbox\n");
+      homedir = getenv("HOME");
+    } else {
+      homedir = entry->pw_dir;
     }
-    homedir = entry->pw_dir;
   } else {
     PRINT_DEBUG("/etc/passwd not found/readable in sandbox! Falling back to $HOME\n");
     homedir = getenv("HOME");
@@ -618,7 +651,7 @@ static int WriteFile(const char *filename, const char *fmt, ...) {
   return r;
 }
 
-static void SetupUserNamespace(int uid, int gid, int new_uid, int new_gid) {
+static void SetupUserNamespace(uid_t uid, uid_t gid, uid_t new_uid, uid_t new_gid) {
   // Disable needs for CAP_SETGID
   int r = WriteFile("/proc/self/setgroups", "deny");
   if (r < 0 && errno != ENOENT) {
@@ -678,6 +711,8 @@ static void ExecCommand(char *const *argv) {
 
 int main(int argc, char *const argv[]) {
   struct Options opt;
+  opt.custom_uid =  kNobodyUid;
+  opt.custom_gid =  kNobodyGid;
   memset(&opt, 0, sizeof(opt));
   opt.mount_sources = calloc(argc, sizeof(char *));
   opt.mount_targets = calloc(argc, sizeof(char *));
@@ -693,8 +728,8 @@ int main(int argc, char *const argv[]) {
     Usage(argc, argv, "Sandbox root (-S) must be specified");
   }
 
-  int uid = SwitchToEuid();
-  int gid = SwitchToEgid();
+  uid_t uid = SwitchToEuid();
+  uid_t gid = SwitchToEgid();
 
   RedirectStdout(opt.stdout_path);
   RedirectStderr(opt.stderr_path);
@@ -718,8 +753,8 @@ int main(int argc, char *const argv[]) {
     SetupDirectories(&opt, 0);
     SetupUserNamespace(uid, gid, 0, 0);
   } else {
-    SetupDirectories(&opt, kNobodyUid);
-    SetupUserNamespace(uid, gid, kNobodyUid, kNobodyGid);
+    SetupDirectories(&opt, opt.custom_uid);
+    SetupUserNamespace(uid, gid, opt.custom_uid, opt.custom_gid);
   }
   if (opt.host_name) {
     CHECK_CALL(sethostname(opt.host_name, strlen(opt.host_name)));
