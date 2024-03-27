@@ -372,7 +372,8 @@ class GitScm(Scm):
             # We're switching the ref. There we will actively change the branch which
             # is normally forbidden.
             if await invoker.callCommand(["git", "show-ref", "-q", "--verify",
-                                          "refs/heads/" + self.__branch]):
+                                          "refs/heads/" + self.__branch],
+                                         cwd=self.__dir):
                 # Branch does not exist. Create and checkout.
                 await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules",
                     "-b", self.__branch, "remotes/origin/"+self.__branch], cwd=self.__dir)
