@@ -383,8 +383,7 @@ class GitScm(Scm):
                 await invoker.checkCommand(["git", "checkout", "--no-recurse-submodules",
                     self.__branch], cwd=self.__dir)
                 preUpdate = await self.__updateSubmodulesPre(invoker)
-                await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "merge",
-                    "--ff-only", "refs/remotes/origin/"+self.__branch], cwd=self.__dir)
+                await self.__forwardBranch(invoker, oldUpstreamCommit)
                 await self.__updateSubmodulesPost(invoker, preUpdate)
         elif (await invoker.checkOutputCommand(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.__dir)) == self.__branch:
             # pull only if on original branch
