@@ -267,6 +267,20 @@ class Invoker:
 
         return FinishedProcess(ret, stdoutBuf, stderrBuf)
 
+    # UID is not in the environment variables
+    def __get_uid_value(self, variable_name):
+        if variable_name.isdigit():
+            return str(variable_name)
+        else:
+            return str(os.getuid())
+
+    # GID is not in the environment variables
+    def __get_gid_value(self, variable_name):
+        if variable_name.isdigit():
+            return str(variable_name)
+        else:
+            return str(os.getgid())
+
     def __getSandboxCmds(self, tmpDir):
         if sys.platform != "linux":
             self.fail("Sandbox builds are only supported on Linux!")
@@ -293,6 +307,11 @@ class Invoker:
                 cmdArgs.extend(["-w", sndbxPath])
             elif hostPath != sndbxPath:
                 cmdArgs.extend(["-m", sndbxPath])
+        if 'uid' in self.__spec.sandboxUser:
+            cmdArgs.extend(["-U", self.__get_uid_value(self.__spec.sandboxUser['uid'])])
+
+        if 'gid' in self.__spec.sandboxUser:
+            cmdArgs.extend(["-G", self.__get_gid_value(self.__spec.sandboxUser['gid'])])
 
         return cmdArgs
 

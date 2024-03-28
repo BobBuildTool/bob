@@ -713,6 +713,7 @@ class StepSpec:
                 'root' : step.getSandbox().getStep().getStoragePath(),
                 'paths' : step.getSandbox().getPaths(),
                 'hostMounts' : step.getSandbox().getMounts(),
+                'user' : step.getSandbox().getUser(),
                 'netAccess' : step.hasNetAccess(),
                 'depMounts' : [
                     (dep.getStoragePath(), dep.getExecPath(step))
@@ -803,6 +804,10 @@ class StepSpec:
     @property
     def sandboxPaths(self):
         return self.__data['sandbox']['paths']
+
+    @property
+    def sandboxUser(self):
+        return self.__data['sandbox']['user']
 
     @property
     def envWhiteList(self):
