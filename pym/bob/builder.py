@@ -1151,7 +1151,7 @@ cd {ROOT}
             elif self.__force:
                 checkoutReason = "forced"
             elif not checkoutStep.isDeterministic():
-                checkoutReason = "indeterminsitic"
+                checkoutReason = "indeterministic"
             elif not compareDirectoryState(checkoutState, oldCheckoutState):
                 checkoutReason = "recipe changed"
             elif (checkoutInputHashes != BobState().getInputHashes(prettySrcPath)):
