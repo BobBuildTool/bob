@@ -1750,6 +1750,13 @@ variables. See :ref:`configuration-principle-subst` for the available
 substations. The mount paths are also subject to an additional variable
 expansion when a step using the sandbox *is actually executed*. This can be
 useful e.g. to expand variables that are only available on the build server.
+
+By default, the user ID inside the sandbox is ``nobody``. The optional ``user``
+key allows to use two other identities: ``root`` or ``$USER``.  Note that using
+``root`` does not provide any more privileges. It merely maps the current user
+ID to the root user ID inside the sandbox. The ``$USER`` option keeps the
+current user ID when entering the sandbox. No other values are allowed.
+
 Example::
 
     provideSandbox:
@@ -1761,6 +1768,7 @@ Example::
             - ["\\$SSH_AUTH_SOCK", "\\SSH_AUTH_SOCK", [nofail, nojenkins]]
         environment:
             AUTOCONF_BUILD: "x86_64-linux-gnu"
+        user: nobody
 
 The example assumes that the variable ``MYREPO`` was set somewhere in the
 recipes. On the other hand ``$HOME`` is expanded later at build time. This is
@@ -1777,7 +1785,8 @@ in the :ref:`configuration-config-whitelist` to be available to the shell.
     packages) nor will binary artifacts be re-fetched.
 
 The user might amend the mount and search paths in ``default.yaml`` by a
-:ref:`configuration-config-sandbox` entry.
+:ref:`configuration-config-sandbox` entry. The user identity can be overridden
+too.
 
 .. _configuration-recipes-relocatable:
 
@@ -2390,10 +2399,10 @@ sandbox
 
 Type: Sandbox-Dictionary
 
-The default paths and mounts of a sandbox are defined by the
+The default paths, mounts and user identity inside a sandbox are defined by the
 :ref:`configuration-recipes-provideSandbox` keyword. The ``sandbox`` section in
-the user configuration allows to specify additional mounts and additional
-search paths. The format of the settings is the same as in the
+the user configuration allows to specify additional mounts, search paths or
+override the user identity. The format of the settings is the same as in the
 :ref:`configuration-recipes-provideSandbox` keyword.
 
 Example::
@@ -2403,6 +2412,7 @@ Example::
             - [ "$HOME/bin", "/mnt" ]
         paths:
             - /mnt
+        user: "$USER"
 
 The search paths from ``paths`` are added to ``$PATH`` in reverse order so that
 later entries have a higher precedence. In contrast to ``provideSandbox`` *no*
@@ -2410,10 +2420,17 @@ variable substitution is possible for the mounts. The mount paths are still subj
 shell variable expansion when a step using the sandbox *is actually executed*,
 though.
 
+The ``user`` key allows to override the user identity inside the sandbox. It
+takes precedence over the value specified in
+:ref:`configuration-recipes-provideSandbox`. The default is ``nobody`` if
+neither setting is given. Other possible values are ``root`` and ``$USER``.
+The latter is replaced by the current user ID. No other values are allowed.
+
 The example above will mount the ``bin`` directory of the users home directory
 as ``/mnt`` inside the sandbox. The ``/mnt`` directory will be in ``$PATH``
 before any other search directory of the sandbox but still after any used tool
-(if any).
+(if any). Additionally, the user identity inside the sandbox will be the same
+as the current user.
 
 .. _configuration-config-scmDefaults:
 
