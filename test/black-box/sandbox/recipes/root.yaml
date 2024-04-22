@@ -9,7 +9,8 @@ checkoutScript: |
     echo ok
 buildScript: |
     echo ok
-packageVars: [FOO]
+packageVars: [FOO, EXPECT_UID]
 packageScript: |
     test $FOO = bar
+    test ${EXPECT_UID:-65534} = $UID
     echo ok

@@ -294,6 +294,13 @@ class Invoker:
             elif hostPath != sndbxPath:
                 cmdArgs.extend(["-m", sndbxPath])
 
+        if self.__spec.sandboxUser == "root":
+            cmdArgs.append("-r")
+        elif self.__spec.sandboxUser == "$USER":
+            cmdArgs.append("-i")
+        else:
+            assert self.__spec.sandboxUser == "nobody"
+
         return cmdArgs
 
     async def executeStep(self, mode, clean=False, keepSandbox=False):

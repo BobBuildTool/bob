@@ -64,7 +64,8 @@ struct Options {
   int num_mounts;            // How many mounts were specified
   char **create_dirs;        // empty dirs to create (-d)
   int num_create_dirs;       // How many empty dirs to create were specified
-  int fake_root;             // Pretend to be root inside the namespace.
+  uid_t uid;                 // User id in namespace
+  uid_t gid;                 // Group id in namespace
   int create_netns;          // If 1, create a new network namespace.
   const char *host_name;     // Host name (-H)
 };
@@ -136,6 +137,7 @@ static void Usage(int argc, char *const *argv, const char *fmt, ...) {
       "specifies where to\n"
       "    mount it in the sandbox.\n"
       "  -n if set, a new network namespace will be created\n"
+      "  -i if set, keep the uid/gid\n"
       "  -r if set, make the uid/gid be root, otherwise use nobody\n"
       "  -H <name> set host name\n"
       "  -D  if set, debug info will be printed\n"
@@ -247,7 +249,7 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
   extern int optind, optopt;
   int c;
 
-  while ((c = getopt(argc, argv, ":CDd:l:L:m:M:nrS:W:w:H:")) != -1) {
+  while ((c = getopt(argc, argv, ":CDd:il:L:m:M:nrS:W:w:H:")) != -1) {
     switch (c) {
       case 'C':
         // Shortcut for the "does this system support sandboxing" check.
@@ -284,6 +286,10 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
         }
         opt->create_dirs[opt->num_create_dirs++] = optarg;
         break;
+      case 'i':
+        opt->uid = getuid();
+        opt->gid = getgid();
+        break;
       case 'M':
         if (optarg[0] != '/') {
           Usage(argc, argv,
@@ -319,7 +325,8 @@ static void ParseCommandLine(int argc, char *const *argv, struct Options *opt) {
         opt->create_netns = 1;
         break;
       case 'r':
-        opt->fake_root = 1;
+        opt->uid = 0;
+        opt->gid = 0;
         break;
       case 'H':
         opt->host_name = optarg;
@@ -580,9 +587,10 @@ static void SetupDirectories(struct Options *opt, uid_t uid) {
     fclose(passwd);
 
     if (entry == NULL) {
-      DIE("User not found in /etc/passwd of sandbox\n");
+      homedir = getenv("HOME");
+    } else {
+      homedir = entry->pw_dir;
     }
-    homedir = entry->pw_dir;
   } else {
     PRINT_DEBUG("/etc/passwd not found/readable in sandbox! Falling back to $HOME\n");
     homedir = getenv("HOME");
@@ -618,7 +626,7 @@ static int WriteFile(const char *filename, const char *fmt, ...) {
   return r;
 }
 
-static void SetupUserNamespace(int uid, int gid, int new_uid, int new_gid) {
+static void SetupUserNamespace(uid_t uid, uid_t gid, uid_t new_uid, uid_t new_gid) {
   // Disable needs for CAP_SETGID
   int r = WriteFile("/proc/self/setgroups", "deny");
   if (r < 0 && errno != ENOENT) {
@@ -679,6 +687,8 @@ static void ExecCommand(char *const *argv) {
 int main(int argc, char *const argv[]) {
   struct Options opt;
   memset(&opt, 0, sizeof(opt));
+  opt.uid = kNobodyUid;
+  opt.gid = kNobodyGid;
   opt.mount_sources = calloc(argc, sizeof(char *));
   opt.mount_targets = calloc(argc, sizeof(char *));
   opt.mount_rw = calloc(argc, sizeof(bool));
@@ -693,8 +703,8 @@ int main(int argc, char *const argv[]) {
     Usage(argc, argv, "Sandbox root (-S) must be specified");
   }
 
-  int uid = SwitchToEuid();
-  int gid = SwitchToEgid();
+  uid_t uid = SwitchToEuid();
+  uid_t gid = SwitchToEgid();
 
   RedirectStdout(opt.stdout_path);
   RedirectStderr(opt.stderr_path);
@@ -714,13 +724,8 @@ int main(int argc, char *const argv[]) {
   // outside environment.
   CHECK_CALL(mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL));
 
-  if (opt.fake_root) {
-    SetupDirectories(&opt, 0);
-    SetupUserNamespace(uid, gid, 0, 0);
-  } else {
-    SetupDirectories(&opt, kNobodyUid);
-    SetupUserNamespace(uid, gid, kNobodyUid, kNobodyGid);
-  }
+  SetupDirectories(&opt, opt.uid);
+  SetupUserNamespace(uid, gid, opt.uid, opt.gid);
   if (opt.host_name) {
     CHECK_CALL(sethostname(opt.host_name, strlen(opt.host_name)));
   }

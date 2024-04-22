@@ -665,7 +665,7 @@ class Tool:
 
 class CoreSandbox(CoreItem):
     __slots__ = ("coreStep", "enabled", "paths", "mounts", "environment",
-        "resultId")
+        "resultId", "user")
 
     def __init__(self, coreStep, env, enabled, spec):
         recipeSet = coreStep.corePackage.recipe.getRecipeSet()
@@ -685,6 +685,7 @@ class CoreSandbox(CoreItem):
             k : env.substitute(v, "providedSandbox::environment")
             for (k, v) in spec.get('environment', {}).items()
         }
+        self.user = recipeSet.getSandboxUser() or spec.get('user', "nobody")
 
         # Calculate a "resultId" so that only identical sandboxes match
         h = hashlib.sha1()
@@ -701,6 +702,7 @@ class CoreSandbox(CoreItem):
         for (key, val) in sorted(self.environment.items()):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
+        h.update(self.user.encode('utf8'))
         self.resultId = h.digest()
 
     def __eq__(self, other):
@@ -709,7 +711,8 @@ class CoreSandbox(CoreItem):
             (self.enabled == other.enabled) and \
             (self.paths == other.paths) and \
             (self.mounts == other.mounts) and \
-            (self.environment == other.environment)
+            (self.environment == other.environment) and \
+            (self.user == other.user)
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -756,6 +759,13 @@ class Sandbox:
     def isEnabled(self):
         """Return True if the sandbox is used in the current build configuration."""
         return self.coreSandbox.enabled
+
+    def getUser(self):
+        """Get user identity in sandbox.
+
+        Returns one of 'nobody', 'root' or '$USER'.
+        """
+        return self.coreSandbox.user
 
 
 class CoreStep(CoreItem):
@@ -3070,6 +3080,7 @@ class RecipeSet:
                 schema.Schema({
                     schema.Optional('mount') : schema.Schema([ MountValidator() ]),
                     schema.Optional('paths') : [str],
+                    schema.Optional('user') : schema.Or("nobody", "root", "$USER"),
                 }),
                 lambda x: updateDicRecursive(self.__sandboxOpts, x),
                 True
@@ -3334,6 +3345,9 @@ class RecipeSet:
 
     def getSandboxPaths(self):
         return list(reversed(self.__sandboxOpts.get("paths", [])))
+
+    def getSandboxUser(self):
+        return self.__sandboxOpts.get("user")
 
     def loadBinary(self, path):
         return self.__cache.loadBinary(path)
@@ -3626,6 +3640,7 @@ class RecipeSet:
                 schema.Optional('mount') : schema.Schema([ MountValidator() ],
                     error="provideSandbox: invalid 'mount' property"),
                 schema.Optional('environment') : VarDefineValidator("provideSandbox::environment"),
+                schema.Optional('user') : schema.Or("nobody", "root", "$USER"),
             }),
             schema.Optional('root') : schema.Or(bool, str, IfExpression),
             schema.Optional('shared') : bool,
