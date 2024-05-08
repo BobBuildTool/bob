@@ -2991,6 +2991,7 @@ class RecipeSet:
         self.__commandConfig = {}
         self.__uiConfig = {}
         self.__shareConfig = {}
+        self.__layers = []
         self.__policies = {
             'noUndefinedTools' : (
                 "0.17.3.dev57",
@@ -3431,7 +3432,7 @@ class RecipeSet:
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
-        self.__parseLayer([], "9999", recipesRoot)
+        self.__parseLayer("", "9999", recipesRoot)
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
@@ -3475,9 +3476,13 @@ class RecipeSet:
         self.__addRecipe(self.__rootRecipe)
 
     def __parseLayer(self, layer, maxVer, recipesRoot):
-        rootDir = os.path.join(recipesRoot, *(os.path.join("layers", l) for l in layer))
+        if layer in self.__layers:
+            return
+        self.__layers.append(layer)
+
+        rootDir = os.path.join(recipesRoot, os.path.join("layers", layer) if layer != "" else "")
         if not os.path.isdir(rootDir or "."):
-            raise ParseError("Layer '{}' does not exist!".format("/".join(layer)))
+            raise ParseError(f"Layer '{layer}' does not exist!")
 
         configYaml = os.path.join(rootDir, "config.yaml")
         def preValidate(data):
@@ -3495,7 +3500,7 @@ class RecipeSet:
             preValidate=preValidate)
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
-            raise ParseError("Layer '{}' reqires a higher Bob version than root project!"
+            raise ParseError("Layer '{}' requires a higher Bob version than root project!"
                                 .format("/".join(layer)))
         if compareVersion(minVer, "0.16") < 0:
             raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
@@ -3518,7 +3523,7 @@ class RecipeSet:
         # First parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
         for l in config.get("layers", []):
-            self.__parseLayer(layer + [l], maxVer, recipesRoot)
+            self.__parseLayer(l, maxVer, recipesRoot)
 
         # Load plugins and re-create schemas as new keys may have been added
         self.__loadPlugins(rootDir, layer, config.get("plugins", []))
