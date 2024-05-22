@@ -1291,6 +1291,16 @@ The following settings are supported:
 |             |                 | At the dependency both names will refer to the same |
 |             |                 | tool.                                               |
 +-------------+-----------------+-----------------------------------------------------+
+| inherit     | Boolean         | Inherit current environment, tools and sandbox to   |
+|             |                 | this dependency. When set to ``false``, all         |
+|             |                 | environment variables are reset to their default    |
+|             |                 | and no tools or sandbox are passed down to the      |
+|             |                 | dependency. This is mostly useful to make an        |
+|             |                 | existing root-package become a dependency of        |
+|             |                 | another (root) package.                             |
+|             |                 |                                                     |
+|             |                 | Default: ``true``                                   |
++-------------+-----------------+-----------------------------------------------------+
 
 .. _configuration-recipes-env:
 
