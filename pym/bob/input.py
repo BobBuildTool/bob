@@ -1855,10 +1855,11 @@ class Recipe(object):
     """
 
     class Dependency(object):
-        def __init__(self, recipe, env, fwd, use, cond, tools, checkoutDep):
+        def __init__(self, recipe, env, fwd, use, cond, tools, checkoutDep, inherit):
             self.recipe = recipe
             self.envOverride = env
             self.provideGlobal = fwd
+            self.inherit = inherit
             self.use = use
             self.useEnv = "environment" in self.use
             self.useTools = "tools" in self.use
@@ -1870,9 +1871,9 @@ class Recipe(object):
             self.checkoutDep = checkoutDep
 
         @staticmethod
-        def __parseEntry(dep, env, fwd, use, cond, tools, checkoutDep):
+        def __parseEntry(dep, env, fwd, use, cond, tools, checkoutDep, inherit):
             if isinstance(dep, str):
-                return [ Recipe.Dependency(dep, env, fwd, use, cond, tools, checkoutDep) ]
+                return [ Recipe.Dependency(dep, env, fwd, use, cond, tools, checkoutDep, inherit) ]
             else:
                 envOverride = dep.get("environment")
                 if envOverride:
@@ -1884,6 +1885,7 @@ class Recipe(object):
                     tools.update(toolOverride)
                 fwd = dep.get("forward", fwd)
                 use = dep.get("use", use)
+                inherit = dep.get("inherit", inherit)
                 newCond = dep.get("if")
                 if newCond is not None:
                     cond = cond + [newCond] if cond is not None else [ newCond ]
@@ -1892,22 +1894,22 @@ class Recipe(object):
                 if name:
                     if "depends" in dep:
                         raise ParseError("A dependency must not use 'name' and 'depends' at the same time!")
-                    return [ Recipe.Dependency(name, env, fwd, use, cond, tools, checkoutDep) ]
+                    return [ Recipe.Dependency(name, env, fwd, use, cond, tools, checkoutDep, inherit) ]
                 dependencies = dep.get("depends")
                 if dependencies is None:
                     raise ParseError("Either 'name' or 'depends' required for dependencies!")
                 return Recipe.Dependency.parseEntries(dependencies, env, fwd,
                                                       use, cond, tools,
-                                                      checkoutDep)
+                                                      checkoutDep, inherit)
 
         @staticmethod
         def parseEntries(deps, env={}, fwd=False, use=["result", "deps"],
-                         cond=None, tools={}, checkoutDep=False):
+                         cond=None, tools={}, checkoutDep=False, inherit=True):
             """Returns an iterator yielding all dependencies as flat list"""
             # return flattened list of dependencies
             return chain.from_iterable(
                 Recipe.Dependency.__parseEntry(dep, env, fwd, use, cond, tools,
-                                               checkoutDep)
+                                               checkoutDep, inherit)
                 for dep in deps )
 
     @staticmethod
@@ -2311,6 +2313,21 @@ class Recipe(object):
             env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
                 "__tools" : tools })
 
+            thisDepEnv = depEnv
+            thisDepTools = depTools
+            thisDepDiffTools = depDiffTools
+            thisDepSandbox = depSandbox
+            thisDepDiffSandbox = depDiffSandbox
+            if not dep.inherit:
+                thisDepEnv = self.getRecipeSet().getRootEnv()
+                thisDepTools = Env()
+                # Compute the diff to remove all tools that were passed to the
+                # package.
+                thisDepDiffTools = { n : None for n in inputTools.inspect().keys() }
+                thisDepSandbox = None
+                # Clear sandbox, if any
+                thisDepDiffSandbox = None
+
             recipe = env.substitute(dep.recipe, "dependency::"+dep.recipe)
             resolvedDeps.append(recipe)
 
@@ -2319,20 +2336,17 @@ class Recipe(object):
 
             if dep.toolOverride:
                 try:
-                    thisDepTools = depTools.derive({
+                    thisDepTools = thisDepTools.derive({
                         k : depTools[v] for k,v in dep.toolOverride.items() })
                 except KeyError as e:
                     raise ParseError("Cannot remap unkown tool '{}' for dependency '{}'!"
                         .format(e.args[0], recipe))
-                thisDepDiffTools = depDiffTools.copy()
+                thisDepDiffTools = thisDepDiffTools.copy()
                 thisDepDiffTools.update({
                     k : depDiffTools.get(v, v)
                     for k, v in dep.toolOverride.items() })
-            else:
-                thisDepTools = depTools
-                thisDepDiffTools = depDiffTools
 
-            thisDepEnv = depEnv.derive(
+            thisDepEnv = thisDepEnv.derive(
                 { key : env.substitute(value, "depends["+recipe+"].environment["+key+"]")
                   for key, value in dep.envOverride.items() })
 
@@ -2342,11 +2356,11 @@ class Recipe(object):
                     raise ParseError("Recipes are cyclic (1st package in cylce)")
                 depStack = stack + [r.__packageName]
                 p, s = r.prepare(thisDepEnv, sandboxEnabled, depStates,
-                                 depSandbox, thisDepTools, depStack)
+                                 thisDepSandbox, thisDepTools, depStack)
                 subTreePackages.add(p.getName())
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
-                depRef = CoreRef(depCoreStep, [p.getName()], thisDepDiffTools, depDiffSandbox)
+                depRef = CoreRef(depCoreStep, [p.getName()], thisDepDiffTools, thisDepDiffSandbox)
             except ParseError as e:
                 e.pushFrame(r.getPackageName())
                 raise e
@@ -2365,7 +2379,7 @@ class Recipe(object):
 
             # Remember dependency diffs before changing them
             origDepDiffTools = thisDepDiffTools
-            origDepDiffSandbox = depDiffSandbox
+            origDepDiffSandbox = thisDepDiffSandbox
 
             # pick up various results of package
             for (n, s) in states.items():
@@ -3340,6 +3354,9 @@ class RecipeSet:
     def getBuildHook(self, name):
         return self.__buildHooks.get(name)
 
+    def getRootEnv(self):
+        return self.__rootEnv
+
     def getSandboxMounts(self):
         return self.__sandboxOpts.get("mount", [])
 
@@ -3564,6 +3581,7 @@ class RecipeSet:
             schema.Optional('name') : str,
             schema.Optional('use') : useClauses,
             schema.Optional('forward') : bool,
+            schema.Optional('inherit') : bool,
             schema.Optional('environment') : VarDefineValidator("depends::environment"),
             schema.Optional('if') : schema.Or(str, IfExpression),
             schema.Optional('tools') : { toolNameSchema : toolNameSchema },

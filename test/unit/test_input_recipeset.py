@@ -647,6 +647,94 @@ class TestDependencies(RecipesTmp, TestCase):
 
         self.assertNotEqual(paVId, pbVId, "checkout steps are different")
 
+    def testDepInherit(self):
+        """ Test the `inherit` property for dependencies  """
+
+        self.writeDefault(
+            {"environment" : {"DEFAULT" : "42" }})
+
+        self.writeClass("foo", """\
+            root: True
+            depends:
+              - name: foo
+                use: [tools]
+                forward: True
+            packageTools: [foo]
+            """)
+
+        self.writeRecipe("a", """\
+            inherit: [foo]
+            depends:
+              - name: sandbox
+                use: [sandbox]
+                forward: True
+              - name: b-env
+                use: [environment]
+                forward: true
+              - name: b
+                inherit: False
+              - name: c
+                inherit: False
+                environment:
+                    C: "1"
+                tools:
+                    c: foo
+              - d
+            packageScript: "true"
+            """)
+
+        self.writeRecipe("b-env", """\
+            provideVars:
+                B: "2"
+            """)
+
+        self.writeRecipe("b", """\
+            inherit: [foo]
+            packageVars: [DEFAULT, B]
+            packageScript: "true"
+            """)
+
+        self.writeRecipe("c", """\
+            packageVars: [C]
+            packageTools: [c]
+            packageScript: "true"
+            """)
+
+        self.writeRecipe("d", """\
+            packageVars: [B]
+            packageTools: [foo]
+            packageScript: "true"
+            """)
+
+        self.writeRecipe("foo", """\
+            packageTools: [foo]
+            packageScript: "true"
+            provideTools:
+              foo: .
+            """)
+
+        self.writeRecipe("sandbox", """\
+            provideSandbox:
+               paths: ["."]
+            """)
+
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda s,m: "unused", True)
+
+        pa_b = packages.walkPackagePath("a/b")
+        pb   = packages.walkPackagePath("b")
+        pb_e = packages.walkPackagePath("a/b-env")
+        pc   = packages.walkPackagePath("a/c")
+        pd   = packages.walkPackagePath("a/d")
+        self.assertEqual(pa_b.getPackageStep().getVariantId(),
+                         pb.getPackageStep().getVariantId())
+        self.assertEqual({"DEFAULT" : "42"}, pb.getPackageStep().getEnv())
+        self.assertEqual({"C" : "1"}, pc.getPackageStep().getEnv())
+        self.assertEqual(list(pc.getPackageStep().getTools()), ["c"])
+        self.assertEqual(pc.getPackageStep().getSandbox(), None)
+        self.assertNotEqual(pb_e.getPackageStep().getSandbox(), None)
+        self.assertNotEqual(pd.getPackageStep().getSandbox(), None)
 
 class TestDependencyEnv(RecipesTmp, TestCase):
     """Tests related to "environment" block in dependencies"""
