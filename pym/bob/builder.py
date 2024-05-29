@@ -1295,7 +1295,7 @@ cd {ROOT}
         # dependency directories change.
         buildVariantId = await self.__getIncrementalVariantId(buildStep)
         buildDigest = [buildVariantId, buildStep.getExecPath()] + \
-            [ i.getExecPath(buildStep) for i in buildStep.getArguments() if i.isValid() ]
+            [ i.getExecPath(buildStep) for i in buildStep.getAllDepSteps() if i.isValid() ]
 
         # get directory into shape
         (prettyBuildPath, created) = self._constructDir(buildStep, "build")
