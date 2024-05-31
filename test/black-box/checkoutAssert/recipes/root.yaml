@@ -6,9 +6,9 @@ checkoutScript: |
 checkoutAssert:
     - 
       file: gpl3.txt
-      start: 1 
+      start: "${GPL3_START}"
       end: 4
-      digestSHA1: 158b94393dfdad277ff26017663c1c56676aaa84
+      digestSHA1: "${GPL3_1_4_SHA1}"
     - 
       file: gpl3.txt
       digestSHA1: 08481bca10b37e1d13d9163515522f774c262cdb

@@ -401,16 +401,23 @@ class CheckoutAssert:
     SCHEMA = schema.Schema({
         'file' : str,
         'digestSHA1' : str,
-        schema.Optional('start') : schema.And(int, lambda n: n >= 1),
-        schema.Optional('end') : schema.And(int, lambda n: n >= 1),
+        schema.Optional('start') : schema.Or(str, int),
+        schema.Optional('end') : schema.Or(str, int)
     })
 
-    def __init__(self, spec):
+    def __init__(self, spec, env=None):
+        if env is not None:
+            spec = {k: ( env.substitute(v, "checkoutAssert::"+ k) if isinstance(v, str) else v)
+                    for (k, v) in spec.items()}
         self.__source = spec['__source']
         self.__file = spec['file']
         self.__digestSHA1 = spec['digestSHA1']
-        self.__start = spec.get('start', 1)
-        self.__end = spec.get('end', 0xffffffff)
+        self.__start = int(spec.get('start', 1))
+        self.__end = int(spec.get('end', 0xffffffff))
+        if self.__start < 1:
+            raise ParseError("CheckoutAssert: First line must be greater than zero")
+        if self.__end < 1:
+            raise ParseError("CheckoutAssert: Last line must be greater than zero")
 
     def getProperties(self):
         return {
@@ -1220,7 +1227,7 @@ class Step:
 
 
 class CoreCheckoutStep(CoreStep):
-    __slots__ = ( "scmList", "__checkoutUpdateIf", "__checkoutUpdateDeterministic" )
+    __slots__ = ( "scmList", "__checkoutUpdateIf", "__checkoutUpdateDeterministic", "__checkoutAsserts" )
 
     def __init__(self, corePackage, checkout=None, checkoutSCMs=[],
                  fullEnv=Env(), digestEnv=Env(), env=Env(), args=[],
@@ -1261,6 +1268,7 @@ class CoreCheckoutStep(CoreStep):
             isValid = False
             self.scmList = []
 
+        self.__checkoutAsserts = [ CheckoutAssert (a, fullEnv) for a in corePackage.recipe.checkoutAsserts ]
         self.__checkoutUpdateIf = checkoutUpdateIf
         self.__checkoutUpdateDeterministic = checkoutUpdateDeterministic
         deterministic = corePackage.recipe.checkoutDeterministic
@@ -1306,14 +1314,14 @@ class CoreCheckoutStep(CoreStep):
         return self.corePackage.recipe.checkoutMainScript
 
     def getPostRunCmds(self):
-        return [s.getProperties() for s in self.corePackage.recipe.checkoutAsserts]
+        return [s.getProperties() for s in self.__checkoutAsserts]
 
     def getDigestScript(self):
         if self.isValid:
             recipe = self.corePackage.recipe
             return "\n".join([s.asDigestScript() for s in self.scmList]
                     + [recipe.checkoutDigestScript]
-                    + [s.asDigestScript() for s in recipe.checkoutAsserts])
+                    + [s.asDigestScript() for s in self.__checkoutAsserts])
         else:
             return None
 
@@ -2667,7 +2675,7 @@ Every dependency must only be given once."""
 
     @property
     def checkoutAsserts(self):
-        return [ CheckoutAssert(cassert) for cassert in self.__checkoutAsserts ]
+        return self.__checkoutAsserts
 
     @property
     def checkoutVars(self):
