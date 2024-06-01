@@ -30,7 +30,7 @@ __bob_complete_dir()
 }
 
 __bob_commands="build dev clean graph help init jenkins ls project status \
-                query-scm query-recipe query-path query-meta show"
+                query-scm query-recipe query-path query-meta show layers"
 
 # Complete a Bob path
 #
@@ -384,6 +384,21 @@ __bob_query_recipe()
 __bob_status()
 {
   __bob_complete_path "--attic --develop --recursive --no-sandbox --release --sandbox --show-clean --show-overrides --verbose -D -c -r -v"
+}
+
+__bob_layers_status()
+{
+   __bob_complete_path "-c -D -v"
+}
+
+__bob_layers_update()
+{
+   __bob_complete_path "-c -D -v"
+}
+
+__bob_layers()
+{
+  __bob_subcommands "status update" "layers"
 }
 
 __bob_show()
