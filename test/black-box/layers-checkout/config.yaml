@@ -1,0 +1,8 @@
+layers:
+  - name: foo
+    scm: git
+    url: "file://${FOO_DIR}"
+  - name: bar
+    scm: git
+    url: "file://${BAR_DIR}"
+    commit: "${BAR_1_COMMIT}"
