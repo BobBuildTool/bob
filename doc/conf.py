@@ -267,6 +267,7 @@ man_pages = [
     ('manpages/bob-graph', 'bob-graph', 'Generate dependency graph', ['Ralf Hubert'], 1),
     ('manpages/bob-init', 'bob-init', 'Initialize out-of-source build tree', ['Jan Klötzke'], 1),
     ('manpages/bob-jenkins', 'bob-jenkins', 'Configure Jenkins server', ['Jan Klötzke'], 1),
+    ('manpages/bob-layers', 'bob-layers', 'Manage Layers', ['BobBuildTool Team'], 1),
     ('manpages/bob-ls', 'bob-ls', 'List package hierarchy', ['Jan Klötzke'], 1),
     ('manpages/bobpaths', 'bobpaths', 'Specifying paths to Bob packages', ['Jan Klötzke'], 7),
     ('manpages/bob-project', 'bob-project', 'Create IDE project files', ['Jan Klötzke'], 1),
