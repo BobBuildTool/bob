@@ -793,6 +793,8 @@ Line numbers start at 1 and are inclusive. The ``start`` line is always taken
 into account even if the ``end`` line is equal or smaller. The line terminator
 is always ``\n`` (ASCII "LF", 0x0a) regardless of the host operating system.
 
+String substitution is applied to every setting.
+
 Example::
 
     checkoutAssert:
