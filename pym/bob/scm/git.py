@@ -420,7 +420,7 @@ class GitScm(Scm):
     async def __checkoutSubmodules(self, invoker):
         if not self.__submodules: return
 
-        args = ["git", "submodule", "update", "--init"]
+        args = ["git", "-c", "submodule.recurse=0", "submodule", "update", "--init"]
         if self.__shallowSubmodules:
             args += ["--depth", "1"]
         if self.__recurseSubmodules:
@@ -497,7 +497,7 @@ class GitScm(Scm):
             return {}
 
         # Sync remote URLs into our config in case they were changed
-        args = ["git", "-C", base, "submodule", "sync"]
+        args = ["git", "-c", "submodule.recurse=0", "-C", base, "submodule", "sync"]
         await invoker.checkCommand(args, cwd=self.__dir)
 
         # List all paths as per .gitmodules. This gives us the list of all
@@ -526,7 +526,7 @@ class GitScm(Scm):
             }
 
         # Do the update of safe submodules
-        args = ["git", "-C", base, "submodule", "update", "--init"]
+        args = ["git", "-c", "submodule.recurse=0", "-C", base, "submodule", "update", "--init"]
         if self.__shallowSubmodules:
             args += ["--depth", "1"]
         args.append("--")
