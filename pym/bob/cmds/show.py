@@ -50,7 +50,7 @@ def dumpPackage(package):
             for s in checkoutStep.getScmList()
         ]
         doc["checkoutAssert"] = [
-            { k:v for k,v in a.getProperties().items() if not k.startswith("__") }
+            { k:v for k,v in a.items() if not k.startswith("__") }
             for a in recipe.checkoutAsserts
         ]
         doc["checkoutTools"] = {
