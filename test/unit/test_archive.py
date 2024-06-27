@@ -523,8 +523,12 @@ def createHttpHandler(repoPath, username=None, password=None):
                 else:
                     exists = True
 
+            if not os.path.isdir(os.path.dirname(path)):
+                self.send_response(409)
+                self.end_headers()
+                return
+
             try:
-                os.makedirs(os.path.dirname(path), exist_ok=True)
                 with open(path, "wb") as f:
                     f.write(content)
                 self.send_response(200 if exists else 201)
