@@ -847,6 +847,16 @@ class SimpleHttpArchive(BaseArchive):
             raise ArtifactUploadError(str(result))
 
     def __putUploadFile(self, url, tmp, overwrite):
+        # Quoting RFC 4918:
+        #
+        #   A PUT that would result in the creation of a resource without an
+        #   appropriately scoped parent collection MUST fail with a 409
+        #   (Conflict).
+        #
+        # We don't want to waste bandwith by uploading big artifacts into a
+        # missing directory. Thus make sure the directory always exists.
+        self.__makeParentDirs(url)
+
         # Determine file length outself and add a "Content-Length" header. This
         # used to work in Python 3.5 automatically but was removed later.
         tmp.seek(0, os.SEEK_END)
@@ -865,6 +875,35 @@ class SimpleHttpArchive(BaseArchive):
             raise ArtifactExistsError()
         elif response.status not in [200, 201, 204]:
             raise ArtifactUploadError("PUT {} {}".format(response.status, response.reason))
+
+    def __makeParentDirs(self, url, depth=0):
+        """Create parent directories.
+
+        Our artifacts are stored directory levels deep. Only do the MKCOL up
+        to the base level.
+        """
+        (dirs, _, _) = url.rpartition("/")
+        if not dirs:
+            return
+
+        response = self.__mkcol(dirs)
+        if response.status == 409 and depth < 2:
+            # 409 Conflict - Parent collection does not exist.
+            self.__makeParentDirs(dirs, depth + 1)
+            response = self.__mkcol(dirs)
+
+        # We expect to create the directory (201) or it already existed (405).
+        # If the server does not support MKCOL we'd expect a 405 too and hope
+        # for the best...
+        if response.status not in [201, 405]:
+            raise ArtifactUploadError("MKCOL {} {}".format(response.status, response.reason))
+
+    def __mkcol(self, url):
+        connection = self._getConnection()
+        connection.request("MKCOL", url, headers=self._getHeaders())
+        response = connection.getresponse()
+        response.read()
+        return response
 
 class SimpleHttpDownloader:
     def __init__(self, archiver, response):

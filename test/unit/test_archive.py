@@ -523,14 +523,39 @@ def createHttpHandler(repoPath, username=None, password=None):
                 else:
                     exists = True
 
+            if not os.path.isdir(os.path.dirname(path)):
+                self.send_response(409)
+                self.end_headers()
+                return
+
             try:
-                os.makedirs(os.path.dirname(path), exist_ok=True)
                 with open(path, "wb") as f:
                     f.write(content)
                 self.send_response(200 if exists else 201)
                 self.end_headers()
             except OSError:
                 self.send_error(500, "internal error")
+
+        def do_MKCOL(self):
+            path = repoPath + self.path
+
+            if os.path.exists(path):
+                self.send_response(405)
+                self.end_headers()
+                return
+
+            parent, _ = os.path.split(path)
+            if not os.path.isdir(parent):
+                self.send_response(409)
+                self.end_headers()
+                return
+
+            try:
+                os.mkdir(path)
+                self.send_response(201)
+            except OSError:
+                self.send_response(403)
+            self.end_headers()
 
     return Handler
 

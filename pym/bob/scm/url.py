@@ -484,7 +484,7 @@ class UrlScm(Scm):
                     tmpFileName = os.path.join(tmpDir, os.path.basename(url.path))
                     shutil.copy2(source, tmpFileName)
                     os.replace(tmpFileName, url.path)
-        elif url.scheme in ["http", "https", "ftp"]:
+        elif url.scheme in ["http", "https"]:
             retries = self.__retries
             while True:
                 invoker.trace("<wput>", workspaceFile, ">", url.geturl(), "retires:", retries)
@@ -501,7 +501,7 @@ class UrlScm(Scm):
                 retries -= 1
                 await asyncio.sleep(3)
         else:
-            invoker.fail("Unsupported URL scheme: " + url.scheme)
+            invoker.fail("Upload not supported for URL scheme: " + url.scheme)
 
     def canSwitch(self, oldScm):
         diff = self._diffSpec(oldScm)
