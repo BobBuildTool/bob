@@ -202,14 +202,14 @@ class RecipeCommon:
         recipeSet.scriptLanguage = self.SCRIPT_LANGUAGE
         recipeSet.getPolicy = lambda x: None
 
-        cc = { n : Recipe(recipeSet, self.applyRecipeDefaults(r), [], n+".yaml",
+        cc = { n : Recipe(recipeSet, self.applyRecipeDefaults(r), "", n+".yaml",
                           cwd, n, n, {}, False)
             for n, r in classes.items() }
         recipeSet.getClass = lambda x, cc=cc: cc[x]
 
         env = Env(env)
         env.funs = DEFAULT_STRING_FUNS
-        ret = Recipe(recipeSet, self.applyRecipeDefaults(recipe), [], name+".yaml",
+        ret = Recipe(recipeSet, self.applyRecipeDefaults(recipe), "", name+".yaml",
                      cwd, name, name, {})
         ret.resolveClasses(env)
         return ret.prepare(env, False, {})[0].refDeref([], {}, None, None)
