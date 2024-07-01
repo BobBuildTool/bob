@@ -899,6 +899,11 @@ class SimpleHttpArchive(BaseArchive):
             raise ArtifactUploadError("MKCOL {} {}".format(response.status, response.reason))
 
     def __mkcol(self, url):
+        # MKCOL resources must have a trailing slash because they are
+        # directories. Otherwise Apache might send a HTTP 301. Nginx refuses to
+        # create the directory with a 409 which looks odd.
+        if not url.endswith("/"):
+            url += "/"
         connection = self._getConnection()
         connection.request("MKCOL", url, headers=self._getHeaders())
         response = connection.getresponse()
