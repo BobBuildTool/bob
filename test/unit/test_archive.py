@@ -544,6 +544,8 @@ def createHttpHandler(repoPath, username=None, password=None):
                 self.end_headers()
                 return
 
+            path = path.rstrip("/")
+
             parent, _ = os.path.split(path)
             if not os.path.isdir(parent):
                 self.send_response(409)

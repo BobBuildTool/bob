@@ -8,5 +8,6 @@ Contents:
 
    compile
    jenkins
+   archive
    create
    fingerprints
