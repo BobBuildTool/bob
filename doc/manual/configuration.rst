@@ -2085,9 +2085,11 @@ azure       Microsoft Azure Blob storage backend. The account must be specified
             Finally the container must be given in ``container``. Requires the
             ``azure-storage-blob`` Python3 library to be installed.
 file        Use a local directory as binary artifact repository. The directory
-            is specified in the ``path`` key as absolute path. The optional
-            ``fileMode`` and ``directoryMode`` keys take the desired access
-            modes as numeric value to override the default umask derived modes.
+            should be specified in the ``path`` key as absolute path. An
+            initial ``~`` or ``~user`` component is replaced by the users home
+            directory. The optional ``fileMode`` and ``directoryMode`` keys
+            take the desired access modes as numeric value to override the
+            default umask derived modes.
 http        Uses a HTTP server as binary artifact repository. The server has to
             support the HEAD, PUT and GET methods. The base URL is given in the
             ``url`` key. The optional ``sslVerify`` boolean key controls

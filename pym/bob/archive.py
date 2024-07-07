@@ -646,7 +646,7 @@ class MirrorLeecher:
 class LocalArchive(BaseArchive):
     def __init__(self, spec):
         super().__init__(spec)
-        self.__basePath = os.path.abspath(spec["path"])
+        self.__basePath = os.path.abspath(os.path.expanduser(spec["path"]))
         self.__fileMode = spec.get("fileMode")
         self.__dirMode = spec.get("directoryMode")
 
