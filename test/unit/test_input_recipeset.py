@@ -395,6 +395,21 @@ class TestDependencies(RecipesTmp, TestCase):
         p = packages.walkPackagePath("root/b-foo")
         self.assertEqual(p.getName(), "b-foo")
 
+    def testDepConditionCheckOrder(self):
+        """Dependency conditions are tested before any other substitutions."""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - if: "false"
+                  name: "$DOES_NOT_EXIST"
+                  environment:
+                    FOO: "$DOES_NOT_EXIST"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        packages = self.generate()
+        packages.getRootPackage() # Must not fail due to substitution error
+
     def testGlobProvideDeps(self):
         """Test globbing pattern in provideDeps"""
         self.writeRecipe("root", """\
