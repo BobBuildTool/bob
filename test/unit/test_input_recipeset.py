@@ -491,6 +491,35 @@ class TestDependencies(RecipesTmp, TestCase):
         packages = recipes.generatePackages(lambda x,y: "unused")
         self.assertRaises(ParseError, packages.getRootPackage)
 
+    def testProvideDisabled(self):
+        """Providing disabled dependencies is not considered an error."""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - intermediate
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("intermediate", """\
+            depends:
+                - if: "false"
+                  name: a
+                - if: "true"
+                  name: b
+            buildScript: "true"
+            packageScript: "true"
+            provideDeps: ["a", "b"]
+            """)
+        self.writeRecipe("a", "packageScript: a")
+        self.writeRecipe("b", "packageScript: b")
+        packages = self.generate()
+        #packages.walkPackagePath("root")
+        rootArgs = packages.walkPackagePath("root").getBuildStep().getArguments()
+        self.assertEqual(len(rootArgs), 3)
+        self.assertEqual(rootArgs[0].getPackage().getName(), "root")
+        self.assertEqual(rootArgs[1].getPackage().getName(), "intermediate")
+        self.assertEqual(rootArgs[2].getPackage().getName(), "b")
+
     def testCyclic(self):
         """Cyclic dependencies must be detected during parsing"""
         self.writeRecipe("a", """\
