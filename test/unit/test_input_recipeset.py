@@ -395,6 +395,21 @@ class TestDependencies(RecipesTmp, TestCase):
         p = packages.walkPackagePath("root/b-foo")
         self.assertEqual(p.getName(), "b-foo")
 
+    def testDepConditionCheckOrder(self):
+        """Dependency conditions are tested before any other substitutions."""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - if: "false"
+                  name: "$DOES_NOT_EXIST"
+                  environment:
+                    FOO: "$DOES_NOT_EXIST"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        packages = self.generate()
+        packages.getRootPackage() # Must not fail due to substitution error
+
     def testGlobProvideDeps(self):
         """Test globbing pattern in provideDeps"""
         self.writeRecipe("root", """\
@@ -490,6 +505,35 @@ class TestDependencies(RecipesTmp, TestCase):
         recipes.parse()
         packages = recipes.generatePackages(lambda x,y: "unused")
         self.assertRaises(ParseError, packages.getRootPackage)
+
+    def testProvideDisabled(self):
+        """Providing disabled dependencies is not considered an error."""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - intermediate
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("intermediate", """\
+            depends:
+                - if: "false"
+                  name: a
+                - if: "true"
+                  name: b
+            buildScript: "true"
+            packageScript: "true"
+            provideDeps: ["a", "b"]
+            """)
+        self.writeRecipe("a", "packageScript: a")
+        self.writeRecipe("b", "packageScript: b")
+        packages = self.generate()
+        #packages.walkPackagePath("root")
+        rootArgs = packages.walkPackagePath("root").getBuildStep().getArguments()
+        self.assertEqual(len(rootArgs), 3)
+        self.assertEqual(rootArgs[0].getPackage().getName(), "root")
+        self.assertEqual(rootArgs[1].getPackage().getName(), "intermediate")
+        self.assertEqual(rootArgs[2].getPackage().getName(), "b")
 
     def testCyclic(self):
         """Cyclic dependencies must be detected during parsing"""

@@ -2321,6 +2321,19 @@ class Recipe(object):
             env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
                 "__tools" : tools })
 
+            skip = dep.condition and not all(env.evaluate(cond, "dependency "+dep.recipe)
+                                                          for cond in dep.condition)
+            # The dependency name is always substituted because we allow
+            # provideDeps to name a disabled dependency. But in case the
+            # substiturion fails, the error is silently ignored.
+            try:
+                recipe = env.substitute(dep.recipe, "dependency::"+dep.recipe)
+                resolvedDeps.append(recipe)
+            except ParseError:
+                if skip: continue
+                raise
+            if skip: continue
+
             thisDepEnv = depEnv
             thisDepTools = depTools
             thisDepDiffTools = depDiffTools
@@ -2335,12 +2348,6 @@ class Recipe(object):
                 thisDepSandbox = None
                 # Clear sandbox, if any
                 thisDepDiffSandbox = None
-
-            recipe = env.substitute(dep.recipe, "dependency::"+dep.recipe)
-            resolvedDeps.append(recipe)
-
-            if dep.condition and not all(env.evaluate(cond, "dependency "+recipe)
-                                                      for cond in dep.condition): continue
 
             if dep.toolOverride:
                 try:
