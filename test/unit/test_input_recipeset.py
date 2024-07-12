@@ -62,9 +62,9 @@ class RecipesTmp:
         with open(os.path.join(path, "default.yaml"), "w") as f:
             f.write(yaml.dump(content))
 
-    def generate(self, sandboxEnabled=False):
+    def generate(self, sandboxEnabled=False, env={}):
         recipes = RecipeSet()
-        recipes.parse()
+        recipes.parse(env)
         return recipes.generatePackages(lambda x,y: "unused", sandboxEnabled)
 
 
@@ -1621,6 +1621,50 @@ class TestToolsWeak(RecipesTmp, TestCase):
         r1 = packages.walkPackagePath("r1").getPackageStep()
         r2 = packages.walkPackagePath("r2").getPackageStep()
         self.assertNotEqual(r1.getVariantId(), r2.getVariantId())
+
+class TestConditionalTools(RecipesTmp, TestCase):
+    """Test behaviour of conditional tools"""
+
+    def setUp(self):
+        super().setUp()
+        self.writeConfig({
+            "bobMinimumVersion" : "0.24",
+        })
+        self.writeRecipe("tool", """\
+            multiPackage:
+                "1":
+                    provideTools:
+                        tool-foo: "."
+                    packageScript: "foo"
+                "2":
+                    provideTools:
+                        tool-bar: "."
+                    packageScript: "bar"
+            """)
+
+    def testConditional(self):
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tool-1
+                  use: [tools]
+                - name: tool-2
+                  use: [tools]
+            packageTools:
+                - tool-foo
+                - name: tool-bar
+                  if: "${BAR:-}"
+            """)
+
+        packages = self.generate()
+        r = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual(set(r.getTools().keys()), { "tool-foo" },
+                         "By default, 'tool-bar' is not used")
+
+        packages = self.generate(env = { "BAR" : "1" })
+        r = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual(set(r.getTools().keys()), { "tool-foo", "tool-bar" },
+                         "If enabled, 'tool-bar' is used")
 
 class TestScmIgnoreUserPolicy(RecipesTmp, TestCase):
     """ Test behaviour of scmIgnoreUser policy"""
