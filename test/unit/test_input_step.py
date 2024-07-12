@@ -20,12 +20,6 @@ class MockRecipe:
         return MockRecipeSet()
 
     checkoutAsserts = []
-    toolDepCheckout = set(["a", "zz"])
-    toolDepCheckoutWeak = set()
-    toolDepBuild = set(["a", "zz"])
-    toolDepBuildWeak = set()
-    toolDepPackage = set(["a", "zz"])
-    toolDepPackageWeak = set()
 
 class MockCorePackage:
     def __init__(self, checkoutScript="script", checkoutDigestScript="digest",
@@ -152,11 +146,11 @@ class TestCheckoutStep(TestCase):
         t1.libs = []
 
         p1 = MockCorePackage(tools={"a" : t1})
-        s1 = CoreCheckoutStep(p1, ("script", "digest", [], []))
+        s1 = CoreCheckoutStep(p1, ("script", "digest", [], []), toolDep=set(["a", "zz"]))
 
         # tool name has no influence
         p2 = MockCorePackage(tools={"zz" : t1})
-        s2 = CoreCheckoutStep(p2, ("script", "digest", [], []))
+        s2 = CoreCheckoutStep(p2, ("script", "digest", [], []), toolDep=set(["a", "zz"]))
         assert s1.variantId == s2.variantId
 
         # step digest change
@@ -168,7 +162,7 @@ class TestCheckoutStep(TestCase):
         t2.libs = []
 
         p2 = MockCorePackage(tools={"a" : t2})
-        s2 = CoreCheckoutStep(p2, ("script", "digest", [], []))
+        s2 = CoreCheckoutStep(p2, ("script", "digest", [], []), toolDep=set(["a", "zz"]))
         assert s1.variantId != s2.variantId
 
         # path change
@@ -176,7 +170,7 @@ class TestCheckoutStep(TestCase):
         t2.path = "foo"
         t2.libs = []
 
-        s2 = CoreCheckoutStep(p2, ("script", "digest", [], []))
+        s2 = CoreCheckoutStep(p2, ("script", "digest", [], []), toolDep=set(["a", "zz"]))
         assert s1.variantId != s2.variantId
 
         # libs change
@@ -184,6 +178,6 @@ class TestCheckoutStep(TestCase):
         t2.path = "p1"
         t2.libs = ["asdf"]
 
-        s2 = CoreCheckoutStep(p2, ("script", "digest", [], []))
+        s2 = CoreCheckoutStep(p2, ("script", "digest", [], []), toolDep=set(["a", "zz"]))
         assert s1.variantId != s2.variantId
 

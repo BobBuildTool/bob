@@ -56,12 +56,12 @@ def dumpPackage(package):
         doc["checkoutTools"] = {
             name : "/".join(t.getStep().getPackage().getStack())
             for name, t in checkoutStep.getTools().items()
-            if name in (recipe.toolDepCheckout - recipe.toolDepCheckoutWeak)
+            if name in (checkoutStep.toolDep - checkoutStep.toolDepWeak)
         }
         doc["checkoutToolsWeak"] = {
             name : "/".join(t.getStep().getPackage().getStack())
             for name, t in checkoutStep.getTools().items()
-            if name in recipe.toolDepCheckoutWeak
+            if name in checkoutStep.toolDepWeak
         }
         doc["checkoutVars"] = {
             k : v for k, v in checkoutStep.getEnv().items()
@@ -83,12 +83,12 @@ def dumpPackage(package):
         doc["buildTools"] = {
             name : "/".join(t.getStep().getPackage().getStack())
             for name, t in buildStep.getTools().items()
-            if name in (recipe.toolDepBuild - recipe.toolDepBuildWeak)
+            if name in (buildStep.toolDep - buildStep.toolDepWeak)
         }
         doc["buildToolsWeak"] = {
             name : "/".join(t.getStep().getPackage().getStack())
             for name, t in buildStep.getTools().items()
-            if name in recipe.toolDepBuildWeak
+            if name in buildStep.toolDepWeak
         }
         doc["buildVars"] = {
             k : v for k, v in buildStep.getEnv().items()
@@ -104,12 +104,12 @@ def dumpPackage(package):
     doc["packageTools"] = {
         name : "/".join(t.getStep().getPackage().getStack())
         for name, t in packageStep.getTools().items()
-        if name in (recipe.toolDepPackage - recipe.toolDepPackageWeak)
+        if name in (packageStep.toolDep - packageStep.toolDepWeak)
     }
     doc["packageToolsWeak"] = {
         name : "/".join(t.getStep().getPackage().getStack())
         for name, t in packageStep.getTools().items()
-        if name in recipe.toolDepPackageWeak
+        if name in packageStep.toolDepWeak
     }
     doc["packageVars"] = {
         k : v for k, v in packageStep.getEnv().items()

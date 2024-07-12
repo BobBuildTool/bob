@@ -778,14 +778,17 @@ class Sandbox:
 class CoreStep(CoreItem):
     __slots__ = ( "corePackage", "digestEnv", "env", "args",
         "providedEnv", "providedTools", "providedDeps", "providedSandbox",
-        "variantId", "deterministic", "isValid" )
+        "variantId", "deterministic", "isValid", "toolDep", "toolDepWeak" )
 
-    def __init__(self, corePackage, isValid, deterministic, digestEnv, env, args):
+    def __init__(self, corePackage, isValid, deterministic, digestEnv, env, args,
+                 toolDep, toolDepWeak):
         self.corePackage = corePackage
         self.isValid = isValid
         self.digestEnv = digestEnv.detach()
         self.env = env.detach()
         self.args = args
+        self.toolDep = toolDep
+        self.toolDepWeak = toolDepWeak
         self.deterministic = deterministic and all(
             arg.isDeterministic() for arg in self.getAllDepCoreSteps())
         self.variantId = self.getDigest(lambda coreStep: coreStep.variantId)
@@ -818,14 +821,6 @@ class CoreStep(CoreItem):
     def getLabel(self):
         raise NotImplementedError
 
-    def _getToolKeys(self):
-        """Return relevant tool names for this CoreStep."""
-        raise NotImplementedError
-
-    def _getToolKeysWeak(self):
-        """Return relevant weak tool names for this CoreStep."""
-        raise NotImplementedError
-
     def isDeterministic(self):
         return self.deterministic
 
@@ -843,7 +838,7 @@ class CoreStep(CoreItem):
 
     def getTools(self):
         if self.isValid:
-            toolKeys = self._getToolKeys()
+            toolKeys = self.toolDep
             return { name : tool for name,tool in self.corePackage.tools.items()
                                  if name in toolKeys }
         else:
@@ -918,7 +913,7 @@ class CoreStep(CoreItem):
                 h.update(struct.pack("<I", len(p)))
                 h.update(p.encode('utf8'))
         # Include weak tools for the same reason as above.
-        weakTools = self._getToolKeysWeak()
+        weakTools = self.toolDepWeak
         for (name, tool) in sorted(self.getTools().items(), key=lambda t: t[0]):
             if name in weakTools:
                 h.update(tool.coreStep.variantId)
@@ -1130,7 +1125,7 @@ class Step:
         The dict maps the tool name to a :class:`bob.input.Tool`.
         """
         if self._coreStep.isValid:
-            toolKeys = self._coreStep._getToolKeys()
+            toolKeys = self._coreStep.toolDep
             return { name : tool for name, tool in self.__package._getAllTools().items()
                                  if name in toolKeys }
         else:
@@ -1206,12 +1201,14 @@ class Step:
         if not self._coreStep.isFingerprinted():
             return ""
 
-        recipe = self.__package.getRecipe()
+        package = self.__package
+        recipe = package.getRecipe()
+        packageStep = package.getPackageStep()
         mask = self._coreStep.fingerprintMask
-        tools = self.__package.getPackageStep().getTools()
+        tools = packageStep.getTools()
         scriptsAndVars = chain(
             ((({}, []) if t is None else (t.fingerprintScript, t.fingerprintVars))
-                for t in (tools.get(k) for k in sorted(recipe.toolDepPackage))),
+                for t in (tools.get(k) for k in sorted(packageStep._coreStep.toolDep))),
             zip(recipe.fingerprintScriptList, recipe.fingerprintVarsList))
         ret = []
         varSet = set()
@@ -1225,13 +1222,22 @@ class Step:
         env = { k : v for k,v in env.items() if k in varSet }
         return recipe.scriptLanguage.mangleFingerprints(ret, env)
 
+    @property
+    def toolDep(self):
+        return self._coreStep.toolDep
+
+    @property
+    def toolDepWeak(self):
+        return self._coreStep.toolDepWeak
+
 
 class CoreCheckoutStep(CoreStep):
     __slots__ = ( "scmList", "__checkoutUpdateIf", "__checkoutUpdateDeterministic", "__checkoutAsserts" )
 
     def __init__(self, corePackage, checkout=None, checkoutSCMs=[],
                  fullEnv=Env(), digestEnv=Env(), env=Env(), args=[],
-                 checkoutUpdateIf=[], checkoutUpdateDeterministic=True):
+                 checkoutUpdateIf=[], checkoutUpdateDeterministic=True,
+                 toolDep=set(), toolDepWeak=set()):
         if checkout:
             recipeSet = corePackage.recipe.getRecipeSet()
             overrides = recipeSet.scmOverrides()
@@ -1272,13 +1278,7 @@ class CoreCheckoutStep(CoreStep):
         self.__checkoutUpdateIf = checkoutUpdateIf
         self.__checkoutUpdateDeterministic = checkoutUpdateDeterministic
         deterministic = corePackage.recipe.checkoutDeterministic
-        super().__init__(corePackage, isValid, deterministic, digestEnv, env, args)
-
-    def _getToolKeys(self):
-        return self.corePackage.recipe.toolDepCheckout
-
-    def _getToolKeysWeak(self):
-        return self.corePackage.recipe.toolDepCheckoutWeak
+        super().__init__(corePackage, isValid, deterministic, digestEnv, env, args, toolDep, toolDepWeak)
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -1363,16 +1363,10 @@ class CoreBuildStep(CoreStep):
     __slots__ = ["fingerprintMask"]
 
     def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(),
-                 env=Env(), args=[], fingerprintMask=0):
+                 env=Env(), args=[], fingerprintMask=0, toolDep=set(), toolDepWeak=set()):
         isValid = script[1] is not None
         self.fingerprintMask = fingerprintMask
-        super().__init__(corePackage, isValid, True, digestEnv, env, args)
-
-    def _getToolKeys(self):
-        return self.corePackage.recipe.toolDepBuild
-
-    def _getToolKeysWeak(self):
-        return self.corePackage.recipe.toolDepBuildWeak
+        super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak)
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -1406,16 +1400,10 @@ class CorePackageStep(CoreStep):
     __slots__ = ["fingerprintMask"]
 
     def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[],
-                 fingerprintMask=0):
+                 fingerprintMask=0, toolDep=set(), toolDepWeak=set()):
         isValid = script[1] is not None
         self.fingerprintMask = fingerprintMask
-        super().__init__(corePackage, isValid, True, digestEnv, env, args)
-
-    def _getToolKeys(self):
-        return self.corePackage.recipe.toolDepPackage
-
-    def _getToolKeysWeak(self):
-        return self.corePackage.recipe.toolDepPackageWeak
+        super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak)
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -1486,26 +1474,28 @@ class CorePackage:
         return Package(self, stack, pathFormatter, inputTools, tools, inputSandbox, sandbox)
 
     def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv,
-                               env, args, checkoutUpdateIf, checkoutUpdateDeterministic):
+                               env, args, checkoutUpdateIf, checkoutUpdateDeterministic,
+                               toolDep, toolDepWeak):
         ret = self.checkoutStep = CoreCheckoutStep(self, checkout, checkoutSCMs,
-            fullEnv, digestEnv, env, args, checkoutUpdateIf, checkoutUpdateDeterministic)
+            fullEnv, digestEnv, env, args, checkoutUpdateIf, checkoutUpdateDeterministic,
+            toolDep, toolDepWeak)
         return ret
 
     def createInvalidCoreCheckoutStep(self):
         ret = self.checkoutStep = CoreCheckoutStep(self)
         return ret
 
-    def createCoreBuildStep(self, script, digestEnv, env, args, fingerprintMask):
+    def createCoreBuildStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak):
         ret = self.buildStep = CoreBuildStep(self, script, digestEnv, env, args,
-                                             fingerprintMask)
+                                             fingerprintMask, toolDep, toolDepWeak)
         return ret
 
     def createInvalidCoreBuildStep(self, args):
         ret = self.buildStep = CoreBuildStep(self, args=args)
         return ret
 
-    def createCorePackageStep(self, script, digestEnv, env, args, fingerprintMask):
-        ret = self.packageStep = CorePackageStep(self, script, digestEnv, env, args, fingerprintMask)
+    def createCorePackageStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak):
+        ret = self.packageStep = CorePackageStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak)
         return ret
 
     def getCorePackageStep(self):
@@ -1992,16 +1982,12 @@ class Recipe(object):
         self.__packageVars |= self.__buildVars
         self.__packageVarsWeak = set(recipe.get("packageVarsWeak", []))
         self.__packageVarsWeak |= self.__buildVarsWeak
-        self.__toolDepCheckout = set(recipe.get("checkoutTools", []))
-        self.__toolDepCheckoutWeak = set(recipe.get("checkoutToolsWeak", []))
-        self.__toolDepBuild = set(recipe.get("buildTools", []))
-        self.__toolDepBuild |= self.__toolDepCheckout
-        self.__toolDepBuildWeak = set(recipe.get("buildToolsWeak", []))
-        self.__toolDepBuildWeak |= self.__toolDepCheckoutWeak
-        self.__toolDepPackage = set(recipe.get("packageTools", []))
-        self.__toolDepPackage |= self.__toolDepBuild
-        self.__toolDepPackageWeak = set(recipe.get("packageToolsWeak", []))
-        self.__toolDepPackageWeak |= self.__toolDepBuildWeak
+        self.__toolDepCheckout = recipe.get("checkoutTools", [])
+        self.__toolDepCheckoutWeak = recipe.get("checkoutToolsWeak", [])
+        self.__toolDepBuild = recipe.get("buildTools", [])
+        self.__toolDepBuildWeak = recipe.get("buildToolsWeak", [])
+        self.__toolDepPackage = recipe.get("packageTools", [])
+        self.__toolDepPackageWeak = recipe.get("packageToolsWeak", [])
         self.__shared = recipe.get("shared")
         self.__relocatable = recipe.get("relocatable")
         self.__jobServer = recipe.get("jobServer")
@@ -2156,12 +2142,12 @@ class Recipe(object):
             self.__buildVarsWeak |= cls.__buildVarsWeak
             self.__packageVars |= cls.__packageVars
             self.__packageVarsWeak |= cls.__packageVarsWeak
-            self.__toolDepCheckout |= cls.__toolDepCheckout
-            self.__toolDepCheckoutWeak |= cls.__toolDepCheckoutWeak
-            self.__toolDepBuild |= cls.__toolDepBuild
-            self.__toolDepBuildWeak |= cls.__toolDepBuildWeak
-            self.__toolDepPackage |= cls.__toolDepPackage
-            self.__toolDepPackageWeak |= cls.__toolDepPackageWeak
+            self.__toolDepCheckout.extend(cls.__toolDepCheckout)
+            self.__toolDepCheckoutWeak.extend(cls.__toolDepCheckoutWeak)
+            self.__toolDepBuild.extend(cls.__toolDepBuild)
+            self.__toolDepBuildWeak.extend(cls.__toolDepBuildWeak)
+            self.__toolDepPackage.extend(cls.__toolDepPackage)
+            self.__toolDepPackageWeak.extend(cls.__toolDepPackageWeak)
             if self.__buildNetAccess is None: self.__buildNetAccess = cls.__buildNetAccess
             if self.__packageNetAccess is None: self.__packageNetAccess = cls.__packageNetAccess
             for (n, p) in self.__properties.items():
@@ -2173,14 +2159,6 @@ class Recipe(object):
 
         # final shared value
         self.__shared = self.__shared == True
-
-        # Only keep weak tools that are not strong at the same time.
-        self.__toolDepCheckoutWeak -= self.__toolDepCheckout
-        self.__toolDepCheckout |= self.__toolDepCheckoutWeak
-        self.__toolDepBuildWeak -= self.__toolDepBuild
-        self.__toolDepBuild |= self.__toolDepBuildWeak
-        self.__toolDepPackageWeak -= self.__toolDepPackage
-        self.__toolDepPackage |= self.__toolDepPackageWeak
 
         if self.__relocatable is None:
             self.__relocatable = True
@@ -2456,22 +2434,44 @@ class Recipe(object):
             if depTrack.useResultOnce():
                 results.append(depRef)
 
+        # Calculate used tools. They are conditional.
+        env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
+            "__tools" : tools })
+        toolDepCheckout = set(name for (name, cond) in self.__toolDepCheckout
+                              if env.evaluate(cond, "checkoutTools"))
+        toolDepCheckoutWeak = set(name for (name, cond) in self.__toolDepCheckoutWeak
+                                  if env.evaluate(cond, "checkoutToolsWeak"))
+        toolDepBuild = set(name for (name, cond) in self.__toolDepBuild
+                           if env.evaluate(cond, "buildTools")) | toolDepCheckout
+        toolDepBuildWeak = set(name for (name, cond) in self.__toolDepBuildWeak
+                               if env.evaluate(cond, "buildToolsWeak")) | toolDepCheckoutWeak
+        toolDepPackage = set(name for (name, cond) in self.__toolDepPackage
+                           if env.evaluate(cond, "packageTools")) | toolDepBuild
+        toolDepPackageWeak = set(name for (name, cond) in self.__toolDepPackageWeak
+                               if env.evaluate(cond, "packageToolsWeak")) | toolDepBuildWeak
+
+        # Only keep weak tools that are not strong at the same time.
+        toolDepCheckoutWeak -= toolDepCheckout
+        toolDepCheckout |= toolDepCheckoutWeak
+        toolDepBuildWeak -= toolDepBuild
+        toolDepBuild |= toolDepBuildWeak
+        toolDepPackageWeak -= toolDepPackage
+        toolDepPackage |= toolDepPackageWeak
+
         # apply tool environments
         toolsEnv = set()
         toolsView = tools.inspect()
-        for i in self.__toolDepPackage:
+        for i in toolDepPackage:
             tool = toolsView.get(i)
             if tool is None: continue
             if not tool.environment: continue
             tmp = set(tool.environment.keys())
             if not tmp.isdisjoint(toolsEnv):
-                self.__raiseIncompatibleTools(toolsView)
+                self.__raiseIncompatibleTools(toolsView, toolDepPackage)
             toolsEnv.update(tmp)
             env.update(tool.environment)
 
         # apply private environment
-        env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-            "__tools" : tools })
         for i in self.__varPrivate:
             env = env.derive({ key : env.substitute(value, "privateEnvironment::"+key)
                                for key, value in i.items() })
@@ -2487,7 +2487,7 @@ class Recipe(object):
 
         # record used environment and tools
         env.touch(self.__packageVars | self.__packageVarsWeak)
-        tools.touch(self.__toolDepPackage)
+        tools.touch(toolDepPackage)
 
         # Check if fingerprinting has to be applied. At least one
         # 'fingerprintIf' must evaluate to 'True'. The mask of included
@@ -2498,7 +2498,7 @@ class Recipe(object):
         mask = 1
         fingerprintConditions = chain(
             ((t.fingerprintIf if t is not None else False)
-                for t in (toolsView.get(i) for i in sorted(self.__toolDepPackage))),
+                for t in (toolsView.get(i) for i in sorted(toolDepPackage))),
             self.__fingerprintIf)
         for fingerprintIf in fingerprintConditions:
             if fingerprintIf is None:
@@ -2517,17 +2517,17 @@ class Recipe(object):
         # the sources are hashed.
         doFingerprintBuild = doFingerprint
         mask = 3
-        for t in sorted(self.__toolDepPackage):
-            if t not in self.__toolDepBuild:
+        for t in sorted(toolDepPackage):
+            if t not in toolDepBuild:
                 doFingerprintBuild &= ~mask
             mask <<= 2
 
         # check that all tools that are required are available
         toolsDetached = tools.detach()
         if self.__recipeSet.getPolicy('noUndefinedTools') and \
-           not set(toolsDetached.keys()).issuperset(self.__toolDepPackage):
+           not set(toolsDetached.keys()).issuperset(toolDepPackage):
             raise ParseError("Missing tools: " + ", ".join(sorted(
-                set(self.__toolDepPackage) - set(toolsDetached.keys()))))
+                set(toolDepPackage) - set(toolsDetached.keys()))))
 
         # create package
         # touchedTools = tools.touchedKeys()
@@ -2557,7 +2557,8 @@ class Recipe(object):
                 checkoutUpdateIf = []
             srcCoreStep = p.createCoreCheckoutStep(self.__checkout,
                 self.__checkoutSCMs, env, checkoutDigestEnv, checkoutEnv,
-                checkoutDeps, checkoutUpdateIf, checkoutUpdateDeterministic)
+                checkoutDeps, checkoutUpdateIf, checkoutUpdateDeterministic,
+                toolDepCheckout, toolDepCheckoutWeak)
         else:
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
@@ -2567,7 +2568,7 @@ class Recipe(object):
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
             buildCoreStep = p.createCoreBuildStep(self.__build, buildDigestEnv, buildEnv,
-                [CoreRef(srcCoreStep)] + results, doFingerprintBuild)
+                [CoreRef(srcCoreStep)] + results, doFingerprintBuild, toolDepBuild, toolDepBuildWeak)
         else:
             buildCoreStep = p.createInvalidCoreBuildStep([CoreRef(srcCoreStep)] + results)
 
@@ -2576,7 +2577,7 @@ class Recipe(object):
         packageEnv = ( env.prune(self.__packageVars | self.__packageVarsWeak)
             if self.__packageVarsWeak else packageDigestEnv )
         packageCoreStep = p.createCorePackageStep(self.__package, packageDigestEnv, packageEnv,
-            [CoreRef(buildCoreStep)], doFingerprint)
+            [CoreRef(buildCoreStep)], doFingerprint, toolDepPackage, toolDepPackageWeak)
 
         # provide environment
         provideEnv = {}
@@ -2650,9 +2651,9 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
 Every dependency must only be given once."""
     .format(PKG=r.corePackage.getName(), CUR=self.__packageName))
 
-    def __raiseIncompatibleTools(self, tools):
+    def __raiseIncompatibleTools(self, tools, toolDepPackage):
         toolsVars = {}
-        for i in self.__toolDepPackage:
+        for i in toolDepPackage:
             tool = tools.get(i)
             if tool is None: continue
             for k in tool.environment.keys():
@@ -2731,30 +2732,6 @@ Every dependency must only be given once."""
     @property
     def packageVarsWeak(self):
         return self.__packageVarsWeak - self.__packageVars
-
-    @property
-    def toolDepCheckout(self):
-        return self.__toolDepCheckout
-
-    @property
-    def toolDepCheckoutWeak(self):
-        return self.__toolDepCheckoutWeak
-
-    @property
-    def toolDepBuild(self):
-        return self.__toolDepBuild
-
-    @property
-    def toolDepBuildWeak(self):
-        return self.__toolDepBuildWeak
-
-    @property
-    def toolDepPackage(self):
-        return self.__toolDepPackage
-
-    @property
-    def toolDepPackageWeak(self):
-        return self.__toolDepPackageWeak
 
     @property
     def fingerprintScriptList(self):
@@ -2883,6 +2860,20 @@ class MountValidator:
                 return (data[0], data[1], [])
 
         raise schema.SchemaError(None, "Mount entry must be a string or a two/three items list!")
+
+class ToolValidator:
+    def __init__(self, toolNameSchema):
+        self.__schema = schema.Schema({
+            "name" : toolNameSchema,
+            schema.Optional("if"): schema.Or(str, IfExpression),
+        })
+
+    def validate(self, data):
+        if isinstance(data, str):
+            return (data, None)
+        else:
+            self.__schema.validate(data)
+            return (data["name"], data.get("if"))
 
 class RecipeSet:
     """The RecipeSet corresponds to the project root directory.
@@ -3630,12 +3621,12 @@ class RecipeSet:
             schema.Optional('packageSetup') : str,
             schema.Optional('packageSetupBash') : str,
             schema.Optional('packageSetupPwsh') : str,
-            schema.Optional('checkoutTools') : [ toolNameSchema ],
-            schema.Optional('buildTools') : [ toolNameSchema ],
-            schema.Optional('packageTools') : [ toolNameSchema ],
-            schema.Optional('checkoutToolsWeak') : [ toolNameSchema ],
-            schema.Optional('buildToolsWeak') : [ toolNameSchema ],
-            schema.Optional('packageToolsWeak') : [ toolNameSchema ],
+            schema.Optional('checkoutTools') : [ ToolValidator(toolNameSchema) ],
+            schema.Optional('buildTools') : [ ToolValidator(toolNameSchema) ],
+            schema.Optional('packageTools') : [ ToolValidator(toolNameSchema) ],
+            schema.Optional('checkoutToolsWeak') : [ ToolValidator(toolNameSchema) ],
+            schema.Optional('buildToolsWeak') : [ ToolValidator(toolNameSchema) ],
+            schema.Optional('packageToolsWeak') : [ ToolValidator(toolNameSchema) ],
             schema.Optional('checkoutVars') : [ varNameUseSchema ],
             schema.Optional('buildVars') : [ varNameUseSchema ],
             schema.Optional('packageVars') : [ varNameUseSchema ],
