@@ -613,7 +613,7 @@ Other than the above differences setup scripts are identical to
 {checkout,build,package}Tools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Type: List of strings
+Type: List of strings or tool dictionaries
 
 This is a list of tools that should be added to ``$PATH`` during the execution
 of the respective checkout/build/package script. A tool denotes a folder in an
@@ -622,6 +622,23 @@ added to ``$LD_LIBRARY_PATH``.  The order of tools in ``$PATH`` and
 ``$LD_LIBRARY_PATH``  is unspecified.  It is assumed that each tool provides a
 separate set of executables so that the order of their inclusion does not
 matter.
+
+In the simple form, a tool is only specified as simple string. This will use
+the tool unconditionally::
+
+    checkoutTools: [foo, bar]
+
+If necessary, a tool can also be used conditionally. In this case the tool
+is specified as a dictionary of the mandatory ``name`` and an optional ``if``
+condition::
+
+    checkoutTools:
+        - name: foo
+          if: "$CONDITION"
+        - bar
+
+The conditions will be checked with the final environment of a package, that is
+after all dependencies of a recipe have been traversed.
 
 A tool that is consumed in one step is also set in the following. This means a
 tool consumed through checkoutTools is also available during the build and
