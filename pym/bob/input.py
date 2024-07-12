@@ -1360,10 +1360,12 @@ class CheckoutStep(Step):
 
 
 class CoreBuildStep(CoreStep):
-    __slots__ = []
+    __slots__ = ["fingerprintMask"]
 
-    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[]):
+    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(),
+                 env=Env(), args=[], fingerprintMask=0):
         isValid = script[1] is not None
+        self.fingerprintMask = fingerprintMask
         super().__init__(corePackage, isValid, True, digestEnv, env, args)
 
     def _getToolKeys(self):
@@ -1393,19 +1395,6 @@ class CoreBuildStep(CoreStep):
     def getDigestScript(self):
         return self.corePackage.recipe.buildDigestScript
 
-    @property
-    def fingerprintMask(self):
-        # Remove bits of all tools that are not used in buildStep
-        ret = self.corePackage.fingerprintMask
-        i = 3
-        ourToolKeys = self.corePackage.recipe.toolDepBuild
-        packageToolKeys = self.corePackage.recipe.toolDepPackage
-        for t in sorted(packageToolKeys):
-            if t not in ourToolKeys:
-                ret &= ~i
-            i <<= 2
-        return ret
-
 class BuildStep(Step):
 
     def hasNetAccess(self):
@@ -1414,10 +1403,12 @@ class BuildStep(Step):
 
 
 class CorePackageStep(CoreStep):
-    __slots__ = []
+    __slots__ = ["fingerprintMask"]
 
-    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[]):
+    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[],
+                 fingerprintMask=0):
         isValid = script[1] is not None
+        self.fingerprintMask = fingerprintMask
         super().__init__(corePackage, isValid, True, digestEnv, env, args)
 
     def _getToolKeys(self):
@@ -1446,10 +1437,6 @@ class CorePackageStep(CoreStep):
 
     def getDigestScript(self):
         return self.corePackage.recipe.packageDigestScript
-
-    @property
-    def fingerprintMask(self):
-        return self.corePackage.fingerprintMask
 
 class PackageStep(Step):
 
@@ -1480,10 +1467,10 @@ corePackageInternal = CorePackageInternal()
 class CorePackage:
     __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
         "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "pkgId", "fingerprintMask", "metaEnv")
+        "pkgId", "metaEnv")
 
     def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox,
-                 directDepSteps, indirectDepSteps, states, pkgId, fingerprintMask, metaEnv):
+                 directDepSteps, indirectDepSteps, states, pkgId, metaEnv):
         self.recipe = recipe
         self.tools = tools
         self.sandbox = sandbox
@@ -1492,7 +1479,6 @@ class CorePackage:
         self.indirectDepSteps = indirectDepSteps
         self.states = states
         self.pkgId = pkgId
-        self.fingerprintMask = fingerprintMask
         self.metaEnv = metaEnv
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter):
@@ -1509,16 +1495,17 @@ class CorePackage:
         ret = self.checkoutStep = CoreCheckoutStep(self)
         return ret
 
-    def createCoreBuildStep(self, script, digestEnv, env, args):
-        ret = self.buildStep = CoreBuildStep(self, script, digestEnv, env, args)
+    def createCoreBuildStep(self, script, digestEnv, env, args, fingerprintMask):
+        ret = self.buildStep = CoreBuildStep(self, script, digestEnv, env, args,
+                                             fingerprintMask)
         return ret
 
     def createInvalidCoreBuildStep(self, args):
         ret = self.buildStep = CoreBuildStep(self, args=args)
         return ret
 
-    def createCorePackageStep(self, script, digestEnv, env, args):
-        ret = self.packageStep = CorePackageStep(self, script, digestEnv, env, args)
+    def createCorePackageStep(self, script, digestEnv, env, args, fingerprintMask):
+        ret = self.packageStep = CorePackageStep(self, script, digestEnv, env, args, fingerprintMask)
         return ret
 
     def getCorePackageStep(self):
@@ -2525,6 +2512,16 @@ class Recipe(object):
         if doFingerprint:
             doFingerprint |= doFingerprintMaybe
 
+        # Remove bits of all tools that are not used in buildStep. In case
+        # you're wondering: the checkout step is never fingerprinted because
+        # the sources are hashed.
+        doFingerprintBuild = doFingerprint
+        mask = 3
+        for t in sorted(self.__toolDepPackage):
+            if t not in self.__toolDepBuild:
+                doFingerprintBuild &= ~mask
+            mask <<= 2
+
         # check that all tools that are required are available
         toolsDetached = tools.detach()
         if self.__recipeSet.getPolicy('noUndefinedTools') and \
@@ -2536,7 +2533,7 @@ class Recipe(object):
         # touchedTools = tools.touchedKeys()
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
         p = CorePackage(self, toolsDetached, diffTools, sandbox, diffSandbox,
-                directPackages, indirectPackages, states, uidGen(), doFingerprint, metaEnv)
+                directPackages, indirectPackages, states, uidGen(), metaEnv)
 
         # optional checkout step
         if self.__checkout != (None, None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
@@ -2570,7 +2567,7 @@ class Recipe(object):
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
             buildCoreStep = p.createCoreBuildStep(self.__build, buildDigestEnv, buildEnv,
-                [CoreRef(srcCoreStep)] + results)
+                [CoreRef(srcCoreStep)] + results, doFingerprintBuild)
         else:
             buildCoreStep = p.createInvalidCoreBuildStep([CoreRef(srcCoreStep)] + results)
 
@@ -2579,7 +2576,7 @@ class Recipe(object):
         packageEnv = ( env.prune(self.__packageVars | self.__packageVarsWeak)
             if self.__packageVarsWeak else packageDigestEnv )
         packageCoreStep = p.createCorePackageStep(self.__package, packageDigestEnv, packageEnv,
-            [CoreRef(buildCoreStep)])
+            [CoreRef(buildCoreStep)], doFingerprint)
 
         # provide environment
         provideEnv = {}
