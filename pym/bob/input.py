@@ -2259,8 +2259,8 @@ class Recipe(object):
             "__tools" : tools })
         env = inputEnv.derive()
         for i in self.__varSelf:
-            env = env.derive({ key : env.substitute(value, "environment::"+key)
-                               for key, value in i.items() })
+            env.update(( (key, env.substitute(value, "environment::"+key))
+                         for key, value in i.items() ))
         states = { n : s.copy() for (n,s) in inputStates.items() }
 
         # update plugin states
@@ -2327,9 +2327,10 @@ class Recipe(object):
                     k : depDiffTools.get(v, v)
                     for k, v in dep.toolOverride.items() })
 
-            thisDepEnv = thisDepEnv.derive(
-                { key : env.substitute(value, "depends["+recipe+"].environment["+key+"]")
-                  for key, value in dep.envOverride.items() })
+            if dep.envOverride:
+                thisDepEnv = thisDepEnv.derive(
+                    { key : env.substitute(value, "depends["+recipe+"].environment["+key+"]")
+                      for key, value in dep.envOverride.items() })
 
             r = self.__recipeSet.getRecipe(recipe)
             try:
