@@ -1532,9 +1532,8 @@ metaEnvironment
 Type: Dictionary (String -> String)
 
 metaEnvironment variables behave like :ref:`configuration-recipes-privateenv` variables.
-They overrule other environment variables and can be used in all steps, but substitution is not
-available. In addition all metaEnvironment variables are added to the audit no matter they are
-used in a step or not.
+They overrule other environment variables and can be used in all steps. In addition all
+metaEnvironment variables are added to the audit no matter they are used in a step or not.
 This predestines metaEnvironment variables to add the license type or version of a package.
 
 The :ref:`manpage-query-meta` command can be used to retrieve metaEnvironment variables.

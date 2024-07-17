@@ -1480,10 +1480,10 @@ corePackageInternal = CorePackageInternal()
 class CorePackage:
     __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
         "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "pkgId", "fingerprintMask")
+        "pkgId", "fingerprintMask", "metaEnv")
 
     def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox,
-                 directDepSteps, indirectDepSteps, states, pkgId, fingerprintMask):
+                 directDepSteps, indirectDepSteps, states, pkgId, fingerprintMask, metaEnv):
         self.recipe = recipe
         self.tools = tools
         self.sandbox = sandbox
@@ -1493,6 +1493,7 @@ class CorePackage:
         self.states = states
         self.pkgId = pkgId
         self.fingerprintMask = fingerprintMask
+        self.metaEnv = metaEnv
 
     def refDeref(self, stack, inputTools, inputSandbox, pathFormatter):
         tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathFormatter)
@@ -1526,6 +1527,9 @@ class CorePackage:
     def getName(self):
         """Name of the package"""
         return self.recipe.getPackageName()
+
+    def getMetaEnv(self):
+        return self.metaEnv
 
     @property
     def jobServer(self):
@@ -1583,7 +1587,7 @@ class Package(object):
 
     def getMetaEnv(self):
         """meta variables of package"""
-        return self.getRecipe().getMetaEnv()
+        return self.__corePackage.getMetaEnv()
 
     def getStack(self):
         """Returns the recipe processing stack leading to this package.
@@ -2227,9 +2231,6 @@ class Recipe(object):
         """
         return self.__baseName
 
-    def getMetaEnv(self):
-        return self.__metaEnv
-
     def isRoot(self):
         """Returns True if this is a root recipe."""
         return self.__root == True
@@ -2488,8 +2489,10 @@ class Recipe(object):
             env = env.derive({ key : env.substitute(value, "privateEnvironment::"+key)
                                for key, value in i.items() })
 
-        # meta variables override existing variables but can not be substituted
-        env.update(self.__metaEnv)
+        # meta variables override existing variables
+        metaEnv = { key : env.substitute(value, "metaEnvironment::"+key)
+            for key, value in self.__metaEnv.items() }
+        env.update(metaEnv)
 
         # set fixed built-in variables
         env['BOB_RECIPE_NAME'] = self.__baseName
@@ -2533,7 +2536,7 @@ class Recipe(object):
         # touchedTools = tools.touchedKeys()
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
         p = CorePackage(self, toolsDetached, diffTools, sandbox, diffSandbox,
-                directPackages, indirectPackages, states, uidGen(), doFingerprint)
+                directPackages, indirectPackages, states, uidGen(), doFingerprint, metaEnv)
 
         # optional checkout step
         if self.__checkout != (None, None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
