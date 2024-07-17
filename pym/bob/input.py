@@ -1737,6 +1737,17 @@ class ScmValidator:
                 None)
         return data
 
+class LayerSpec:
+    def __init__(self, name, scm=None):
+        self.__name = name;
+        self.__scm = scm
+
+    def getName(self):
+        return self.__name
+
+    def getScm(self):
+        return self.__scm
+
 class LayerValidator:
     def __init__(self):
         self.__scmValidator = ScmValidator({
@@ -1746,11 +1757,15 @@ class LayerValidator:
             'url' : UrlScm.SCHEMA})
 
     def validate(self, data):
+        if isinstance(data,str):
+            return LayerSpec(data)
         if 'name' not in data:
             raise schema.SchemaMissingKeyError("Missing 'name' key in {}".format(data), None)
-        name = data.get('name')
-        del data['name']
-        return {'scmSpec' : self.__scmValidator.validate(data)[0], 'name' : name}
+        _data = data.copy();
+        name = _data.get('name')
+        del _data['name']
+
+        return LayerSpec (name, self.__scmValidator.validate(_data)[0])
 
 class VarDefineValidator:
     def __init__(self, keyword):
@@ -1866,12 +1881,6 @@ def getProvideDepsResolver(pattern):
         return GlobProvideDepsResolver(pattern)
     else:
         return VerbatimProvideDepsResolver(pattern)
-
-def getLayerName(layerSpec):
-    if isinstance(layerSpec, str):
-        return layerSpec
-    else:
-        return layerSpec.get('name')
 
 class Recipe(object):
     """Representation of a single recipe
@@ -2041,7 +2050,7 @@ class Recipe(object):
         }
         self.__corePackagesByMatch = []
         self.__corePackagesById = {}
-        self.__layer = getLayerName(layer)
+        self.__layer = layer
 
         sourceName = ("Recipe " if isRecipe else "Class  ") + packageName + (
             ", layer "+"/".join(layer) if layer else "")
@@ -2969,7 +2978,7 @@ class RecipeSet:
             },
             error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
-        schema.Optional('layers') : [schema.Or(str, LayerValidator())],
+        schema.Optional('layers') : [LayerValidator()],
         schema.Optional('scriptLanguage',
                         default=ScriptLanguage.BASH) : schema.And(schema.Or("bash", "PowerShell"),
                                                                   schema.Use(ScriptLanguage)),
@@ -3464,7 +3473,7 @@ class RecipeSet:
         self.__rootEnv = env
 
         # Begin with root layer
-        self.__parseLayer("", "9999", recipesRoot, dryRun)
+        self.__parseLayer(LayerSpec(""), "9999", recipesRoot, dryRun)
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
@@ -3478,10 +3487,12 @@ class RecipeSet:
             self.__parseUserConfig(c)
 
         # calculate start environment
+        osEnv.setFuns(self.__stringFunctions)
         env = Env({ k : osEnv.substitute(v, k) for (k, v) in
             self.__defaultEnv.items() })
         env.setFuns(self.__stringFunctions)
         env.update(envOverrides)
+        env["BOB_HOST_PLATFORM"] = platform
         self.__rootEnv = env
 
         if dryRun:
@@ -3507,17 +3518,11 @@ class RecipeSet:
         self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(filteredRoots), self.__properties)
         self.__addRecipe(self.__rootRecipe)
 
-    def updateLayers(self, loop, defines, verbose):
-        from .layers import fetchLayers
-        try:
-            self.parse(defines, dryRun=True)
-        except ParseError:
-            pass
+    def resetLayers(self):
         self.__layers = []
-        fetchLayers(self, self.__cache, loop, verbose)
 
     def __parseLayer(self, layerSpec, maxVer, recipesRoot, dryRun):
-        layer = getLayerName(layerSpec)
+        layer = layerSpec.getName()
 
         if layer in self.__layers:
             return

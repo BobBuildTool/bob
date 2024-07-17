@@ -60,7 +60,7 @@ def __ls(*args, **kwargs):
      return 0
 
 def __layers(*args, **kwargs):
-     from .layers import doLayers
+     from .cmds.layers import doLayers
      doLayers(*args, **kwargs)
      return 0
 

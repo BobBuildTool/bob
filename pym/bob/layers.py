@@ -1,13 +1,12 @@
-import argparse
 import datetime
 import os
 from .cmds.build.status import PackagePrinter
-from .errors import BuildError
+from .errors import BuildError, ParseError
 from .invoker import CmdFailedError, InvocationError, Invoker
 from .state import BobState
 from .input import RecipeSet, Scm, YamlCache
-from .utils import EventLoopWrapper, processDefines, INVALID_CHAR_TRANS
-from .tty import DEBUG, EXECUTED, INFO, NORMAL, SKIPPED, WARNING, colorize, log, setVerbosity
+from .utils import INVALID_CHAR_TRANS
+from .tty import DEBUG, EXECUTED, INFO, NORMAL, IMPORTANT, SKIPPED, WARNING, log
 
 class LayerStepSpec:
     def __init__(self, path):
@@ -46,8 +45,8 @@ class Layer:
         invoker = Invoker(spec=LayerStepSpec(layerSrcPath),
                           preserveEnv=True,
                           noLogFiles = True,
-                          showStdOut = verbose >= INFO,
-                          showStdErr = verbose >= INFO,
+                          showStdOut = verbose > INFO,
+                          showStdErr = verbose > INFO,
                           trace = verbose >= DEBUG,
                           redirect=False, executor=None)
         newState = {}
@@ -66,7 +65,7 @@ class Layer:
            and oldState is not None \
            and oldState["digest"] == newState["digest"]:
             log("CHECKOUT: Layer " +
-                "{} skipped (up to date)".format(layerSrcPath), SKIPPED, NORMAL)
+                "'{}' skipped (up to date)".format(self.getName()), SKIPPED, INFO)
             return
 
         if not created and oldState is not None and \
@@ -76,7 +75,7 @@ class Layer:
                                  overrides=self.__recipes.scmOverrides(),
                                  recipeSet=self.__recipes)):
                 ret = await invoker.executeScmSwitch(self.__scm, oldState["prop"])
-                log("SWITCH: Layer {} .. ok".format(self.getName()), EXECUTED, INFO)
+                log("SWITCH: Layer '{}' .. ok".format(self.getName()), EXECUTED, INFO)
 
                 if ret == 0:
                     BobState().setLayerState(layerSrcPath, newState)
@@ -87,7 +86,7 @@ class Layer:
             atticName = datetime.datetime.now().isoformat().translate(INVALID_CHAR_TRANS) + "_" + \
                             self.__name
             log("ATTIC: Layer " +
-                "{} (move to layers.attic/{})".format(layerSrcPath, atticName), WARNING, WARNING)
+                "'{}' (move to layers.attic/{})".format(self.getName(), atticName), WARNING, WARNING)
             atticPath = os.path.join(self.__root, "layers.attic")
             if not os.path.isdir(atticPath):
                 os.makedirs(atticPath)
@@ -98,7 +97,7 @@ class Layer:
             os.makedirs(layerSrcPath)
         await self.__scm.invoke(invoker)
         log("CHECKOUT: Layer " +
-                "{} .. ok".format(self.getName()), EXECUTED, INFO)
+                "'{}' .. ok".format(self.getName()), EXECUTED, NORMAL)
         BobState().setLayerState(layerSrcPath, newState)
 
     def checkout(self, loop, verbose):
@@ -122,14 +121,14 @@ class Layer:
         configYaml = os.path.join(self.__layerDir, "config.yaml")
         config = self.loadYaml(configYaml, (RecipeSet.STATIC_CONFIG_SCHEMA, b''))
         for l in config.get('layers', []):
-            if not isinstance(l, dict): continue
-            scmSpec = l.get("scmSpec", {})
+            scmSpec = l.getScm()
+            if scmSpec is None: continue
             scmSpec.update({'recipe':configYaml})
             layerScms = Scm(scmSpec,
                             self.__recipes.getRootEnv(),
                             overrides=self.__recipes.scmOverrides(),
                             recipeSet=self.__recipes)
-            self.__subLayers.append(Layer(l.get("name"),
+            self.__subLayers.append(Layer(l.getName(),
                                           self.__root,
                                           self.__recipes,
                                           self.__yamlCache,
@@ -146,14 +145,11 @@ class Layer:
         pp.show(status, self.__layerDir)
 
 class Layers:
-    def __init__(self, recipes, loop, yamlCache=None):
+    def __init__(self, recipes, loop):
         self.__layers = {}
         self.__loop = loop
-        self.__scmUpdate = False
         self.__recipes = recipes
-        self.__yamlCache = yamlCache
-        if yamlCache is None:
-            self.__yamlCache = YamlCache()
+        self.__yamlCache = YamlCache()
 
     def __haveLayer(self, layer):
         for depth,layers in self.__layers.items():
@@ -193,36 +189,12 @@ class Layers:
             for layer in self.__layers[level]:
                 layer.status(verbose)
 
-def fetchLayers(recipes, yamlCache, loop, verbose):
-    layers = Layers(recipes, loop, yamlCache)
+def updateLayers(recipes, loop, defines, verbose):
+    try:
+        recipes.parse(defines, dryRun=True)
+    except ParseError:
+        pass
+    recipes.resetLayers()
+
+    layers = Layers(recipes, loop)
     layers.collect(True, verbose)
-
-def doLayers(argv, bobRoot):
-    parser = argparse.ArgumentParser(prog="bob layers", description='Handle layers')
-    parser.add_argument('action', type=str, choices=['update', 'status'], default="status",
-                        help="Action: [update, status]")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
-    parser.add_argument('-v', '--verbose', default=NORMAL, action='count',
-        help="Increase verbosity (may be specified multiple times)")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-    args = parser.parse_args(argv)
-
-    setVerbosity(args.verbose)
-
-    defines = processDefines(args.defines)
-
-    with EventLoopWrapper() as (loop, executor):
-        recipes = RecipeSet()
-        recipes.setConfigFiles(args.configFile)
-        if args.action == "update":
-            recipes.updateLayers(loop, defines, args.verbose)
-
-        recipes.parse(defines)
-
-        layers = Layers(recipes, loop)
-        layers.collect(False, args.verbose)
-        if args.action == "status":
-            layers.status(args.verbose)
-

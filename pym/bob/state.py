@@ -625,12 +625,6 @@ class _BobState():
             else:
                 self.__dirStates[path] = dirState
             needSave = True
-        if self.__layerStates.get(path) != dirState:
-            if dirState is None:
-                del self.__layerStates[path]
-            else:
-                self.__layerStates[path] = dirState
-            needSave = True
         if path in self.__variantIds:
             del self.__variantIds[path]
             needSave = True
