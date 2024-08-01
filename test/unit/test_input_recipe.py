@@ -691,8 +691,8 @@ class TestEnvironment(RecipeCommon, TestCase):
                     "C" : "<lib><b>",
                 })
 
-    def testMetaEnvrionmentNoSubstitution(self):
-        """metaEnvironment values are not substituted but merged on a key-by-key basis"""
+    def testMetaEnvrionmentSubstitution(self):
+        """metaEnvironment is substituted and merged on a key-by-key basis"""
         recipe = {
             "inherit" : ["a", "b"],
             "metaEnvironment" : {
@@ -721,7 +721,7 @@ class TestEnvironment(RecipeCommon, TestCase):
         }
         p = self.parseAndPrepare(recipe, classes, env=env).getPackageStep()
         self.assertEqual(p.getEnv(), {
-            "A" : "<lib>${A:-}",
-            "B" : "<lib>${B:-}",
+            "A" : "<lib>a",
+            "B" : "<lib>b",
             "C" : "<b>",
         })
