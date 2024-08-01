@@ -90,7 +90,9 @@ jobs:
                 bash ./test/run-tests.sh -c xml
 
             - name: Upload coverage to Codecov
-              uses: codecov/codecov-action@v2
+              uses: codecov/codecov-action@v4
+              with:
+                token: ${{ secrets.CODECOV_TOKEN }}
 
     build-sdist:
         runs-on: ubuntu-latest
