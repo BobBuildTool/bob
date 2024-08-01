@@ -215,6 +215,7 @@ def bob(bobRoot = None):
         if args.color_mode:
             from .input import RecipeSet
             RecipeSet.setColorModeCfg(args.color_mode)
+            setColorMode(args.color_mode)
 
         if args.query_mode:
             from .input import RecipeSet
