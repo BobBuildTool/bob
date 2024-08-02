@@ -13,15 +13,16 @@ jobs:
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
 
             - name: Set up Python ${{ matrix.python-version }}
-              uses: actions/setup-python@v2
+              uses: actions/setup-python@v5
               with:
                 python-version: ${{ matrix.python-version }}
+                cache: pip
 
             - name: Cache Jenkins integration test
-              uses: actions/cache@v3
+              uses: actions/cache@v4
               with:
                 path: test/integration/jenkins/cache
                 key: ${{ runner.os }}
@@ -52,9 +53,9 @@ jobs:
                 token: ${{ secrets.CODECOV_TOKEN }}
 
             - name: Store the binary wheel
-              uses: actions/upload-artifact@v3
+              uses: actions/upload-artifact@v4
               with:
-                name: python-package-distributions
+                name: python-dist-linux-${{ matrix.python-version }}
                 path: dist
 
     build-windows:
@@ -62,19 +63,20 @@ jobs:
         timeout-minutes: 20
         steps:
             - name: Checkout
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
 
             - name: Set up Python 3.12
-              uses: actions/setup-python@v2
+              uses: actions/setup-python@v5
               with:
                 python-version: "3.12"
+                cache: pip
 
             - name: Prepare MSYS2 environment
               run: |
                 C:\msys64\usr\bin\bash -l -c "pacman -Sy --needed --noconfirm parallel || true"
 
             - name: Cache Jenkins integration test
-              uses: actions/cache@v3
+              uses: actions/cache@v4
               with:
                 path: test/integration/jenkins/cache
                 key: ${{ runner.os }}
@@ -102,12 +104,13 @@ jobs:
         timeout-minutes: 5
         steps:
             - name: Checkout
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
 
             - name: Set up Python 3.12
-              uses: actions/setup-python@v2
+              uses: actions/setup-python@v5
               with:
                 python-version: "3.12"
+                cache: pip
 
             - name: Install dependencies
               run: |
@@ -120,9 +123,9 @@ jobs:
                 python3 setup.py sdist
 
             - name: Store the source distribution
-              uses: actions/upload-artifact@v3
+              uses: actions/upload-artifact@v4
               with:
-                name: python-package-distributions
+                name: python-dist-sdist
                 path: dist
 
     publish:
@@ -136,9 +139,10 @@ jobs:
             - build-sdist
         steps:
             - name: Download all the dists
-              uses: actions/download-artifact@v3
+              uses: actions/download-artifact@v4
               with:
-                name: python-package-distributions
+                pattern: python-dist-*
+                merge-multiple: true
                 path: dist/
 
             - name: List
