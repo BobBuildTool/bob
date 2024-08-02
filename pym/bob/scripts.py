@@ -59,6 +59,11 @@ def __ls(*args, **kwargs):
      doLS(*args, **kwargs)
      return 0
 
+def __layers(*args, **kwargs):
+     from .cmds.layers import doLayers
+     doLayers(*args, **kwargs)
+     return 0
+
 def __project(*args, **kwargs):
      from .cmds.build.project import doProject
      doProject(*args, **kwargs)
@@ -111,6 +116,7 @@ availableCommands = {
     "help"          : ('hl', __help, "Display help information about command"),
     "init"          : ('hl', __init, "Initialize build tree"),
     "jenkins"       : ('hl', __jenkins, "Configure Jenkins server"),
+    "layers"        : ('hl', __layers, "Handle layers"),
     "ls"            : ('hl', __ls, "List package hierarchy"),
     "project"       : ('hl', __project, "Create project files"),
     "show"          : ('hl', __show, "Show properties of a package"),

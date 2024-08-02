@@ -34,24 +34,25 @@ class RecipesTmp:
         os.chdir(self.cwd)
         self.tmpdir.cleanup()
 
-    def writeRecipe(self, name, content, layer=[]):
+    def writeRecipe(self, name, content, layer=None):
         path = os.path.join("",
-            *(os.path.join("layers", l) for l in layer),
+            os.path.join("layers", layer) if layer is not None else "",
             "recipes")
         if path: os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, name+".yaml"), "w") as f:
             f.write(textwrap.dedent(content))
 
-    def writeClass(self, name, content, layer=[]):
+    def writeClass(self, name, content, layer=None):
         path = os.path.join("",
-            *(os.path.join("layers", l) for l in layer),
+            os.path.join("layers", layer) if layer is not None else "",
             "classes")
         if path: os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, name+".yaml"), "w") as f:
             f.write(textwrap.dedent(content))
 
-    def writeConfig(self, content, layer=[]):
-        path = os.path.join("", *(os.path.join("layers", l) for l in layer))
+    def writeConfig(self, content, layer=None):
+        path = os.path.join("",
+            os.path.join("layers", layer) if layer is not None else "")
         if path: os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, "config.yaml"), "w") as f:
             f.write(yaml.dump(content))
@@ -1342,26 +1343,26 @@ class TestLayers(RecipesTmp, TestCase):
         self.writeConfig({
             "bobMinimumVersion" : "0.24",
             "layers" : [ "l2" ],
-        }, layer=["l1_n1"])
+        }, layer="l1_n1")
         self.writeRecipe("foo", """\
             depends:
                 - baz
             buildScript: "true"
             packageScript: "true"
             """,
-            layer=["l1_n1"])
+            layer="l1_n1")
 
         self.writeRecipe("baz", """\
             buildScript: "true"
             packageScript: "true"
             """,
-            layer=["l1_n1", "l2"])
+            layer="l2")
 
         self.writeRecipe("bar", """\
             buildScript: "true"
             packageScript: "true"
             """,
-            layer=["l1_n2"])
+            layer="l1_n2")
 
     def testRegular(self):
         """Test that layers can be parsed"""
@@ -1375,13 +1376,13 @@ class TestLayers(RecipesTmp, TestCase):
             buildScript: "true"
             packageScript: "true"
             """,
-            layer=["l1_n2"])
+            layer="l1_n2")
         self.assertRaises(ParseError, self.generate)
 
     def testClassObstruction(self):
         """Test that layers must not provide identical classes"""
-        self.writeClass("c", "", layer=["l1_n1", "l2"])
-        self.writeClass("c", "", layer=["l1_n2"])
+        self.writeClass("c", "", layer="l2")
+        self.writeClass("c", "", layer="l1_n2")
         self.assertRaises(ParseError, self.generate)
 
     def testMinimumVersion(self):

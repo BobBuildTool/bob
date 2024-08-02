@@ -1718,6 +1718,36 @@ class ScmValidator:
                 None)
         return data
 
+class LayerSpec:
+    def __init__(self, name, scm=None):
+        self.__name = name;
+        self.__scm = scm
+
+    def getName(self):
+        return self.__name
+
+    def getScm(self):
+        return self.__scm
+
+class LayerValidator:
+    def __init__(self):
+        self.__scmValidator = ScmValidator({
+            'git' : GitScm.SCHEMA,
+            'svn' : SvnScm.SCHEMA,
+            'cvs' : CvsScm.SCHEMA,
+            'url' : UrlScm.SCHEMA})
+
+    def validate(self, data):
+        if isinstance(data,str):
+            return LayerSpec(data)
+        if 'name' not in data:
+            raise schema.SchemaMissingKeyError("Missing 'name' key in {}".format(data), None)
+        _data = data.copy();
+        name = _data.get('name')
+        del _data['name']
+
+        return LayerSpec (name, self.__scmValidator.validate(_data)[0])
+
 class VarDefineValidator:
     def __init__(self, keyword):
         self.__varName = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
@@ -1947,7 +1977,7 @@ class Recipe(object):
             "buildScript" : "true",
             "packageScript" : "true"
         }
-        ret = Recipe(recipeSet, recipe, [], "", ".", "", "", properties)
+        ret = Recipe(recipeSet, recipe, "", "", ".", "", "", properties)
         ret.resolveClasses(Env())
         return ret
 
@@ -2914,6 +2944,14 @@ class RecipeSet:
             schema.Optional('max_depth') : int,
         })
 
+    SCM_SCHEMA = ScmValidator({
+        'git' : GitScm.SCHEMA,
+        'svn' : SvnScm.SCHEMA,
+        'cvs' : CvsScm.SCHEMA,
+        'url' : UrlScm.SCHEMA,
+        'import' : ImportScm.SCHEMA,
+    })
+
     STATIC_CONFIG_SCHEMA = schema.Schema({
         schema.Optional('bobMinimumVersion') : str, # validated separately in preValidate
         schema.Optional('plugins') : [str],
@@ -2939,18 +2977,10 @@ class RecipeSet:
             },
             error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
-        schema.Optional('layers') : [str],
+        schema.Optional('layers') : [LayerValidator()],
         schema.Optional('scriptLanguage',
                         default=ScriptLanguage.BASH) : schema.And(schema.Or("bash", "PowerShell"),
                                                                   schema.Use(ScriptLanguage)),
-    })
-
-    SCM_SCHEMA = ScmValidator({
-        'git' : GitScm.SCHEMA,
-        'svn' : SvnScm.SCHEMA,
-        'cvs' : CvsScm.SCHEMA,
-        'url' : UrlScm.SCHEMA,
-        'import' : ImportScm.SCHEMA,
     })
 
     MIRRORS_SCHEMA = ScmValidator({
@@ -2991,6 +3021,7 @@ class RecipeSet:
         self.__commandConfig = {}
         self.__uiConfig = {}
         self.__shareConfig = {}
+        self.__layers = []
         self.__policies = {
             'noUndefinedTools' : (
                 "0.17.3.dev57",
@@ -3382,7 +3413,8 @@ class RecipeSet:
         else:
             return schema[0].validate(default)
 
-    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot=""):
+    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="",
+              dryRun=False):
         if not recipesRoot and os.path.isfile(".bob-project"):
             try:
                 with open(".bob-project") as f:
@@ -3392,14 +3424,14 @@ class RecipeSet:
         recipesDir = os.path.join(recipesRoot, "recipes")
         if not os.path.isdir(recipesDir):
             raise ParseError("No recipes directory found in " + recipesDir)
+        self.__projectRoot = recipesRoot or os.getcwd()
         self.__cache.open()
         try:
-            self.__parse(envOverrides, platform, recipesRoot)
+            self.__parse(envOverrides, platform, recipesRoot, dryRun)
         finally:
             self.__cache.close()
-        self.__projectRoot = recipesRoot or os.getcwd()
 
-    def __parse(self, envOverrides, platform, recipesRoot=""):
+    def __parse(self, envOverrides, platform, recipesRoot="", dryRun=False):
         if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
             raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
@@ -3430,8 +3462,17 @@ class RecipeSet:
             self.__parseUserConfig(os.path.join(os.environ.get('XDG_CONFIG_HOME',
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
+        osEnv = Env(os.environ)
+        osEnv.setFuns(self.__stringFunctions)
+        env = Env({ k : osEnv.substitute(v, k) for (k, v) in
+            self.__defaultEnv.items() })
+        env.setFuns(self.__stringFunctions)
+        env.update(envOverrides)
+        env["BOB_HOST_PLATFORM"] = platform
+        self.__rootEnv = env
+
         # Begin with root layer
-        self.__parseLayer([], "9999", recipesRoot)
+        self.__parseLayer(LayerSpec(""), "9999", recipesRoot, dryRun)
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
@@ -3445,7 +3486,6 @@ class RecipeSet:
             self.__parseUserConfig(c)
 
         # calculate start environment
-        osEnv = Env(os.environ)
         osEnv.setFuns(self.__stringFunctions)
         env = Env({ k : osEnv.substitute(v, k) for (k, v) in
             self.__defaultEnv.items() })
@@ -3453,6 +3493,9 @@ class RecipeSet:
         env.update(envOverrides)
         env["BOB_HOST_PLATFORM"] = platform
         self.__rootEnv = env
+
+        if dryRun:
+            return
 
         # resolve recipes and their classes
         rootRecipes = []
@@ -3474,10 +3517,19 @@ class RecipeSet:
         self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(filteredRoots), self.__properties)
         self.__addRecipe(self.__rootRecipe)
 
-    def __parseLayer(self, layer, maxVer, recipesRoot):
-        rootDir = os.path.join(recipesRoot, *(os.path.join("layers", l) for l in layer))
+    def resetLayers(self):
+        self.__layers = []
+
+    def __parseLayer(self, layerSpec, maxVer, recipesRoot, dryRun):
+        layer = layerSpec.getName()
+
+        if layer in self.__layers:
+            return
+        self.__layers.append(layer)
+
+        rootDir = os.path.join(recipesRoot, os.path.join("layers", layer) if layer != "" else "")
         if not os.path.isdir(rootDir or "."):
-            raise ParseError("Layer '{}' does not exist!".format("/".join(layer)))
+            raise ParseError(f"Layer '{layer}' does not exist!")
 
         configYaml = os.path.join(rootDir, "config.yaml")
         def preValidate(data):
@@ -3495,11 +3547,14 @@ class RecipeSet:
             preValidate=preValidate)
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
-            raise ParseError("Layer '{}' reqires a higher Bob version than root project!"
+            raise ParseError("Layer '{}' requires a higher Bob version than root project!"
                                 .format("/".join(layer)))
         if compareVersion(minVer, "0.16") < 0:
             raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
+
+        if dryRun:
+            return
 
         # Determine policies. The root layer determines the default settings
         # implicitly by bobMinimumVersion or explicitly via 'policies'. All
@@ -3518,7 +3573,7 @@ class RecipeSet:
         # First parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
         for l in config.get("layers", []):
-            self.__parseLayer(layer + [l], maxVer, recipesRoot)
+            self.__parseLayer(l, maxVer, recipesRoot, dryRun)
 
         # Load plugins and re-create schemas as new keys may have been added
         self.__loadPlugins(rootDir, layer, config.get("plugins", []))

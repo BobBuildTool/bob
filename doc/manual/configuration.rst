@@ -1918,7 +1918,7 @@ equal.
 layers
 ~~~~~~
 
-Type: List of strings
+Type: List of strings or SCM-Dictionary or List of SCM-Dictionaries
 
 The ``layers`` section consists of a list of layer names that are then expected
 in the ``layers`` directory relative to the ``conig.yaml`` referencing them::
@@ -1939,6 +1939,25 @@ precedence. A layer with a higher precedence can override settings from layers
 of lower precedence.
 
 See :ref:`configuration` for more information.
+
+Typically layers have their own VCS. To provide them to the root-recipes common
+VCS-methods like git-submodules can be used. Another possibility is to provide a
+SCM-Dictionary (see :ref:`configuration-recipes-scm`)::
+
+    layers:
+        - name: myapp
+          scm: git
+          url: git@foo.bar:myapp.git
+          commit: ...
+        - bsp
+
+Only `git`,`svn`,`url` and `cvs` scm's are supported for layers.
+
+Using this Bob takes care of the layer managment and would checkout the layers
+if they do not exists, update the layers if the spec changed during regular
+build (except `build-only` is used) and allows you to use `bob layers`.
+
+See :ref:`manpage-layers`.
 
 .. _configuration-config-plugins:
 
