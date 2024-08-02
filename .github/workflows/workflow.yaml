@@ -8,7 +8,7 @@ jobs:
         timeout-minutes: 15
         strategy:
             matrix:
-                python-version: ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+                python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
             fail-fast: false
 
         steps:
@@ -46,8 +46,6 @@ jobs:
                 python3 setup.py bdist_wheel --plat-name manylinux1_x86_64
 
             - name: Upload coverage to Codecov
-              # Coverage is not complete on Python <3.7 (see pym/bob/utils.py)
-              if: matrix.python-version != '3.6'
               uses: codecov/codecov-action@v4
               with:
                 token: ${{ secrets.CODECOV_TOKEN }}
