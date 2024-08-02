@@ -93,7 +93,7 @@ class StepIR(AbstractIR):
                     for s in step.getScmList()
                 ]
                 self.__data['scmDirectories'] = { d : (h.hex(), p) for (d, (h, p)) in step.getScmDirectories().items() }
-            self.__data['toolKeysWeak'] = sorted(step._coreStep._getToolKeysWeak())
+            self.__data['toolKeysWeak'] = sorted(step._coreStep.toolDepWeak)
             self.__data['digestEnv'] = step._coreStep.digestEnv
 
         return self
