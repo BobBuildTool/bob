@@ -8,7 +8,7 @@ jobs:
         timeout-minutes: 15
         strategy:
             matrix:
-                python-version: ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11"]
+                python-version: ["3.6", "3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
             fail-fast: false
 
         steps:
@@ -63,10 +63,10 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v2
 
-            - name: Set up Python 3.11
+            - name: Set up Python 3.12
               uses: actions/setup-python@v2
               with:
-                python-version: "3.11"
+                python-version: "3.12"
 
             - name: Prepare MSYS2 environment
               run: |
@@ -103,10 +103,10 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v2
 
-            - name: Set up Python 3.11
+            - name: Set up Python 3.12
               uses: actions/setup-python@v2
               with:
-                python-version: "3.11"
+                python-version: "3.12"
 
             - name: Install dependencies
               run: |
