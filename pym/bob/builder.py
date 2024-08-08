@@ -1234,7 +1234,7 @@ cd {ROOT}
                 # re-runs with "build-only" the dependent steps should
                 # trigger.
                 if BobState().getResultHash(prettySrcPath) is not None:
-                    oldCheckoutHash = datetime.datetime.utcnow()
+                    oldCheckoutHash = datetime.datetime.now()
                     BobState().setResultHash(prettySrcPath, oldCheckoutHash)
 
                 with stepExec(checkoutStep, "CHECKOUT",
@@ -1327,7 +1327,7 @@ cd {ROOT}
                 # content. If the execution fails we have nothing reliable
                 # left and we _must_ run it again.
                 BobState().delInputHashes(prettyBuildPath)
-                BobState().setResultHash(prettyBuildPath, datetime.datetime.utcnow())
+                BobState().setResultHash(prettyBuildPath, datetime.datetime.now())
                 # build it
                 with stepExec(buildStep, "BUILD", prettyBuildPath, INFO) as buildAction:
                     visibleAction = fullAction if fullAction.visible else buildAction
@@ -1578,7 +1578,7 @@ cd {ROOT}
             with stepExec(packageStep, "PACKAGE", prettyPackagePath, (ALWAYS, NORMAL)) as fullAction:
                 # invalidate result because folder will be cleared
                 BobState().delInputHashes(prettyPackagePath)
-                BobState().setResultHash(prettyPackagePath, datetime.datetime.utcnow())
+                BobState().setResultHash(prettyPackagePath, datetime.datetime.now())
                 with stepExec(packageStep, "PACKAGE", prettyPackagePath, INFO) as packageAction:
                     visibleAction = fullAction if fullAction.visible else packageAction
                     await self._runShell(packageStep, "package", visibleAction)
