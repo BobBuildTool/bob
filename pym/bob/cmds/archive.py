@@ -5,7 +5,7 @@
 
 from ..audit import Audit
 from ..errors import BobError
-from ..utils import binStat, asHexStr, infixBinaryOp
+from ..utils import binStat, asHexStr, infixBinaryOp, tarfileOpen
 import argparse
 import gzip
 import json
@@ -118,7 +118,7 @@ class ArchiveScanner:
 
             # read audit trail
             if verbose: print("scan", fileName)
-            with tarfile.open(fileName, errorlevel=1) as tar:
+            with tarfileOpen(fileName, errorlevel=1) as tar:
                 # validate
                 if tar.pax_headers.get('bob-archive-vsn') != "1":
                     print("Not a Bob archive:", fileName, "Ignored!")

@@ -129,7 +129,7 @@ setup(
     cmdclass = cmdclass,
 
     # Our runtime dependencies
-    python_requires = '>=3.6',
+    python_requires = '>=3.7',
     install_requires = [
         'PyYAML',
         'schema',
@@ -144,8 +144,7 @@ setup(
 
     # Installation time dependencies only needed by setup.py
     setup_requires = [
-        'setuptools_scm<7',   # automatically get package version
-                              # TODO: remove constraint when Python 3.7 is required
+        'setuptools_scm',   # automatically get package version
     ],
 
     # Provide executables

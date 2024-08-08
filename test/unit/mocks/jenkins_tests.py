@@ -21,6 +21,8 @@ class ArtifactExtractor:
     def __enter__(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         with tarfile.open(self.tgz, "r:gz", errorlevel=1) as tar:
+            # Python >= 3.12 compatibility
+            tar.extraction_filter = (lambda member, path: member)
             f = tar.next()
             while f is not None:
                 if f.name.startswith("content/"):
