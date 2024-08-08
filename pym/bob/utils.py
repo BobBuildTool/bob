@@ -809,3 +809,32 @@ def sslNoVerifyContext():
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     return context
+
+# Python 3.12 tarfile compliance
+
+def _tarExtractFilter(member, path):
+    path = os.path.realpath(path)
+    name = member.name
+
+    # Strip absolute path names (GNU tar default)
+    if name.startswith(('/', os.sep)):
+        name = name.lstrip('/' + os.sep)
+        member = member.replace(name=name, deep=False)
+
+    # If still absolute (e.g. C:/...), bail out.
+    if os.path.isabs(name):
+        raise BuildError(f"Refusing to extract absolute path '{name}' from tar file.")
+
+    # Ensure we stay in the destination
+    full_name = os.path.realpath(os.path.join(path, name))
+    if os.path.commonpath([full_name, path]) != path:
+        raise BuildError(f"Refusing to extract '{name}' from tar file. File is outside of destination directory.")
+
+    return member
+
+def tarfileOpen(*args, **kwargs):
+    import tarfile
+    ret = tarfile.open(*args, **kwargs)
+    # Set a sensible extraction filter, used by Python 3.12 and later...
+    ret.extraction_filter = _tarExtractFilter
+    return ret

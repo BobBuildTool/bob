@@ -6,7 +6,7 @@
 from ..errors import BuildError
 from ..stringparser import IfExpression
 from ..tty import stepAction, INFO, TRACE
-from ..utils import asHexStr, hashDirectory, emptyDirectory
+from ..utils import asHexStr, hashDirectory, emptyDirectory, tarfileOpen
 from .scm import Scm, ScmAudit
 import base64
 import io
@@ -14,7 +14,6 @@ import os, os.path
 import schema
 import shutil
 import stat
-import tarfile
 
 def copyTree(src, dst, invoker):
     """Recursively copy directory tree.
@@ -84,7 +83,7 @@ def packTree(src):
 
     try:
         f = io.BytesIO()
-        with tarfile.open(fileobj=f, mode="w:xz") as tar:
+        with tarfileOpen(fileobj=f, mode="w:xz") as tar:
             # Special handling for MSYS. Symlinks fail if the target does not
             # exist and Python will fall back to create a copy on extraction.
             # To prevent this first everything *except* symlinks is archived
@@ -107,7 +106,7 @@ def packTree(src):
 def unpackTree(data, dest):
     try:
         f = io.BytesIO(base64.b85decode(data))
-        with tarfile.open(fileobj=f, mode="r:xz") as tar:
+        with tarfileOpen(fileobj=f, mode="r:xz") as tar:
             tar.extractall(dest)
     except OSError as e:
         raise BuildError("Error unpacking files: {}".format(str(e)))
