@@ -108,14 +108,14 @@ class TestHashDir(TestCase):
                 sum1 = hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
-                    self.assertEqual(f.read(4), b'BOB1')
+                    self.assertEqual(f.read(4), b'BOB2')
 
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'qwer')
                 sum2 = hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
-                    self.assertEqual(f.read(4), b'BOB1')
+                    self.assertEqual(f.read(4), b'BOB2')
 
                 self.assertNotEqual(sum1, sum2)
 
@@ -151,7 +151,7 @@ class TestHashDir(TestCase):
                     hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
-                    self.assertEqual(f.read(4), b'BOB1')
+                    self.assertEqual(f.read(4), b'BOB2')
 
     def testOldFile(self):
         """Test negative time fields for files from the past"""
