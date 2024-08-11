@@ -24,7 +24,7 @@ from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
 from .utils import asHexStr, removePath, isWindows, sslNoVerifyContext, \
-    getBashPath
+    getBashPath, tarfileOpen
 from shlex import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import argparse
@@ -38,6 +38,7 @@ import http.client
 import io
 import os
 import os.path
+import shutil
 import signal
 import ssl
 import subprocess
@@ -145,8 +146,9 @@ class TarHelper:
                     raise BuildError("File name encoding error while extracting '{}'".format(f.name),
                                      help="Your locale(7) probably does not (fully) support unicode.")
             elif f.name == "meta/audit.json.gz":
-                f.name = audit
-                tar.extract(f)
+                with tar.extractfile(f) as audit_src:
+                    with open(audit, 'wb') as audit_dst:
+                        shutil.copyfileobj(audit_src, audit_dst)
             elif f.name == "content" or f.name == "meta":
                 pass
             else:
@@ -154,7 +156,7 @@ class TarHelper:
             f = tar.next()
 
     def _extract(self, fileobj, audit, content):
-        with tarfile.open(None, "r|*", fileobj=fileobj, errorlevel=1) as tar:
+        with tarfileOpen(None, "r|*", fileobj=fileobj, errorlevel=1) as tar:
             removePath(audit)
             removePath(content)
             os.makedirs(content)
@@ -163,8 +165,8 @@ class TarHelper:
     def _pack(self, name, fileobj, audit, content):
         pax = { 'bob-archive-vsn' : "1" }
         with gzip.open(name or fileobj, 'wb', 6) as gzf:
-            with tarfile.open(name, "w", fileobj=gzf,
-                              format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
+            with tarfileOpen(name, "w", fileobj=gzf,
+                             format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
                 tar.add(audit, "meta/" + os.path.basename(audit))
                 tar.add(content, arcname="content")
 

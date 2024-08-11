@@ -17,6 +17,10 @@ import struct
 import sys
 import sysconfig
 
+# The stat.st_ino field is 128 bit since Python 3.12 on Windows...
+def maskIno(ino):
+    return (ino ^ (ino >> 64)) & 0xFFFFFFFFFFFFFFFF
+
 def hashString(string):
     h = hashlib.md5()
     h.update(string.encode("utf8"))
@@ -341,8 +345,8 @@ class DirHasher:
     ])
 
     class FileIndex:
-        SIGNATURE        = b'BOB1'
-        CACHE_ENTRY_FMT  = '=qqLQLQ20sH'
+        SIGNATURE        = b'BOB2'
+        CACHE_ENTRY_FMT  = '=qqQQLQ20sH'
         CACHE_ENTRY_SIZE = struct.calcsize(CACHE_ENTRY_FMT)
 
         class Stat:
@@ -422,7 +426,7 @@ class DirHasher:
                 else:
                     self.__outFile.write(DirHasher.FileIndex.SIGNATURE)
             self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, st.st_ctime_ns,
-                st.st_mtime_ns, st.st_dev, st.st_ino, st.st_mode, st.st_size,
+                st.st_mtime_ns, st.st_dev, maskIno(st.st_ino), st.st_mode, st.st_size,
                 digest, len(name)))
             self.__outFile.write(name)
 
@@ -432,7 +436,7 @@ class DirHasher:
             e = self.__current
             res = ((e.name == name) and (e.ctime == st.st_ctime_ns) and
                 (e.mtime == st.st_mtime_ns) and (e.dev == st.st_dev) and
-                (e.ino == st.st_ino) and (e.mode == st.st_mode) and
+                (e.ino == maskIno(st.st_ino)) and (e.mode == st.st_mode) and
                 (e.size == st.st_size))
             #if not res: print("Mismatch", e.name, name, e, st)
             return res
@@ -578,8 +582,8 @@ def hashPath(path, index=None, ignoreDirs=None):
 
 def binStat(path):
     st = os.stat(path)
-    return struct.pack('=qqLQLQ', st.st_ctime_ns, st.st_mtime_ns,
-                       st.st_dev, st.st_ino, st.st_mode, st.st_size)
+    return struct.pack('=qqQQLQ', st.st_ctime_ns, st.st_mtime_ns,
+                       st.st_dev, maskIno(st.st_ino), st.st_mode, st.st_size)
 
 
 # There are two "magic" modules with similar functionality. Find out which one we got and adapt.
@@ -809,3 +813,32 @@ def sslNoVerifyContext():
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     return context
+
+# Python 3.12 tarfile compliance
+
+def _tarExtractFilter(member, path):
+    path = os.path.realpath(path)
+    name = member.name
+
+    # Strip absolute path names (GNU tar default)
+    if name.startswith(('/', os.sep)):
+        name = name.lstrip('/' + os.sep)
+        member = member.replace(name=name, deep=False)
+
+    # If still absolute (e.g. C:/...), bail out.
+    if os.path.isabs(name):
+        raise BuildError(f"Refusing to extract absolute path '{name}' from tar file.")
+
+    # Ensure we stay in the destination
+    full_name = os.path.realpath(os.path.join(path, name))
+    if os.path.commonpath([full_name, path]) != path:
+        raise BuildError(f"Refusing to extract '{name}' from tar file. File is outside of destination directory.")
+
+    return member
+
+def tarfileOpen(*args, **kwargs):
+    import tarfile
+    ret = tarfile.open(*args, **kwargs)
+    # Set a sensible extraction filter, used by Python 3.12 and later...
+    ret.extraction_filter = _tarExtractFilter
+    return ret
