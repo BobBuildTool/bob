@@ -605,6 +605,10 @@ They are included when entering the shell environment of a step (i.e. calling
 ``build.sh shell``). As such they are intended mainly for classes so that the
 definitions of a class are automatically available in the shell environment.
 
+A ``checkoutSetup`` script is always considered deterministic. That is, the
+:ref:`configuration-recipes-checkoutdeterministic` setting only applies to
+the ``checkoutScript``.
+
 Other than the above differences setup scripts are identical to
 :ref:`configuration-recipes-scripts`.
 
@@ -847,6 +851,11 @@ If the checkout is deemed deterministic it enables Bob to apply various
 optimizations. Deterministic checkouts do not need to be executed every time
 and binary artifacts can be searched without executing the checkout script at
 all.
+
+.. note::
+    The ``checkoutDeterministic`` setting does not apply to the optional
+    ``checkoutSetup`` script. Setup scripts are always considered
+    deterministic.
 
 .. _configuration-recipes-scm:
 
