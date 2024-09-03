@@ -88,6 +88,7 @@ class StringParser:
         return "".join(tok)
 
     def getRestOfName(self):
+        """Get remainder of bare variable name"""
         ret = ''
         i = self.index
         while i < self.end:
@@ -100,6 +101,7 @@ class StringParser:
         return ret
 
     def getSingleQuoted(self):
+        """Get remainder of single quoted string."""
         i = self.index
         while i < self.end:
             if self.text[i] == "'":
@@ -112,6 +114,15 @@ class StringParser:
         return ret
 
     def getString(self, delim=[None], keep=False):
+        """Interpret as string from current parsing position.
+
+        Do any necessary substitutions until either the string ends or hits one
+        of the additional delimiters.
+
+        :param delim: Additional delimiter characters where parsing should stop
+        :param keep: Keep the additional delimiter if hit. By default the
+                     delimier is swallowed.
+        """
         s = []
         tok = self.nextToken(delim)
         while tok not in delim:
@@ -141,6 +152,7 @@ class StringParser:
         return "".join(s)
 
     def getVariable(self):
+        """Substitute variable at current position."""
         # get variable name
         varName = self.getString([':', '-', '+', '}'], True)
 
@@ -175,6 +187,10 @@ class StringParser:
             raise ParseError("Unterminated variable: " + str(op))
 
     def getBareVariable(self, varName):
+        """Substitute base variable at current position.
+
+        :param varName: Initial character of variable name
+        """
         varName += self.getRestOfName()
         varValue = self.env.get(varName)
         if varValue is None:
@@ -185,6 +201,7 @@ class StringParser:
             return varValue
 
     def getCommand(self):
+        """Substitute string function at current position."""
         words = []
         delim = [",", ")"]
         while True:
