@@ -119,6 +119,26 @@ class TestStringParser(TestCase):
         self.assertRaises(ParseError, u.parse, "$1")
         self.assertRaises(ParseError, u.parse, "$%%")
 
+    def testSkipUnused(self):
+        """Unused branches must not be substituted.
+
+        Syntax error must still be detected, though.
+        """
+
+        self.assertEqual(self.p.parse("${asdf:-$unset}"), "qwer")
+        self.assertEqual(self.p.parse("${asdf:-${unset}}"), "qwer")
+        self.assertEqual(self.p.parse("${asdf:-${${double-unset}}}"), "qwer")
+        self.assertEqual(self.p.parse("${asdf:-$(unknown)}"), "qwer")
+        self.assertEqual(self.p.parse("${asdf:-$($fn,$unset)}"), "qwer")
+        self.assertRaises(ParseError, self.p.parse, "${asdf:-$($fn}")
+
+        self.assertEqual(self.p.parse("${unset:+$unset}"), "")
+        self.assertEqual(self.p.parse("${unset:+${unset}}"), "")
+        self.assertEqual(self.p.parse("${unset:+${${double-unset}}}"), "")
+        self.assertEqual(self.p.parse("${unset:+$(unknown)}"), "")
+        self.assertEqual(self.p.parse("${unset:+$($fn,$unset)}"), "")
+        self.assertRaises(ParseError, self.p.parse, "${unset:+${${double-unset}}")
+
 class TestStringFunctions(TestCase):
 
     def testEqual(self):
