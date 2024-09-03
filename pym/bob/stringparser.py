@@ -33,6 +33,8 @@ def isTrue(val):
 class StringParser:
     """Utility class for complex string parsing/manipulation"""
 
+    __slots__ = ('env', 'funs', 'funArgs', 'nounset', 'text', 'index', 'end')
+
     def __init__(self, env, funs, funArgs, nounset):
         self.env = env
         self.funs = funs
