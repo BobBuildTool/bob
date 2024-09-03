@@ -113,7 +113,7 @@ class StringParser:
         self.index = i+1
         return ret
 
-    def getString(self, delim=[None], keep=False):
+    def getString(self, delim=[None], keep=False, subst=True):
         """Interpret as string from current parsing position.
 
         Do any necessary substitutions until either the string ends or hits one
@@ -122,22 +122,24 @@ class StringParser:
         :param delim: Additional delimiter characters where parsing should stop
         :param keep: Keep the additional delimiter if hit. By default the
                      delimier is swallowed.
+        :param subst: Do variable or command substitution. If false, skip over
+                      such substitutions.
         """
         s = []
         tok = self.nextToken(delim)
         while tok not in delim:
             if tok == '"':
-                s.append(self.getString(['"']))
+                s.append(self.getString(['"'], False, subst))
             elif tok == '\'':
                 s.append(self.getSingleQuoted())
             elif tok == '$':
                 tok = self.nextChar()
                 if tok == '{':
-                    s.append(self.getVariable())
+                    s.append(self.getVariable(subst))
                 elif tok == '(':
-                    s.append(self.getCommand())
+                    s.append(self.getCommand(subst))
                 elif tok in NAME_START:
-                    s.append(self.getBareVariable(tok))
+                    s.append(self.getBareVariable(tok, subst))
                 else:
                     raise ParseError("Invalid $-subsitituion")
             elif tok == None:
@@ -151,10 +153,13 @@ class StringParser:
             if keep: self.index -= 1
         return "".join(s)
 
-    def getVariable(self):
-        """Substitute variable at current position."""
+    def getVariable(self, subst):
+        """Substitute variable at current position.
+
+        :param subst: Bail out if substitution fails?
+        """
         # get variable name
-        varName = self.getString([':', '-', '+', '}'], True)
+        varName = self.getString([':', '-', '+', '}'], True, subst)
 
         # process?
         op = self.nextChar()
@@ -165,20 +170,20 @@ class StringParser:
             op = self.nextChar()
 
         if op == '-':
-            default = self.getString(['}'])
+            default = self.getString(['}'], False, subst and unset)
             if unset:
                 return default
             else:
                 return self.env[varName]
         elif op == '+':
-            alternate = self.getString(['}'])
+            alternate = self.getString(['}'], False, subst and not unset)
             if unset:
                 return ""
             else:
                 return alternate
         elif op == '}':
             if varName not in self.env:
-                if self.nounset:
+                if subst and self.nounset:
                     raise ParseError("Unset variable: " + varName)
                 else:
                     return ""
@@ -186,29 +191,36 @@ class StringParser:
         else:
             raise ParseError("Unterminated variable: " + str(op))
 
-    def getBareVariable(self, varName):
+    def getBareVariable(self, varName, subst):
         """Substitute base variable at current position.
 
         :param varName: Initial character of variable name
+        :param subst: Bail out if substitution fails?
         """
         varName += self.getRestOfName()
         varValue = self.env.get(varName)
         if varValue is None:
-            if self.nounset:
+            if subst and self.nounset:
                 raise ParseError("Unset variable: " + varName)
             return ""
         else:
             return varValue
 
-    def getCommand(self):
-        """Substitute string function at current position."""
+    def getCommand(self, subst):
+        """Substitute string function at current position.
+
+        :param subst: Actually call function or just skip?
+        """
         words = []
         delim = [",", ")"]
         while True:
-            word = self.getString(delim, True)
+            word = self.getString(delim, True, subst)
             words.append(word)
             end = self.nextChar()
             if end == ")": break
+
+        if not subst:
+            return ""
 
         if len(words) < 1:
             raise ParseError("Expected function name")
