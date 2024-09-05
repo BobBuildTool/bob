@@ -598,7 +598,7 @@ class GitScm(Scm):
 
             curCommit = await invoker.checkOutputCommand(["git", "rev-parse",
                 "HEAD"], cwd=self.__dir)
-            if curCommit != oldCommit:
+            if curCommit != oldCommit and curCommit != self.__commit:
                 invoker.fail("Cannot switch: user moved to different commit: {} vs. {}".format(curCommit, oldCommit))
 
         # Try to checkout new state in old workspace. If something fails the
