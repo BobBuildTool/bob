@@ -185,3 +185,29 @@ run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c1" -DSCM_BRANCH=foobar root2 -
 ls -la dev/src/root2/1/workspace
 expect_output "hello world" cat dev/src/root2/1/workspace/test.txt
 expect_not_exist dev/src/root2/1/attic
+
+# detached HEAD handling
+cleanup
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c0" root
+
+# move to detached HEAD state
+pushd dev/src/root/1/workspace
+git checkout $d1_c1
+echo canary > canary.txt
+popd
+
+# run update to the same commit. No attic
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c1" root
+expect_not_exist dev/src/root/1/attic
+
+# commit the change and update to different commit -> attic
+pushd dev/src/root/1/workspace
+git config user.email "bob@bob.bob"
+git config user.name test
+git add .
+git commit -m "local commit"
+popd
+
+run_bob dev -DSCM_DIR="$git_dir1" -DSCM_REV="$d1_c2" root
+expect_not_exist dev/src/root/1/workspace/canary
+expect_exist dev/src/root/1/attic
