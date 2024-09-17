@@ -6,7 +6,7 @@
 from ..errors import ParseError, BuildError
 from ..stringparser import isTrue, IfExpression
 from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
-from ..utils import check_output, joinLines, run, removeUserFromUrl
+from ..utils import check_output, joinLines, run, removeUserFromUrl, hashFile
 from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
 from shlex import quote
 from textwrap import dedent, indent
@@ -15,10 +15,12 @@ import asyncio
 import concurrent.futures
 import hashlib
 import locale
+import gzip
 import os, os.path
 import re
 import schema
 import subprocess
+import tarfile
 
 def normPath(p):
     return os.path.normcase(os.path.normpath(p))
@@ -163,7 +165,11 @@ class GitScm(Scm):
             properties.update({GitScm.REMOTE_PREFIX+key : val})
         return properties
 
-    async def invoke(self, invoker, switch=False):
+    @property
+    def bundleName(self):
+        return os.path.join(self.__dir, "-".join(filter(None, (self.__branch, self.__tag, self.__commit))) + ".tgz")
+
+    async def invoke(self, invoker, switch=False, bundleFile=None):
         alternatesFile = invoker.joinPath(self.__dir, ".git/objects/info/alternates")
 
         # make sure the git directory exists
@@ -245,6 +251,27 @@ class GitScm(Scm):
         if os.path.exists(alternatesFile) and self.__dissociate:
             await invoker.checkCommand(["git", "repack", "-a"], cwd=self.__dir)
             os.unlink(alternatesFile)
+
+        if bundleFile:
+            def reset(tarinfo):
+                tarinfo.uid = tarinfo.gid = 0
+                tarinfo.uname = tarinfo.gname = "root"
+                tarinfo.mtime = 0
+                return tarinfo
+            files = []
+            for root, dirs, filenames in os.walk(invoker.joinPath(self.__dir)):
+                if ".git" in root: continue
+                for f in filenames:
+                    if f == ".bundle.log": continue
+                    files.append(os.path.join(root, f))
+            files.sort()
+            os.makedirs(os.path.dirname(bundleFile), exist_ok=True)
+            with open(bundleFile, 'wb') as outfile:
+                with gzip.GzipFile(fileobj=outfile, mode='wb', mtime=0) as zipfile:
+                    with tarfile.open(fileobj=zipfile, mode="w:") as bundle:
+                        for f in files:
+                            bundle.add(f, arcname=os.path.relpath(f, invoker.joinPath(self.__dir)),
+                                       recursive=False, filter=reset)
 
     async def __checkoutTagOnBranch(self, invoker, fetchCmd, switch):
         # Only do something if nothing is checked out yet or a forceful switch

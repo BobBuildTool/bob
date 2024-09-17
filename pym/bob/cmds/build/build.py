@@ -211,6 +211,10 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Move scm to attic if inline switch is not possible (default).")
     group.add_argument('--no-attic', action='store_false', default=None, dest='attic',
         help="Do not move to attic, instead fail the build.")
+    parser.add_argument('--bundle', metavar='BUNDLE', default=None,
+        help="Bundle all matching packages to BUNDLE")
+    parser.add_argument('--bundle-exclude', action='append', default=[],
+        help="Do not add matching packages to bundle.")
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -296,6 +300,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         packages = recipes.generatePackages(nameFormatter, args.sandbox)
         if develop: developPersister.prime(packages)
 
+        if args.bundle and args.build_mode == 'build-only':
+            parser.error("--bundle can't be used with --build-only")
+
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
         setVerbosity(verbosity)
         builder = LocalBuilder(verbosity, args.force,
@@ -319,6 +326,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setShareHandler(getShare(recipes.getShareConfig()))
         builder.setShareMode(args.shared, args.install)
         builder.setAtticEnable(args.attic)
+        builder.setBundle(args.bundle, args.bundle_exclude)
         if args.resume: builder.loadBuildState()
 
         backlog = []
@@ -379,6 +387,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 + str(stats.packagesBuilt)
                     + " package" + ("s" if (stats.packagesBuilt != 1) else "") + " built, "
                 + str(stats.packagesDownloaded) + " downloaded.")
+
+        builder.bundle()
 
         # Copy build result if requested. It's ok to overwrite files that are
         # already at the destination. Warn if built packages overwrite

@@ -16,7 +16,7 @@ from .stringparser import Env
 from .tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit, \
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
-from .utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
+from .utils import asHexStr, hashDirectory, hashFile, removePath, emptyDirectory, \
     isWindows, INVALID_CHAR_TRANS, quoteCmdExe, getPlatformTag, canSymlink
 from .share import NullShare
 from shlex import quote
@@ -26,6 +26,7 @@ import asyncio
 import concurrent.futures
 import datetime
 import hashlib
+import fnmatch
 import io
 import locale
 import os
@@ -34,7 +35,9 @@ import shutil
 import signal
 import stat
 import sys
+import tarfile
 import tempfile
+import yaml
 
 # Output verbosity:
 #    <= -2: package name
@@ -311,6 +314,76 @@ class AtticTracker:
                 return p
         return None
 
+class Bundler:
+    def __init__(self, name, excludes):
+        self.__name = name
+        self.__bundleFile = os.path.join(os.getcwd(), self.__name) + ".tar"
+        self.__excludes = excludes
+        self.__tempDir = tempfile.TemporaryDirectory()
+        self.__tempDirPath = os.path.join(self.__tempDir.name, self.__name)
+        self.__bundled = {}
+
+        if os.path.exists(self.__bundleFile):
+            raise BuildError(f"Bundle {self.__bundleFile} already exists!")
+        os.mkdir(self.__tempDirPath)
+
+    def add(self, path, bundle):
+        self.__bundled[path] = bundle
+
+    def bundle(self, step):
+        for e in self.__excludes:
+            if fnmatch.fnmatch(step.getPackage().getName(), e):
+                return False
+        return True
+
+    def getName(self):
+        return self.__name
+
+    def getTempDir (self):
+        return self.__tempDirPath
+
+    def finalize(self):
+        def _delFilter(f):
+            noDel = ["__*", "recipe", "digest*", "extract", "overridden", "dir",
+                     "stripComponents"]
+            for d in noDel:
+                if fnmatch.fnmatch(f, d):
+                    return False
+            return True
+
+        overrides = {
+            "scmOverrides" : []
+        }
+        with tarfile.open(self.__bundleFile, "w") as bundle_tar:
+            for path, bundles in self.__bundled.items():
+                for (scm, bundleFile) in bundles:
+                    bundlePath = os.path.join(self.__name,
+                                              os.path.relpath(bundleFile, self.__tempDirPath))
+                    properties = scm.getProperties(False)
+                    data = {
+                        "match": {
+                            "url": properties.get("url")
+                        },
+                        "del" : list(filter(_delFilter, [name for name, value in properties.items()
+                                                         if value is not None])),
+                        "set": {
+                            "url": "file://${LOCAL_BUNDLE_BASE}/" + bundlePath,
+                            "scm": "url",
+                        }
+                    }
+                    if properties.get("scm") != "url":
+                        d = hashFile(os.path.join(self.__tempDirPath, bundleFile),
+                                     hashlib.sha256).hex()
+                        data["set"].update({"digestSHA256" : d})
+                    overrides["scmOverrides"].append(data)
+                    bundle_tar.add(os.path.join(self.__tempDirPath, bundleFile),
+                              arcname=bundlePath)
+
+            overridesFile= os.path.join(self.__tempDirPath, self.__name + "_overrides.yaml")
+            with open(overridesFile, "w") as f:
+                yaml.dump(overrides, f, default_flow_style=False)
+            bundle_tar.add(overridesFile, arcname=os.path.join(self.__name, os.path.basename(overridesFile)))
+
 class LocalBuilder:
 
     RUN_TEMPLATE_POSIX = """#!/bin/bash
@@ -407,6 +480,7 @@ cd {ROOT}
         self.__installSharedPackages = False
         self.__executor = None
         self.__attic = True
+        self.__bundler = None
 
     def setExecutor(self, executor):
         self.__executor = executor
@@ -504,6 +578,10 @@ cd {ROOT}
 
     def setAtticEnable(self, enable):
         self.__attic = enable
+
+    def setBundle(self, dest, excludes):
+        if dest is not None:
+            self.__bundler = Bundler(dest, excludes)
 
     def setShareHandler(self, handler):
         self.__share = handler
@@ -617,6 +695,10 @@ cd {ROOT}
         if ret is None:
             self.__workspaceLocks[path] = ret = asyncio.Lock()
         return ret
+
+    def bundle(self):
+        if self.__bundler:
+            self.__bundler.finalize()
 
     async def _generateAudit(self, step, depth, resultHash, buildId, executed=True):
         auditPath = os.path.join(os.path.dirname(step.getWorkspacePath()), "audit.json.gz")
@@ -789,6 +871,35 @@ cd {ROOT}
                                 .format(absRunFile, ret),
                              help="You may resume at this point with '--resume' after fixing the error.",
                              returncode=ret)
+
+    async def __doBundle(self, checkoutStep, logger):
+        dest = os.path.join(self.__bundler.getTempDir(), checkoutStep.getPackage().getRecipe().getName())
+        os.makedirs(dest, exist_ok=True)
+        logFile = os.path.join(dest, ".bundle.log")
+        spec = StepSpec.fromStep(checkoutStep, None, self.__envWhiteList, logFile, False)
+
+        bundled = []
+        for scm in checkoutStep.getScmList():
+            invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
+                self.__verbose >= INFO, self.__verbose >= NORMAL,
+                self.__verbose >= DEBUG, self.__bufferedStdIO,
+                executor=self.__executor, tmpdir=scm.getProperties(checkoutStep.JENKINS)['scm']=="git")
+
+            bundleFile = os.path.join(dest, scm.bundleName)
+            ret = await invoker.executeScmBundle(scm, bundleFile)
+            bundled.append((scm, os.path.join(checkoutStep.getPackage().getName(), bundleFile)))
+
+        if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
+        if ret == -int(signal.SIGINT):
+            raise BuildError("User aborted while running bundling {}".format(self.__bundler.getName()));
+        elif ret != 0:
+            if self.__bufferedStdIO:
+                logger.setError(invoker.getStdio().strip())
+            raise BuildError("Bundling {} returned with {}"
+                                .format(checkoutStep.getPackage().getName(), ret),
+                             returncode=ret)
+
+        self.__bundler.add(checkoutStep.getPackage().getName(), bundled)
 
     def getStatistic(self):
         return self.__statistic
@@ -1283,6 +1394,11 @@ cd {ROOT}
         if buildId != checkoutHash:
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
+
+        if self.__bundler and self.__bundler.bundle(checkoutStep):
+            with stepExec(checkoutStep, "BUNDLE",
+                "{} {}".format(checkoutStep.getPackage().getName(), overridesString)) as a:
+               await self.__doBundle (checkoutStep, a);
 
     async def _cookBuildStep(self, buildStep, depth, buildBuildId):
         # Add the execution path of the build step to the buildDigest to

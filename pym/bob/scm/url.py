@@ -285,6 +285,10 @@ class UrlScm(Scm):
         })
         return ret
 
+    @property
+    def bundleName(self):
+        return os.path.join(self.__dir, os.path.basename(urllib.parse.urlparse(self.__url).path))
+
     def __applyMirrors(self, mirrors):
         if not self.isDeterministic():
             return []
@@ -535,7 +539,7 @@ class UrlScm(Scm):
         # does not match.
         return True
 
-    async def invoke(self, invoker):
+    async def invoke(self, invoker, bundleFile=None):
         os.makedirs(invoker.joinPath(self.__dir), exist_ok=True)
         workspaceFile = os.path.join(self.__dir, self.__fn)
         destination = invoker.joinPath(self.__dir, self.__fn)
@@ -578,6 +582,10 @@ class UrlScm(Scm):
             d = hashFile(destination, hashlib.sha512).hex()
             if d != self.__digestSha512:
                 invoker.fail("SHA512 digest did not match! expected:", self.__digestSha512, "got:", d)
+
+        if bundleFile is not None:
+            os.makedirs(os.path.dirname(bundleFile), exist_ok=True)
+            shutil.copyfile(destination, bundleFile)
 
         # Upload to mirrors that requested it. This is only done for stable
         # files, though.

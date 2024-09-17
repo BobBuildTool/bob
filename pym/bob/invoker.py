@@ -81,9 +81,13 @@ class InvocationMode(Enum):
 
 class Invoker:
     def __init__(self, spec, preserveEnv, noLogFiles, showStdOut, showStdErr,
-                 trace, redirect, executor=None):
+                 trace, redirect, executor=None, tmpdir=False):
         self.__spec = spec
-        self.__cwd = spec.workspaceWorkspacePath
+        if not tmpdir:
+            self.__cwd = spec.workspaceWorkspacePath
+        else:
+            self.__tempDir = tempfile.TemporaryDirectory()
+            self.__cwd = self.__tempDir.name
         self.__preserveEnv = preserveEnv
         if preserveEnv:
             self.__env = os.environ.copy()
@@ -494,6 +498,33 @@ class Invoker:
             self.__openLog("SCM inline switch")
             try:
                 await scm.switch(self, getScm(oldSpec))
+            except CmdFailedError as e:
+                self.error(scm.getSource(), "failed")
+                self.error(e.what)
+                raise
+            except Exception:
+                self.error(scm.getSource(), "failed")
+                raise
+
+            # everything went well
+            ret = 0
+
+        except OSError as e:
+            self.error("Something went wrong:", str(e))
+            ret = 1
+        except InvocationError as e:
+            ret = e.returncode
+        finally:
+            self.__closeLog(ret)
+
+        return ret
+
+    async def executeScmBundle(self, scm, bundleFile):
+        ret = 1
+        try:
+            self.__openLog("SCM Bundle")
+            try:
+                await scm.invoke(self, bundleFile=bundleFile)
             except CmdFailedError as e:
                 self.error(scm.getSource(), "failed")
                 self.error(e.what)

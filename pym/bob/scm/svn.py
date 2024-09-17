@@ -49,7 +49,10 @@ class SvnScm(Scm):
             ret["revision"] = self.__revision
         return ret
 
-    async def invoke(self, invoker):
+    async def invoke(self, invoker, bundleFile=None):
+        if bundleFile is not None:
+            invoker.fail("Bundling of an svn scm is not implemented!")
+
         options = [ "--non-interactive" ]
         if not self.__sslVerify:
             options += [ "--trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other" ]

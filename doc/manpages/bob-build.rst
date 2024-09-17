@@ -24,6 +24,7 @@ Synopsis
               [--shared | --no-shared] [--install | --no-install]
               [--sandbox | --no-sandbox] [--clean-checkout]
               [--attic | --no-attic]
+              [--bundle BUNDLE] [--bundle-exclude BUNDLE_EXCLUDE]
               PACKAGE [PACKAGE ...]
 
 

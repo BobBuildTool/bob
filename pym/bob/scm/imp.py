@@ -149,7 +149,10 @@ class ImportScm(Scm):
             ret['__projectRoot'] = self.__projectRoot
         return ret
 
-    async def invoke(self, invoker):
+    async def invoke(self, invoker, bundleFile=None):
+        if bundleFile is not None:
+            invoker.fail("Bundling of an import scm is not implemented!")
+
         dest = invoker.joinPath(self.__dir)
         os.makedirs(dest, exist_ok=True)
         if self.__prune: emptyDirectory(dest)
