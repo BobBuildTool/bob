@@ -14,6 +14,7 @@ Contents:
    bob-graph
    bob-init
    bob-jenkins
+   bob-layers
    bob-ls
    bobpaths
    bob-project
