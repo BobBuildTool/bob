@@ -1,0 +1,11 @@
+root: True
+
+depends:
+  - name: bar
+    use: [environment]
+
+buildVars: [BAR_VERSION]
+buildScript: |
+  echo "${BAR_VERSION}" > bar
+packageScript: |
+  cp $1/bar .

@@ -1,0 +1,8 @@
+layersScmOverrides:
+  -
+    match:
+      url: "file://${FOO_DIR}"
+    del: [branch, tag, commit]
+    set:
+      branch: "branch_override"
+
