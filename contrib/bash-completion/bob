@@ -30,7 +30,7 @@ __bob_complete_dir()
 }
 
 __bob_commands="build dev clean graph help init jenkins ls project status \
-                query-scm query-recipe query-path query-meta show"
+                query-scm query-recipe query-path query-meta show layers"
 
 # Complete a Bob path
 #
@@ -79,10 +79,13 @@ __bob_complete_path()
    # Auto complete config files. They can be in directories and their '.yaml'
    # suffix is implicitly added by Bob. The file name might directly start
    # after '-c' making it a bit more complicated.
-   if [[ $prev = "-c" || $cur = -c?* ]] ; then
+   if [[ $prev = "-c" || $cur = -c?*  || $prev = "-lc" || $cur = -lc* ]] ; then
 	  if [[ $cur = -c?* ]] ; then
 	     prefix="-c"
 		 cur="${cur:2}"
+	  elif [[ $cur = -lc?* ]] ; then
+	     prefix="-lc"
+		 cur="${cur:3}"
 	  else
 		 prefix=
 	  fi
@@ -384,6 +387,21 @@ __bob_query_recipe()
 __bob_status()
 {
   __bob_complete_path "--attic --develop --recursive --no-sandbox --release --sandbox --show-clean --show-overrides --verbose -D -c -r -v"
+}
+
+__bob_layers_status()
+{
+   __bob_complete_path "-c -D -v -lc --attic --no-attic"
+}
+
+__bob_layers_update()
+{
+   __bob_complete_path "-c -D -v -lc --attic --no-attic"
+}
+
+__bob_layers()
+{
+  __bob_subcommands "status update" "layers"
 }
 
 __bob_show()
