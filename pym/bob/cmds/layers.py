@@ -37,7 +37,7 @@ def doLayers(argv, bobRoot):
             updateLayers(recipes, loop, defines, args.verbose,
                          args.attic, args.layerConfig)
 
-        recipes.parse(defines)
+        recipes.parse(defines, noLayers=True)
 
         layers = Layers(recipes, loop, defines, args.attic)
         layers.setLayerConfig(args.layerConfig)
