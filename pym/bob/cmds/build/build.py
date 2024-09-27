@@ -9,6 +9,7 @@ from ...errors import BuildError
 from ...input import RecipeSet
 from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
     RecipeSetIR
+from ...layers import updateLayers
 from ...share import getShare
 from ...tty import setVerbosity, setTui, Warn
 from ...utils import copyTree, processDefines, EventLoopWrapper
@@ -171,6 +172,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
+    parser.add_argument('-lc', dest="layerConfig", default=[], action='append',
+        help="Additional layer config")
     parser.add_argument('-e', dest="white_list", default=[], action='append', metavar="NAME",
         help="Preserve environment variable")
     parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
@@ -224,6 +227,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         recipes.defineHook('developNameFormatter', LocalBuilder.developNameFormatter)
         recipes.defineHook('developNamePersister', None)
         recipes.setConfigFiles(args.configFile)
+        if args.build_mode != 'build-only':
+            setVerbosity(args.verbose)
+            updateLayers(recipes, loop, defines, args.verbose, args.attic, args.layerConfig)
         recipes.parse(defines)
 
         # if arguments are not passed on cmdline use them from default.yaml or set to default yalue

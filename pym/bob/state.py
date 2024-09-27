@@ -314,6 +314,7 @@ class _BobState():
         self.__dirty = False
         self.__dirStates = {}
         self.__buildState = {}
+        self.__layerStates = {}
         self.__lock = None
         self.__buildIdCache = None
         self.__variantIds = {}
@@ -363,6 +364,7 @@ class _BobState():
                 self.__inputs = state["inputs"]
                 self.__jenkins = state.get("jenkins", {})
                 self.__dirStates = state.get("dirStates", {})
+                self.__layerStates = state.get("layerStates", {})
                 self.__buildState = state.get("buildState", {})
                 self.__variantIds = state.get("variantIds", {})
                 self.__atticDirs = state.get("atticDirs", {})
@@ -406,6 +408,7 @@ class _BobState():
                 "inputs" : self.__inputs,
                 "jenkins" : self.__jenkins,
                 "dirStates" : self.__dirStates,
+                "layerStates" : self.__layerStates,
                 "buildState" : self.__buildState,
                 "variantIds" : self.__variantIds,
                 "atticDirs" : self.__atticDirs,
@@ -539,6 +542,25 @@ class _BobState():
     def delInputHashes(self, path):
         if path in self.__inputs:
             del self.__inputs[path]
+            self.__save()
+
+    def getLayers(self):
+        return list(self.__layerStates.keys())
+
+    def hasLayerState(self, path):
+        return path in self.__layerStates
+
+    def getLayerState(self, path):
+        ret = copy.deepcopy(self.__layerStates.get(path, None))
+        return ret
+
+    def setLayerState(self, path, digest):
+        self.__layerStates[path] = digest
+        self.__save()
+
+    def delLayerState(self, path):
+        if path in self.__layerStates:
+            del self.__layerStates[path]
             self.__save()
 
     def getDirectories(self):
