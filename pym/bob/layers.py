@@ -4,7 +4,7 @@ import schema
 import shutil
 from .errors import BuildError
 from .invoker import CmdFailedError, InvocationError, Invoker
-from .scm import ScmOverride
+from .scm import getScm, ScmOverride
 from .state import BobState
 from .stringparser import Env
 from .input import RecipeSet, Scm, YamlCache
@@ -81,10 +81,7 @@ class Layer:
         if not created and oldState is not None and \
             newState["digest"] != oldState["digest"]:
 
-            canSwitch = self.__scm.canSwitch(Scm(oldState["prop"],
-                                 Env(self.__defines),
-                                 overrides=self.__overrides,
-                                 recipeSet=self.__recipes))
+            canSwitch = self.__scm.canSwitch(getScm(oldState["prop"]))
             if canSwitch:
                 log("SWITCH: Layer '{}' .. ok".format(self.getName()), EXECUTED, INFO)
                 ret = await invoker.executeScmSwitch(self.__scm, oldState["prop"])
