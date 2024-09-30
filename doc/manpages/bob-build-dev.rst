@@ -35,6 +35,16 @@ Options
 
     This is the default unless the user changed it in ``default.yaml``.
 
+``--bundle BUNDLE``
+    Bundle all the sources needed to build the package. The bunlde is a tar-file
+    containing the sources and a overrides file. To use the bundle call bob
+    dev/build with ``-c`` pointing to the scmOverrides-file. In addition to this
+    the ``LOCAL_BUNDLE_BASE`` environment variable needs to be set to point to
+    the base-directoy where the bundle has been extracted.
+
+``--bundle-exclude RE``
+    Do not add packages matching  RE to the bundle.
+
 ``--clean``
     Do clean builds by clearing the build directory before executing the build
     commands. It will *not* clean all build results (e.g. like ``make clean``)

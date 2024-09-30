@@ -201,6 +201,7 @@ class RecipeCommon:
         recipeSet.loadBinary = MagicMock()
         recipeSet.scriptLanguage = self.SCRIPT_LANGUAGE
         recipeSet.getPolicy = lambda x: None
+        recipeSet.getFromBundle = lambda x: None
 
         cc = { n : Recipe(recipeSet, self.applyRecipeDefaults(r), "", n+".yaml",
                           cwd, n, n, {}, False)

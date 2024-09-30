@@ -88,6 +88,7 @@ class StepIR(AbstractIR):
             self.__data['hasNetAccess'] = step.hasNetAccess()
             if self.__data['isCheckoutStep']:
                 self.__data['hasLiveBuildId'] = step.hasLiveBuildId()
+                self.__data['bundle'] = step.getBundle()
                 self.__data['scmList'] = [
                     (s.getProperties(self.JENKINS), [ o.__getstate__() for o in s.getActiveOverrides()])
                     for s in step.getScmList()
@@ -263,6 +264,9 @@ class StepIR(AbstractIR):
 
     def isDeterministic(self):
         return self.__data['isDeterministic']
+
+    def getBundle(self):
+        return self.__data['bundle']
 
     def isUpdateDeterministic(self):
         return self.__data['isUpdateDeterministic']

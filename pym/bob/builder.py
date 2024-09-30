@@ -6,6 +6,7 @@
 from . import BOB_VERSION
 from .archive import DummyArchive
 from .audit import Audit
+from .bundle import Bundler
 from .errors import BobError, BuildError, MultiBobError
 from .input import RecipeSet
 from .invoker import Invoker, InvocationMode
@@ -407,6 +408,7 @@ cd {ROOT}
         self.__installSharedPackages = False
         self.__executor = None
         self.__attic = True
+        self.__bundler = None
 
     def setExecutor(self, executor):
         self.__executor = executor
@@ -504,6 +506,10 @@ cd {ROOT}
 
     def setAtticEnable(self, enable):
         self.__attic = enable
+
+    def setBundle(self, dest, excludes):
+        if dest is not None:
+            self.__bundler = Bundler(dest, excludes)
 
     def setShareHandler(self, handler):
         self.__share = handler
@@ -617,6 +623,10 @@ cd {ROOT}
         if ret is None:
             self.__workspaceLocks[path] = ret = asyncio.Lock()
         return ret
+
+    def bundle(self):
+        if self.__bundler:
+            self.__bundler.finalize()
 
     async def _generateAudit(self, step, depth, resultHash, buildId, executed=True):
         auditPath = os.path.join(os.path.dirname(step.getWorkspacePath()), "audit.json.gz")
@@ -1237,7 +1247,10 @@ cd {ROOT}
                     oldCheckoutHash = datetime.datetime.now()
                     BobState().setResultHash(prettySrcPath, oldCheckoutHash)
 
-                with stepExec(checkoutStep, "CHECKOUT",
+                action = "CHECKOUT"
+                if checkoutStep.getBundle() is not None:
+                    action = "UNBUNDLE"
+                with stepExec(checkoutStep, action,
                               "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
                     await self._runShell(checkoutStep, "checkout", a)
                 self.__statistic.checkouts += 1
@@ -1283,6 +1296,9 @@ cd {ROOT}
         if buildId != checkoutHash:
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
+
+        if self.__bundler:
+            await self.__bundler.bundle(checkoutStep, self.__executor)
 
     async def _cookBuildStep(self, buildStep, depth, buildBuildId):
         # Add the execution path of the build step to the buildDigest to

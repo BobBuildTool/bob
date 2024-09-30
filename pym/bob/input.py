@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
+from .bundle import Unbundler
 from .errors import ParseError, BobError
 from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
 from .pathspec import PackageSet
@@ -1232,12 +1233,12 @@ class Step:
 
 
 class CoreCheckoutStep(CoreStep):
-    __slots__ = ( "scmList", "__checkoutUpdateIf", "__checkoutUpdateDeterministic", "__checkoutAsserts" )
+    __slots__ = ( "scmList", "__checkoutUpdateIf", "__checkoutUpdateDeterministic", "__checkoutAsserts", "__bundle" )
 
     def __init__(self, corePackage, checkout=None, checkoutSCMs=[],
                  fullEnv=Env(), digestEnv=Env(), env=Env(), args=[],
                  checkoutUpdateIf=[], checkoutUpdateDeterministic=True,
-                 toolDep=set(), toolDepWeak=set()):
+                 toolDep=set(), toolDepWeak=set(), bundle=False):
         if checkout:
             recipeSet = corePackage.recipe.getRecipeSet()
             overrides = recipeSet.scmOverrides()
@@ -1277,6 +1278,7 @@ class CoreCheckoutStep(CoreStep):
         self.__checkoutAsserts = [ CheckoutAssert (a, fullEnv) for a in corePackage.recipe.checkoutAsserts ]
         self.__checkoutUpdateIf = checkoutUpdateIf
         self.__checkoutUpdateDeterministic = checkoutUpdateDeterministic
+        self.__bundle = None
         deterministic = corePackage.recipe.checkoutDeterministic
         super().__init__(corePackage, isValid, deterministic, digestEnv, env, args, toolDep, toolDepWeak)
 
@@ -1285,6 +1287,12 @@ class CoreCheckoutStep(CoreStep):
         ret = CheckoutStep(self, package, pathFormatter)
         package._setCheckoutStep(ret)
         return ret
+
+    def setBundle(self, bundle):
+        self.__bundle = bundle
+
+    def getBundle(self):
+        return self.__bundle
 
     def getLabel(self):
         return "src"
@@ -1308,10 +1316,10 @@ class CoreCheckoutStep(CoreStep):
         return [ s.getProperties(True) for s in self.scmList if not s.hasJenkinsPlugin() ]
 
     def getSetupScript(self):
-        return self.corePackage.recipe.checkoutSetupScript
+        return self.corePackage.recipe.checkoutSetupScript if self.__bundle is None else ""
 
     def getMainScript(self):
-        return self.corePackage.recipe.checkoutMainScript
+        return self.corePackage.recipe.checkoutMainScript if self.__bundle is None else ""
 
     def getPostRunCmds(self):
         return [s.getProperties() for s in self.__checkoutAsserts]
@@ -1358,6 +1366,8 @@ class CheckoutStep(Step):
     def hasNetAccess(self):
         return True
 
+    def getBundle(self):
+        return self._coreStep.getBundle()
 
 class CoreBuildStep(CoreStep):
     __slots__ = ["fingerprintMask"]
@@ -1511,6 +1521,9 @@ class CorePackage:
     @property
     def jobServer(self):
         return self.recipe.jobServer()
+
+    def setCoreCheckoutBundle(self, bundleScm):
+        self.checkoutStep.setBundle(bundleScm)
 
 class Package(object):
     """Representation of a package that was created from a recipe.
@@ -2590,6 +2603,16 @@ class Recipe(object):
                 self.__checkoutSCMs, env, checkoutDigestEnv, checkoutEnv,
                 checkoutDeps, checkoutUpdateIf, checkoutUpdateDeterministic,
                 toolDepCheckout, toolDepCheckoutWeak)
+
+            fromBundle = self.__recipeSet.getFromBundle(srcCoreStep.variantId)
+            if fromBundle is not None:
+                print(" -> from Bundle!")
+                bundleScm = [{'scm': 'url',
+                              'url': fromBundle[1],
+                              'recipe': fromBundle[0],
+                              'digestSHA256' : fromBundle[2]
+                              }]
+                p.setCoreCheckoutBundle(bundleScm)
         else:
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
@@ -3061,6 +3084,7 @@ class RecipeSet:
         self.__hooks = {}
         self.__projectGenerators = {}
         self.__configFiles = []
+        self.__bundleFiles = []
         self.__properties = {}
         self.__states = {}
         self.__cache = YamlCache()
@@ -3116,6 +3140,10 @@ class RecipeSet:
             "archive" : BuiltinSetting(archiveValidator, updateArchive, True),
             "archiveAppend" : BuiltinSetting(archiveValidator, appendArchive, True, 100),
             "archivePrepend" : BuiltinSetting(archiveValidator, prependArchive, True, 100),
+            "bundles" : BuiltinSetting(
+                schema.Schema([str]),
+                lambda x: self.__bundleFiles.extend(x)
+            ),
             "command" : BuiltinSetting(
                 schema.Schema({
                     schema.Optional('dev') : self.BUILD_DEV_SCHEMA,
@@ -3206,6 +3234,7 @@ class RecipeSet:
                 priority=100
             ),
         }
+        self.__unbundler = None
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
@@ -3348,6 +3377,14 @@ class RecipeSet:
 
     def setConfigFiles(self, configFiles):
         self.__configFiles = configFiles
+
+    def getFromBundle(self, variantId):
+        if self.__unbundler is not None:
+            return self.__unbundler.getFromBundle(variantId)
+        return None
+
+    def setBundleFiles(self, bundleFiles):
+        self.__bundleFiles = bundleFiles
 
     def getCommandConfig(self):
         return self.__commandConfig
@@ -3497,6 +3534,12 @@ class RecipeSet:
             if not os.path.isfile(c):
                 raise ParseError("Config file {} does not exist!".format(c))
             self.__parseUserConfig(c)
+
+        if len(self.__bundleFiles) > 0:
+            bundledSources = {}
+            for b in self.__bundleFiles:
+                bundledSources[b] = self.loadYaml(b, (Unbundler.BUNDLE_SCHEMA, b''))
+            self.__unbundler = Unbundler(bundledSources)
 
         # calculate start environment
         osEnv = Env(os.environ)
