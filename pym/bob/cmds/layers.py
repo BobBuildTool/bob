@@ -10,8 +10,6 @@ def doLayers(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob layers", description='Handle layers')
     parser.add_argument('action', type=str, choices=['update', 'status'], default="status",
                         help="Action: [update, status]")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File.")
     parser.add_argument('-lc', dest="layerConfig", default=[], action='append',
         help="Additional layer config")
     parser.add_argument('-v', '--verbose', default=NORMAL, action='count',
@@ -32,7 +30,6 @@ def doLayers(argv, bobRoot):
 
     with EventLoopWrapper() as (loop, executor):
         recipes = RecipeSet()
-        recipes.setConfigFiles(args.configFile)
         if args.action == "update":
             updateLayers(recipes, loop, defines, args.verbose,
                          args.attic, args.layerConfig)

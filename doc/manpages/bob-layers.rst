@@ -15,7 +15,7 @@ Synopsis
 
 ::
 
-    bob layers [-h] [-c CONFIGFILE] [-lc LAYERCONFIG] [-v] [-D DEFINES]
+    bob layers [-h] [-lc LAYERCONFIG] [-v] [-D DEFINES]
                [--attic | --no-attic] 
                {update,status}
 
@@ -43,17 +43,6 @@ Options
 ``--no-attic``
     Do not move layer workspace to attic if inline SCM switching is not possible.
     Instead a build error is issued.
-
-``-c CONFIGFILE``
-    Use additional configuration file.
-
-    The ``.yaml`` suffix is appended automatically and the configuration file
-    is searched relative to the project root directory unless an absolute path
-    is given. Bob will parse these user configuration files after
-    *default.yaml*. They are using the same schema.
-
-    This option can be given multiple times. The files will be parsed in the
-    order as they appeared on the command line.
 
 ``-lc LAYERCONFIG``
     Use additional layer configuration file.
