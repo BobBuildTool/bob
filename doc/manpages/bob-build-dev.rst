@@ -94,7 +94,6 @@ Options
     given regular expression (``--download`` option will be overwritten for
     matching modules).
     Can be used multiple times (if regex is used also multiple times the last mode wins).
-    A sub layer is separated with a ``/``.
 
     no=<layer regex>
       build modules of a layer that match a given regular expression from sources

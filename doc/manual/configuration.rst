@@ -92,12 +92,15 @@ recipes may reference each other freely. The only restriction is that a
 particular recipe or class must only be defined by one layer. It is not allowed
 to "overwrite" a recipe in a layer above.
 
-Layers must be configured in ``config.yaml`` to be picked up. This is just a
-simple list of layer names that are then expected in the ``layers`` directory::
+Layers must be configured in ``config.yaml`` to be picked up. This is a list of
+either simple layer names that are then expected in the ``layers`` directory or
+an SCM specification where the layer is fetched from::
 
     layers:
         - myapp
-        - bsp
+        - name: bsp
+          scm: git
+          url: git@github.com:...
 
 The order of layers is important with respect to settings made by
 ``default.yaml`` in the various layers. The project root has the highest
@@ -1927,10 +1930,10 @@ equal.
 layers
 ~~~~~~
 
-Type: List of strings or SCM-Dictionary or List of SCM-Dictionaries
+Type: List of strings or SCM-Dictionaries
 
 The ``layers`` section consists of a list of layer names that are then expected
-in the ``layers`` directory relative to the ``conig.yaml`` referencing them::
+in the ``layers`` directory of the project root directory::
 
     layers:
         - myapp
@@ -1949,9 +1952,10 @@ of lower precedence.
 
 See :ref:`configuration` for more information.
 
-Typically layers have their own VCS. To provide them to the root-recipes common
-VCS-methods like git-submodules can be used. Another possibility is to provide a
-SCM-Dictionary (see :ref:`configuration-recipes-scm`)::
+Typically, layers are stored in their own SCM. To provide them to the root
+recipes, common SCM-methods like git-submodules can be used. Another
+possibility is to provide an SCM-Dictionary (see
+:ref:`configuration-recipes-scm`) and let Bob manage the layer::
 
     layers:
         - name: myapp
@@ -1960,17 +1964,17 @@ SCM-Dictionary (see :ref:`configuration-recipes-scm`)::
           commit: ...
         - bsp
 
-Only `git`,`svn`,`url` and `cvs` scm's are supported for layers. During layers
-checkout the regular ``whitelist`` and ``scmOverrides`` settings are not used.
-Instead the checkout could be controlled by ``layersWhitelist`` and
+If a layer SCM specification is given, Bob takes care of the layer management:
+
+- Layers are checked out / updated during bob-build (except build-only).
+- The ``bob layers`` command can update layers or show their status (see
+  :ref:`manpage-layers`).
+
+Only git, svn, url and cvs SCMs are supported for layers. Because layers are
+fetched and updated before any :ref:`configuration-config-usr` is parsed, the
+regular ``whitelist`` and ``scmOverrides`` settings are not used.  Instead,
+layer checkouts are controlled by ``layersWhitelist`` and
 ``layersScmOverrides``.
-
-If a scmSpec is given Bob takes care of the layer management:
-
-- layers are checked out / updated during bob-build (except build-only)
-- bob layers command to update / show status (see :ref:`manpage-layers`).
-
-.. _configuration-config-plugins:
 
 layersWhitelist
 ~~~~~~~~~~~~~~~
@@ -1982,6 +1986,8 @@ layersScmOverrides
 
 :ref:`configuration-config-scmOverrides` used by layers checkout / update.
 Conditional overrides are not supported.
+
+.. _configuration-config-plugins:
 
 plugins
 ~~~~~~~
