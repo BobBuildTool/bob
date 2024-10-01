@@ -33,13 +33,11 @@ def doLayers(argv, bobRoot):
         if args.action == "update":
             updateLayers(recipes, loop, defines, args.verbose,
                          args.attic, args.layerConfig)
-
-        recipes.parse(defines, noLayers=True)
-
-        layers = Layers(recipes, loop, defines, args.attic)
-        layers.setLayerConfig(args.layerConfig)
-        layers.collect(False, args.verbose)
-        if args.action == "status":
+        elif args.action == "status":
+            recipes.parse(defines, noLayers=True)
+            layers = Layers(recipes, loop, defines, args.attic)
+            layers.setLayerConfig(args.layerConfig)
+            layers.collect(False, args.verbose)
             pp = PackagePrinter(args.verbose, False, False)
             layers.status(pp.show)
 
