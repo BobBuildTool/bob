@@ -3566,12 +3566,6 @@ class RecipeSet:
         config_spec = {**RecipeSet.STATIC_CONFIG_SCHEMA_SPEC, **RecipeSet.STATIC_CONFIG_LAYER_SPEC}
         config = self.loadYaml(configYaml, (schema.Schema(config_spec), b''),
             preValidate=preValidate)
-
-        # merge settings
-        for (name, value) in sorted([s for s in config.items() if s[0] in self.__settings],
-                                    key=lambda i: self.__settings[i[0]].priority):
-            self.__settings[name].merge(value)
-
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
             raise ParseError("Layer '{}' requires a higher Bob version than root project!"
