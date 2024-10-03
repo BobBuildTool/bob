@@ -1739,13 +1739,6 @@ class LayerSpec:
         return self.__scm
 
 class LayerValidator:
-    def __init__(self):
-        self.__scmValidator = ScmValidator({
-            'git' : GitScm.SCHEMA,
-            'svn' : SvnScm.SCHEMA,
-            'cvs' : CvsScm.SCHEMA,
-            'url' : UrlScm.SCHEMA})
-
     def validate(self, data):
         if isinstance(data,str):
             return LayerSpec(data)
@@ -1755,7 +1748,7 @@ class LayerValidator:
         name = _data.get('name')
         del _data['name']
 
-        return LayerSpec (name, self.__scmValidator.validate(_data)[0])
+        return LayerSpec(name, RecipeSet.LAYERS_SCM_SCHEMA.validate(_data)[0])
 
 class VarDefineValidator:
     def __init__(self, keyword):
@@ -2952,6 +2945,14 @@ class RecipeSet:
             schema.Optional('type') : schema.Or("d3", "dot"),
             schema.Optional('max_depth') : int,
         })
+
+    # We do not support the "import" SCM for layers. It just makes no sense.
+    LAYERS_SCM_SCHEMA = ScmValidator({
+        'git' : GitScm.SCHEMA,
+        'svn' : SvnScm.SCHEMA,
+        'cvs' : CvsScm.SCHEMA,
+        'url' : UrlScm.SCHEMA,
+    })
 
     SCM_SCHEMA = ScmValidator({
         'git' : GitScm.SCHEMA,
