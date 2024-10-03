@@ -14,7 +14,7 @@ from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode, setParallelTUIThreshold
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
     updateDicRecursive, hashString, getPlatformTag, getPlatformString, \
-    replacePath
+    replacePath, getPlatformEnvWhiteList
 from itertools import chain
 from os.path import expanduser
 from string import Template
@@ -3465,23 +3465,7 @@ class RecipeSet:
         self.__platform = platform
         self.__layers = []
         self.__policies = RecipeSet.POLICIES.copy()
-        self.__whiteList = set()
-        if platform == 'win32':
-            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
-                "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "COMSPEC",
-                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
-                "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
-                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
-        else:
-            self.__whiteList |= set(["PATH", "TERM", "SHELL", "USER", "HOME"])
-
-        if platform in ('cygwin', 'msys'):
-            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
-                "COMMONPROGRAMFILES", "CommonProgramFiles(x86)", "COMSPEC",
-                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
-                "ProgramData", "PROGRAMFILES", "ProgramFiles(x86)", "SYSTEMDRIVE",
-                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
-
+        self.__whiteList = getPlatformEnvWhiteList(platform)
         self.__pluginPropDeps = b''
         self.__pluginSettingsDeps = b''
         self.__createSchemas()
