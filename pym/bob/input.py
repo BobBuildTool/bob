@@ -3080,7 +3080,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__layers = []
-        self.__policies = RecipeSet.POLICIES.copy()
         self.__buildHooks = {}
         self.__sandboxOpts = {}
         self.__scmDefaults = {}
@@ -3462,7 +3461,6 @@ class RecipeSet:
             raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
         self.__layers = []
-        self.__policies = RecipeSet.POLICIES.copy()
         self.__whiteList = getPlatformEnvWhiteList(platform)
         self.__pluginPropDeps = b''
         self.__pluginSettingsDeps = b''
@@ -3545,6 +3543,15 @@ class RecipeSet:
 
         return ret
 
+    @classmethod
+    def calculatePolicies(cls, config):
+        minVer = config.get("bobMinimumVersion", "0.16")
+        ret = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
+            for (name, (ver, warn)) in cls.POLICIES.items() }
+        for (name, behaviour) in config.get("policies", {}).items():
+            ret[name] = (behaviour, None)
+        return ret
+
     def __parseLayer(self, layerSpec, maxVer, recipesRoot, noLayers=False):
         layer = layerSpec.getName()
 
@@ -3573,10 +3580,7 @@ class RecipeSet:
                     raise ParseError("Layer '{}' requires different behaviour for policy '{}' than root project!"
                                         .format("/".join(layer), name))
         else:
-            self.__policies = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
-                for (name, (ver, warn)) in self.__policies.items() }
-            for (name, behaviour) in config.get("policies", {}).items():
-                self.__policies[name] = (behaviour, None)
+            self.__policies = self.calculatePolicies(config)
 
         if noLayers:
             return
