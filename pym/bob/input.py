@@ -3437,10 +3437,7 @@ class RecipeSet:
         return self.__cache.loadBinary(path)
 
     def loadYaml(self, path, schema, default={}, preValidate=lambda x: None):
-        if os.path.exists(path):
-            return self.__cache.loadYaml(path, schema, default, preValidate)
-        else:
-            return schema[0].validate(default)
+        return self.__cache.loadYaml(path, schema, default, preValidate)
 
     def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="",
               noLayers=False):
@@ -3943,6 +3940,8 @@ class YamlCache:
         except sqlite3.Error as e:
             raise ParseError("Cannot access cache: " + str(e),
                 help="You probably executed Bob concurrently in the same workspace. Try again later.")
+        except FileNotFoundError:
+            return yamlSchema[0].validate(default)
         except OSError as e:
             raise ParseError("Error loading yaml file: " + str(e))
 
