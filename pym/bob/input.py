@@ -3521,18 +3521,8 @@ class RecipeSet:
         self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(filteredRoots), self.__properties)
         self.__addRecipe(self.__rootRecipe)
 
-    def __parseLayer(self, layerSpec, maxVer, recipesRoot, noLayers=False):
-        layer = layerSpec.getName()
-
-        if layer in self.__layers:
-            return
-        self.__layers.append(layer)
-
-        rootDir = os.path.join(recipesRoot, os.path.join("layers", layer) if layer != "" else "")
-        if not os.path.isdir(rootDir or "."):
-            raise ParseError(f"Layer '{layer}' does not exist!",
-                                     help="You probably want to run 'bob layers update' to fetch missing layers.")
-
+    @classmethod
+    def loadConfigYaml(cls, loadYaml, rootDir):
         configYaml = os.path.join(rootDir, "config.yaml")
         def preValidate(data):
             if not isinstance(data, dict):
@@ -3545,17 +3535,34 @@ class RecipeSet:
             if compareVersion(BOB_VERSION, minVer) < 0:
                 raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
 
-        config_spec = {**RecipeSet.STATIC_CONFIG_SCHEMA_SPEC, **RecipeSet.STATIC_CONFIG_LAYER_SPEC}
-        config = self.loadYaml(configYaml, (schema.Schema(config_spec), b''),
+        config_spec = {**cls.STATIC_CONFIG_SCHEMA_SPEC, **cls.STATIC_CONFIG_LAYER_SPEC}
+        ret = loadYaml(configYaml, (schema.Schema(config_spec), b''),
             preValidate=preValidate)
+
+        minVer = ret.get("bobMinimumVersion", "0.16")
+        if compareVersion(minVer, "0.16") < 0:
+            raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
+
+        return ret
+
+    def __parseLayer(self, layerSpec, maxVer, recipesRoot, noLayers=False):
+        layer = layerSpec.getName()
+
+        if layer in self.__layers:
+            return
+        self.__layers.append(layer)
+
+        rootDir = os.path.join(recipesRoot, os.path.join("layers", layer) if layer != "" else "")
+        if not os.path.isdir(rootDir or "."):
+            raise ParseError(f"Layer '{layer}' does not exist!",
+                                     help="You probably want to run 'bob layers update' to fetch missing layers.")
+
+        config = self.loadConfigYaml(self.loadYaml, rootDir)
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
             raise ParseError("Layer '{}' requires a higher Bob version than root project!"
                                 .format("/".join(layer)))
-        if compareVersion(minVer, "0.16") < 0:
-            raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
-
 
         # Determine policies. The root layer determines the default settings
         # implicitly by bobMinimumVersion or explicitly via 'policies'. All
