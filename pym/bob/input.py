@@ -3953,6 +3953,14 @@ class YamlCache:
         self.__files[name] = hashlib.sha1(result).digest()
         return result
 
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
+
 
 class PackagePickler(pickle.Pickler):
     def __init__(self, file, pathsConfig):
