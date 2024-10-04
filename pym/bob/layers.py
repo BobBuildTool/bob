@@ -8,8 +8,59 @@ from .scm import getScm, ScmOverride
 from .state import BobState
 from .stringparser import Env
 from .input import RecipeSet, Scm, YamlCache
-from .utils import INVALID_CHAR_TRANS
+from .utils import INVALID_CHAR_TRANS, getPlatformString, getPlatformEnvWhiteList, compareVersion
 from .tty import DEBUG, EXECUTED, INFO, NORMAL, IMPORTANT, SKIPPED, WARNING, log
+
+class LayersConfig:
+    def __init__(self):
+        self.__platform = getPlatformString()
+        self.__whiteList = getPlatformEnvWhiteList(self.__platform)
+        self.__scmOverrides = []
+        self.__policies = None
+
+    def derive(self, config, rootLayer=False):
+        """Create a new LayersConfig by adding the passed config to this one."""
+        ret = LayersConfig()
+        ret.__whiteList = set(self.__whiteList)
+        ret.__scmOverrides = self.__scmOverrides[:]
+        ret.__policies = self.__policies
+
+        ret.__whiteList.update([c.upper() if self.__platform == "win32" else c
+            for c in config.get("layersWhiteList", []) ])
+        ret.__scmOverrides.extend([ ScmOverride(o) for o in config.get("layersScmOverrides", []) ])
+
+        if rootLayer:
+            ret.__policies = RecipeSet.calculatePolicies(config)
+
+        return ret
+
+    # The following is required by bob.input.Scm
+
+    SCM_SCHEMA = RecipeSet.LAYERS_SCM_SCHEMA
+
+    def envWhiteList(self):
+        return self.__whiteList
+
+    def scmOverrides(self):
+        return self.__scmOverrides
+
+    # The following methods are required for bob.input.RecipeSet compatibility.
+
+    def scmDefaults(self):
+        return {}
+
+    def getPreMirrors(self):
+        return []
+
+    def getFallbackMirrors(self):
+        return []
+
+    def getPolicy(self, name, location=None):
+        (policy, warning) = self.__policies[name]
+        if policy is None:
+            warning.show(location)
+        return policy
+
 
 class LayerStepSpec:
     def __init__(self, path, whitelist):
@@ -28,28 +79,25 @@ class LayerStepSpec:
     def envWhiteList(self):
         return self.__whitelist
 
+
 class Layer:
-    def __init__(self, name, root, recipes, yamlCache, defines, attic, 
-                 whitelist, overrides, scm=None):
-        self.__attic = attic
-        self.__created = False
-        self.__defines = defines
-        self.__layerDir = os.path.join(root, "layers", name) if len(name) else root
+    def __init__(self, name, upperConfig, root, defines, attic, scm=None):
         self.__name = name
-        self.__recipes = recipes
+        self.__upperConfig = upperConfig
         self.__root = root
-        self.__subLayers = []
+        self.__defines = defines
+        self.__attic = attic
         self.__scm = scm
-        self.__yamlCache = yamlCache
-        self.__whitelist = whitelist
-        self.__overrides = overrides
+        self.__created = False
+        self.__layerDir = os.path.join(root, "layers", name) if len(name) else root
+        self.__subLayers = []
 
     async def __checkoutTask(self, verbose):
         if self.__scm is None:
             return
         dir = self.__scm.getProperties(False).get("dir")
 
-        invoker = Invoker(spec=LayerStepSpec(self.__layerDir, self.__whitelist),
+        invoker = Invoker(spec=LayerStepSpec(self.__layerDir, self.__upperConfig.envWhiteList()),
                           preserveEnv= False,
                           noLogFiles = True,
                           showStdOut = verbose > INFO,
@@ -123,41 +171,27 @@ class Layer:
     def getName(self):
         return self.__name
 
-    def getWhiteList(self):
-        return self.__layerWhitelist
+    def parse(self, yamlCache):
+        configSchema = (schema.Schema({**RecipeSet.STATIC_CONFIG_SCHEMA_SPEC,
+                                       **RecipeSet.STATIC_CONFIG_LAYER_SPEC}), b'')
+        config = RecipeSet.loadConfigYaml(yamlCache.loadYaml, self.__layerDir)
+        self.__config = self.__upperConfig.derive(config, self.__name == "")
 
-    def loadYaml(self, path, schema):
-        if os.path.exists(path):
-            return self.__yamlCache.loadYaml(path, schema, {}, preValidate=lambda x: None)
-        return {}
-
-    def parse(self):
         configYaml = os.path.join(self.__layerDir, "config.yaml")
-        config = self.loadYaml(configYaml, (schema.Schema({**RecipeSet.STATIC_CONFIG_SCHEMA_SPEC,
-                                                           **RecipeSet.STATIC_CONFIG_LAYER_SPEC}), b''))
-
-        self.__whitelist.append([c.upper() if self.__platform == "win32" else c
-            for c in config.get("layersWhiteList", []) ])
-
-        self.__overrides.extend([ ScmOverride(o) for o in config.get("layersScmOverrides", []) ])
-
         for l in config.get('layers', []):
             scmSpec = l.getScm()
             if scmSpec is None: continue
             scmSpec.update({'recipe':configYaml})
-            layerScms = Scm(scmSpec,
-                            Env(self.__defines),
-                            overrides=self.__overrides,
-                            recipeSet=self.__recipes)
+            layerScm = Scm(scmSpec,
+                           Env(self.__defines),
+                           overrides=self.__config.scmOverrides(),
+                           recipeSet=self.__config)
             self.__subLayers.append(Layer(l.getName(),
+                                          self.__config,
                                           self.__root,
-                                          self.__recipes,
-                                          self.__yamlCache,
                                           self.__defines,
                                           self.__attic,
-                                          self.__whitelist,
-                                          self.__overrides,
-                                          layerScms))
+                                          layerScm))
 
     def getSubLayers(self):
         return self.__subLayers
@@ -169,15 +203,11 @@ class Layer:
         printer(status, self.__layerDir)
 
 class Layers:
-    def __init__(self, recipes, loop, defines, attic):
+    def __init__(self, loop, defines, attic):
         self.__layers = {}
         self.__loop = loop
-        self.__recipes = recipes
         self.__attic = attic
         self.__defines = defines
-        self.__yamlCache = YamlCache()
-        self.__whitelist = []
-        self.__overrides = []
         self.__layerConfigFiles = []
 
     def __haveLayer(self, layer):
@@ -187,19 +217,19 @@ class Layers:
                     return True
         return False
 
-    def __collect(self, depth, update, verbose):
+    def __collect(self, depth, yamlCache, update, verbose):
         self.__layers[depth+1] = []
         newLevel = False
         for l in self.__layers[depth]:
             if update:
                 l.checkout(self.__loop, verbose)
-            l.parse()
+            l.parse(yamlCache)
             for subLayer in l.getSubLayers():
                 if not self.__haveLayer(subLayer):
                     self.__layers[depth+1].append(subLayer)
                     newLevel = True
         if newLevel:
-            self.__collect(depth + 1, update, verbose)
+            self.__collect(depth + 1, yamlCache, update, verbose)
 
     def cleanupUnused(self):
         old_layers = BobState().getLayers()
@@ -221,26 +251,20 @@ class Layers:
                 BobState().delLayerState(d)
 
     def collect(self, update, verbose=0):
-        self.__yamlCache.open()
-        try:
+        configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
+        config = LayersConfig()
+        with YamlCache() as yamlCache:
             for c in self.__layerConfigFiles:
                 c += ".yaml"
-                if os.path.exists(c):
-                    config = self.__yamlCache.loadYaml(c, (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b''),
-                                                       {}, preValidate=lambda x: None)
-                    self.__whitelist.append([c.upper() if self.__platform == "win32" else c
-                        for c in config.get("layersWhiteList", []) ])
-                    self.__overrides.extend([ ScmOverride(o) for o in config.get("layersScmOverrides", []) ])
-                else:
+                if not os.path.exists(c):
                     raise BuildError(f"Layer config file {c} not found" )
 
-            rootLayers = Layer("", os.getcwd(), self.__recipes, self.__yamlCache,
-                               self.__defines, self.__attic, self.__whitelist, self.__overrides)
-            rootLayers.parse()
+                config = config.derive(yamlCache.loadYaml(c, configSchema))
+
+            rootLayers = Layer("", config, os.getcwd(), self.__defines, self.__attic)
+            rootLayers.parse(yamlCache)
             self.__layers[0] = rootLayers.getSubLayers();
-            self.__collect(0, update, verbose)
-        finally:
-            self.__yamlCache.close()
+            self.__collect(0, yamlCache, update, verbose)
 
     def setLayerConfig(self, configFiles):
         self.__layerConfigFiles = configFiles
@@ -250,9 +274,8 @@ class Layers:
             for layer in self.__layers[level]:
                 layer.status(printer)
 
-def updateLayers(recipes, loop, defines, verbose, attic, layerConfigs):
-    recipes.parse(defines, noLayers=True)
-    layers = Layers(recipes, loop, defines, attic)
+def updateLayers(loop, defines, verbose, attic, layerConfigs):
+    layers = Layers(loop, defines, attic)
     layers.setLayerConfig(layerConfigs)
     layers.collect(True, verbose)
     layers.cleanupUnused()

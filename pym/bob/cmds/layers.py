@@ -29,13 +29,11 @@ def doLayers(argv, bobRoot):
     defines = processDefines(args.defines)
 
     with EventLoopWrapper() as (loop, executor):
-        recipes = RecipeSet()
         if args.action == "update":
-            updateLayers(recipes, loop, defines, args.verbose,
+            updateLayers(loop, defines, args.verbose,
                          args.attic, args.layerConfig)
         elif args.action == "status":
-            recipes.parse(defines, noLayers=True)
-            layers = Layers(recipes, loop, defines, args.attic)
+            layers = Layers(loop, defines, args.attic)
             layers.setLayerConfig(args.layerConfig)
             layers.collect(False, args.verbose)
             pp = PackagePrinter(args.verbose, False, False)
