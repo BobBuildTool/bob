@@ -65,12 +65,11 @@ class Layer:
         if os.path.exists(self.__layerDir) and oldState is None:
             raise BuildError(f"New layer checkout '{self.getName()}' collides with existing layer '{self.__layerDir}'!")
 
-        created = False
         if not os.path.isdir(self.__layerDir):
             os.makedirs(self.__layerDir)
             self.__created = True
 
-        if not created \
+        if not self.__created \
            and self.__scm.isDeterministic() \
            and oldState is not None \
            and oldState["digest"] == newState["digest"]:
@@ -78,7 +77,7 @@ class Layer:
                 "'{}' skipped (up to date)".format(self.getName()), SKIPPED, INFO)
             return
 
-        if not created and oldState is not None and \
+        if not self.__created and oldState is not None and \
             newState["digest"] != oldState["digest"]:
 
             canSwitch = self.__scm.canSwitch(getScm(oldState["prop"]))
