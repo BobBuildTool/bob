@@ -3908,7 +3908,7 @@ class YamlCache:
     def getDigest(self):
         return self.__digest
 
-    def loadYaml(self, name, yamlSchema, default, preValidate):
+    def loadYaml(self, name, yamlSchema, default={}, preValidate=lambda x: None):
         try:
             bs = binStat(name) + yamlSchema[1]
             if self.__hot:
