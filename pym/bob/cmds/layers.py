@@ -33,9 +33,9 @@ def doLayers(argv, bobRoot):
             updateLayers(loop, defines, args.verbose,
                          args.attic, args.layerConfig)
         elif args.action == "status":
-            layers = Layers(loop, defines, args.attic)
+            layers = Layers(defines, args.attic)
             layers.setLayerConfig(args.layerConfig)
-            layers.collect(False, args.verbose)
+            layers.collect(loop, False, args.verbose)
             pp = PackagePrinter(args.verbose, False, False)
             layers.status(pp.show)
 

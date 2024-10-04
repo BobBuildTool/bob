@@ -203,9 +203,8 @@ class Layer:
         printer(status, self.__layerDir)
 
 class Layers:
-    def __init__(self, loop, defines, attic):
+    def __init__(self, defines, attic):
         self.__layers = {}
-        self.__loop = loop
         self.__attic = attic
         self.__defines = defines
         self.__layerConfigFiles = []
@@ -217,19 +216,19 @@ class Layers:
                     return True
         return False
 
-    def __collect(self, depth, yamlCache, update, verbose):
+    def __collect(self, loop, depth, yamlCache, update, verbose):
         self.__layers[depth+1] = []
         newLevel = False
         for l in self.__layers[depth]:
             if update:
-                l.checkout(self.__loop, verbose)
+                l.checkout(loop, verbose)
             l.parse(yamlCache)
             for subLayer in l.getSubLayers():
                 if not self.__haveLayer(subLayer):
                     self.__layers[depth+1].append(subLayer)
                     newLevel = True
         if newLevel:
-            self.__collect(depth + 1, yamlCache, update, verbose)
+            self.__collect(loop, depth + 1, yamlCache, update, verbose)
 
     def cleanupUnused(self):
         old_layers = BobState().getLayers()
@@ -250,7 +249,7 @@ class Layers:
                 os.rename(d, atticPath)
                 BobState().delLayerState(d)
 
-    def collect(self, update, verbose=0):
+    def collect(self, loop, update, verbose=0):
         configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
         config = LayersConfig()
         with YamlCache() as yamlCache:
@@ -264,7 +263,7 @@ class Layers:
             rootLayers = Layer("", config, os.getcwd(), self.__defines, self.__attic)
             rootLayers.parse(yamlCache)
             self.__layers[0] = rootLayers.getSubLayers();
-            self.__collect(0, yamlCache, update, verbose)
+            self.__collect(loop, 0, yamlCache, update, verbose)
 
     def setLayerConfig(self, configFiles):
         self.__layerConfigFiles = configFiles
@@ -275,7 +274,7 @@ class Layers:
                 layer.status(printer)
 
 def updateLayers(loop, defines, verbose, attic, layerConfigs):
-    layers = Layers(loop, defines, attic)
+    layers = Layers(defines, attic)
     layers.setLayerConfig(layerConfigs)
-    layers.collect(True, verbose)
+    layers.collect(loop, True, verbose)
     layers.cleanupUnused()
