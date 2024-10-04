@@ -3438,8 +3438,7 @@ class RecipeSet:
     def loadYaml(self, path, schema, default={}, preValidate=lambda x: None):
         return self.__cache.loadYaml(path, schema, default, preValidate)
 
-    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="",
-              noLayers=False):
+    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot=""):
         if not recipesRoot and os.path.isfile(".bob-project"):
             try:
                 with open(".bob-project") as f:
@@ -3452,11 +3451,11 @@ class RecipeSet:
         self.__projectRoot = recipesRoot or os.getcwd()
         self.__cache.open()
         try:
-            self.__parse(envOverrides, platform, recipesRoot, noLayers)
+            self.__parse(envOverrides, platform, recipesRoot)
         finally:
             self.__cache.close()
 
-    def __parse(self, envOverrides, platform, recipesRoot="", noLayers=False):
+    def __parse(self, envOverrides, platform, recipesRoot=""):
         if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
             raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
@@ -3473,10 +3472,7 @@ class RecipeSet:
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
-        self.__parseLayer(LayerSpec(""), "9999", recipesRoot, noLayers)
-
-        if noLayers:
-            return
+        self.__parseLayer(LayerSpec(""), "9999", recipesRoot)
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
@@ -3552,7 +3548,7 @@ class RecipeSet:
             ret[name] = (behaviour, None)
         return ret
 
-    def __parseLayer(self, layerSpec, maxVer, recipesRoot, noLayers=False):
+    def __parseLayer(self, layerSpec, maxVer, recipesRoot):
         layer = layerSpec.getName()
 
         if layer in self.__layers:
@@ -3581,9 +3577,6 @@ class RecipeSet:
                                         .format("/".join(layer), name))
         else:
             self.__policies = self.calculatePolicies(config)
-
-        if noLayers:
-            return
 
         # First parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
