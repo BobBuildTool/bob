@@ -52,7 +52,8 @@ Options
 
     The ``.yaml`` suffix is appended automatically and the configuration file
     is searched relative to the project root directory unless an absolute path
-    is given.
+    is given. If multiple layer configuration files are passed, all files are
+    parsed. Later files on the command line have higher precedence.
 
 ``-D VAR=VALUE``
     Override default or set environment variable.

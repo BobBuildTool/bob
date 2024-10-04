@@ -27,7 +27,7 @@ class LayersConfig:
 
         ret.__whiteList.update([c.upper() if self.__platform == "win32" else c
             for c in config.get("layersWhiteList", []) ])
-        ret.__scmOverrides.extend([ ScmOverride(o) for o in config.get("layersScmOverrides", []) ])
+        ret.__scmOverrides[0:0] = [ ScmOverride(o) for o in config.get("layersScmOverrides", []) ]
 
         if rootLayer:
             ret.__policies = RecipeSet.calculatePolicies(config)
@@ -254,7 +254,7 @@ class Layers:
         configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
         config = LayersConfig()
         with YamlCache() as yamlCache:
-            for c in self.__layerConfigFiles:
+            for c in reversed(self.__layerConfigFiles):
                 c += ".yaml"
                 if not os.path.exists(c):
                     raise BuildError(f"Layer config file {c} not found" )
