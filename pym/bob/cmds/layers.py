@@ -12,6 +12,10 @@ def doLayersStatus(argv):
         help="Additional layer config")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
+    parser.add_argument('--show-clean', action='store_true',
+        help="Show SCM status even if layer is unmodified")
+    parser.add_argument('--show-overrides', action='store_true',
+        help="Show SCM status if affected by an scmOverrides")
     parser.add_argument('-v', '--verbose', default=NORMAL, action='count',
         help="Increase verbosity (may be specified multiple times)")
 
@@ -22,7 +26,7 @@ def doLayersStatus(argv):
     layers = Layers(defines, False)
     layers.setLayerConfig(args.layerConfig)
     layers.collect(None, False, args.verbose)
-    pp = PackagePrinter(args.verbose, False, False)
+    pp = PackagePrinter(args.verbose, args.show_clean, args.show_overrides)
     layers.status(pp.show)
 
 
