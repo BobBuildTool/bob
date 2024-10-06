@@ -81,15 +81,14 @@ class LayerStepSpec:
 
 
 class Layer:
-    def __init__(self, name, upperConfig, root, defines, attic, scm=None):
+    def __init__(self, name, upperConfig, defines, attic, scm=None):
         self.__name = name
         self.__upperConfig = upperConfig
-        self.__root = root
         self.__defines = defines
         self.__attic = attic
         self.__scm = scm
         self.__created = False
-        self.__layerDir = os.path.join(root, "layers", name) if len(name) else root
+        self.__layerDir = os.path.join("layers", name) if len(name) else "."
         self.__subLayers = []
 
     async def __checkoutTask(self, verbose):
@@ -188,7 +187,6 @@ class Layer:
                            recipeSet=self.__config)
             self.__subLayers.append(Layer(l.getName(),
                                           self.__config,
-                                          self.__root,
                                           self.__defines,
                                           self.__attic,
                                           layerScm))
@@ -260,7 +258,7 @@ class Layers:
 
                 config = config.derive(yamlCache.loadYaml(c, configSchema))
 
-            rootLayers = Layer("", config, os.getcwd(), self.__defines, self.__attic)
+            rootLayers = Layer("", config, self.__defines, self.__attic)
             rootLayers.parse(yamlCache)
             self.__layers[0] = rootLayers.getSubLayers();
             self.__collect(loop, 0, yamlCache, update, verbose)
