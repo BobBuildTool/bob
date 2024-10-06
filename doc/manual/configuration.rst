@@ -1981,6 +1981,8 @@ layersWhitelist
 
 Whitelist for layers update only. See :ref:`configuration-config-whitelist`.
 
+.. _configuration-config-layersScmOverrides:
+
 layersScmOverrides
 ~~~~~~~~~~~~~~~~~~
 

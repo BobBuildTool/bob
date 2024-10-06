@@ -15,9 +15,10 @@ Synopsis
 
 ::
 
-    bob layers [-h] [-lc LAYERCONFIG] [-v] [-D DEFINES]
-               [--attic | --no-attic] 
-               {update,status}
+    bob layers status [-h] [-lc LAYERCONFIG] [-D DEFINES] [--show-clean]
+                      [--show-overrides] [-v]
+    bob layers update [-h] [-lc LAYERCONFIG] [-D DEFINES]
+                      [--attic | --no-attic] [-v]
 
 Description
 -----------
@@ -61,6 +62,17 @@ Options
     Sets the variable ``VAR`` to ``VALUE``. This overrides the value possibly
     set by ``default.yaml``, config files passed by ``-c`` or any file that was
     included by either of these files.
+
+``--show-clean``
+    Show the status of a layer even if unmodified. This includes
+    ``--show-overrides``.
+
+``--show-overrides``
+    Show layers that have active :ref:`layersScmOverrides <configuration-config-layersScmOverrides>`
+    (``O``) even if the layer is unchanged. Override information is always
+    displayed if a layer is shown but a ``STATUS`` line is normally only
+    emitted if the SCM was modified. Adding ``-v`` will additionally show the
+    detailed override status.
 
 ``-v, --verbose``
     Increase verbosity (may be specified multiple times)
