@@ -104,7 +104,7 @@ class Layer:
                           trace = verbose >= DEBUG,
                           redirect=False, executor=None)
         newState = {}
-        newState["digest"] = self.__scm.asDigestScript(),
+        newState["digest"] = self.__scm.asDigestScript()
         newState["prop"] = {k:v for k,v in self.__scm.getProperties(False).items() if v is not None}
 
         oldState = BobState().getLayerState(self.__layerDir)
