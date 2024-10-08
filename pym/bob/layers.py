@@ -130,7 +130,7 @@ class Layer:
 
             canSwitch = self.__scm.canSwitch(getScm(oldState["prop"]))
             if canSwitch:
-                log("SWITCH: Layer '{}' .. ok".format(self.getName()), EXECUTED, INFO)
+                log("SWITCH: Layer '{}' .. ok".format(self.getName()), EXECUTED, NORMAL)
                 ret = await invoker.executeScmSwitch(self.__scm, oldState["prop"])
                 if ret == 0:
                     BobState().setLayerState(self.__layerDir, newState)
