@@ -2,13 +2,14 @@ import datetime
 import os
 import schema
 import shutil
+from textwrap import indent
 from .errors import BuildError
 from .invoker import CmdFailedError, InvocationError, Invoker
-from .scm import getScm, ScmOverride
+from .scm import getScm, ScmOverride, ScmStatus, ScmTaint
 from .state import BobState
 from .stringparser import Env
 from .input import RecipeSet, Scm, YamlCache
-from .utils import INVALID_CHAR_TRANS, getPlatformString, getPlatformEnvWhiteList, compareVersion
+from .utils import INVALID_CHAR_TRANS, getPlatformString, getPlatformEnvWhiteList, compareVersion, joinLines
 from .tty import DEBUG, EXECUTED, INFO, NORMAL, IMPORTANT, SKIPPED, WARNING, log
 
 class LayersConfig:
@@ -194,11 +195,8 @@ class Layer:
     def getSubLayers(self):
         return self.__subLayers
 
-    def status(self, printer):
-        if self.__scm is None:
-            return
-        status = self.__scm.status(self.__layerDir)
-        printer(status, self.__layerDir)
+    def getScm(self):
+        return self.__scm
 
 class Layers:
     def __init__(self, defines, attic):
@@ -267,9 +265,51 @@ class Layers:
         self.__layerConfigFiles = configFiles
 
     def status(self, printer):
-        for level in sorted(self.__layers.keys()):
+        result = {}
+        currentLayers = {}
+        for level in self.__layers.keys():
             for layer in self.__layers[level]:
-                layer.status(printer)
+                scm = layer.getScm()
+                if scm is not None:
+                    currentLayers[layer.getWorkspace()] = (scm.asDigestScript(), scm)
+
+        # Scan previously known layer SCMs first. They may not be referenced
+        # any more but we want to know their status nonetheless.
+        for layerDir in BobState().getLayers():
+            if not os.path.exists(layerDir): continue
+
+            oldLayer = BobState().getLayerState(layerDir)
+            if oldLayer["digest"] == currentLayers.get(layerDir, (None, None))[0]:
+                # The digest still matches -> use current SCM properties
+                status = currentLayers[layerDir][1].status(layerDir)
+            else:
+                # Changed or removed. Compare with that and mark as attic...
+                status = getScm(oldLayer["prop"]).status(layerDir)
+                status.add(ScmTaint.attic,
+                           "> Config.yaml changed. Will be moved to attic on next update.")
+
+            result[layerDir] = status
+
+        # Additionally, scan current layers state to find new checkouts and
+        # determine override status.
+        for layerDir, (layerDigets, layerScm) in currentLayers.items():
+            status = result.setdefault(layerDir, ScmStatus(ScmTaint.new))
+            if (ScmTaint.new in status.flags) and os.path.exists(layerDir):
+                status.add(ScmTaint.collides,
+                    "> Collides with existing directory in project.")
+            elif ScmTaint.attic in status.flags:
+                status.add(ScmTaint.new)
+
+            # The override status is taken from the layer SCM. This is
+            # independent of any actual checkout.
+            overrides = layerScm.getActiveOverrides()
+            for o in overrides:
+                status.add(ScmTaint.overridden, joinLines("> Overridden by:",
+                    indent(str(o), '   ')))
+
+        # Show results
+        for (layerDir, status) in sorted(result.items()):
+            printer(status, layerDir)
 
 def updateLayers(loop, defines, verbose, attic, layerConfigs):
     layers = Layers(defines, attic)
