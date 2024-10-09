@@ -64,6 +64,7 @@ class StepIR(AbstractIR):
         self.__data['isRelocatable'] = step.isRelocatable()
         self.__data['isShared'] = step.isShared()
         self.__data['sandbox'] = graph.addSandbox(step.getSandbox())
+        self.__data['stablePaths'] = step.stablePaths()
 
         if not partial:
             self.__data['isFingerprinted'] = step._isFingerprinted()
@@ -144,6 +145,9 @@ class StepIR(AbstractIR):
     def getWorkspacePath(self):
         return self.__data['workspacePath']
 
+    def stablePaths(self):
+        return self.__data['stablePaths']
+
     def getExecPath(self, referrer=None):
         """Return the execution path of the step.
 
@@ -153,10 +157,14 @@ class StepIR(AbstractIR):
         to this step while building.
         """
         if self.isValid():
-            if (referrer or self).getSandbox() is None:
-                return self.getStoragePath()
-            else:
+            stablePaths = self.stablePaths()
+            if stablePaths is None:
+                stablePaths = (referrer or self).getSandbox() is not None
+
+            if stablePaths:
                 return os.path.join("/bob", asHexStr(self.getVariantId()), "workspace")
+            else:
+                return self.getStoragePath()
         else:
             return "/invalid/exec/path/of/{}".format(self.getPackage().getName())
 

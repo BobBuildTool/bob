@@ -451,6 +451,12 @@ class CheckoutAssert:
         return self.__file + " " + self.__digestSHA1 + " " + str(self.__start) + " " + str(self.__end)
 
 
+class PathsConfig:
+    def __init__(self, pathFormatter, stablePaths):
+        self.pathFormatter = pathFormatter
+        self.stablePaths = stablePaths
+
+
 class CoreRef:
     """Reference from one CoreStep/CorePackage to another one.
 
@@ -487,7 +493,7 @@ class CoreRef:
     def refGetStack(self):
         return self.__stackAdd + self.__destination.refGetStack()
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
         if cache is None: cache = {}
         if self.__diffTools:
             tools = inputTools.copy()
@@ -499,7 +505,7 @@ class CoreRef:
                 else:
                     coreTool = cache.get(tool)
                     if coreTool is None:
-                        cache[tool] = coreTool = tool.refDeref(stack, inputTools, inputSandbox, pathFormatter, cache)
+                        cache[tool] = coreTool = tool.refDeref(stack, inputTools, inputSandbox, pathsConfig, cache)
                     tools[name] = coreTool
         else:
             tools = inputTools
@@ -512,10 +518,10 @@ class CoreRef:
             sandbox = cache[self.__diffSandbox]
         else:
             sandbox = self.__diffSandbox.refDeref(stack, inputTools, inputSandbox,
-                    pathFormatter, cache)
+                    pathsConfig, cache)
             cache[self.__diffSandbox] = sandbox
 
-        return self.__destination.refDeref(stack + self.__stackAdd, tools, sandbox, pathFormatter)
+        return self.__destination.refDeref(stack + self.__stackAdd, tools, sandbox, pathsConfig)
 
 class CoreItem:
     __slots__ = []
@@ -526,7 +532,7 @@ class CoreItem:
     def refGetStack(self):
         return []
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
         raise NotImplementedError
 
 
@@ -600,8 +606,8 @@ class CoreTool(CoreItem):
         h.update(fingerprintIfStr.encode('utf8'))
         self.resultId = h.digest()
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
-        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
+        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathsConfig)
         return Tool(step, self.path, self.libs, self.netAccess, self.environment,
                     self.fingerprintScript, self.fingerprintVars)
 
@@ -721,8 +727,8 @@ class CoreSandbox(CoreItem):
             (self.environment == other.environment) and \
             (self.user == other.user)
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
-        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathFormatter)
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
+        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathsConfig)
         return Sandbox(step, self)
 
 class Sandbox:
@@ -968,10 +974,10 @@ class Step:
     the step. See :meth:`bob.input.Step.getVariantId` for details.
     """
 
-    def __init__(self, coreStep, package, pathFormatter):
+    def __init__(self, coreStep, package, pathsConfig):
         self._coreStep = coreStep
         self.__package = package
-        self.__pathFormatter = pathFormatter
+        self.__pathsConfig = pathsConfig
 
     def __repr__(self):
         return "Step({}, {}, {})".format(self.getLabel(), "/".join(self.getPackage().getStack()), asHexStr(self.getVariantId()))
@@ -1115,9 +1121,12 @@ class Step:
         script but the one from getExecPath() instead.
         """
         if self.isValid():
-            return self.__pathFormatter(self, self.__package.getPluginStates())
+            return self.__pathsConfig.pathFormatter(self, self.__package.getPluginStates())
         else:
             return "/invalid/workspace/path/of/{}".format(self.__package.getName())
+
+    def stablePaths(self):
+        return self.__pathsConfig.stablePaths
 
     def getTools(self):
         """Get dictionary of tools.
@@ -1139,7 +1148,7 @@ class Step:
         p = self.__package
         refCache = {}
         return [ a.refDeref(p.getStack(), p._getInputTools(), p._getInputSandboxRaw(),
-                            self.__pathFormatter, refCache)
+                            self.__pathsConfig, refCache)
                     for a in self._coreStep.args ]
 
     def getAllDepSteps(self):
@@ -1183,7 +1192,7 @@ class Step:
         p = self.__package
         refCache = {}
         return [ a.refDeref(p.getStack(), p._getInputTools(), p._getInputSandboxRaw(),
-                            self.__pathFormatter, refCache)
+                            self.__pathsConfig, refCache)
                     for a in self._coreStep.providedDeps ]
 
     def _isFingerprinted(self):
@@ -1280,9 +1289,9 @@ class CoreCheckoutStep(CoreStep):
         deterministic = corePackage.recipe.checkoutDeterministic
         super().__init__(corePackage, isValid, deterministic, digestEnv, env, args, toolDep, toolDepWeak)
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
-        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
-        ret = CheckoutStep(self, package, pathFormatter)
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+        ret = CheckoutStep(self, package, pathsConfig)
         package._setCheckoutStep(ret)
         return ret
 
@@ -1368,9 +1377,9 @@ class CoreBuildStep(CoreStep):
         self.fingerprintMask = fingerprintMask
         super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak)
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
-        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
-        ret = BuildStep(self, package, pathFormatter)
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+        ret = BuildStep(self, package, pathsConfig)
         package._setBuildStep(ret)
         return ret
 
@@ -1405,9 +1414,9 @@ class CorePackageStep(CoreStep):
         self.fingerprintMask = fingerprintMask
         super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak)
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
-        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathFormatter)
-        ret = PackageStep(self, package, pathFormatter)
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+        ret = PackageStep(self, package, pathsConfig)
         package._setPackageStep(ret)
         return ret
 
@@ -1447,7 +1456,7 @@ class PackageStep(Step):
 
 class CorePackageInternal(CoreItem):
     __slots__ = []
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter, cache=None):
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
         return (inputTools, inputSandbox)
 
 corePackageInternal = CorePackageInternal()
@@ -1469,9 +1478,9 @@ class CorePackage:
         self.pkgId = pkgId
         self.metaEnv = metaEnv
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathFormatter):
-        tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathFormatter)
-        return Package(self, stack, pathFormatter, inputTools, tools, inputSandbox, sandbox)
+    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig):
+        tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+        return Package(self, stack, pathsConfig, inputTools, tools, inputSandbox, sandbox)
 
     def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv,
                                env, args, checkoutUpdateIf, checkoutUpdateDeterministic,
@@ -1523,10 +1532,10 @@ class Package(object):
     package.
     """
 
-    def __init__(self, corePackage, stack, pathFormatter, inputTools, tools, inputSandbox, sandbox):
+    def __init__(self, corePackage, stack, pathsConfig, inputTools, tools, inputSandbox, sandbox):
         self.__corePackage = corePackage
         self.__stack = stack
-        self.__pathFormatter = pathFormatter
+        self.__pathsConfig = pathsConfig
         self.__inputTools = inputTools
         self.__tools = tools
         self.__inputSandbox = inputSandbox
@@ -1586,7 +1595,7 @@ class Package(object):
         """
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
-                            self.__pathFormatter, refCache)
+                            self.__pathsConfig, refCache)
                     for d in self.__corePackage.directDepSteps ]
 
     def getIndirectDepSteps(self):
@@ -1597,7 +1606,7 @@ class Package(object):
         """
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
-                            self.__pathFormatter, refCache)
+                            self.__pathsConfig, refCache)
                     for d in self.__corePackage.indirectDepSteps ]
 
     def getAllDepSteps(self):
@@ -1622,7 +1631,7 @@ class Package(object):
             ret = self.__checkoutStep
         except AttributeError:
             ret = self.__checkoutStep = CheckoutStep(self.__corePackage.checkoutStep,
-                self, self.__pathFormatter)
+                self, self.__pathsConfig)
         return ret
 
     def _setBuildStep(self, buildStep):
@@ -1634,7 +1643,7 @@ class Package(object):
             ret = self.__buildStep
         except AttributeError:
             ret = self.__buildStep = BuildStep(self.__corePackage.buildStep,
-                self, self.__pathFormatter)
+                self, self.__pathsConfig)
         return ret
 
     def _setPackageStep(self, packageStep):
@@ -1646,7 +1655,7 @@ class Package(object):
             ret = self.__packageStep
         except AttributeError:
             ret = self.__packageStep = PackageStep(self.__corePackage.packageStep,
-                self, self.__pathFormatter)
+                self, self.__pathsConfig)
         return ret
 
     def getPluginStates(self):
@@ -3787,7 +3796,7 @@ class RecipeSet:
             raise ParseError("Class {} requested but not found.".format(className))
         return self.__classes[className]
 
-    def __generatePackages(self, nameFormatter, cacheKey, sandboxEnabled):
+    def __generatePackages(self, pathsConfig, cacheKey, sandboxEnabled):
         # use separate caches with and without sandbox
         if sandboxEnabled:
             cacheName = ".bob-packages-sb.pickle"
@@ -3800,8 +3809,8 @@ class RecipeSet:
                 persistedCacheKey = f.read(len(cacheKey))
                 if cacheKey == persistedCacheKey:
                     tmp = PackageUnpickler(f, self.getRecipe, self.__plugins,
-                                           nameFormatter).load()
-                    return tmp.refDeref([], {}, None, nameFormatter)
+                                           pathsConfig).load()
+                    return tmp.refDeref([], {}, None, pathsConfig)
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -3816,14 +3825,27 @@ class RecipeSet:
             newCacheName = cacheName + ".new"
             with open(newCacheName, "wb") as f:
                 f.write(cacheKey)
-                PackagePickler(f, nameFormatter).dump(result)
+                PackagePickler(f, pathsConfig).dump(result)
             replacePath(newCacheName, cacheName)
         except OSError as e:
             Warn("Could not save package cache: " + str(e)).show(cacheName)
 
-        return result.refDeref([], {}, None, nameFormatter)
+        return result.refDeref([], {}, None, pathsConfig)
 
-    def generatePackages(self, nameFormatter, sandboxEnabled=False):
+    def generatePackages(self, nameFormatter, sandboxEnabled=False, stablePaths=None):
+        """Generate package set.
+
+        :param nameFormatter: Function returning path for a given step.
+        :type nameFormatter: Callable[[Step, Mapping[str, PluginState]], str]
+        :param sandboxEnabled: Enable sandbox image dependencies.
+        :type sandboxEnabled: bool
+        :param stablePaths: Configure usage of stable execution paths (/bob/...).
+            * ``None``: Use stable path in sandbox image, otherwise workspace path.
+            * ``False``: Always use workspace path.
+            * ``True``: Always use stable path (/bob/...).
+        :type stablePaths: None | bool
+        """
+        pathsConfig = PathsConfig(nameFormatter, stablePaths)
         # calculate cache key for persisted packages
         h = hashlib.sha1()
         h.update(BOB_INPUT_HASH)
@@ -3836,7 +3858,7 @@ class RecipeSet:
         cacheKey = h.digest()
 
         return PackageSet(cacheKey, self.__aliases, self.__stringFunctions,
-            lambda: self.__generatePackages(nameFormatter, cacheKey, sandboxEnabled),
+            lambda: self.__generatePackages(pathsConfig, cacheKey, sandboxEnabled),
             self._queryMode or  self.__uiConfig.get('queryMode', 'nullglob'))
 
     def getPolicy(self, name, location=None):
@@ -3955,29 +3977,29 @@ class YamlCache:
 
 
 class PackagePickler(pickle.Pickler):
-    def __init__(self, file, pathFormatter):
+    def __init__(self, file, pathsConfig):
         super().__init__(file, -1, fix_imports=False)
-        self.__pathFormatter = pathFormatter
+        self.__pathsConfig = pathsConfig
 
     def persistent_id(self, obj):
-        if obj is self.__pathFormatter:
-            return ("pathfmt", None)
+        if obj is self.__pathsConfig:
+            return ("pathscfg", None)
         elif isinstance(obj, Recipe):
             return ("recipe", obj.getPackageName())
         else:
             return None
 
 class PackageUnpickler(pickle.Unpickler):
-    def __init__(self, file, recipeGetter, plugins, pathFormatter):
+    def __init__(self, file, recipeGetter, plugins, pathsConfig):
         super().__init__(file)
         self.__recipeGetter = recipeGetter
         self.__plugins = plugins
-        self.__pathFormatter = pathFormatter
+        self.__pathsConfig = pathsConfig
 
     def persistent_load(self, pid):
         (tag, key) = pid
-        if tag == "pathfmt":
-            return self.__pathFormatter
+        if tag == "pathscfg":
+            return self.__pathsConfig
         elif tag == "recipe":
             return self.__recipeGetter(key)
         else:
