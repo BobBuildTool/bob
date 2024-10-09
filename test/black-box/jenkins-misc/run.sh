@@ -13,6 +13,10 @@ expect_fail run_bob jenkins add local http://another.test/
 
 run_bob jenkins graph local
 
+# Plugins smoke test
+run_bob jenkins export local "$exp"
+grep -q "test.bob.canary" "$exp/root.xml"
+
 run_bob jenkins ls
 run_bob jenkins ls -v
 run_bob jenkins ls -vv
