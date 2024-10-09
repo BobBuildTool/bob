@@ -407,6 +407,7 @@ cd {ROOT}
         self.__installSharedPackages = False
         self.__executor = None
         self.__attic = True
+        self.__slimSandbox = False
 
     def setExecutor(self, executor):
         self.__executor = executor
@@ -504,6 +505,9 @@ cd {ROOT}
 
     def setAtticEnable(self, enable):
         self.__attic = enable
+
+    def setSlimSandbox(self, enable):
+        self.__slimSandbox = enable
 
     def setShareHandler(self, handler):
         self.__share = handler
@@ -737,7 +741,8 @@ cd {ROOT}
         logFile = os.path.join(workspacePath, "..", "log.txt")
         scriptHint = os.path.join(workspacePath, "..", "script")
         spec = StepSpec.fromStep(step, envFile, self.__envWhiteList, logFile,
-            scriptHint=scriptHint, isJenkins=step.JENKINS)
+            scriptHint=scriptHint, isJenkins=step.JENKINS,
+            slimSandbox=self.__slimSandbox)
 
         # Write invocation wrapper except on Jenkins. There will be nobody
         # around to actually execute it...
@@ -1934,7 +1939,8 @@ cd {ROOT}
         return fingerprint
 
     async def __runFingerprintScript(self, step, logger):
-        spec = StepSpec.fromStep(step, None, self.__envWhiteList, isJenkins=step.JENKINS)
+        spec = StepSpec.fromStep(step, None, self.__envWhiteList, isJenkins=step.JENKINS,
+                                 slimSandbox=self.__slimSandbox)
         invoker = Invoker(spec, self.__preserveEnv, True,
                           self.__verbose >= INFO, self.__verbose >= NORMAL,
                           self.__verbose >= DEBUG, self.__bufferedStdIO,
@@ -1952,7 +1958,8 @@ cd {ROOT}
 
     async def __runScmSwitch(self, step, scmPath, scm, oldSpec):
         logFile = os.path.join(step.getWorkspacePath(), "..", "log.txt")
-        spec = StepSpec.fromStep(step, None, self.__envWhiteList, logFile, isJenkins=step.JENKINS)
+        spec = StepSpec.fromStep(step, None, self.__envWhiteList, logFile, isJenkins=step.JENKINS,
+                                 slimSandbox=self.__slimSandbox)
         invoker = Invoker(spec, self.__preserveEnv, self.__noLogFile,
             self.__verbose >= INFO, self.__verbose >= NORMAL,
             self.__verbose >= DEBUG, self.__bufferedStdIO,

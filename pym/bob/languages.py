@@ -362,7 +362,7 @@ class BashLanguage:
 
     @staticmethod
     def __scriptFilePaths(spec, tmpDir):
-        if spec.hasSandbox:
+        if spec.fatSandbox:
             execScriptFile = "/.script"
             realScriptFile = spec.scriptHint or os.path.join(tmpDir, ".script")
         else:
@@ -590,7 +590,7 @@ class PwshLanguage:
 
     @staticmethod
     def __scriptFilePaths(spec, tmpDir):
-        if spec.hasSandbox:
+        if spec.fatSandbox:
             execScriptFile = "/.script.ps1"
             realScriptFile = (spec.scriptHint or os.path.join(tmpDir, ".script")) + ".ps1"
         else:
@@ -670,7 +670,7 @@ class StepSpec:
 
     @classmethod
     def fromStep(cls, step, envFile=None, envWhiteList=[], logFile=None, isJenkins=False,
-                 scriptHint=None):
+                 scriptHint=None, slimSandbox=False):
         self = cls()
         scriptLanguage = step.getPackage().getRecipe().scriptLanguage
         self.__data = d = {
@@ -679,6 +679,7 @@ class StepSpec:
             'logFile' : logFile,
             'isJenkins' : isJenkins,
             'scriptHint' : scriptHint,
+            'slimSandbox' : slimSandbox,
             'vsn' : asHexStr(BOB_INPUT_HASH),
             'language' : scriptLanguage.index.value,
             'env' : dict(step.getEnv()),
@@ -698,6 +699,7 @@ class StepSpec:
                 (n, os.path.join(t.getStep().getExecPath(step), t.getPath()))
                 for (n,t) in step.getTools().items()
             ]),
+            'netAccess' : step.hasNetAccess(),
         }
 
         if step.isCheckoutStep():
@@ -714,23 +716,24 @@ class StepSpec:
                 'paths' : step.getSandbox().getPaths(),
                 'hostMounts' : step.getSandbox().getMounts(),
                 'user' : step.getSandbox().getUser(),
-                'netAccess' : step.hasNetAccess(),
-                'depMounts' : [
-                    (dep.getStoragePath(), dep.getExecPath(step))
-                    for dep in step.getAllDepSteps() if dep.isValid()
-                ],
             }
 
-            # Special handling to mount all previous steps of current package.
-            # It is defined that the checkout and build step are visible in the
-            # sandbox for a given package step. We must stop at checkout steps
-            # because they might have dependencies due to the 'checkoutDep'
-            # flag.
-            extra = step
-            while extra.isValid() and not extra.isCheckoutStep() and len(extra.getArguments()) > 0:
-                extra = extra.getArguments()[0]
-                if extra.isValid():
-                    s['depMounts'].append((extra.getStoragePath(), extra.getExecPath(step)))
+        # What needs to be mounted in a user namespace slim/fat sandbox
+        d['depMounts'] = depMounts = [
+            (dep.getStoragePath(), dep.getExecPath(step))
+            for dep in step.getAllDepSteps() if dep.isValid()
+        ]
+
+        # Special handling to mount all previous steps of current package.
+        # It is defined that the checkout and build step are visible in the
+        # sandbox for a given package step. We must stop at checkout steps
+        # because they might have dependencies due to the 'checkoutDep'
+        # flag.
+        extra = step
+        while extra.isValid() and not extra.isCheckoutStep() and len(extra.getArguments()) > 0:
+            extra = extra.getArguments()[0]
+            if extra.isValid():
+                depMounts.append((extra.getStoragePath(), extra.getExecPath(step)))
 
         d['preRunCmds'] = step.getJenkinsPreRunCmds() if isJenkins else step.getPreRunCmds()
         d['setupScript'] = step.getSetupScript()
@@ -758,8 +761,16 @@ class StepSpec:
         return json.dumps(self.__data, indent="\t", sort_keys=True)
 
     @property
-    def hasSandbox(self):
+    def fatSandbox(self):
         return 'sandbox' in self.__data
+
+    @property
+    def slimSandbox(self):
+        return self.__data['slimSandbox']
+
+    @property
+    def hasSandbox(self):
+        return self.fatSandbox or self.slimSandbox
 
     @property
     def language(self):
@@ -786,12 +797,12 @@ class StepSpec:
         return self.__data['paths']
 
     @property
-    def sandboxDepMounts(self):
-        return self.__data['sandbox']['depMounts']
+    def depMounts(self):
+        return self.__data['depMounts']
 
     @property
-    def sandboxNetAccess(self):
-        return self.__data['sandbox']['netAccess']
+    def netAccess(self):
+        return self.__data['netAccess']
 
     @property
     def sandboxRootWorkspace(self):
