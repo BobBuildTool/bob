@@ -3265,7 +3265,7 @@ class RecipeSet:
                 raise ParseError("Plugin '"+fileName+"': hook name must be a string!")
             if not callable(fun):
                 raise ParseError("Plugin '"+fileName+"': "+hook+": hook must be callable!")
-            self.__hooks.setdefault(hook, []).append(fun)
+            self.__hooks.setdefault(hook, []).append((fun, apiVersion))
 
         projectGenerators = manifest.get('projectGenerators', {})
         if not isinstance(projectGenerators, dict):
@@ -3344,7 +3344,7 @@ class RecipeSet:
         return mod
 
     def defineHook(self, name, value):
-        self.__hooks[name] = [value]
+        self.__hooks[name] = [(value, BOB_VERSION)]
 
     def setConfigFiles(self, configFiles):
         self.__configFiles = configFiles
@@ -3353,9 +3353,11 @@ class RecipeSet:
         return self.__commandConfig
 
     def getHook(self, name):
-        return self.__hooks[name][-1]
+        # just return the hook function
+        return self.__hooks[name][-1][0]
 
     def getHookStack(self, name):
+        # return list of hook functions with API version
         return self.__hooks.get(name, [])
 
     def getProjectGenerators(self):

@@ -1206,8 +1206,8 @@ def doJenkinsRm(recipes, argv):
     BobState().delJenkins(args.name)
 
 def applyHooks(hooks, job, info, reverse=False):
-    for h in (reversed(hooks) if reverse else hooks):
-        job = h(job, **info)
+    for hook, apiVersion in (reversed(hooks) if reverse else hooks):
+        job = hook(job, **info)
     return job
 
 def doJenkinsPush(recipes, argv):
