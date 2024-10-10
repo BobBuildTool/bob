@@ -1,0 +1,61 @@
+packageVars: [CANARY]
+packageScript: |
+    verifyIsolated()
+    {
+        if [[ $1 -ne 0 ]] ; then
+            if [[ -e "$CANARY" ]] ; then
+                echo "$CANARY exists in isolated environment" >&2
+                exit 1
+            fi
+        else
+            if [[ ! -e "$CANARY" ]] ; then
+                echo "$CANARY does not exists in host environment" >&2
+                exit 1
+            fi
+        fi
+    }
+
+    verifyImageUsed()
+    {
+        if [[ $1 -ne 0 ]] ; then
+            if [[ ! -e /canary.txt ]] ; then
+                echo "Sandbox image not used?" >&2
+                exit 1
+            fi
+        else
+            if [[ -e /canary.txt ]] ; then
+                echo "Canary found in host environment" >&2
+                exit 1
+            fi
+        fi
+    }
+
+    verifyStablePath()
+    {
+        if [[ $1 -ne 0 ]] ; then
+            if [[ $PWD != /bob/* ]] ; then
+                echo "No stable path inside sandbox" >&2
+                exit 1
+            fi
+        else
+            if [[ $PWD == /bob/* ]] ; then
+                echo "Stable path used in host environment" >&2
+                exit 1
+            fi
+        fi
+    }
+
+multiPackage:
+    outside:
+        packageVars: [OUTSIDE_ISOLATED, OUTSIDE_STABLE_PATH]
+        packageScript: |
+            verifyIsolated $OUTSIDE_ISOLATED
+            verifyImageUsed 0
+            verifyStablePath $OUTSIDE_STABLE_PATH
+
+    inside:
+        packageVars: [INSIDE_ISOLATED, INSIDE_IMAGE_USED, INSIDE_STABLE_PATH]
+        packageScript: |
+            verifyIsolated $INSIDE_ISOLATED
+            verifyImageUsed $INSIDE_IMAGE_USED
+            verifyStablePath $INSIDE_STABLE_PATH

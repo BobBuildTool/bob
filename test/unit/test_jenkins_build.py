@@ -1,9 +1,10 @@
 from mocks.jenkins_tests import JenkinsTests
 from shlex import quote
-from unittest import TestCase, expectedFailure
+from unittest import TestCase, expectedFailure, skipUnless
 import os, os.path
 import tempfile
 import subprocess
+import sys
 
 from bob.utils import removePath
 
@@ -357,7 +358,158 @@ class JenkinsSharedPackage(JenkinsTests, TestCase):
             self.assertTrue(os.path.isdir(s))
         
 # Build with tool
+
 # Build with sandbox
+
+class JenkinsSandboxBuilds(JenkinsTests):
+    OPTIONS = "--no-sandbox"
+    OUTSIDE_ISOLATED = 0
+    OUTSIDE_STABLE_PATH = 0
+    INSIDE_ISOLATED = 0
+    INSIDE_IMAGE_USED = 0
+    INSIDE_STABLE_PATH = 0
+
+    def testBuild(self):
+        """Test sandbox build"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - test-outside
+                - name: sandbox
+                  use: [sandbox]
+                  forward: True
+                - test-inside
+
+            buildScript: "true"
+            packageScript: |
+                echo ok > result.txt
+            """)
+        self.writeRecipe("sandbox", """\
+            packageScript: |
+                echo "canary" > canary.txt
+            provideSandbox:
+                paths: ["/usr/local/bin", "/usr/local/sbin", "/usr/bin", "/usr/sbin",
+                        "/bin", "/sbin"]
+                mount:
+                    - /bin
+                    - /etc
+                    - /lib
+                    - /run
+                    - /usr
+                    - /var
+                    - ["/lib32", "/lib32", [nofail]]
+                    - ["/lib64", "/lib64", [nofail]]
+            """)
+
+        # The canary needs to be somewhere in the project path. The slim sandbox
+        # mode only restricts those paths...
+        CANARY = os.path.join(self.cwd, "config.yaml")
+        self.writeRecipe("test", f"""\
+            packageScript: |
+                verifyIsolated()
+                {{
+                    if [[ $1 -ne 0 ]] ; then
+                        if [[ -e "{CANARY}" ]] ; then
+                            echo "{CANARY} exists in isolated environment" >&2
+                            exit 1
+                        fi
+                    else
+                        if [[ ! -e "{CANARY}" ]] ; then
+                            echo "{CANARY} does not exists in host environment" >&2
+                            exit 1
+                        fi
+                    fi
+                }}
+
+                verifyImageUsed()
+                {{
+                    if [[ $1 -ne 0 ]] ; then
+                        if [[ ! -e /canary.txt ]] ; then
+                            echo "Sandbox image not used?" >&2
+                            exit 1
+                        fi
+                    else
+                        if [[ -e /canary.txt ]] ; then
+                            echo "Canary found in host environment" >&2
+                            exit 1
+                        fi
+                    fi
+                }}
+
+                verifyStablePath()
+                {{
+                    if [[ $1 -ne 0 ]] ; then
+                        if [[ $PWD != /bob/* ]] ; then
+                            echo "No stable path inside sandbox" >&2
+                            exit 1
+                        fi
+                    else
+                        if [[ $PWD == /bob/* ]] ; then
+                            echo "Stable path used in host environment" >&2
+                            exit 1
+                        fi
+                    fi
+                }}
+
+            multiPackage:
+                outside:
+                    packageScript: |
+                        verifyIsolated {self.OUTSIDE_ISOLATED}
+                        verifyImageUsed 0
+                        verifyStablePath {self.OUTSIDE_STABLE_PATH}
+
+                inside:
+                    packageScript: |
+                        verifyIsolated {self.INSIDE_ISOLATED}
+                        verifyImageUsed {self.INSIDE_IMAGE_USED}
+                        verifyStablePath {self.INSIDE_STABLE_PATH}
+            """)
+        self.executeBobJenkinsCmd("set-options test " + self.OPTIONS)
+        self.executeBobJenkinsCmd("push test")
+        self.jenkinsMock.run()
+        with self.getJobResult("root") as d:
+            with open(os.path.join(d, "result.txt")) as f:
+                self.assertEqual(f.read(), "ok\n")
+
+@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+class JenkinsSandboxBuildDisabled(JenkinsSandboxBuilds, TestCase):
+    pass
+
+@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+class JenkinsSandboxBuildPartial(JenkinsSandboxBuilds, TestCase):
+    OPTIONS = "--sandbox"
+    OUTSIDE_ISOLATED=0
+    OUTSIDE_STABLE_PATH=0
+    INSIDE_ISOLATED=1
+    INSIDE_STABLE_PATH=1
+    INSIDE_IMAGE_USED=1
+
+@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+class JenkinsSandboxBuildSlim(JenkinsSandboxBuilds, TestCase):
+    OPTIONS = "--slim-sandbox"
+    OUTSIDE_ISOLATED=1
+    OUTSIDE_STABLE_PATH=0
+    INSIDE_ISOLATED=1
+    INSIDE_STABLE_PATH=0
+    INSIDE_IMAGE_USED=0
+
+@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+class JenkinsSandboxBuildDev(JenkinsSandboxBuilds, TestCase):
+    OPTIONS = "--dev-sandbox"
+    OUTSIDE_ISOLATED=1
+    OUTSIDE_STABLE_PATH=0
+    INSIDE_ISOLATED=1
+    INSIDE_STABLE_PATH=0
+    INSIDE_IMAGE_USED=1
+
+@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+class JenkinsSandboxBuildStrict(JenkinsSandboxBuilds, TestCase):
+    OPTIONS = "--strict-sandbox"
+    OUTSIDE_ISOLATED=1
+    OUTSIDE_STABLE_PATH=1
+    INSIDE_ISOLATED=1
+    INSIDE_STABLE_PATH=1
+    INSIDE_IMAGE_USED=1
 
 # Smoke tests:
 # - Set a node

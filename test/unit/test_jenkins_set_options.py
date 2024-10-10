@@ -86,3 +86,15 @@ class TestJenkinsSetOptions(JenkinsTests, TestCase):
         self.assertFalse(c.upload)
         self.assertEqual(c.sandbox.mode, "yes")
         self.assertTrue(c.clean)
+
+    def testSandboxModes(self):
+        self.executeBobJenkinsCmd("set-options test --no-sandbox")
+        self.assertEqual(BobState().getJenkinsConfig("test").sandbox.mode, "no")
+        self.executeBobJenkinsCmd("set-options test --sandbox")
+        self.assertEqual(BobState().getJenkinsConfig("test").sandbox.mode, "yes")
+        self.executeBobJenkinsCmd("set-options test --slim-sandbox")
+        self.assertEqual(BobState().getJenkinsConfig("test").sandbox.mode, "slim")
+        self.executeBobJenkinsCmd("set-options test --dev-sandbox")
+        self.assertEqual(BobState().getJenkinsConfig("test").sandbox.mode, "dev")
+        self.executeBobJenkinsCmd("set-options test --strict-sandbox")
+        self.assertEqual(BobState().getJenkinsConfig("test").sandbox.mode, "strict")
