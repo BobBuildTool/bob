@@ -209,7 +209,9 @@ Currently the following additional kwargs are passed:
  * ``packageSteps``: list of all package steps (:class:`bob.input.Step`) used
    in the job
  * ``prefix``: Prefix of all job names
- * ``sandbox``: Boolean whether sandbox should be used
+ * ``sandbox``: Boolean whether sandbox should be used. Plugins starting with
+   API version ``0.25`` are passed the sandbox mode as string (``no``, ``yes``,
+   ``slim``, ``dev`` or ``strict``).
  * ``url``: URL of Jenkins instance
  * ``windows``: True if Jenkins runs on Windows
 

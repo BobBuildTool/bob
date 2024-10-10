@@ -26,8 +26,8 @@ Available sub-commands:
     bob jenkins add [-h] [-n NODES] [-o OPTIONS]
                     [--host-platform {linux,msys,win32}] [-w] [-p PREFIX]
                     [-r ROOT] [-D DEFINES] [--keep] [--download] [--upload]
-                    [--no-sandbox] [--credentials CREDENTIALS]
-                    [--clean | --incremental]
+                    [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
+                    [--credentials CREDENTIALS] [--clean | --incremental]
                     [--shortdescription | --longdescription]
                     name url
     bob jenkins export [-h] name dir
@@ -50,7 +50,7 @@ Available sub-commands:
                             [--keep | --no-keep]
                             [--download | --no-download]
                             [--upload | --no-upload]
-                            [--sandbox | --no-sandbox]
+                            [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
                             [--clean | --incremental]
                             name
     bob jenkins set-url [-h] name url
@@ -125,6 +125,13 @@ Options
 
 ``--del-root DEL_ROOT``
     Remove existing root package.
+
+``--dev-sandbox``
+    Enable development sandboxing.
+
+    Always build packages in an isolated environment where only declared
+    dependencies are visible. If a sandbox image is available, it is used.
+    Otherwise the host paths are made read-only.
 
 ``--download``
     Enable downloads from binary archive. Disabled by default. There must
@@ -224,7 +231,8 @@ Options
     Disable sandboxing during builds.
 
     Unless required by the project, it is discouraged to disable the sandbox
-    feature. See ``--sandbox`` for the opposite switch.
+    feature. See ``--sandbox``, ``--slim-sandbox``, ``--dev-sandbox`` or
+    ``--strict-sandbox`` for the opposite switches.
 
 ``--no-ssl-verify``
     Disable HTTPS certificate checking.
@@ -296,7 +304,11 @@ Options
     on the previous state.
 
 ``--sandbox``
-    Enable sandboxing. This is the default.
+    Enable partial sandboxing. This is the default.
+
+    Build packages in an ephemeral container if a sandbox image is available
+    for the package. Inside the sandbox, stable execution paths are used. In
+    absence of a sandbox image, no isolation is performed.
 
 ``--shortdescription``
     Do not calculate every possible path of each package in a job for the
@@ -304,6 +316,22 @@ Options
     project complexity, might reduce the configuration time considerably. The
     drawback is that not all packages are then listed in the job description.
     For each unique package only one example path will be shown.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+    Build packages in an isolated mount namespace. Most of the host paths
+    are available read-only. Other workspaces are hidden when building a
+    package unless they are a declared dependency. An optionally available
+    sandbox image is *not* used.
+
+``--strict-sandbox``
+    Enable strict sandboxing.
+
+    Always build packages in an isolated environment where only declared
+    dependencies are visible. If a sandbox image is available, it is used.
+    Otherwise the host paths are made read-only. The build path is always
+    a reproducible, stable path.
 
 ``-U UNDEFINES``
     Undefine environment variable override. This removes a variable previously
