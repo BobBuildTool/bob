@@ -2298,7 +2298,10 @@ jobs            ``-j``                 Integer
 link_deps       ``--[no-]link-deps``   Boolean
 no_deps         ``-n``                 Boolean
 no_logfiles     ``--no-logfiles``      Boolean
-sandbox         ``--[no-]sandbox``     Boolean
+sandbox         ``--[no-]sandbox`` |   Boolean / String (``yes``, ``no``, ``slim``,
+                ``--slim-sandbox`` |   ``dev``, ``strict``)
+                ``--dev-sandbox`` |
+                ``--strict-sandbox``
 shared          ``--[no-]shared``      Boolean
 upload          ``--upload``           Boolean
 verbosity       ``-q | -v``            Integer (-2[quiet] .. 3[verbose], default 0)

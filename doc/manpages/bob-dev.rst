@@ -22,10 +22,10 @@ Synopsis
             [-lc LAYERCONFIG] [-e NAME] [-E] [-M META] [--upload]
             [--link-deps] [--no-link-deps] [--download MODE]
             [--download-layer MODE] [--shared | --no-shared]
-            [--install | --no-install] [--sandbox | --no-sandbox]
+            [--install | --no-install]
+            [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
             [--clean-checkout] [--attic | --no-attic]
             PACKAGE [PACKAGE ...]
-
 
 Description
 -----------
