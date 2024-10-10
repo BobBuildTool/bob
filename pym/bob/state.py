@@ -6,7 +6,7 @@
 from .errors import ParseError
 from .stringparser import isTrue
 from .tty import colorize, WarnOnce, WARNING
-from .utils import replacePath, getPlatformString
+from .utils import replacePath, getPlatformString, SandboxMode
 import copy
 import errno
 import os
@@ -52,7 +52,7 @@ class JenkinsConfig:
         self.defines = config.get("defines", {}).copy()
         self.download = config.get("download", False)
         self.upload = config.get("upload", False)
-        self.sandbox = config.get("sandbox", True)
+        self.__sandbox = SandboxMode(config.get("sandbox", True))
         self.credentials = config.get("credentials", None)
         self.clean = config.get("clean", True)
         self.keep = config.get("keep", False)
@@ -83,7 +83,7 @@ class JenkinsConfig:
                 "options" : self.__options,
                 "prefix" : self.prefix,
                 "roots" : self.roots,
-                "sandbox" : self.sandbox,
+                "sandbox" : self.__sandbox.compatMode,
                 "shortdescription" : self.shortdescription,
                 "upload" : self.upload,
                 "url" : self.__url,
@@ -97,7 +97,7 @@ class JenkinsConfig:
         self.defines = {}
         self.download = False
         self.upload = False
-        self.sandbox = True
+        self.__sandbox = SandboxMode(True)
         self.credentials = None
         self.clean = True
         self.keep = False
@@ -105,6 +105,17 @@ class JenkinsConfig:
         self.shortdescription = False
         self.hostPlatform = getPlatformString()
         self.__options = {}
+
+    @property
+    def sandbox(self):
+        return self.__sandbox
+
+    @sandbox.setter
+    def sandbox(self, mode):
+        if isinstance(mode, SandboxMode):
+            self.__sandbox = mode
+        else:
+            self.__sandbox = SandboxMode(mode)
 
     @property
     def url(self):
