@@ -233,6 +233,17 @@ Options
     it cannot be built either, the other dependencies are still processed.
     Normally Bob stops on the first error that is encountered.
 
+``-lc LAYERCONFIG``
+    Use additional layer configuration file.
+
+    This is special kind of configuration file to control the layers checkout. Only
+    ``layersWhitelist`` and ``layersScmOverrides`` are supported. Layers are
+    updated automatically unless ``--build-only`` is given too.
+
+    The ``.yaml`` suffix is appended automatically and the configuration file
+    is searched relative to the project root directory unless an absolute path
+    is given.
+
 ``--no-attic``
     Do not move checkout workspace to attic if inline SCM switching is not possible.
     Instead a build error is issued.
