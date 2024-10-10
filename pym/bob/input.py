@@ -2940,7 +2940,7 @@ class RecipeSet:
             schema.Optional('link_deps') : bool,
             schema.Optional('no_deps') : bool,
             schema.Optional('no_logfiles') : bool,
-            schema.Optional('sandbox') : bool,
+            schema.Optional('sandbox') : schema.Or(bool, "no", "slim", "dev", "yes", "strict"),
             schema.Optional('shared') : bool,
             schema.Optional('upload') : bool,
             schema.Optional('verbosity') : int,
