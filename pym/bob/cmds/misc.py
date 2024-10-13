@@ -90,6 +90,12 @@ def doLS(argv, bobRoot):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
+    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
+        help="Enable strict sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
     args = parser.parse_args(argv)
@@ -138,6 +144,12 @@ def doQueryMeta(argv, bobRoot):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
+    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
+        help="Enable strict sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
     args = parser.parse_args(argv)
@@ -196,6 +208,12 @@ are used:
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
+    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
+        help="Enable strict sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
 
@@ -258,6 +276,12 @@ def doQueryRecipe(argv, bobRoot):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--sandbox', action='store_true', default=False,
         help="Enable sandboxing")
+    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
+        help="Enable strict sandboxing")
     group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
         help="Disable sandboxing")
 
