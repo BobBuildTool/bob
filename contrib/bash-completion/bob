@@ -57,11 +57,8 @@ __bob_complete_path()
    # influence parsing and must be passed to "bob ls".
    for i in "${words[@]}"; do
       case "$i" in
-         --sandbox)
-            sandbox="--sandbox"
-            ;;
-         --no-sandbox)
-            sandbox="--no-sandbox"
+         --*sandbox)
+            sandbox="$i"
             ;;
 		 -c?* | -D?*)
 		    cmd_settings+=( "$i" )
@@ -130,7 +127,7 @@ __bob_cook()
    elif [[ "$prev" = "--always-checkout" ]] ; then
       COMPREPLY=( )
    else
-      __bob_complete_path "--destination -j --jobs -k --keep-going -f --force -n --no-deps -p --with-provided --without-provided -A --no-audit --audit -b --build-only -B --checkout-only --normal --clean --incremental --always-checkout --resume -q --quiet -v --verbose --no-logfiles -D -c -e -E -M --upload --link-deps --no-link-deps --download --download-layer --shared --no-shared --install --no-install --sandbox --no-sandbox --clean-checkout --attic --no-attic"
+      __bob_complete_path "--destination -j --jobs -k --keep-going -f --force -n --no-deps -p --with-provided --without-provided -A --no-audit --audit -b --build-only -B --checkout-only --normal --clean --incremental --always-checkout --resume -q --quiet -v --verbose --no-logfiles -D -c -e -E -M --upload --link-deps --no-link-deps --download --download-layer --shared --no-shared --install --no-install --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox --clean-checkout --attic --no-attic"
    fi
 }
 
@@ -151,7 +148,7 @@ __bob_graph()
    if [[ "$prev" = "-t" || "$prev" = "--type" ]] ; then
          __bob_complete_words "d3 dot"
    else
-      __bob_complete_path "-c -D -e --exclude -f --filename -H --highlight -n --max-depth -t --type -o --sandbox --no-sandbox"
+      __bob_complete_path "-c -D -e --exclude -f --filename -H --highlight -n --max-depth -t --type -o --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox"
    fi
 }
 
@@ -162,7 +159,7 @@ __bob_help()
 
 __bob_ls()
 {
-   __bob_complete_path "-a --all -c -D -d --direct --no-sandbox -o --origin -p --prefixed -r --recursive --sandbox -u --unsorted"
+   __bob_complete_path "-a --all -c -D -d --direct --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox -o --origin -p --prefixed -r --recursive --sandbox -u --unsorted"
 }
 
 __bob_init()
@@ -183,7 +180,7 @@ __bob_jenkins_add()
 
    case "$cur" in
       -*)
-         __bob_complete_words "--clean --credentials --download --help --host-platform --keep --longdescription --no-sandbox --nodes --prefix --root --shortdescription --upload --windows -D -h -n -o -p -r -w"
+         __bob_complete_words "--clean --credentials --download --help --host-platform --keep --longdescription --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox --nodes --prefix --root --shortdescription --upload --windows -D -h -n -o -p -r -w"
          ;;
       *)
          case "$prev" in
@@ -304,7 +301,7 @@ __bob_jenkins_set_options()
 
    case "$cur" in
       -*)
-         __bob_complete_words "-h --help --reset -n --nodes -o -p --prefix --add-root --del-root -D -U --credentials --authtoken --shortdescription --longdescription --keep --no-keep --download --no-download --upload --no-upload --sandbox --no-sandbox --clean --incremental --host-platform"
+         __bob_complete_words "-h --help --reset -n --nodes -o -p --prefix --add-root --del-root -D -U --credentials --authtoken --shortdescription --longdescription --keep --no-keep --download --no-download --upload --no-upload --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox --clean --incremental --host-platform"
          ;;
       *)
          case "$prev" in
@@ -353,7 +350,7 @@ __bob_project()
    elif [[ -z "$command" ]] ; then
       case "$cur" in
          -*)
-            __bob_complete_words "-b -c -D --download -E -e -j --list -n --no-sandbox --resume --sandbox"
+            __bob_complete_words "-b -c -D --download -E -e -j --list -n --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox --resume --sandbox"
             ;;
          *)
             __bob_complete_words "$($bob --color=never project --list 2>/dev/null)"
@@ -366,22 +363,22 @@ __bob_project()
 
 __bob_query_scm()
 {
-    __bob_complete_path "-c -D -f --default -r --recursive --sandbox --no-sandbox"
+    __bob_complete_path "-c -D -f --default -r --recursive --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox"
 }
 
 __bob_query_path()
 {
-  __bob_complete_path "-f -D -c --sandbox --no-sandbox --develop --release"
+  __bob_complete_path "-f -D -c --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox --develop --release"
 }
 
 __bob_query_meta()
 {
-  __bob_complete_path " -c -D -r --recursive --sandbox --no-sandbox"
+  __bob_complete_path " -c -D -r --recursive --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox"
 }
 
 __bob_query_recipe()
 {
-    __bob_complete_path "-c -D --sandbox --no-sandbox"
+    __bob_complete_path "-c -D --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox"
 }
 
 __bob_status()
@@ -419,7 +416,8 @@ __bob_show()
     elif [[ "$prev" = "--indent" ]] ; then
         COMPREPLY=( )
     else
-        __bob_complete_path "-D -c --sandbox --no-sandbox --show-empty
+        __bob_complete_path "-D -c --sandbox --no-sandbox --slim-sandbox
+            --dev-sandbox --strict-sandbox --show-empty
             --show-common --indent --no-indent --format -f"
     fi
 }
