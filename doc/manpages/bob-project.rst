@@ -17,7 +17,7 @@ Synopsis
 
     bob project [-h] [--list] [-D DEFINES] [-c CONFIGFILE] [-e NAME] [-E]
                 [--download MODE] [--resume] [-n] [-b] [-j [JOBS]]
-                [--sandbox | --no-sandbox]
+                [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
                 [projectGenerator] [package] ...
 
 
@@ -31,6 +31,13 @@ Options
 
 ``-c CONFIGFILE``
     Use config File
+
+``--dev-sandbox``
+    Enable development sandboxing.
+
+    Always build packages in an isolated environment where only declared
+    dependencies are visible. If a sandbox image is available, it is used.
+    Otherwise the host paths are made read-only.
 
 ``--download MODE``
     Download from binary archive (yes, no, deps, packages)
@@ -57,7 +64,7 @@ Options
     work
 
 ``--no-sandbox``
-    Disable sandboxing
+    Disable sandboxing. This is the default.
 
 ``-b``
     Do build only (bob dev -b) before generate project Files. No checkout
@@ -66,7 +73,27 @@ Options
     Resume build where it was previously interrupted
 
 ``--sandbox``
-    Enable sandboxing
+    Enable partial sandboxing.
+
+    Build packages in an ephemeral container if a sandbox image is available
+    for the package. Inside the sandbox, stable execution paths are used. In
+    absence of a sandbox image, no isolation is performed.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+    Build packages in an isolated mount namespace. Most of the host paths
+    are available read-only. Other workspaces are hidden when building a
+    package unless they are a declared dependency. An optionally available
+    sandbox image is *not* used.
+
+``--strict-sandbox``
+    Enable strict sandboxing.
+
+    Always build packages in an isolated environment where only declared
+    dependencies are visible. If a sandbox image is available, it is used.
+    Otherwise the host paths are made read-only. The build path is always
+    a reproducible, stable path.
 
 Eclipse CDT project generator
 -----------------------------

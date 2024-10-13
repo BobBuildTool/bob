@@ -14,8 +14,10 @@ Synopsis
 --------
 
 ::
+
     bob query-scm [-h] [-D DEFINES] [-c CONFIGFILE] [-f FORMATS]
-                  [--default DEFAULT] [-r] [--sandbox | --no-sandbox]
+                  [--default DEFAULT] [-r]
+                  [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
                   packages [packages ...]
 
 Description
@@ -44,6 +46,9 @@ Options
 ``--default DEFAULT``
     Default for missing attributes (default: "")
 
+``--dev-sandbox``
+    Enable development sandboxing.
+
 ``-f FORMATS``
     Output format for scm (syntax: scm=format). Can be specified multiple times.
 
@@ -54,4 +59,10 @@ Options
     Recursively display dependencies
 
 ``--sandbox``
-    Enable sandboxing
+    Enable partial sandboxing.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing.
