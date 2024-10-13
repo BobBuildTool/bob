@@ -365,7 +365,7 @@ The following built in string functions are supported:
 * ``$(if-then-else,condition,then,else)``: The expansion of ``condition`` is
   interpreted as a boolean value. If the condition is true the expansion of
   ``then`` is returned. Otherwise ``else`` is returned.
-* ``$(is-sandbox-enabled)``: Return ``true`` if a sandbox is enabled in the
+* ``$(is-sandbox-enabled)``: Return ``true`` if a sandbox image is used in the
   current context, ``false`` otherwise.
 * ``$(is-tool-defined,name)``: If ``name`` is a defined tool in the current
   context the function will return ``true``. Otherwise ``false`` is returned.
