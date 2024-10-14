@@ -708,15 +708,23 @@ def getProcessPoolExecutor():
             # To "prime" the process pool a dummy workload must be executed because
             # the processes are spawned lazily.
             origSigInt = signal.getsignal(signal.SIGINT)
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            try:
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-            method = 'fork' if isWindows() else 'forkserver'
-            __setStartMethod(method)
-            executor = concurrent.futures.ProcessPoolExecutor()
+                method = 'fork' if isWindows() else 'forkserver'
+                __setStartMethod(method)
+                executor = concurrent.futures.ProcessPoolExecutor()
 
-            # fork early before process gets big
-            executor.submit(dummy).result()
-            signal.signal(signal.SIGINT, origSigInt)
+                # fork early before process gets big
+                executor.submit(dummy).result()
+            finally:
+                signal.signal(signal.SIGINT, origSigInt)
+    except EOFError:
+        # On Windows WSL1, the 'forkserver' method does not work because UNIX
+        # domain sockets are not fully implemented. Fall back to the 'spawn'
+        # method. See bug #562.
+        multiprocessing.set_start_method('spawn', force=True)
+        executor = concurrent.futures.ProcessPoolExecutor()
     except OSError as e:
         raise BuildError("Error spawning process pool: " + str(e))
 
