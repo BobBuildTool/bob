@@ -719,6 +719,12 @@ def getProcessPoolExecutor():
                 executor.submit(dummy).result()
             finally:
                 signal.signal(signal.SIGINT, origSigInt)
+    except EOFError:
+        # On Windows WSL1, the 'forkserver' method does not work because UNIX
+        # domain sockets are not fully implemented. Fall back to the 'spawn'
+        # method. See bug #562.
+        multiprocessing.set_start_method('spawn', force=True)
+        executor = concurrent.futures.ProcessPoolExecutor()
     except OSError as e:
         raise BuildError("Error spawning process pool: " + str(e))
 
