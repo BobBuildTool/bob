@@ -708,15 +708,17 @@ def getProcessPoolExecutor():
             # To "prime" the process pool a dummy workload must be executed because
             # the processes are spawned lazily.
             origSigInt = signal.getsignal(signal.SIGINT)
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            try:
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-            method = 'fork' if isWindows() else 'forkserver'
-            __setStartMethod(method)
-            executor = concurrent.futures.ProcessPoolExecutor()
+                method = 'fork' if isWindows() else 'forkserver'
+                __setStartMethod(method)
+                executor = concurrent.futures.ProcessPoolExecutor()
 
-            # fork early before process gets big
-            executor.submit(dummy).result()
-            signal.signal(signal.SIGINT, origSigInt)
+                # fork early before process gets big
+                executor.submit(dummy).result()
+            finally:
+                signal.signal(signal.SIGINT, origSigInt)
     except OSError as e:
         raise BuildError("Error spawning process pool: " + str(e))
 
