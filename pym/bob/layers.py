@@ -179,12 +179,14 @@ class Layer:
         configYaml = os.path.join(self.__layerDir, "config.yaml")
         for l in config.get('layers', []):
             scmSpec = l.getScm()
-            if scmSpec is None: continue
-            scmSpec.update({'recipe':configYaml})
-            layerScm = Scm(scmSpec,
-                           Env(self.__defines),
-                           overrides=self.__config.scmOverrides(),
-                           recipeSet=self.__config)
+            if scmSpec is None:
+                layerScm = None
+            else:
+                scmSpec.update({'recipe':configYaml})
+                layerScm = Scm(scmSpec,
+                               Env(self.__defines),
+                               overrides=self.__config.scmOverrides(),
+                               recipeSet=self.__config)
             self.__subLayers.append(Layer(l.getName(),
                                           self.__config,
                                           self.__defines,
