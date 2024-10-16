@@ -1,6 +1,5 @@
 import argparse
 
-from ..input import RecipeSet
 from ..layers import Layers, updateLayers
 from ..tty import NORMAL, setVerbosity
 from ..utils import EventLoopWrapper, processDefines
