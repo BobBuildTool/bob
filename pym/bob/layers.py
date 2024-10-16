@@ -82,17 +82,16 @@ class LayerStepSpec:
 
 
 class Layer:
-    def __init__(self, name, upperConfig, defines, attic, scm=None):
+    def __init__(self, name, upperConfig, defines, scm=None):
         self.__name = name
         self.__upperConfig = upperConfig
         self.__defines = defines
-        self.__attic = attic
         self.__scm = scm
         self.__created = False
         self.__layerDir = os.path.join("layers", name) if len(name) else "."
         self.__subLayers = []
 
-    async def __checkoutTask(self, verbose):
+    async def __checkoutTask(self, verbose, attic):
         if self.__scm is None:
             return
         dir = self.__scm.getProperties(False).get("dir")
@@ -136,7 +135,7 @@ class Layer:
                     BobState().setLayerState(self.__layerDir, newState)
                     return
 
-            if not self.__attic:
+            if not attic:
                 raise BuildError("Layer '{}' inline switch not possible and move to attic disabled '{}'!"
                     .format(self.__name, self.__layerDir))
             atticName = datetime.datetime.now().isoformat().translate(INVALID_CHAR_TRANS)+"_"+os.path.basename(self.__layerDir)
@@ -156,9 +155,9 @@ class Layer:
                 "'{}' .. ok".format(self.getName()), EXECUTED, NORMAL)
         BobState().setLayerState(self.__layerDir, newState)
 
-    def checkout(self, loop, verbose):
+    def checkout(self, loop, verbose, attic):
         try:
-            j = loop.create_task(self.__checkoutTask(verbose))
+            j = loop.create_task(self.__checkoutTask(verbose, attic))
             loop.run_until_complete(j)
         except (CmdFailedError, InvocationError) as e:
             if self.__created:
@@ -189,7 +188,6 @@ class Layer:
             self.__subLayers.append(Layer(l.getName(),
                                           self.__config,
                                           self.__defines,
-                                          self.__attic,
                                           layerScm))
 
     def getSubLayers(self):
@@ -217,7 +215,7 @@ class Layers:
         newLevel = False
         for l in self.__layers[depth]:
             if update:
-                l.checkout(loop, verbose)
+                l.checkout(loop, verbose, self.__attic)
             l.parse(yamlCache)
             for subLayer in l.getSubLayers():
                 if not self.__haveLayer(subLayer):
@@ -256,7 +254,7 @@ class Layers:
 
                 config = config.derive(yamlCache.loadYaml(c, configSchema))
 
-            rootLayers = Layer("", config, self.__defines, self.__attic)
+            rootLayers = Layer("", config, self.__defines)
             rootLayers.parse(yamlCache)
             self.__layers[0] = rootLayers.getSubLayers();
             self.__collect(loop, 0, yamlCache, update, verbose)
