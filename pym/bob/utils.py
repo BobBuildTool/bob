@@ -97,6 +97,34 @@ def removeUserFromUrl(url):
     # Nothing matched
     return url
 
+class SandboxMode:
+    def __init__(self, mode):
+        # normalize legacy boolean argument
+        if isinstance(mode, bool):
+            mode = "yes" if mode else "no"
+        assert mode in ("no", "yes", "slim", "dev", "strict")
+
+        self.mode = mode
+        self.sandboxEnabled = mode in ("dev", "yes", "strict")
+        self.slimSandbox = mode in ("slim", "dev", "strict")
+
+        if mode == "dev":
+            self.stablePaths = False
+        elif mode == "strict":
+            self.stablePaths = True
+        else:
+            self.stablePaths = None
+
+    @property
+    def compatMode(self):
+        # pre 0.25 compatibility
+        if self.mode == "no":
+            return False
+        elif self.mode == "yes":
+            return True
+        else:
+            return self.mode
+
 def removePath(path):
     if sys.platform == "win32":
         def onerror(func, path, exc):

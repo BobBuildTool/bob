@@ -15,9 +15,11 @@ Synopsis
 
 ::
 
-    bob query-path [-h] [-f FORMAT] [-D DEFINES] [-c CONFIGFILE]
-                   [--sandbox | --no-sandbox] [--develop | --release]
-                   [-q] [--fail] PACKAGE [PACKAGE ...]
+    bob query-path [-h] [-f FORMAT] [-D DEFINES] [-c CONFIGFILE] [-q]
+                   [--fail]
+                   [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
+                   [--develop | --release]
+                   PACKAGE [PACKAGE ...]
 
 Description
 -----------
@@ -26,15 +28,15 @@ This command lists existing workspace directory names for packages given
 on the command line. Output is formatted with a format string that can
 contain placeholders
 
-    +----------+------------------+
-    |{name}    |package name      |
-    +----------+------------------+
-    |{src}     |checkout directory|
-    +----------+------------------+
-    |{build}   |build directory   |
-    +----------+------------------+
-    |{dist}    |package directory |
-    +----------+------------------+
+    +-----------+--------------------+
+    | {name}    | package name       |
+    +-----------+--------------------+
+    | {src}     | checkout directory |
+    +-----------+--------------------+
+    | {build}   | build directory    |
+    +-----------+--------------------+
+    | {dist}    | package directory  |
+    +-----------+--------------------+
 
 The default format is '{name}<tab>{dist}'.
 
@@ -51,6 +53,9 @@ Options
 
 ``-D DEFINES``
     Override default environment variable
+
+``--dev-sandbox``
+    Enable development sandboxing.
 
 ``--develop``
     Use developer mode
@@ -71,5 +76,10 @@ Options
     Use release mode
 
 ``--sandbox``
-    Enable sandboxing
+    Enable partial sandboxing.
 
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing.

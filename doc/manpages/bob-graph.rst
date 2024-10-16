@@ -15,7 +15,8 @@ Synopsis
 
 ::
 
-    bob graph [-h] [-D DEFINES] [-c CONFIGFILE] [--sandbox | --no-sandbox]
+    bob graph [-h] [-D DEFINES] [-c CONFIGFILE]
+              [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
               [--destination DEST] [-e EXCLUDES] [-f FILENAME]
               [-H HIGHLIGHTS] [-n MAX_DEPTH] [-t {d3,dot}] [-o OPTIONS]
               PACKAGE [PACKAGE ...]
@@ -45,6 +46,9 @@ Options
 ``--destination``
     Destination of graph output files.
 
+``--dev-sandbox``
+    Enable development sandboxing. Include sandbox dependencies in the graph.
+
 ``-e, --excludes``
     Do not show packages matching this regex. (And all it's
     dependencies)
@@ -64,7 +68,13 @@ Options
     the default.
 
 ``--sandbox``
-    Enable sandboxing. Include sandbox dependencies in the graph.
+    Enable partial sandboxing. Include sandbox dependencies in the graph.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing. Include sandbox dependencies in the graph.
 
 ``-t, --type``
     Set the graph type. ``d3`` (default) or ``dot``.

@@ -1,0 +1,11 @@
+root: True
+
+depends:
+    - test-outside
+    - name: sandbox
+      use: [sandbox]
+      forward: True
+    - test-inside
+
+buildScript: "true"
+packageScript: "true"

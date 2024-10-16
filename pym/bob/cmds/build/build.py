@@ -12,7 +12,7 @@ from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
 from ...layers import updateLayers
 from ...share import getShare
 from ...tty import setVerbosity, setTui, Warn
-from ...utils import copyTree, processDefines, EventLoopWrapper
+from ...utils import copyTree, processDefines, EventLoopWrapper, SandboxMode
 import argparse
 import datetime
 import re
@@ -197,16 +197,25 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Use shared packages")
     group.add_argument('--no-shared', action='store_false', dest='shared',
         help="Do not use shared packages")
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--install', action='store_true', default=None,
         help="Install shared packages")
     group.add_argument('--no-install', action='store_false', dest='install',
         help="Do not install shared packages")
+
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=None,
-        help="Enable sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+    group.add_argument('--sandbox', action='store_const', const="yes", default=None,
+        help="Enable partial sandboxing")
+    group.add_argument('--slim-sandbox', action='store_const', const="slim", dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_const', const="dev", dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_const', const="strict", dest='sandbox',
+        help="Enable strict sandboxing")
+    group.add_argument('--no-sandbox', action='store_const', const="no", dest='sandbox',
         help="Disable sandboxing")
+
     parser.add_argument('--clean-checkout', action='store_true', default=None, dest='clean_checkout',
         help="Do a clean checkout if SCM state is dirty.")
     group = parser.add_mutually_exclusive_group()
@@ -247,7 +256,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 'clean' : not develop,
                 'upload' : False,
                 'download' : "deps" if develop else "yes",
-                'sandbox' : not develop,
+                'sandbox' : "no" if develop else "yes",
                 'clean_checkout' : False,
                 'no_logfiles' : False,
                 'link_deps' : True,
@@ -299,7 +308,10 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             nameFormatter = recipes.getHook('releaseNameFormatter')
             nameFormatter = LocalBuilder.releaseNamePersister(nameFormatter)
         nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
-        packages = recipes.generatePackages(nameFormatter, args.sandbox)
+
+        sandboxMode = SandboxMode(args.sandbox)
+        packages = recipes.generatePackages(nameFormatter, sandboxMode.sandboxEnabled,
+                                            sandboxMode.stablePaths)
         if develop: developPersister.prime(packages)
 
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
@@ -325,6 +337,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setShareHandler(getShare(recipes.getShareConfig()))
         builder.setShareMode(args.shared, args.install)
         builder.setAtticEnable(args.attic)
+        builder.setSlimSandbox(sandboxMode.slimSandbox)
         if args.resume: builder.loadBuildState()
 
         backlog = []

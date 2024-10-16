@@ -162,7 +162,7 @@ passed:
 
 * ``env``: dict of all available environment variables at the current context
 * ``recipe``: the current :class:`bob.input.Recipe`
-* ``sandbox``: ``True`` if a sandbox is used. ``False`` if no sandbox was
+* ``sandbox``: ``True`` if a sandbox *image* is used. ``False`` if no sandbox image was
   configured or if it is disabled (e.g. ``--no-sandbox`` option was specified).
 
 In the future additional keyword args may be added without notice. Such string
@@ -209,7 +209,9 @@ Currently the following additional kwargs are passed:
  * ``packageSteps``: list of all package steps (:class:`bob.input.Step`) used
    in the job
  * ``prefix``: Prefix of all job names
- * ``sandbox``: Boolean whether sandbox should be used
+ * ``sandbox``: Boolean whether sandbox should be used. Plugins starting with
+   API version ``0.25`` are passed the sandbox mode as string (``no``, ``yes``,
+   ``slim``, ``dev`` or ``strict``).
  * ``url``: URL of Jenkins instance
  * ``windows``: True if Jenkins runs on Windows
 

@@ -16,7 +16,7 @@ Synopsis
 ::
 
     bob query-recipe [-h] [-D DEFINES] [-c CONFIGFILE]
-                     [--sandbox | --no-sandbox]
+                     [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
                      package
 
 Description
@@ -33,8 +33,17 @@ Options
 ``-D DEFINES``
     Override default environment variable
 
+``--dev-sandbox``
+    Enable development sandboxing.
+
 ``--no-sandbox``
     Disable sandboxing
 
 ``--sandbox``
-    Enable sandboxing
+    Enable partial sandboxing.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing.

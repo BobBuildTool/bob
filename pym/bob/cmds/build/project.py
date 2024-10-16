@@ -8,7 +8,7 @@ from ...errors import BobError
 from ...generators import generators as defaultGenerators
 from ...input import RecipeSet
 from ...tty import colorize
-from ...utils import processDefines
+from ...utils import processDefines, SandboxMode
 import argparse
 import os
 
@@ -48,9 +48,15 @@ def doProject(argv, bobRoot):
     parser.add_argument('-j', '--jobs', default=None, type=int, nargs='?', const=...,
         help="Specifies  the  number of jobs to run simultaneously.")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=False,
-        help="Enable sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+    group.add_argument('--sandbox', action='store_const', const="yes", default="no",
+        help="Enable partial sandboxing")
+    group.add_argument('--slim-sandbox', action='store_const', const="slim", dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_const', const="dev", dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_const', const="strict", dest='sandbox',
+        help="Enable strict sandboxing")
+    group.add_argument('--no-sandbox', action='store_const', const="no", dest='sandbox',
         help="Disable sandboxing")
     args = parser.parse_args(argv)
 
@@ -68,7 +74,9 @@ def doProject(argv, bobRoot):
     nameFormatter = recipes.getHook('developNameFormatter')
     developPersister = DevelopDirOracle(nameFormatter, recipes.getHook('developNamePersister'))
     nameFormatter = LocalBuilder.makeRunnable(developPersister.getFormatter())
-    packages = recipes.generatePackages(nameFormatter, args.sandbox)
+    sandboxMode = SandboxMode(args.sandbox)
+    packages = recipes.generatePackages(nameFormatter, sandboxMode.sandboxEnabled,
+                                        sandboxMode.stablePaths)
     developPersister.prime(packages)
 
     generators = defaultGenerators.copy()
@@ -98,7 +106,14 @@ def doProject(argv, bobRoot):
         extra.append('-e')
         extra.append(e)
     if args.preserve_env: extra.append('-E')
-    if args.sandbox: extra.append('--sandbox')
+    if args.sandbox == "yes":
+        extra.append('--sandbox')
+    elif args.sandbox == "slim":
+        extra.append('--slim-sandbox')
+    elif args.sandbox == "dev":
+        extra.append('--dev-sandbox')
+    elif args.sandbox == "strict":
+        extra.append('--strict-sandbox')
     if args.jobs is ...:
         # expand because we cannot control the argument order in the generator
         args.jobs = os.cpu_count()

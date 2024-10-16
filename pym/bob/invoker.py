@@ -267,7 +267,7 @@ class Invoker:
 
         return FinishedProcess(ret, stdoutBuf, stderrBuf)
 
-    def __getSandboxCmds(self, tmpDir):
+    def __getFatSandboxCmds(self, tmpDir):
         if sys.platform != "linux":
             self.fail("Sandbox builds are only supported on Linux!")
 
@@ -300,6 +300,31 @@ class Invoker:
             cmdArgs.append("-i")
         else:
             assert self.__spec.sandboxUser == "nobody"
+
+        return cmdArgs
+
+    def __getSlimSandboxCmds(self, tmpDir):
+        if sys.platform != "linux":
+            self.fail("Sandbox builds are only supported on Linux!")
+
+        sandboxTmpDir = os.path.join(tmpDir, "sandbox")
+        os.mkdir(sandboxTmpDir)
+        whiteoutTmpDir = os.path.join(tmpDir, "whiteout")
+        os.mkdir(whiteoutTmpDir)
+
+        cmdArgs = [ self.__getSandboxHelperPath() ]
+        cmdArgs.extend(["-S", sandboxTmpDir])
+        cmdArgs.append("-i")
+        cmdArgs.extend(["-d", "/tmp"])
+
+        # Mount everything read-only except tmp
+        for f in os.listdir("/"):
+            if f == "tmp": continue
+            cmdArgs.extend(["-M", "/"+f, "-m", "/"+f])
+
+        # Whiteout current directory. Other workspaces should only be visible
+        # if they are a depdendency.
+        cmdArgs.extend(["-M", whiteoutTmpDir, "-w", os.getcwd()])
 
         return cmdArgs
 
@@ -349,12 +374,17 @@ class Invoker:
 
             # Wrap call into sandbox if requested
             if self.__spec.hasSandbox:
-                cmdArgs = self.__getSandboxCmds(tmpDir)
+                if self.__spec.fatSandbox:
+                    cmdArgs = self.__getFatSandboxCmds(tmpDir)
+                else:
+                    assert self.__spec.slimSandbox
+                    cmdArgs = self.__getSlimSandboxCmds(tmpDir)
+
                 cmdArgs.extend(["-M", os.path.abspath(realScriptFile), "-m"
                     , execScriptFile])
 
                 # Prevent network access
-                if not self.__spec.sandboxNetAccess: cmdArgs.append('-n')
+                if not self.__spec.netAccess: cmdArgs.append('-n')
 
                 # Create empty env file. Otheriwse bind mount fails.
                 if self.__spec.envFile:
@@ -363,17 +393,20 @@ class Invoker:
 
                 # Mount workspace writable and all dependencies read-only
                 cmdArgs.extend(["-M", os.path.abspath(self.__spec.workspaceWorkspacePath),
-                    "-w", self.__spec.workspaceExecPath])
+                                "-w", os.path.abspath(self.__spec.workspaceExecPath)])
                 cmdArgs.extend(["-W", os.path.abspath(self.__spec.workspaceExecPath) ])
-                for argWorkspacePath, argExecPath in self.__spec.sandboxDepMounts:
+                for argWorkspacePath, argExecPath in self.__spec.depMounts:
                     cmdArgs.extend(["-M", os.path.abspath(argWorkspacePath),
-                        "-m", argExecPath])
+                                    "-m", os.path.abspath(argExecPath)])
 
                 # Command follows. Stop parsing options.
                 cmdArgs.append("--")
 
                 # Hard override of PATH. The sandbox helper is found by an absolute path!
-                env = { "PATH" : ":".join(self.__spec.sandboxPaths) }
+                if self.__spec.fatSandbox:
+                    env = { "PATH" : ":".join(self.__spec.sandboxPaths) }
+                else:
+                    env = None
             else:
                 cmdArgs = []
                 env = None
@@ -443,12 +476,12 @@ class Invoker:
 
             # Wrap call into sandbox if requested
             env = {}
-            if self.__spec.hasSandbox:
+            if self.__spec.fatSandbox:
                 env["BOB_CWD"] = "/bob/fingerprint"
                 env["PATH"] = ":".join(self.__spec.sandboxPaths)
 
                 # Setup workspace
-                cmdArgs = self.__getSandboxCmds(tmpDir)
+                cmdArgs = self.__getFatSandboxCmds(tmpDir)
                 cmdArgs.extend(["-d", "/bob/fingerprint"])
                 cmdArgs.extend(["-W", "/bob/fingerprint"])
 
@@ -474,12 +507,12 @@ class Invoker:
             raise BuildError(e.what)
         finally:
             if tmpDir is not None:
-                if not self.__spec.hasSandbox or not keepSandbox:
+                if not self.__spec.fatSandbox or not keepSandbox:
                     try:
                         removePath(tmpDir)
                     except OSError as e:
                         self.error("Error removing sandbox:", str(e))
-                elif self.__spec.hasSandbox:
+                elif self.__spec.fatSandbox:
                     self.info("Keeping sandbox image at", tmpDir)
             self.__closeLog(ret)
 

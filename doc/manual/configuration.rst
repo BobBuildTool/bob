@@ -365,7 +365,7 @@ The following built in string functions are supported:
 * ``$(if-then-else,condition,then,else)``: The expansion of ``condition`` is
   interpreted as a boolean value. If the condition is true the expansion of
   ``then`` is returned. Otherwise ``else`` is returned.
-* ``$(is-sandbox-enabled)``: Return ``true`` if a sandbox is enabled in the
+* ``$(is-sandbox-enabled)``: Return ``true`` if a sandbox image is used in the
   current context, ``false`` otherwise.
 * ``$(is-tool-defined,name)``: If ``name`` is a defined tool in the current
   context the function will return ``true``. Otherwise ``false`` is returned.
@@ -2298,7 +2298,10 @@ jobs            ``-j``                 Integer
 link_deps       ``--[no-]link-deps``   Boolean
 no_deps         ``-n``                 Boolean
 no_logfiles     ``--no-logfiles``      Boolean
-sandbox         ``--[no-]sandbox``     Boolean
+sandbox         ``--[no-]sandbox`` |   Boolean / String (``yes``, ``no``, ``slim``,
+                ``--slim-sandbox`` |   ``dev``, ``strict``)
+                ``--dev-sandbox`` |
+                ``--strict-sandbox``
 shared          ``--[no-]shared``      Boolean
 upload          ``--upload``           Boolean
 verbosity       ``-q | -v``            Integer (-2[quiet] .. 3[verbose], default 0)

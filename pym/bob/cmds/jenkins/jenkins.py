@@ -11,7 +11,7 @@ from ...languages import StepSpec
 from ...state import BobState, JenkinsConfig
 from ...tty import WarnOnce
 from ...utils import processDefines, runInEventLoop, sslNoVerifyContext, quoteCmdExe, \
-    getPlatformString
+    getPlatformString, SandboxMode, compareVersion
 from .intermediate import getJenkinsVariantId, PartialIR
 from pathlib import PurePosixPath
 from shlex import quote
@@ -443,6 +443,7 @@ class JenkinsJob:
             "copy=" + config.artifactsCopy,
             "share=" + config.sharedDir,
             "always-checkout=" + ("1" if config.scmAlwaysCheckout else "0"),
+            "slimSandbox=" + ("1" if config.sandbox.slimSandbox else "0"),
         ])
         if config.sharedQuota:
             execCmds.append("quota=" + config.sharedQuota)
@@ -742,7 +743,8 @@ def genJenkinsJobs(recipes, jenkins):
 
     packages = recipes.generatePackages(
         jenkinsNamePersister(jenkins, nameFormatter, config.uuid),
-        config.sandbox)
+        config.sandbox.sandboxEnabled,
+        config.sandbox.stablePaths)
     nameCalculator = JobNameCalculator(config.prefix)
     rootPackages = []
     for r in config.roots: rootPackages.extend(packages.queryPackagePath(r))
@@ -807,7 +809,16 @@ def doJenkinsAdd(recipes, argv):
         help="Download from binary archive")
     parser.add_argument('--upload', default=False, action='store_true',
         help="Upload to binary archive")
-    parser.add_argument('--no-sandbox', action='store_false', dest='sandbox', default=True,
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_const', const="yes", default="yes",
+        help="Enable partial sandboxing")
+    group.add_argument('--slim-sandbox', action='store_const', const="slim", dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_const', const="dev", dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_const', const="strict", dest='sandbox',
+        help="Enable strict sandboxing")
+    group.add_argument('--no-sandbox', action='store_const', const="no", dest='sandbox',
         help="Disable sandboxing")
     parser.add_argument("--credentials", help="Credentials UUID for SCM checkouts")
     group = parser.add_mutually_exclusive_group()
@@ -836,7 +847,7 @@ def doJenkinsAdd(recipes, argv):
     config.defines = processDefines(args.defines)
     config.download = args.download
     config.upload = args.upload
-    config.sandbox = args.sandbox
+    config.sandbox = SandboxMode(args.sandbox)
     config.credentials = args.credentials
     config.clean = args.clean
     config.keep = args.keep
@@ -884,7 +895,7 @@ def doJenkinsExport(recipes, argv):
             'url' : config.url,
             'prefix' : config.prefix,
             'nodes' : config.nodes,
-            'sandbox' : config.sandbox,
+            'sandbox' : config.sandbox.mode,
             'windows' : config.windows,
             'hostPlatform' : config.hostPlatform,
             'checkoutSteps' : job.getCheckoutSteps(),
@@ -917,6 +928,14 @@ def doJenkinsLs(recipes, argv):
         help="Show additional information")
     args = parser.parse_args(argv)
 
+    SANDBOX_MODES = {
+        "no" : "disabled",
+        "yes" : "enabled, partial",
+        "slim" : "enabled, slim",
+        "dev" : "enabled, dev",
+        "strict" : "enabled, strict",
+    }
+
     for j in sorted(BobState().getAllJenkins()):
         print(j)
         cfg = BobState().getJenkinsConfig(j)
@@ -933,7 +952,7 @@ def doJenkinsLs(recipes, argv):
             print("    Download:", "enabled" if cfg.download else "disabled")
             print("    Upload:", "enabled" if cfg.upload else "disabled")
             print("    Clean builds:", "enabled" if cfg.clean else "disabled")
-            print("    Sandbox:", "enabled" if cfg.sandbox else "disabled")
+            print("    Sandbox:", SANDBOX_MODES[cfg.sandbox.mode])
             if cfg.credentials:
                 print("    Credentials:", cfg.credentials)
             options = cfg.getOptions()
@@ -1206,8 +1225,14 @@ def doJenkinsRm(recipes, argv):
     BobState().delJenkins(args.name)
 
 def applyHooks(hooks, job, info, reverse=False):
-    for h in (reversed(hooks) if reverse else hooks):
-        job = h(job, **info)
+    for hook, apiVersion in (reversed(hooks) if reverse else hooks):
+        if compareVersion(apiVersion, "0.24.1.dev106") < 0:
+            # Retain pre 0.25 compatibility of 'sandbox' info item
+            args = info.copy()
+            args['sandbox'] = args['sandbox'] != "no"
+        else:
+            args = info
+        job = hook(job, **args)
     return job
 
 def doJenkinsPush(recipes, argv):
@@ -1288,7 +1313,7 @@ def doJenkinsPush(recipes, argv):
                 'url' : config.url,
                 'prefix' : config.prefix,
                 'nodes' : config.nodes,
-                'sandbox' : config.sandbox,
+                'sandbox' : config.sandbox.mode,
                 'windows' : config.windows,
                 'hostPlatform' : config.hostPlatform,
                 'checkoutSteps' : job.getCheckoutSteps(),
@@ -1501,9 +1526,15 @@ def doJenkinsSetOptions(recipes, argv):
     group.add_argument('--no-upload', action='store_false', dest='upload',
         help="Disable binary archive upload")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=None,
-        help="Enable sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+    group.add_argument('--sandbox', action='store_const', const="yes", default=None,
+        help="Enable partial sandboxing")
+    group.add_argument('--slim-sandbox', action='store_const', const="slim", dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_const', const="dev", dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_const', const="strict", dest='sandbox',
+        help="Enable strict sandboxing")
+    group.add_argument('--no-sandbox', action='store_const', const="no", dest='sandbox',
         help="Disable sandboxing")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--clean', action='store_true', default=None,
@@ -1543,7 +1574,7 @@ def doJenkinsSetOptions(recipes, argv):
     if args.upload is not None:
         config.upload = args.upload
     if args.sandbox is not None:
-        config.sandbox = args.sandbox
+        config.sandbox = SandboxMode(args.sandbox)
     if defines:
         config.defines.update(defines)
     for d in args.undefines:

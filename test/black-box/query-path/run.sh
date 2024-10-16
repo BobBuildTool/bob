@@ -52,20 +52,20 @@ test -n "$(run_bob query-path --release root/interm2/child)"
 #
 
 # Must report no path for all usages because we have not built.
-test -z "$(run_bob query-path --dev root)"
-test -z "$(run_bob query-path --dev root/interm1/child)"
-test -z "$(run_bob query-path --dev root/interm2/child)"
+test -z "$(run_bob query-path --develop root)"
+test -z "$(run_bob query-path --develop root/interm1/child)"
+test -z "$(run_bob query-path --develop root/interm2/child)"
 
 # Build everything
 run_bob dev root
 # Convert reported paths to unix format.
-set -- $(run_bob query-path --dev root | sed -e 's|\\|/|g')
+set -- $(run_bob query-path --develop root | sed -e 's|\\|/|g')
 test "$1" = "root"
 test "$2" = "dev/dist/root/1/workspace"
 
-# 'query-path --dev' is the default
+# 'query-path --develop' is the default
 PACKAGES="root root/interm1/child root/interm2/child"
-RESULT=$(run_bob query-path --dev $PACKAGES)
+RESULT=$(run_bob query-path --develop $PACKAGES)
 test "$RESULT" = "$(run_bob query-path $PACKAGES)"
 
 # No matter in which order we build, we must get the same result.
@@ -73,7 +73,7 @@ for i in $PACKAGES; do
     rm -rf work dev .bob-*
     run_bob dev $i
     run_bob dev root
-    test "$(run_bob query-path --dev $PACKAGES)" = "$RESULT"
+    test "$(run_bob query-path --develop $PACKAGES)" = "$RESULT"
 done
 
 

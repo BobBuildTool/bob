@@ -16,9 +16,9 @@ Synopsis
 ::
 
     bob ls [-h] [-a] [-A] [-o] [-r] [-u] [-p | -d] [-D DEFINES]
-           [-c CONFIGFILE] [--sandbox | --no-sandbox]
+           [-c CONFIGFILE]
+           [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
            [package]
-
 
 Description
 -----------
@@ -80,6 +80,9 @@ Options
 ``-D DEFINES``
     Override default environment variable
 
+``--dev-sandbox``
+    Enable development sandboxing.
+
 ``--no-sandbox``
     Disable sandboxing
 
@@ -95,7 +98,13 @@ Options
     Recursively display dependencies
 
 ``--sandbox``
-    Enable sandboxing
+    Enable partial sandboxing.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing.
 
 ``-u, --unsorted``
     Show the packages in the order they were named in the recipe. By default

@@ -30,6 +30,7 @@ class Spec:
         self.platform = None
         self.__recipesAudit = []
         self.__execIR = []
+        self.slimSandbox = False
 
         with open(specFile, "r") as f:
             f.readline() # skip shebang
@@ -65,6 +66,8 @@ class Spec:
             self.platform = v
         elif k == "always-checkout":
             self.scmAlwaysCheckout = isTrue(v)
+        elif k == "slimSandbox":
+            self.slimSandbox = isTrue(v)
         else:
             raise AssertionError(line)
 
@@ -237,6 +240,7 @@ def doJenkinsExecuteRun(argv, bobRoot):
             builder.setShareMode(True, True)
         if spec.scmAlwaysCheckout:
             builder.setAlwaysCheckout([".*"])
+        builder.setSlimSandbox(spec.slimSandbox)
         builder.cook(ir.getRoots(), False, loop)
 
     return 0

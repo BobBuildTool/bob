@@ -17,7 +17,7 @@ Synopsis
 ::
 
     bob query-meta [-h] [-D DEFINES] [-c CONFIGFILE] [-r]
-                   [--sandbox | --no-sandbox]
+                   [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
                    packages [packages ...]
 
 Description
@@ -34,6 +34,9 @@ Options
 ``-D DEFINES``
     Override default environment variable
 
+``--dev-sandbox``
+    Enable development sandboxing.
+
 ``--no-sandbox``
     Disable sandboxing
 
@@ -41,4 +44,10 @@ Options
     Also list metaEnvironment variables for all dependencies.
 
 ``--sandbox``
-    Enable sandboxing
+    Enable partial sandboxing.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing.

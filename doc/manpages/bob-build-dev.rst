@@ -7,6 +7,67 @@ be initialized with :ref:`bob init <manpage-bob-init>`. Any number of build
 trees may refer to the same project. Inside the external build-tree there may
 be a dedicated ``default.yaml``, overriding settings from the project.
 
+Sandboxing
+----------
+
+Sandboxing allows to execute the build steps in ephemeral containers. The
+feature is currently available on Linux only. There are different aspects to
+sandboxing:
+
+1. Isolating from the host environment. By using a project defined sandbox
+   image, the build environment is made independent of the host Linux
+   distribution.
+2. Controlling the accessible project paths. Only declared dependencies are
+   accessible read-only. The build workspace is the only writable path (despite
+   ``/tmp``). All other project paths are not not accessible at all.
+3. Providing stable execution paths. Sometimes the build path is leaking into
+   the created binaries. Inside the sandbox environment, the paths can be made
+   reproducible.
+
+.. only:: not man
+
+    To accommodate for different use cases, five different sandbox modes are
+    supported by Bob. They differ in their degree of isolation and execution path
+    stability:
+
+    +----------------------+--------------------------------+------------------------------------------+
+    | Mode                 | Packages without sandbox image | Packages with sandbox image              |
+    |                      +-------------+------------------+-----------+-------------+----------------+
+    |                      | Isolation   | Execution path   | Isolation | Image used? | Execution path |
+    +======================+=============+==================+===========+=============+================+
+    | ``--no-sandbox``     | \-          |  Workspace       |  \-       | n/a         | Workspace      |
+    +----------------------+-------------+------------------+-----------+-------------+----------------+
+    | ``--sandbox``        | \-          |  Workspace       |  Yes      | Yes         | Stable         |
+    +----------------------+-------------+------------------+-----------+-------------+----------------+
+    | ``--slim-sandbox``   | Yes         |  Workspace       |  Yes      | \-          | Workspace      |
+    +----------------------+-------------+------------------+-----------+-------------+----------------+
+    | ``--dev-sandbox``    | Yes         |  Workspace       |  Yes      | Yes         | Workspace      |
+    +----------------------+-------------+------------------+-----------+-------------+----------------+
+    | ``--strict-sandbox`` | Yes         |  Stable          |  Yes      | Yes         | Stable         |
+    +----------------------+-------------+------------------+-----------+-------------+----------------+
+
+    The overall behaviour depends on the availability of a sandbox image. Such
+    an image must be provided by a recipe via
+    :ref:`configuration-recipes-provideSandbox` and the sandbox image must have
+    been picked up by a ``use: [sandbox]`` dependency.
+
+    The execution path is the path where the checkout/build/packageScript is
+    executed. This is usually the *workspace* path but some modes use a
+    *stable* path instead. Stable paths start with ``/bob/...`` and are computed
+    from the :term:`Variant-Id` of the step. An unchanged step will always be
+    executed at the same stable path in a sandbox.
+
+Using ``--no-sandbox`` will not use any sandboxing features and all build steps
+are executed without any isolation on the build host. The ``--sandbox`` option
+will provide partial isolation only if a sandbox image is available for a package.
+Inside the sandbox image all paths are stable, i.e. independent of the
+workspace path. As a light-weight alternative, the ``--slim-sandbox`` option
+will always provide isolation but an available sandbox image is not used and
+all workspace paths are retained. Likewise, the ``--dev-sandbox`` option will
+also provide full isolation but an available sandbox image is used. The
+``--strict-sandbox`` option further uses stable paths consistently.
+
+
 Options
 -------
 
@@ -64,6 +125,13 @@ Options
     Unless ``--without-provided`` is given using this option will implicitly
     enable ``--with-provided`` to build and copy all provided packages of the
     built package(s).
+
+``--dev-sandbox``
+    Enable development sandboxing.
+
+    Always build packages in an isolated environment where only declared
+    dependencies are visible. If a sandbox image is available, it is used.
+    Otherwise the host paths are made read-only.
 
 ``--download MODE``
     Download from binary archive (yes, no, deps, forced, forced-deps, packages)
@@ -134,10 +202,30 @@ Options
     failed and the error has been corrected in the failing package.
 
 ``--sandbox``
-    Enable sandboxing
+    Enable partial sandboxing.
+
+    Build packages in an ephemeral container if a sandbox image is available
+    for the package. Inside the sandbox, stable execution paths are used. In
+    absence of a sandbox image, no isolation is performed.
 
 ``--shared``
     Use shared packages if they are available. This is the default.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+    Build packages in an isolated mount namespace. Most of the host paths
+    are available read-only. Other workspaces are hidden when building a
+    package unless they are a declared dependency. An optionally available
+    sandbox image is *not* used.
+
+``--strict-sandbox``
+    Enable strict sandboxing.
+
+    Always build packages in an isolated environment where only declared
+    dependencies are visible. If a sandbox image is available, it is used.
+    Otherwise the host paths are made read-only. The build path is always
+    a reproducible, stable path.
 
 ``--upload``
     Upload to binary archive

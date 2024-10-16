@@ -15,7 +15,8 @@ Synopsis
 
 ::
 
-    bob show [-h] [-D DEFINES] [-c CONFIGFILE] [--sandbox | --no-sandbox]
+    bob show [-h] [-D DEFINES] [-c CONFIGFILE]
+             [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
              [--show-empty] [--show-common] [--indent INDENT | --no-indent]
              [--format {yaml,json,flat,diff}]
              [-f {buildNetAccess,buildTools,buildToolsWeak,buildVars,buildVarsWeak,
@@ -62,6 +63,9 @@ the properties that are different between both packages.
 Options
 -------
 
+``--dev-sandbox``
+    Enable development sandboxing.
+
 ``-f FIELD``
    Show only the given ``FIELD``. This option may be specified more than once
    to show additional fields. If this option is not given then all fields are
@@ -83,7 +87,7 @@ Options
    Disable sandboxing.
 
 ``--sandbox``
-   Enable sandboxing.
+   Enable partial sandboxing.
 
 ``--show-common``
    The ``diff`` format suppresses identical fields by default. This option
@@ -94,3 +98,9 @@ Options
    as short as possible. Specifying this option will still show them. If the
    package does not have a checkout- or build-step the respective properties do
    not exist and will never be shown.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing.
