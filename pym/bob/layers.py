@@ -82,13 +82,19 @@ class LayerStepSpec:
 
 
 class Layer:
-    def __init__(self, name, upperConfig, defines, scm=None):
+    def __init__(self, name, upperConfig, defines, projectRoot, scm=None):
         self.__name = name
         self.__upperConfig = upperConfig
         self.__defines = defines
+        self.__projectRoot = projectRoot
         self.__scm = scm
         self.__created = False
-        self.__layerDir = os.path.join("layers", name) if len(name) else "."
+
+        # SCM backed layers are in build dir, regular layers are in project dir.
+        layerDir = projectRoot if scm is None else ""
+        if name:
+            layerDir = os.path.join(layerDir, "layers", name)
+        self.__layerDir = layerDir
         self.__subLayers = []
 
     async def __checkoutTask(self, verbose, attic):
@@ -190,6 +196,7 @@ class Layer:
             self.__subLayers.append(Layer(l.getName(),
                                           self.__config,
                                           self.__defines,
+                                          self.__projectRoot,
                                           layerScm))
 
     def getSubLayers(self):
@@ -204,6 +211,14 @@ class Layers:
         self.__attic = attic
         self.__defines = defines
         self.__layerConfigFiles = []
+
+        self.__projectRoot = os.getcwd()
+        if os.path.isfile(".bob-project"):
+            try:
+                with open(".bob-project") as f:
+                    self.__projectRoot = f.read()
+            except OSError as e:
+                raise ParseError("Broken project link: " + str(e))
 
     def __haveLayer(self, layer):
         for depth,layers in self.__layers.items():
@@ -256,7 +271,7 @@ class Layers:
 
                 config = config.derive(yamlCache.loadYaml(c, configSchema))
 
-            rootLayers = Layer("", config, self.__defines)
+            rootLayers = Layer("", config, self.__defines, self.__projectRoot)
             rootLayers.parse(yamlCache)
             self.__layers[0] = rootLayers.getSubLayers();
             self.__collect(loop, 0, yamlCache, update, verbose)
