@@ -1,9 +1,0 @@
-layers:
-  - bar:
-      checkoutSCM:
-        scm: import
-        url: "__layers/bar/2"
-  - baz:
-      checkoutSCM:
-        scm: import
-        url: "__layers/baz/1"
