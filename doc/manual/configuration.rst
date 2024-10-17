@@ -1970,6 +1970,11 @@ If a layer SCM specification is given, Bob takes care of the layer management:
 - The ``bob layers`` command can update layers or show their status (see
   :ref:`manpage-layers`).
 
+.. note::
+   SCM backed layers are checked out into the build tree rather than the
+   project root directory. This is important as soon as an out-of-source
+   build tree is used (see :ref:`manpage-bob-init`).
+
 Only git, svn, url and cvs SCMs are supported for layers. Because layers are
 fetched and updated before any :ref:`configuration-config-usr` is parsed, the
 regular ``whitelist`` and ``scmOverrides`` settings are not used.  Instead,
