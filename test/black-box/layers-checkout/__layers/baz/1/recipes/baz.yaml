@@ -1,3 +1,0 @@
-packageScript: "/bin/true"
-provideVars:
-  BAZ_VERSION: "1"
