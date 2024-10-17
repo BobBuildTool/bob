@@ -3555,7 +3555,10 @@ class RecipeSet:
             return
         self.__layers.append(layer)
 
-        rootDir = os.path.join(recipesRoot, os.path.join("layers", layer) if layer != "" else "")
+        # SCM backed layers are in build dir, regular layers are in project dir.
+        rootDir = recipesRoot if layerSpec.getScm() is None else ""
+        if layer:
+            rootDir = os.path.join(rootDir, "layers", layer)
         if not os.path.isdir(rootDir or "."):
             raise ParseError(f"Layer '{layer}' does not exist!",
                                      help="You probably want to run 'bob layers update' to fetch missing layers.")
