@@ -27,7 +27,7 @@ class LayersConfig:
         ret.__policies = self.__policies
 
         ret.__whiteList.update([c.upper() if self.__platform == "win32" else c
-            for c in config.get("layersWhiteList", []) ])
+            for c in config.get("layersWhitelist", []) ])
         ret.__scmOverrides[0:0] = [ ScmOverride(o) for o in config.get("layersScmOverrides", []) ]
 
         if rootLayer:
