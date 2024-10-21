@@ -2032,7 +2032,7 @@ class Recipe(object):
         self.__layer = layer
 
         sourceName = ("Recipe " if isRecipe else "Class  ") + packageName + (
-            ", layer "+"/".join(layer) if layer else "")
+            ", layer "+ layer if layer else "")
         incHelperBash = IncludeHelper(BashLanguage, recipeSet.loadBinary,
                                       baseDir, packageName, sourceName).resolve
         incHelperPwsh = IncludeHelper(PwshLanguage, recipeSet.loadBinary,
@@ -3567,7 +3567,7 @@ class RecipeSet:
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
             raise ParseError("Layer '{}' requires a higher Bob version than root project!"
-                                .format("/".join(layer)))
+                                .format(layer))
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
 
         # Determine policies. The root layer determines the default settings
@@ -3577,7 +3577,7 @@ class RecipeSet:
             for (name, behaviour) in config.get("policies", {}).items():
                 if bool(self.__policies[name][0]) != behaviour:
                     raise ParseError("Layer '{}' requires different behaviour for policy '{}' than root project!"
-                                        .format("/".join(layer), name))
+                                        .format(layer, name))
         else:
             self.__policies = self.calculatePolicies(config)
 
