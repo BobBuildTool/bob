@@ -1,0 +1,234 @@
+Bob 0.25 Release Notes
+======================
+
+Changes made since Bob 0.24.0 include the following.
+
+Upcoming 1.0 release
+--------------------
+
+It is anticipated that the next release will be 1.0.
+
+As announced previously, support for pre-0.16 projects has been removed. If no
+``config.yaml`` is present, version ``0.16`` is implied. Likewise, all policies
+that were introduced before have been :ref:`declared obsolete <policies-obsolete>`
+and may not be set to their old behaviour. (See :pull:`557`)
+
+
+New features
+------------
+
+SCM backed layers
+~~~~~~~~~~~~~~~~~
+
+Previously, layers had to be managed outside of Bob. Typically this involved
+git submodules or similar means. Bob now gained the possibility to checkout and
+update them directly. Instead of just referencing the layer name in
+:ref:`config.yaml <configuration-config>`, the SCM source can be specified
+too::
+
+    layers:
+        - name: myapp
+          scm: git
+          url: git@foo.bar:myapp.git
+          commit: ...
+        - bsp
+
+In the example above, the ``myapp`` layer is cloned via git while the ``bsp``
+layer is expected to exist.  If a layer SCM specification is given, Bob takes
+care of the layer management:
+
+- Layers are checked out / updated during ``bob build/dev`` (except
+  build-only).
+- The ``bob layers`` command can update layers or show their status (see
+  :ref:`manpage-layers`).
+
+(:pull:`561`, :pull:`587`, :pull:`588`, :pull:`589`, :pull:`593`. See
+:ref:`configuration-config-layers`.)
+
+More flexible sandbox modes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Sandboxing allows to execute the build steps in ephemeral containers. So far,
+the long existing ``--sandbox`` option provides partial isolation only if a
+sandbox image is available for a package. Inside the sandbox image all paths
+are stable, i.e. independent of the workspace path. To provide more
+flexibility, the ``bob build/dev/jenkins`` commands gained three new sandbox
+modes.
+
+As a light-weight alternative, the ``--slim-sandbox`` option has been added to
+provide isolation without using a potentially available sandbox image. All
+workspace paths are retained. Likewise, the added ``--dev-sandbox`` option will
+also provide full isolation but an available sandbox image is used. The
+``--strict-sandbox`` option further uses stable paths consistently.
+
+See :ref:`manpage-build`, resp. :ref:`manpage-dev`. (:pull:`591`)
+
+Recipes
+~~~~~~~
+
+* The ``git`` :ref:`configuration-recipes-scm` gained the ``rebase`` option.
+
+  Sometimes upstream branches are rebased. While this behaviour is frowned
+  upon, it is still necessary to cope with such situations. The optional
+  ``rebase`` attribute, if set to true, will cause Bob to rebase the local
+  branch instead of doing a fast-forward merge.
+* Added the ``inherit`` dependency property to :ref:`configuration-recipes-depends`
+  items.
+
+  This property controls the inheritance of environment, tools and sandbox for
+  a dependency. It defaults to ``true``, so everything is inherited.  If set to
+  ``false``, environment, tools and sandbox are dropped. The dependency starts
+  with the default-environment, no tools and no sandbox.
+
+  This becomes particularly useful when an existing root-package should become
+  a dependency of another root-package, e.g. for building an installer.
+
+  (:pull:`565`)
+* Environment substitution is now applied to :ref:`configuration-recipes-checkoutassert`.
+
+  If variables are used to control the checkout of a package, the
+  :ref:`configuration-recipes-checkoutassert` might need to be variable as
+  well. (:pull:`567`)
+* Bob now applies variable substitution in :ref:`configuration-recipes-metaenv`.
+  (:issue:`573`)
+* Tools can be used conditionally.
+
+  Sometimes a recipe might only require a tool if certain conditions are met.
+  So far, tools could only be used unconditionally. Bob gained a new syntax
+  along the following lines::
+
+    checkoutTools:
+        - if: "${TEST_VAR:-}"
+          name: graphics::package
+
+  (:issue:`572`, see :ref:`configuration-recipes-tools`).
+
+User configuration (default.yaml)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Gained an option to set the user identity inside the sandbox.
+
+  Apparently, some license check tools require to observe the same user and
+  group ID inside the sandbox. An option has been added to the sandbox
+  definition and user configuration to override the user inside the sandbox.
+  The default is ``nobody`` which reflects the traditional behaviour.  The new
+  options ``root`` and ``$USER`` set the UID to either 0 (root) or keep the UID
+  of the current user.
+
+  See :ref:`configuration-config-sandbox`. (:pull:`559`)
+* Added user path expansion for local archive backend.
+
+  Bob applies user path expansion to the given path of a "file" archive
+  backend. This could be used to place an artifact cache in the user
+  directory, e.g. in ``~/.cache/bob/artifacts``::
+
+      archivePrepend:
+         - backend: file
+           path: "~/.cache/bob/artifacts"
+           flags: [download, cache]
+
+  (:pull:`574`)
+
+Improvements
+------------
+
+* Bob has been made compatible to Python 3.12.
+* Added a :ref:`recommended user configuration <installation-recommended-config>`
+  to the documentation.
+* The build scheduling has been improved. Now Bob builds ``use: [result]``
+  dependencies and used tools in parallel instead of first all tools and then all
+  dependencies.
+* WebDAV compatibility has been improved for binary artifact uploads.
+
+  So far, Bob incorrectly assumed that the parent directories are created
+  automatically (e.g. on Nginx via "create_full_put_path on"). There is no such
+  option on, e.g. Apache. Instead of assuming such non-compliant behavior, Bob
+  now always does an ``MKCOL`` request for the parent directory first.
+
+  (:pull:`571`)
+* Added a Dockerfile to the contrib folder. It creates a a Debian based
+  container with bob. It can be used to build bob projects in a container.
+
+Backwards incompatible changes
+------------------------------
+
+* Support for Python 3.6 has been dropped.
+* Support for projects targeting Bob versions before ``0.16`` has been removed.
+  If no ``config.yaml`` is present, or no :ref:`configuration-bobMinimumVersion`
+  is specified, version ``0.16`` is assumed.
+* The ``filter`` recipe keyword has been removed. It was never used in practice.
+* Support for nested layers has been dropped in favour of layer SCM support.
+  (:pull:`561`. See :ref:`configuration-config-layers`.)
+
+Bug fixes
+---------
+
+* Fix build of fingerprinted packages with different sandbox images.
+
+  If a package is fingerprinted, the result is effectively declared to
+  depend on the host system. How exactly is not known to Bob. Despite the
+  actual host system, each sandbox represents a potentially different host
+  system environment. This means that the same fingerprint script might
+  yield different results if being executed in a sandbox, a different
+  sandbox or the host system.
+
+  This implies that packages which are fingerprinted need to be built
+  separately for the host system and each sandbox image. With the
+  introduction of the :ref:`policies-sandboxInvariant`, Bob erroneously coalesced
+  fingerprinted packages which only differ in their host/sandbox
+  environment. Now Bob will always use separate workspaces again for such
+  packages.
+
+  The fix will impact the calculation of the :term:`Variant-Id` which might lead
+  to some rebuilds. On the other hand, the :term:`Build-Id` is not affected and
+  existing binary artifacts will continue to be used.
+* Fixed ``git`` branch check when inline switching nested SCMs.
+
+  When switching branches, Bob first checks if the new branch already
+  exists in the workspace. Unfortunately, the check did not consider the
+  subdirectory of the SCM, so it might have wrongly concluded that the branch
+  exists in case of nested repositories.
+* Fixed a typo in the build log messages (:pull:`563`)
+* Bob now does clean builds if the path to a tool changes.
+
+  The builds step implicitly depends on the execution path of all dependencies.
+  So far, we only tracked arguments. But some build systems also store the
+  absolute path to tools. In this case, the build will fail if a tool path
+  changes. Now changed tool paths also trigger a clean rebuild.
+
+  (:pull:`566`)
+* Prevent automatic recursion into submodules.
+
+  The user can enable the recursive submodule handling in the global git
+  config. Bob does the update of submodules manually but some git invocations
+  missed the proper arguments.
+
+  (:issue:`568`)
+* Fixed parse failure for substitutions in disabled dependencies.
+
+  If a dependency is disabled, all other variable substitutions in this
+  dependency shall be skipped. That has been the case already, except the
+  dependency name itself. No Bob will ignore name substitution failures as well
+  if the dependency shall be skipped.
+
+  (:pull:`575`)
+* Fixed command line color mode handling. (:issue:`578`)
+* String substitution now skips over unused substitution parts.
+
+  Variable substitutions can have a default value (``${VAR-default}``) or an
+  alternate value (``${VAR+alternate}``). The "default" and "alternate" parts
+  can itself be comprised of variable/function substitutions.
+
+  Now, if the default/alternate part is unused, it should be skipped
+  altogether. Previously Bob always substituted them, even if they were unused.
+  This was undesired because it caused constructs like::
+
+    ${VAR:+${VAR}}
+
+  to fail which contradicts POSIX shell substitution behaviour which we try to
+  follow. Now such parts are properly skipped.
+
+  (:pull:`583`)
+* Fixed that git repositories in detached HEAD state are not moved to the attic
+  if the repository already points to the commit in the recipe. (:pull:`584`)
+* Fixed crash on Windows WSL1. (:issue:`562`)

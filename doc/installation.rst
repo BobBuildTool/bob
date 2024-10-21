@@ -132,6 +132,8 @@ setuptools_scm, wheel,...
 Linux/POSIX platform notes
 ==========================
 
+.. _installation-recommended-config:
+
 Recommended configuration
 -------------------------
 

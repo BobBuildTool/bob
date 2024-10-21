@@ -272,6 +272,8 @@ New behavior
     The ``fileMode`` attribute is default initialized to ``0600``. All files
     will get the same mode, regardless of the URL schema.
 
+.. _policies-obsolete:
+
 Obsolete policies
 -----------------
 
