@@ -208,7 +208,7 @@ class Layer:
 class Layers:
     def __init__(self, defines, attic):
         self.__layers = {}
-        self.__attic = attic
+        self.__attic = attic if attic is not None else True
         self.__defines = defines
         self.__layerConfigFiles = []
 

@@ -36,7 +36,7 @@ def doLayersUpdate(argv):
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--attic', action='store_true', default=True,
+    group.add_argument('--attic', action='store_true', default=None,
         help="Move scm to attic if inline switch is not possible (default).")
     group.add_argument('--no-attic', action='store_false', default=None, dest='attic',
         help="Do not move to attic, instead fail the build.")
