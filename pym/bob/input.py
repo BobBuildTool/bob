@@ -14,7 +14,7 @@ from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode, setParallelTUIThreshold
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
     updateDicRecursive, hashString, getPlatformTag, getPlatformString, \
-    replacePath
+    replacePath, getPlatformEnvWhiteList
 from itertools import chain
 from os.path import expanduser
 from string import Template
@@ -1739,13 +1739,6 @@ class LayerSpec:
         return self.__scm
 
 class LayerValidator:
-    def __init__(self):
-        self.__scmValidator = ScmValidator({
-            'git' : GitScm.SCHEMA,
-            'svn' : SvnScm.SCHEMA,
-            'cvs' : CvsScm.SCHEMA,
-            'url' : UrlScm.SCHEMA})
-
     def validate(self, data):
         if isinstance(data,str):
             return LayerSpec(data)
@@ -1755,7 +1748,7 @@ class LayerValidator:
         name = _data.get('name')
         del _data['name']
 
-        return LayerSpec (name, self.__scmValidator.validate(_data)[0])
+        return LayerSpec(name, RecipeSet.LAYERS_SCM_SCHEMA.validate(_data)[0])
 
 class VarDefineValidator:
     def __init__(self, keyword):
@@ -2039,7 +2032,7 @@ class Recipe(object):
         self.__layer = layer
 
         sourceName = ("Recipe " if isRecipe else "Class  ") + packageName + (
-            ", layer "+"/".join(layer) if layer else "")
+            ", layer "+ layer if layer else "")
         incHelperBash = IncludeHelper(BashLanguage, recipeSet.loadBinary,
                                       baseDir, packageName, sourceName).resolve
         incHelperPwsh = IncludeHelper(PwshLanguage, recipeSet.loadBinary,
@@ -2953,6 +2946,14 @@ class RecipeSet:
             schema.Optional('max_depth') : int,
         })
 
+    # We do not support the "import" SCM for layers. It just makes no sense.
+    LAYERS_SCM_SCHEMA = ScmValidator({
+        'git' : GitScm.SCHEMA,
+        'svn' : SvnScm.SCHEMA,
+        'cvs' : CvsScm.SCHEMA,
+        'url' : UrlScm.SCHEMA,
+    })
+
     SCM_SCHEMA = ScmValidator({
         'git' : GitScm.SCHEMA,
         'svn' : SvnScm.SCHEMA,
@@ -3079,7 +3080,6 @@ class RecipeSet:
         self.__uiConfig = {}
         self.__shareConfig = {}
         self.__layers = []
-        self.__policies = RecipeSet.POLICIES.copy()
         self.__buildHooks = {}
         self.__sandboxOpts = {}
         self.__scmDefaults = {}
@@ -3436,13 +3436,9 @@ class RecipeSet:
         return self.__cache.loadBinary(path)
 
     def loadYaml(self, path, schema, default={}, preValidate=lambda x: None):
-        if os.path.exists(path):
-            return self.__cache.loadYaml(path, schema, default, preValidate)
-        else:
-            return schema[0].validate(default)
+        return self.__cache.loadYaml(path, schema, default, preValidate)
 
-    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="",
-              noLayers=False):
+    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot=""):
         if not recipesRoot and os.path.isfile(".bob-project"):
             try:
                 with open(".bob-project") as f:
@@ -3455,33 +3451,16 @@ class RecipeSet:
         self.__projectRoot = recipesRoot or os.getcwd()
         self.__cache.open()
         try:
-            self.__parse(envOverrides, platform, recipesRoot, noLayers)
+            self.__parse(envOverrides, platform, recipesRoot)
         finally:
             self.__cache.close()
 
-    def __parse(self, envOverrides, platform, recipesRoot="", noLayers=False):
+    def __parse(self, envOverrides, platform, recipesRoot=""):
         if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
             raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
         self.__layers = []
-        self.__policies = RecipeSet.POLICIES.copy()
-        self.__whiteList = set()
-        if platform == 'win32':
-            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
-                "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "COMSPEC",
-                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
-                "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
-                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
-        else:
-            self.__whiteList |= set(["PATH", "TERM", "SHELL", "USER", "HOME"])
-
-        if platform in ('cygwin', 'msys'):
-            self.__whiteList |= set(["ALLUSERSPROFILE", "APPDATA",
-                "COMMONPROGRAMFILES", "CommonProgramFiles(x86)", "COMSPEC",
-                "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
-                "ProgramData", "PROGRAMFILES", "ProgramFiles(x86)", "SYSTEMDRIVE",
-                "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
-
+        self.__whiteList = getPlatformEnvWhiteList(platform)
         self.__pluginPropDeps = b''
         self.__pluginSettingsDeps = b''
         self.__createSchemas()
@@ -3493,10 +3472,7 @@ class RecipeSet:
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
-        self.__parseLayer(LayerSpec(""), "9999", recipesRoot, noLayers)
-
-        if noLayers:
-            return
+        self.__parseLayer(LayerSpec(""), "9999", recipesRoot)
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
@@ -3539,18 +3515,8 @@ class RecipeSet:
         self.__rootRecipe = Recipe.createVirtualRoot(self, sorted(filteredRoots), self.__properties)
         self.__addRecipe(self.__rootRecipe)
 
-    def __parseLayer(self, layerSpec, maxVer, recipesRoot, noLayers=False):
-        layer = layerSpec.getName()
-
-        if layer in self.__layers:
-            return
-        self.__layers.append(layer)
-
-        rootDir = os.path.join(recipesRoot, os.path.join("layers", layer) if layer != "" else "")
-        if not os.path.isdir(rootDir or "."):
-            raise ParseError(f"Layer '{layer}' does not exist!",
-                                     help="You probably want to run 'bob layers update' to fetch missing layers.")
-
+    @classmethod
+    def loadConfigYaml(cls, loadYaml, rootDir):
         configYaml = os.path.join(rootDir, "config.yaml")
         def preValidate(data):
             if not isinstance(data, dict):
@@ -3563,23 +3529,46 @@ class RecipeSet:
             if compareVersion(BOB_VERSION, minVer) < 0:
                 raise ParseError("Your Bob is too old. At least version "+minVer+" is required!")
 
-        config_spec = {**RecipeSet.STATIC_CONFIG_SCHEMA_SPEC, **RecipeSet.STATIC_CONFIG_LAYER_SPEC}
-        config = self.loadYaml(configYaml, (schema.Schema(config_spec), b''),
+        config_spec = {**cls.STATIC_CONFIG_SCHEMA_SPEC, **cls.STATIC_CONFIG_LAYER_SPEC}
+        ret = loadYaml(configYaml, (schema.Schema(config_spec), b''),
             preValidate=preValidate)
 
-        # merge settings
-        for (name, value) in sorted([s for s in config.items() if s[0] in self.__settings],
-                                    key=lambda i: self.__settings[i[0]].priority):
-            self.__settings[name].merge(value)
+        minVer = ret.get("bobMinimumVersion", "0.16")
+        if compareVersion(minVer, "0.16") < 0:
+            raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
 
+        return ret
+
+    @classmethod
+    def calculatePolicies(cls, config):
+        minVer = config.get("bobMinimumVersion", "0.16")
+        ret = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
+            for (name, (ver, warn)) in cls.POLICIES.items() }
+        for (name, behaviour) in config.get("policies", {}).items():
+            ret[name] = (behaviour, None)
+        return ret
+
+    def __parseLayer(self, layerSpec, maxVer, recipesRoot):
+        layer = layerSpec.getName()
+
+        if layer in self.__layers:
+            return
+        self.__layers.append(layer)
+
+        # SCM backed layers are in build dir, regular layers are in project dir.
+        rootDir = recipesRoot if layerSpec.getScm() is None else ""
+        if layer:
+            rootDir = os.path.join(rootDir, "layers", layer)
+        if not os.path.isdir(rootDir or "."):
+            raise ParseError(f"Layer '{layer}' does not exist!",
+                                     help="You probably want to run 'bob layers update' to fetch missing layers.")
+
+        config = self.loadConfigYaml(self.loadYaml, rootDir)
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
             raise ParseError("Layer '{}' requires a higher Bob version than root project!"
-                                .format("/".join(layer)))
-        if compareVersion(minVer, "0.16") < 0:
-            raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
+                                .format(layer))
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
-
 
         # Determine policies. The root layer determines the default settings
         # implicitly by bobMinimumVersion or explicitly via 'policies'. All
@@ -3588,15 +3577,9 @@ class RecipeSet:
             for (name, behaviour) in config.get("policies", {}).items():
                 if bool(self.__policies[name][0]) != behaviour:
                     raise ParseError("Layer '{}' requires different behaviour for policy '{}' than root project!"
-                                        .format("/".join(layer), name))
+                                        .format(layer, name))
         else:
-            self.__policies = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
-                for (name, (ver, warn)) in self.__policies.items() }
-            for (name, behaviour) in config.get("policies", {}).items():
-                self.__policies[name] = (behaviour, None)
-
-        if noLayers:
-            return
+            self.__policies = self.calculatePolicies(config)
 
         # First parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
@@ -3932,7 +3915,7 @@ class YamlCache:
     def getDigest(self):
         return self.__digest
 
-    def loadYaml(self, name, yamlSchema, default, preValidate):
+    def loadYaml(self, name, yamlSchema, default={}, preValidate=lambda x: None):
         try:
             bs = binStat(name) + yamlSchema[1]
             if self.__hot:
@@ -3964,6 +3947,8 @@ class YamlCache:
         except sqlite3.Error as e:
             raise ParseError("Cannot access cache: " + str(e),
                 help="You probably executed Bob concurrently in the same workspace. Try again later.")
+        except FileNotFoundError:
+            return yamlSchema[0].validate(default)
         except OSError as e:
             raise ParseError("Error loading yaml file: " + str(e))
 
@@ -3974,6 +3959,14 @@ class YamlCache:
             result = f.read()
         self.__files[name] = hashlib.sha1(result).digest()
         return result
+
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
 
 
 class PackagePickler(pickle.Pickler):

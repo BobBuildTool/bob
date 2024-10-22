@@ -321,6 +321,28 @@ def getPlatformTag():
     __platformTag = ret
     return ret
 
+def getPlatformEnvWhiteList(platform):
+    """Return default environment whitelist, depending on the platform"""
+
+    ret = set()
+    if platform == 'win32':
+        ret |= set(["ALLUSERSPROFILE", "APPDATA",
+            "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "COMSPEC",
+            "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
+            "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
+            "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
+    else:
+        ret |= set(["PATH", "TERM", "SHELL", "USER", "HOME"])
+
+    if platform in ('cygwin', 'msys'):
+        ret |= set(["ALLUSERSPROFILE", "APPDATA",
+            "COMMONPROGRAMFILES", "CommonProgramFiles(x86)", "COMSPEC",
+            "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PATHEXT",
+            "ProgramData", "PROGRAMFILES", "ProgramFiles(x86)", "SYSTEMDRIVE",
+            "SYSTEMROOT", "TEMP", "TMP", "WINDIR"])
+
+    return ret
+
 __bashPath = None
 
 def getBashPath():

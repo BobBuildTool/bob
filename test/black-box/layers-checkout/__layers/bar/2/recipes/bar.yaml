@@ -1,3 +1,0 @@
-packageScript: "/bin/true"
-provideVars:
-  BAR_VERSION: "2"

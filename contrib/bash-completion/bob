@@ -388,12 +388,12 @@ __bob_status()
 
 __bob_layers_status()
 {
-   __bob_complete_path "-c -D -v -lc --attic --no-attic"
+   __bob_complete_words "-D -v -lc --show-clean --show-overrides"
 }
 
 __bob_layers_update()
 {
-   __bob_complete_path "-c -D -v -lc --attic --no-attic"
+   __bob_complete_words "-D -v -lc --attic --no-attic"
 }
 
 __bob_layers()

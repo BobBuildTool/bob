@@ -1,10 +1,13 @@
 #!/bin/bash -e
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
-foo_dir=$(mktemp -d)
-bar_dir=$(mktemp -d)
-baz_dir=$(mktemp -d)
-trap 'rm -rf "$foo_dir" "$bar_dir" "$baz_dir" layers layers.attic log-status.txt' EXIT
+tmp_dir=$(mktemp -d)
+mkdir -p "$tmp_dir/"{foo,bar,baz,ext}
+foo_dir="$tmp_dir/foo"
+bar_dir="$tmp_dir/bar"
+baz_dir="$tmp_dir/baz"
+ext_dir="$tmp_dir/ext"
+trap 'rm -rf "$tmp_dir" layers layers.attic log-status.txt' EXIT
 cleanup
 
 # build the git layer bar/1
@@ -119,6 +122,22 @@ run_bob layers update -DBAR_1_COMMIT=${bar_c0} -DBAR_2_COMMIT=${bar_c1} -DBAR_DI
 # remove layers + clean
 cleanup
 rm -rf layers
+
+# Do the build and update in an external build tree. SCM backed layers are
+# checked out into the build tree rather than the project tree.
+run_bob init . "$ext_dir"
+pushd "$ext_dir"
+run_bob dev root -DBAR_1_COMMIT=${bar_c0} -DBAR_2_COMMIT=${bar_c1} -DBAR_DIR=${bar_dir} \
+	-DBAZ_DIR=${baz_dir} -DBAZ_COMMIT="${baz_c0}" \
+	-DBAZ1_COMMIT="${baz_c2}" \
+	-DFOO_DIR=${foo_dir} -DFOO_COMMIT="${foo_c0}" -vvv
+expect_exist layers
+run_bob layers update -DBAR_1_COMMIT=${bar_c0} -DBAR_2_COMMIT=${bar_c1} -DBAR_DIR=${bar_dir} \
+	-DBAZ_DIR=${baz_dir} -DBAZ_COMMIT="${baz_c0}" \
+	-DBAZ1_COMMIT="${baz_c2}" \
+	-DFOO_DIR=${foo_dir} -DFOO_COMMIT="${foo_c0}"
+popd
+expect_not_exist layers
 
 # if the layer already exists we fail
 mkdir -p layers/bar
