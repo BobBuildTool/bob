@@ -2510,8 +2510,11 @@ class Recipe(object):
                                for key, value in i.items() })
 
         # meta variables override existing variables
-        metaEnv = { key : env.substitute(value, "metaEnvironment::"+key)
-            for key, value in self.__metaEnv.items() }
+        if self.__recipeSet.getPolicy('substituteMetaEnv'):
+            metaEnv = { key : env.substitute(value, "metaEnvironment::"+key)
+                for key, value in self.__metaEnv.items() }
+        else:
+            metaEnv = self.__metaEnv
         env.update(metaEnv)
 
         # set fixed built-in variables
@@ -2999,6 +3002,7 @@ class RecipeSet:
                 schema.Optional('gitCommitOnBranch') : bool,
                 schema.Optional('fixImportScmVariant') : bool,
                 schema.Optional('defaultFileMode') : bool,
+                schema.Optional('substituteMetaEnv') : bool,
             },
             error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
@@ -3043,6 +3047,11 @@ class RecipeSet:
             InfoOnce("defaultFileMode policy not set. File mode of URL SCMs not set for locally copied files.",
                 help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#defaultfilemode for more information.")
         ),
+        "substituteMetaEnv": (
+            "0.25rc1",
+            InfoOnce("substituteMetaEnv policy is not set. MetaEnv will not be substituted.",
+                help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#substitutemetaenv for more information.")
+        )
     }
 
     _ignoreCmdConfig = False

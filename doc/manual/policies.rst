@@ -272,6 +272,24 @@ New behavior
     The ``fileMode`` attribute is default initialized to ``0600``. All files
     will get the same mode, regardless of the URL schema.
 
+.. _policies-substituteMetaEnv:
+
+substituteMetaEnv
+~~~~~~~~~~~~~~~~~
+
+Introduced in: 0.25
+
+Bob versions 0.24 and before did not apply string substitution to
+:ref:`configuration-recipes-metaenv` variables. Starting with Bob 0.25, regular
+string substitution is performed. Because older recipes might contain
+characters that need quoting, the substitution is subject to this policy.
+
+Old behavior
+    No substitution is applied to :ref:`configuration-recipes-metaenv` variables.
+
+New behavior
+    Apply string substitution to ``metaEnvironment`` variables.
+
 .. _policies-obsolete:
 
 Obsolete policies

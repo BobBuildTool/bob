@@ -200,7 +200,7 @@ class RecipeCommon:
         recipeSet = MagicMock()
         recipeSet.loadBinary = MagicMock()
         recipeSet.scriptLanguage = self.SCRIPT_LANGUAGE
-        recipeSet.getPolicy = lambda x: None
+        recipeSet.getPolicy = lambda x: True if x == "substituteMetaEnv" else None
 
         cc = { n : Recipe(recipeSet, self.applyRecipeDefaults(r), "", n+".yaml",
                           cwd, n, n, {}, False)
