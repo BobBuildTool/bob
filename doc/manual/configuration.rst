@@ -1567,6 +1567,10 @@ This predestines metaEnvironment variables to add the license type or version of
 
 The :ref:`manpage-query-meta` command can be used to retrieve metaEnvironment variables.
 
+All metaEnvironment variables are subject to :ref:`string substitution
+<configuration-principle-subst>`, unless the :ref:`policies-substituteMetaEnv`
+policy is configured for the old behaviour.
+
 multiPackage
 ~~~~~~~~~~~~
 
