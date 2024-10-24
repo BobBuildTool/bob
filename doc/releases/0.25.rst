@@ -90,7 +90,8 @@ Recipes
   :ref:`configuration-recipes-checkoutassert` might need to be variable as
   well. (:pull:`567`)
 * Bob now applies variable substitution in :ref:`configuration-recipes-metaenv`.
-  (:issue:`573`)
+  (:issue:`573`) The substitution is subject to the :ref:`policies-substituteMetaEnv`
+  policy. (:pull:`594`)
 * Tools can be used conditionally.
 
   Sometimes a recipe might only require a tool if certain conditions are met.
