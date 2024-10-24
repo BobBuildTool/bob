@@ -194,13 +194,13 @@ class RecipeCommon:
         r.setdefault("checkoutUpdateIf", False)
         return r
 
-    def parseAndPrepare(self, recipe, classes={}, name="foo", env={}):
+    def parseAndPrepare(self, recipe, classes={}, name="foo", env={}, policies={}):
 
         cwd = os.getcwd()
         recipeSet = MagicMock()
         recipeSet.loadBinary = MagicMock()
         recipeSet.scriptLanguage = self.SCRIPT_LANGUAGE
-        recipeSet.getPolicy = lambda x: True if x == "substituteMetaEnv" else None
+        recipeSet.getPolicy = lambda x: policies.get(x)
 
         cc = { n : Recipe(recipeSet, self.applyRecipeDefaults(r), "", n+".yaml",
                           cwd, n, n, {}, False)
@@ -691,6 +691,20 @@ class TestEnvironment(RecipeCommon, TestCase):
                     "C" : "<lib><b>",
                 })
 
+    def testMetaEnvironmentLegacy(self):
+        """Pre 0.25 versions did not apply substitution in metaEnvironment"""
+        recipe = {
+            "metaEnvironment" : {
+                "A" : "$A",
+                "B" : "$B'",
+            },
+        }
+        pkg = self.parseAndPrepare(recipe)
+        self.assertEqual(pkg.getMetaEnv(), {
+            "A" : "$A",
+            "B" : "$B'",
+        })
+
     def testMetaEnvrionmentSubstitution(self):
         """metaEnvironment is substituted and merged on a key-by-key basis"""
         recipe = {
@@ -719,7 +733,10 @@ class TestEnvironment(RecipeCommon, TestCase):
             "A" : "a",
             "B" : "b",
         }
-        p = self.parseAndPrepare(recipe, classes, env=env).getPackageStep()
+        policies = {
+            "substituteMetaEnv" : True,
+        }
+        p = self.parseAndPrepare(recipe, classes, env=env, policies=policies).getPackageStep()
         self.assertEqual(p.getEnv(), {
             "A" : "<lib>a",
             "B" : "<lib>b",
