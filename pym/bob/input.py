@@ -2087,10 +2087,14 @@ class Recipe(object):
         are named from top to bottom. Example:
         ``layers/foo/layers/bar/recipes/baz.yaml`` -> ``['foo', 'bar']``.
 
+        If the managedLayers policy is set to the new behaviour, nested layers
+        are flattened. This means that layers are always returnd as single-item
+        lists.
+
         :rtype: List[str]
         """
         if self.__layer:
-            return [self.__layer]
+            return self.__layer.split("/")
         else:
             return []
 
@@ -3006,6 +3010,7 @@ class RecipeSet:
                 schema.Optional('fixImportScmVariant') : bool,
                 schema.Optional('defaultFileMode') : bool,
                 schema.Optional('substituteMetaEnv') : bool,
+                schema.Optional('managedLayers') : bool,
             },
             error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
@@ -3054,7 +3059,12 @@ class RecipeSet:
             "0.25rc1",
             InfoOnce("substituteMetaEnv policy is not set. MetaEnv will not be substituted.",
                 help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#substitutemetaenv for more information.")
-        )
+        ),
+        "managedLayers": (
+            "0.25.0rc2.dev6",
+            InfoOnce("managedLayers policy is not set. Only unmanaged layers are supported.",
+                help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#managedlayers for more information.")
+        ),
     }
 
     _ignoreCmdConfig = False
@@ -3484,7 +3494,7 @@ class RecipeSet:
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
-        self.__parseLayer(LayerSpec(""), "9999", recipesRoot)
+        self.__parseLayer(LayerSpec(""), "9999", recipesRoot, None)
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
@@ -3560,20 +3570,40 @@ class RecipeSet:
             ret[name] = (behaviour, None)
         return ret
 
-    def __parseLayer(self, layerSpec, maxVer, recipesRoot):
+    def __parseLayer(self, layerSpec, maxVer, recipesRoot, upperLayer):
         layer = layerSpec.getName()
-
-        if layer in self.__layers:
-            return
-        self.__layers.append(layer)
-
-        # SCM backed layers are in build dir, regular layers are in project dir.
-        rootDir = recipesRoot if layerSpec.getScm() is None else ""
         if layer:
-            rootDir = os.path.join(rootDir, "layers", layer)
-        if not os.path.isdir(rootDir or "."):
-            raise ParseError(f"Layer '{layer}' does not exist!",
+            # Managed layers imply that layers are potentially nested instead
+            # of being checked out next to each other in the build directory.
+            managedLayers = self.getPolicy('managedLayers')
+            if layerSpec.getScm() is not None and not managedLayers:
+                raise ParseError("Managed layers aren't enabled! See the managedLayers policy for details.")
+
+            # Pre 0.25, layers could be nested.
+            if not managedLayers and upperLayer:
+                layer = upperLayer + "/" + layer
+
+            if layer in self.__layers:
+                return
+            self.__layers.append(layer)
+
+            if managedLayers:
+                # SCM backed layers are in build dir, regular layers are in
+                # project dir.
+                rootDir = recipesRoot if layerSpec.getScm() is None else ""
+                rootDir = os.path.join(rootDir, "layers", layer)
+                if not os.path.isdir(rootDir):
+                    raise ParseError(f"Layer '{layer}' does not exist!",
                                      help="You probably want to run 'bob layers update' to fetch missing layers.")
+            else:
+                # Before managed layers existed, layers could be nested in the
+                # project directory.
+                rootDir = os.path.join(recipesRoot, *( os.path.join("layers", l)
+                                                       for l in layer.split("/") ))
+                if not os.path.isdir(rootDir):
+                    raise ParseError(f"Layer '{layer}' does not exist!")
+        else:
+            rootDir = recipesRoot
 
         config = self.loadConfigYaml(self.loadYaml, rootDir)
         minVer = config.get("bobMinimumVersion", "0.16")
@@ -3596,7 +3626,7 @@ class RecipeSet:
         # First parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
         for l in config.get("layers", []):
-            self.__parseLayer(l, maxVer, recipesRoot)
+            self.__parseLayer(l, maxVer, recipesRoot, layer)
 
         # Load plugins and re-create schemas as new keys may have been added
         self.__loadPlugins(rootDir, layer, config.get("plugins", []))
