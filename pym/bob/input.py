@@ -2089,7 +2089,10 @@ class Recipe(object):
 
         :rtype: List[str]
         """
-        return self.__layer
+        if self.__layer:
+            return [self.__layer]
+        else:
+            return []
 
     def resolveClasses(self, rootEnv):
         # must be done only once

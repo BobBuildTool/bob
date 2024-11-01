@@ -1479,7 +1479,7 @@ cd {ROOT}
           * still same build-id -> done
           * build-id changed -> prune and try download, fall back to build
         """
-        layer = packageStep.getPackage().getRecipe().getLayer()
+        layer = "/".join(packageStep.getPackage().getRecipe().getLayer())
         layerDownloadMode = None
         if layer:
             for mode in self.__downloadLayerModes:
