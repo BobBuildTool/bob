@@ -3,7 +3,7 @@ import os
 import schema
 import shutil
 from textwrap import indent
-from .errors import BuildError
+from .errors import BuildError, ParseError
 from .invoker import CmdFailedError, InvocationError, Invoker
 from .scm import getScm, ScmOverride, ScmStatus, ScmTaint
 from .state import BobState
