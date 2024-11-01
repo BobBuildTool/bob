@@ -205,6 +205,9 @@ class Layer:
     def getScm(self):
         return self.__scm
 
+    def getPolicy(self, name, location=None):
+        return self.__config.getPolicy(name, location)
+
 class Layers:
     def __init__(self, defines, attic):
         self.__layers = {}
@@ -260,7 +263,7 @@ class Layers:
                 os.rename(d, atticPath)
                 BobState().delLayerState(d)
 
-    def collect(self, loop, update, verbose=0):
+    def collect(self, loop, update, verbose=0, requireManagedLayers=True):
         configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
         config = LayersConfig()
         with YamlCache() as yamlCache:
@@ -273,8 +276,15 @@ class Layers:
 
             rootLayers = Layer("", config, self.__defines, self.__projectRoot)
             rootLayers.parse(yamlCache)
+            if not rootLayers.getPolicy("managedLayers"):
+                if requireManagedLayers:
+                    raise ParseError("Managed layers aren't enabled! See the managedLayers policy for details.")
+                else:
+                    return False
             self.__layers[0] = rootLayers.getSubLayers();
             self.__collect(loop, 0, yamlCache, update, verbose)
+
+        return True
 
     def setLayerConfig(self, configFiles):
         self.__layerConfigFiles = configFiles
@@ -326,8 +336,8 @@ class Layers:
         for (layerDir, status) in sorted(result.items()):
             printer(status, layerDir)
 
-def updateLayers(loop, defines, verbose, attic, layerConfigs):
+def updateLayers(loop, defines, verbose, attic, layerConfigs, requireManagedLayers=True):
     layers = Layers(defines, attic)
     layers.setLayerConfig(layerConfigs)
-    layers.collect(loop, True, verbose)
-    layers.cleanupUnused()
+    if layers.collect(loop, True, verbose, requireManagedLayers):
+        layers.cleanupUnused()
