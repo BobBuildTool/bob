@@ -1392,6 +1392,22 @@ class TestLayers(RecipesTmp, TestCase):
         })
         self.assertRaises(ParseError, self.generate)
 
+    def testManagedRejected(self):
+        self.writeConfig({
+            "bobMinimumVersion" : "0.25rc1",
+            "layers" : [
+                {
+                    "name" : "l1_n1",
+                    "scm" : "git",
+                    "url" : "git@server.test:bob.git",
+                }
+            ]
+        })
+        with self.assertRaises(ParseError) as err:
+            self.generate()
+        self.assertEqual(err.exception.slogan,
+                         "Managed layers aren't enabled! See the managedLayers policy for details.")
+
 class TestIfExpression(RecipesTmp, TestCase):
     """ Test if expressions """
     def setUp(self):

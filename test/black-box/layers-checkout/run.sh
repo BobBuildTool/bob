@@ -188,6 +188,12 @@ run_bob layers update -DBAR_1_COMMIT=${bar_c1} -DBAR_2_COMMIT=${bar_c1} -DBAR_DI
 	-lc layers_overrides -vv
 expect_exist layers/foo/override
 
+# test that layers status/update are rejected on the old managedLayers policy
+old_dir="$tmp_dir/legacy"
+mkdir -p "$old_dir/recipes"
+expect_fail run_bob -C "$old_dir" layers update
+expect_fail run_bob -C "$old_dir" layers status
+
 # remove layers + clean
 cleanup
 rm -rf layers
