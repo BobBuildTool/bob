@@ -33,6 +33,11 @@ too::
           commit: ...
         - bsp
 
+.. note::
+   Managed layers are only supported if the :ref:`policies-managedLayers`
+   policy is set to the new behaviour. This potentiall affects the location of
+   layers in the project tree, though.  See the policy for more details.
+
 In the example above, the ``myapp`` layer is cloned via git while the ``bsp``
 layer is expected to exist.  If a layer SCM specification is given, Bob takes
 care of the layer management:
@@ -42,8 +47,8 @@ care of the layer management:
 - The ``bob layers`` command can update layers or show their status (see
   :ref:`manpage-layers`).
 
-(:pull:`561`, :pull:`587`, :pull:`588`, :pull:`589`, :pull:`593`. See
-:ref:`configuration-config-layers`.)
+(:pull:`561`, :pull:`587`, :pull:`588`, :pull:`589`, :pull:`593`, :pull:`596`.
+See :ref:`configuration-config-layers`.)
 
 More flexible sandbox modes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -158,8 +163,6 @@ Backwards incompatible changes
   If no ``config.yaml`` is present, or no :ref:`configuration-bobMinimumVersion`
   is specified, version ``0.16`` is assumed.
 * The ``filter`` recipe keyword has been removed. It was never used in practice.
-* Support for nested layers has been dropped in favour of layer SCM support.
-  (:pull:`561`. See :ref:`configuration-config-layers`.)
 
 Bug fixes
 ---------
