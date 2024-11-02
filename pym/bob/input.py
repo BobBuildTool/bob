@@ -2957,11 +2957,12 @@ class RecipeSet:
         })
 
     # We do not support the "import" SCM for layers. It just makes no sense.
+    # Also, all SCMs lack the "dir" and "if" attributes.
     LAYERS_SCM_SCHEMA = ScmValidator({
-        'git' : GitScm.SCHEMA,
-        'svn' : SvnScm.SCHEMA,
-        'cvs' : CvsScm.SCHEMA,
-        'url' : UrlScm.SCHEMA,
+        'git' : GitScm.LAYERS_SCHEMA,
+        'svn' : SvnScm.LAYERS_SCHEMA,
+        'cvs' : CvsScm.LAYERS_SCHEMA,
+        'url' : UrlScm.LAYERS_SCHEMA,
     })
 
     SCM_SCHEMA = ScmValidator({

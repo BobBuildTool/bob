@@ -57,7 +57,7 @@ def getBranchTagCommit(spec):
 
 class GitScm(Scm):
 
-    DEFAULTS = {
+    __DEFAULTS = {
         schema.Optional('branch') : str,
         schema.Optional('sslVerify') : bool,
         schema.Optional('singleBranch') : bool,
@@ -65,7 +65,6 @@ class GitScm(Scm):
         schema.Optional('recurseSubmodules') : bool,
         schema.Optional('shallowSubmodules') : bool,
         schema.Optional('shallow') : schema.Or(int, str),
-        schema.Optional('dir') : str,
         schema.Optional('references') :
             schema.Schema([schema.Or(str, {
                 schema.Optional('url') : str,
@@ -80,14 +79,26 @@ class GitScm(Scm):
     __SCHEMA = {
         'scm' : 'git',
         'url' : str,
-        schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('tag') : str,
         schema.Optional('commit') : str,
         schema.Optional('rev') : str,
         schema.Optional(schema.Regex('^remote-.*')) : str,
     }
 
-    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
+    DEFAULTS = {
+        **__DEFAULTS,
+        schema.Optional('dir') : str,
+    }
+
+    SCHEMA = schema.Schema({
+        **__SCHEMA,
+        **DEFAULTS,
+        schema.Optional('if') : schema.Or(str, IfExpression),
+    })
+
+    # Layers have no "dir" and no "if"
+    LAYERS_SCHEMA = schema.Schema({**__SCHEMA, **__DEFAULTS})
+
     REMOTE_PREFIX = "remote-"
 
     def __init__(self, spec, overrides=[], stripUser=None, useBranchAndCommit=False):
