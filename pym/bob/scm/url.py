@@ -158,6 +158,7 @@ isWin32 = sys.platform == "win32"
 class UrlScm(Scm):
 
     DEFAULTS = {
+        schema.Optional('dir') : str,
         schema.Optional('extract') : schema.Or(bool, str),
         schema.Optional('fileName') : str,
         schema.Optional('stripComponents') : int,
@@ -169,7 +170,6 @@ class UrlScm(Scm):
     __SCHEMA = {
         'scm' : 'url',
         'url' : str,
-        schema.Optional('dir') : str,
         schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('digestSHA1') : str,
         schema.Optional('digestSHA256') : str,
