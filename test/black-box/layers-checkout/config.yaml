@@ -1,3 +1,4 @@
+bobMinimumVersion: "0.25.0rc2.dev6"
 layers:
   - name: foo
     scm: git

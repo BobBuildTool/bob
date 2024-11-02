@@ -290,6 +290,60 @@ Old behavior
 New behavior
     Apply string substitution to ``metaEnvironment`` variables.
 
+.. _policies-managedLayers:
+
+managedLayers
+~~~~~~~~~~~~~
+
+Introduced in: 0.25
+
+Starting with Bob version 0.25, managed layers are supported. This changed the
+location where layers are stored, though. Historically, layers could be nested
+where they would form a tree structure. That is, each layer can have a ``layers``
+directory itself where further layers are located. Because this does not work
+if multiple layers refer to another common layer, the directory structure
+has been flattened.
+
+Old behavior
+    Keep support for projects that were created before Bob 0.25. Layers with
+    sub-layers form a tree structure. See the following example::
+
+        .
+        ├── config.yaml
+        ├── layers
+        │   └── foo
+        │       ├── config.yaml
+        │       ├── layers
+        │       │   ├── bar
+        │       │   │   └── recipes
+        │       │   └── baz
+        │       │       └── recipes
+        │       └── recipes
+        └── recipes
+
+    No SCM can be used in the :ref:`configuration-config-layers` section of
+    ``config.yaml``. The :ref:`manpage-layers` command will refuse to work on
+    such projectes.
+
+New behavior
+    Managed layers are supported, that is SCMs can be used in the
+    :ref:`configuration-config-layers` section of ``config.yaml``. The layers
+    are checked out flat into the ``layers`` directory of the project::
+
+        .
+        ├── config.yaml
+        ├── layers
+        │   ├── bar
+        │   │   └── recipes
+        │   ├── baz
+        │   │   └── recipes
+        │   └── foo
+        │       ├── config.yaml
+        │       └── recipes
+        └── recipes
+
+    Unmanaged layers are expected in the same directory.
+
 .. _policies-obsolete:
 
 Obsolete policies

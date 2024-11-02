@@ -1968,6 +1968,10 @@ possibility is to provide an SCM-Dictionary (see
           commit: ...
         - bsp
 
+.. note::
+   Managed layers are only supported if the :ref:`policies-managedLayers`
+   policy is set to the new behaviour.
+
 If a layer SCM specification is given, Bob takes care of the layer management:
 
 - Layers are checked out / updated during bob-build (except build-only).

@@ -238,7 +238,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         recipes.setConfigFiles(args.configFile)
         if args.build_mode != 'build-only':
             setVerbosity(args.verbose)
-            updateLayers(loop, defines, args.verbose, args.attic, args.layerConfig)
+            updateLayers(loop, defines, args.verbose, args.attic, args.layerConfig, False)
         recipes.parse(defines)
 
         # if arguments are not passed on cmdline use them from default.yaml or set to default yalue
