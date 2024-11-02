@@ -21,6 +21,12 @@ jobs:
                 python-version: ${{ matrix.python-version }}
                 cache: pip
 
+            - name: Setup Java
+              uses: actions/setup-java@v4
+              with:
+                distribution: 'temurin'
+                java-version: '21'
+
             - name: Cache Jenkins integration test
               uses: actions/cache@v4
               with:
@@ -68,6 +74,12 @@ jobs:
               with:
                 python-version: "3.12"
                 cache: pip
+
+            - name: Setup Java
+              uses: actions/setup-java@v4
+              with:
+                distribution: 'temurin'
+                java-version: '21'
 
             - name: Prepare MSYS2 environment
               run: |
