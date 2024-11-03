@@ -388,9 +388,6 @@ class Audit:
     def setRecipesAudit(self, recipes):
         self.__artifact.setRecipes(recipes)
 
-    def setRecipesData(self, xml):
-        self.__artifact.setRecipes(auditFromData(xml))
-
     def setEnv(self, env):
         self.__artifact.setEnv(env)
 
