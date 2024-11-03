@@ -1739,13 +1739,28 @@ class LayerSpec:
         return self.__scm
 
 class LayerValidator:
+    @staticmethod
+    def __validateName(name):
+        if name == "":
+            raise schema.SchemaError("Layer name must not be empty")
+        if any((c in name) for c in '\\/'):
+            raise schema.SchemaError("Invalid character in layer name")
+
     def validate(self, data):
-        if isinstance(data,str):
+        if isinstance(data, str):
+            self.__validateName(data)
             return LayerSpec(data)
+        elif not isinstance(data, dict):
+            raise schema.SchemaUnexpectedTypeError("Layer entry must be a string or a dict", None)
+
         if 'name' not in data:
             raise schema.SchemaMissingKeyError("Missing 'name' key in {}".format(data), None)
+        elif not isinstance(data['name'], str):
+            raise schema.SchemaUnexpectedTypeError("Layer name must be a string", None)
+
         _data = data.copy();
         name = _data.get('name')
+        self.__validateName(name)
         del _data['name']
 
         return LayerSpec(name, RecipeSet.LAYERS_SCM_SCHEMA.validate(_data)[0])
