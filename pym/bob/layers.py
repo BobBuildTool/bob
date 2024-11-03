@@ -100,7 +100,6 @@ class Layer:
     async def __checkoutTask(self, verbose, attic):
         if self.__scm is None:
             return
-        dir = self.__scm.getProperties(False).get("dir")
 
         invoker = Invoker(spec=LayerStepSpec(self.__layerDir, self.__upperConfig.envWhiteList()),
                           preserveEnv= False,
