@@ -74,7 +74,8 @@ class PartialRecipeSet(PartialIRBase, RecipeSetIR):
     @classmethod
     def fromData(cls, data, scmAudit):
         self = super(PartialRecipeSet, cls).fromData(data)
-        self.__scmAudit = scmAudit and auditFromData(scmAudit)
+        self.__scmAudit = scmAudit and { name : (audit and auditFromData(audit))
+                                         for name, audit in scmAudit.items() }
         return self
 
     async def getScmAudit(self):
@@ -94,7 +95,7 @@ class PartialIR:
         self.packages = {}
         self.recipes = {}
         self.recipeSet = None
-        self.scmAudit = None
+        self.scmAudit = {}
 
     @classmethod
     def fromData(cls, data):

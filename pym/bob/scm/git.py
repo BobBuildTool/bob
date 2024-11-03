@@ -57,7 +57,7 @@ def getBranchTagCommit(spec):
 
 class GitScm(Scm):
 
-    DEFAULTS = {
+    __DEFAULTS = {
         schema.Optional('branch') : str,
         schema.Optional('sslVerify') : bool,
         schema.Optional('singleBranch') : bool,
@@ -65,7 +65,6 @@ class GitScm(Scm):
         schema.Optional('recurseSubmodules') : bool,
         schema.Optional('shallowSubmodules') : bool,
         schema.Optional('shallow') : schema.Or(int, str),
-        schema.Optional('dir') : str,
         schema.Optional('references') :
             schema.Schema([schema.Or(str, {
                 schema.Optional('url') : str,
@@ -80,14 +79,26 @@ class GitScm(Scm):
     __SCHEMA = {
         'scm' : 'git',
         'url' : str,
-        schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('tag') : str,
         schema.Optional('commit') : str,
         schema.Optional('rev') : str,
         schema.Optional(schema.Regex('^remote-.*')) : str,
     }
 
-    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
+    DEFAULTS = {
+        **__DEFAULTS,
+        schema.Optional('dir') : str,
+    }
+
+    SCHEMA = schema.Schema({
+        **__SCHEMA,
+        **DEFAULTS,
+        schema.Optional('if') : schema.Or(str, IfExpression),
+    })
+
+    # Layers have no "dir" and no "if"
+    LAYERS_SCHEMA = schema.Schema({**__SCHEMA, **__DEFAULTS})
+
     REMOTE_PREFIX = "remote-"
 
     def __init__(self, spec, overrides=[], stripUser=None, useBranchAndCommit=False):
@@ -897,11 +908,10 @@ class GitScm(Scm):
 
 
     def getAuditSpec(self):
-        extra = {}
-        if self.__submodules:
-            extra['submodules'] = self.__submodules
-            if self.__recurseSubmodules:
-                extra['recurseSubmodules'] = True
+        extra = {
+            'submodules' : self.__submodules,
+            'recurseSubmodules' : self.__recurseSubmodules,
+        }
         return ("git", self.__dir, extra)
 
     def hasLiveBuildId(self):
@@ -976,8 +986,11 @@ class GitAudit(ScmAudit):
 
     async def _scanDir(self, workspace, dir, extra):
         self.__dir = dir
-        self.__submodules = extra.get('submodules', False)
-        self.__recurseSubmodules = extra.get('recurseSubmodules', False)
+        # In case we scan an unkown directry, the `extra` dict will be empty.
+        # In this case we assume submodules exist and are checked our
+        # recursively.
+        self.__submodules = extra.get('submodules')
+        self.__recurseSubmodules = extra.get('recurseSubmodules')
         dir = os.path.join(workspace, dir)
         try:
             remotes = (await check_output(["git", "remote", "-v"],
@@ -1026,7 +1039,8 @@ class GitAudit(ScmAudit):
         # Normalize subset of submodules
         if isinstance(shouldExist, list):
             shouldExist = set(normPath(p) for p in shouldExist)
-        elif shouldExist:
+        elif shouldExist or shouldExist is None:
+            # If unspecified, we expect all submodules to be present.
             shouldExist = set(normPath(p) for p in allPaths.keys())
         else:
             shouldExist = set()
@@ -1069,8 +1083,8 @@ class GitAudit(ScmAudit):
         self.__commit = data["commit"]
         self.__description = data["description"]
         self.__dirty = data["dirty"]
-        self.__submodules = data.get("submodules", False)
-        self.__recurseSubmodules = data.get("recurseSubmodules", False)
+        self.__submodules = data.get("submodules")
+        self.__recurseSubmodules = data.get("recurseSubmodules")
 
     def dump(self):
         ret = {
@@ -1081,10 +1095,10 @@ class GitAudit(ScmAudit):
             "description" : self.__description,
             "dirty" : self.__dirty,
         }
-        if self.__submodules:
+        if self.__submodules is not None:
             ret["submodules"] = self.__submodules
-            if self.__recurseSubmodules:
-                ret["recurseSubmodules"] = True
+        if self.__recurseSubmodules is not None:
+            ret["recurseSubmodules"] = self.__recurseSubmodules
         return ret
 
     def getStatusLine(self):

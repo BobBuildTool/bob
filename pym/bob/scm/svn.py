@@ -16,19 +16,32 @@ from xml.etree import ElementTree
 
 class SvnScm(Scm):
 
-    DEFAULTS = {
-        schema.Optional('dir') : str,
+    __DEFAULTS = {
         schema.Optional('sslVerify') : bool,
     };
 
     __SCHEMA = {
         'scm' : 'svn',
         'url' : str,
-        schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('revision') : schema.Or(int, str),
     }
 
-    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
+    DEFAULTS = {
+        **__DEFAULTS,
+        schema.Optional('dir') : str,
+    }
+
+    SCHEMA = schema.Schema({
+        **__SCHEMA,
+        **DEFAULTS,
+        schema.Optional('if') : schema.Or(str, IfExpression),
+    })
+
+    # Layers have no "dir" and no "if"
+    LAYERS_SCHEMA = schema.Schema({
+        **__SCHEMA,
+        **__DEFAULTS,
+    })
 
     def __init__(self, spec, overrides=[]):
         super().__init__(spec, overrides)

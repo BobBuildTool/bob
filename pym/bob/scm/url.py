@@ -157,7 +157,7 @@ isWin32 = sys.platform == "win32"
 
 class UrlScm(Scm):
 
-    DEFAULTS = {
+    __DEFAULTS = {
         schema.Optional('extract') : schema.Or(bool, str),
         schema.Optional('fileName') : str,
         schema.Optional('stripComponents') : int,
@@ -169,14 +169,27 @@ class UrlScm(Scm):
     __SCHEMA = {
         'scm' : 'url',
         'url' : str,
-        schema.Optional('dir') : str,
-        schema.Optional('if') : schema.Or(str, IfExpression),
         schema.Optional('digestSHA1') : str,
         schema.Optional('digestSHA256') : str,
         schema.Optional('digestSHA512') : str,
     }
 
-    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
+    DEFAULTS = {
+        **__DEFAULTS,
+        schema.Optional('dir') : str,
+    }
+
+    SCHEMA = schema.Schema({
+        **__SCHEMA,
+        **DEFAULTS,
+        schema.Optional('if') : schema.Or(str, IfExpression),
+    })
+
+    # Layers have no "dir" and no "if"
+    LAYERS_SCHEMA = schema.Schema({
+        **__SCHEMA,
+        **__DEFAULTS,
+    })
 
     MIRRORS_SCHEMA = schema.Schema({
         'scm' : 'url',

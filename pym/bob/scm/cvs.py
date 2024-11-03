@@ -19,11 +19,17 @@ class CvsScm(Scm):
         'scm' : 'cvs',
         'cvsroot' : str,
         'module' : str,
-        schema.Optional('if') : str,
         schema.Optional('rev') : str
     }
 
-    SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
+    SCHEMA = schema.Schema({
+        **__SCHEMA,
+        **DEFAULTS,
+        schema.Optional('if') : str,
+    })
+
+    # Layers have no "dir" and no "if"
+    LAYERS_SCHEMA = schema.Schema({ **__SCHEMA })
 
     # Checkout using CVS
     # - mandatory parameters: cvsroot, module

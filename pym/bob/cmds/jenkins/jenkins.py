@@ -1281,8 +1281,10 @@ def doJenkinsPush(recipes, argv):
     date = str(datetime.datetime.now())
 
     recipesAudit = runInEventLoop(recipes.getScmAudit())
-    if recipesAudit is not None:
-        recipesAudit = json.dumps(recipesAudit.dump(), sort_keys=True)
+    if recipesAudit:
+        recipesAudit = json.dumps({ name : (audit and audit.dump())
+                                    for name, audit in recipesAudit.items() },
+                                  sort_keys=True)
 
     def printLine(level, job, *args):
         if level <= verbose:

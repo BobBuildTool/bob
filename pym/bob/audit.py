@@ -42,6 +42,8 @@ def digestData(d, h):
     elif isinstance(d, bytes):
         h.update(struct.pack("<BI", 6, len(d)))
         h.update(d)
+    elif d is None:
+        h.update(struct.pack("<B", 7))
     else:
         assert False, "Cannot digest " + str(type(d))
 
@@ -80,6 +82,7 @@ class Artifact:
         schema.Optional('metaEnv') : { schema.Optional(str) : str },
         "scms" : [ dict ],
         schema.Optional("recipes") : dict,
+        schema.Optional("layers") : dict,
         "dependencies" : {
             schema.Optional('args') : [ HexValidator() ],
             schema.Optional('tools') : { str : HexValidator() },
@@ -122,6 +125,7 @@ class Artifact:
         self.__buildId = buildId
         self.__resultHash = resultHash
         self.__recipes = None
+        self.__layers = {}
         self.__defines = {}
         u = platform.uname()
         self.__build = {
@@ -154,6 +158,13 @@ class Artifact:
             self.__recipes = auditFromData(recipes)
         else:
             self.__recipes = None
+
+        layers = data.get("layers")
+        if layers:
+            self.__layers = { name : (audit and auditFromData(audit))
+                              for name, audit in layers.items() }
+        else:
+            self.__layers = {}
 
         self.__defines = data["meta"]
         self.__build = data["build"]
@@ -206,10 +217,17 @@ class Artifact:
         if self.__recipes is not None:
             ret["recipes"] = self.__recipes.dump()
 
+        if self.__layers: # Explicitly filter empty layers
+            ret["layers"] = { name : (audit and audit.dump())
+                              for name, audit in self.__layers.items() }
+
         return ret
 
     def setRecipes(self, recipes):
         self.__recipes = recipes
+
+    def setLayers(self, layers):
+        self.__layers = layers
 
     def setEnv(self, env):
         try:
@@ -338,7 +356,8 @@ class Audit:
                 r["artifact-id"] : Artifact.fromData(r) for r in tree["references"]
             }
         except schema.SchemaError as e:
-            raise ParseError(name + ": Invalid audit record: " + str(e))
+            raise ParseError(name + ": Invalid audit record: " + str(e),
+                             help="Try updating to the latest Bob version. The audit probably contains new record types.")
         except ValueError as e:
             raise ParseError(name + ": Invalid json: " + str(e))
         self.__validate()
@@ -385,11 +404,11 @@ class Audit:
                 refs.update(artifact.getReferences())
         return sorted(ret)
 
-    def setRecipesAudit(self, recipes):
-        self.__artifact.setRecipes(recipes)
-
-    def setRecipesData(self, xml):
-        self.__artifact.setRecipes(auditFromData(xml))
+    def setRecipesAudit(self, recipesAudit):
+        self.__artifact.setRecipes(recipesAudit.get(""))
+        self.__artifact.setLayers({
+            layer : audit for layer, audit in recipesAudit.items() if layer != ""
+        })
 
     def setEnv(self, env):
         self.__artifact.setEnv(env)

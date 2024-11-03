@@ -59,7 +59,7 @@ def findPackages(package, excludes, highlights, done, maxdepth, donePackages, le
            yield ('link', d.getPackage(), package)
         yield from findPackages(d.getPackage(), excludes, highlights, done, maxdepth, donePackages, level+1)
 
-def makeD3Graph(packages, p, filename, options, excludes, highlights, maxdepth):
+def makeD3Graph(recipes, packages, p, filename, options, excludes, highlights, maxdepth):
     def getHover(package, options):
         hover = collections.OrderedDict(package.getMetaEnv())
         if options.get('d3.showScm', False) and package.getCheckoutStep().isValid():
@@ -469,7 +469,7 @@ function ticked() {
 simulation.force("link").links(links)
 </script>
 <div class='info' style="width: 100%; text-align: center;">
-  <div id='innerLeft' style="float: left"> Recipes: """ + runInEventLoop(RecipeSet().getScmStatus()) + """</div>
+  <div id='innerLeft' style="float: left"> Recipes: """ + runInEventLoop(recipes.getScmStatus()) + """</div>
   <div id='innerRight' style="float: right">Bob version: """ + BOB_VERSION +"""</div>
   <div id='innerMiddle' style="display: inline-block">Generated using <a href="https://www.d3js.org">D3JS</a></div>
 </div>
@@ -584,6 +584,6 @@ def doGraph(argv, bobRoot):
         print(colorize("   GRAPH   {} ({})".format(p, args.type), "32"))
 
         if args.type == 'd3':
-            makeD3Graph(packages, p, os.path.join(destination, filename), options, excludes, highlights, args.max_depth)
+            makeD3Graph(recipes, packages, p, os.path.join(destination, filename), options, excludes, highlights, args.max_depth)
         elif args.type == 'dot':
             makeDotGraph(packages, p, os.path.join(destination, filename), excludes, highlights, args.max_depth)

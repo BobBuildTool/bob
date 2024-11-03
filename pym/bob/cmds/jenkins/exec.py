@@ -86,7 +86,7 @@ class Spec:
         if self.__recipesAudit:
             return json.loads("".join(self.__recipesAudit))
         else:
-            return None
+            return {}
 
     @property
     def execIR(self):

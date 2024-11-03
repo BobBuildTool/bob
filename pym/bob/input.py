@@ -8,7 +8,7 @@ from .errors import ParseError, BobError
 from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
-    auditFromDir, getScm, SYNTHETIC_SCM_PROPS
+    auditFromDir, auditFromProperties, getScm, SYNTHETIC_SCM_PROPS
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode, setParallelTUIThreshold
@@ -1739,13 +1739,28 @@ class LayerSpec:
         return self.__scm
 
 class LayerValidator:
+    @staticmethod
+    def __validateName(name):
+        if name == "":
+            raise schema.SchemaError("Layer name must not be empty")
+        if any((c in name) for c in '\\/'):
+            raise schema.SchemaError("Invalid character in layer name")
+
     def validate(self, data):
-        if isinstance(data,str):
+        if isinstance(data, str):
+            self.__validateName(data)
             return LayerSpec(data)
+        elif not isinstance(data, dict):
+            raise schema.SchemaUnexpectedTypeError("Layer entry must be a string or a dict", None)
+
         if 'name' not in data:
             raise schema.SchemaMissingKeyError("Missing 'name' key in {}".format(data), None)
+        elif not isinstance(data['name'], str):
+            raise schema.SchemaUnexpectedTypeError("Layer name must be a string", None)
+
         _data = data.copy();
         name = _data.get('name')
+        self.__validateName(name)
         del _data['name']
 
         return LayerSpec(name, RecipeSet.LAYERS_SCM_SCHEMA.validate(_data)[0])
@@ -2957,11 +2972,12 @@ class RecipeSet:
         })
 
     # We do not support the "import" SCM for layers. It just makes no sense.
+    # Also, all SCMs lack the "dir" and "if" attributes.
     LAYERS_SCM_SCHEMA = ScmValidator({
-        'git' : GitScm.SCHEMA,
-        'svn' : SvnScm.SCHEMA,
-        'cvs' : CvsScm.SCHEMA,
-        'url' : UrlScm.SCHEMA,
+        'git' : GitScm.LAYERS_SCHEMA,
+        'svn' : SvnScm.LAYERS_SCHEMA,
+        'cvs' : CvsScm.LAYERS_SCHEMA,
+        'url' : UrlScm.LAYERS_SCHEMA,
     })
 
     SCM_SCHEMA = ScmValidator({
@@ -3101,7 +3117,7 @@ class RecipeSet:
         self.__commandConfig = {}
         self.__uiConfig = {}
         self.__shareConfig = {}
-        self.__layers = []
+        self.__layers = {}
         self.__buildHooks = {}
         self.__sandboxOpts = {}
         self.__scmDefaults = {}
@@ -3424,20 +3440,34 @@ class RecipeSet:
         try:
             ret = self.__recipeScmAudit
         except AttributeError:
+            ret = {}
             try:
-                ret = await auditFromDir(".")
+                ret[""] = await auditFromDir(".")
             except BobError as e:
                 Warn("could not determine recipes state").warn(e.slogan)
-                ret = None
+
+            # We look into every layers directory. If the Bob state knows it,
+            # use the SCM information from there. Otherwise make a best guess.
+            for layer, path in sorted(self.__layers.items()):
+                state = None
+                try:
+                    scmProps = (BobState().getLayerState(path) or {}).get("prop")
+                    if scmProps is None:
+                        state = await auditFromDir(path)
+                    else:
+                        state = await auditFromProperties(path, scmProps)
+                except BobError as e:
+                    Warn(f"could not determine layer '{layer}' state").warn(e.slogan)
+                ret[layer] = state
+
             self.__recipeScmAudit = ret
         return ret
 
     async def getScmStatus(self):
-        audit = await self.getScmAudit()
-        if audit is None:
-            return "unknown"
-        else:
-            return audit.getStatusLine()
+        scmAudit = await self.getScmAudit()
+        return ", ".join(( ((f"layer {name}: " if name else "")
+                            + ("unknown" if audit is None else audit.getStatusLine()))
+                           for name, audit in sorted(scmAudit.items()) ))
 
     def getBuildHook(self, name):
         return self.__buildHooks.get(name)
@@ -3481,7 +3511,7 @@ class RecipeSet:
         if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
             raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
-        self.__layers = []
+        self.__layers = {}
         self.__whiteList = getPlatformEnvWhiteList(platform)
         self.__pluginPropDeps = b''
         self.__pluginSettingsDeps = b''
@@ -3585,7 +3615,6 @@ class RecipeSet:
 
             if layer in self.__layers:
                 return
-            self.__layers.append(layer)
 
             if managedLayers:
                 # SCM backed layers are in build dir, regular layers are in
@@ -3602,6 +3631,8 @@ class RecipeSet:
                                                        for l in layer.split("/") ))
                 if not os.path.isdir(rootDir):
                     raise ParseError(f"Layer '{layer}' does not exist!")
+
+            self.__layers[layer] = rootDir
         else:
             rootDir = recipesRoot
 
