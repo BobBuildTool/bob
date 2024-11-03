@@ -21,6 +21,21 @@ async def auditFromDir(dir):
     else:
         return None
 
+async def auditFromProperties(baseDir, props):
+    auditSpec = getScm(props).getAuditSpec()
+    if auditSpec is None:
+        return None
+
+    SCMS = {
+        'git' : GitAudit,
+        'svn' : SvnAudit,
+        'url' : UrlAudit,
+        'import' : ImportAudit,
+    }
+
+    (typ, subDir, extra) = auditSpec
+    return await SCMS[typ].fromDir(baseDir, subDir, extra)
+
 def auditFromData(data):
     typ = data.get("type")
     if typ == "git":
