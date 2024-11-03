@@ -338,7 +338,8 @@ class Audit:
                 r["artifact-id"] : Artifact.fromData(r) for r in tree["references"]
             }
         except schema.SchemaError as e:
-            raise ParseError(name + ": Invalid audit record: " + str(e))
+            raise ParseError(name + ": Invalid audit record: " + str(e),
+                             help="Try updating to the latest Bob version. The audit probably contains new record types.")
         except ValueError as e:
             raise ParseError(name + ": Invalid json: " + str(e))
         self.__validate()
