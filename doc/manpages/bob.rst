@@ -77,7 +77,7 @@ Options
 User commands
 -------------
 
-The user commands are intended for interactive usage. Unless otherwise noticed
+The user commands are intended for interactive usage. Unless otherwise noticed,
 their output is subject to improvements in future versions and usually not
 intended to be parsed by scripts.
 
@@ -86,7 +86,7 @@ intended to be parsed by scripts.
 :ref:`manpage-build`
     Build (sub-)packages in release mode
 :ref:`manpage-clean`
-    Delete unused src/build/dist paths of release builds
+    Delete unused src/build/dist paths
 :ref:`manpage-dev`
     Build (sub-)packages in development mode
 :ref:`manpage-graph`
@@ -97,10 +97,12 @@ bob-help
     Initialize build tree
 :ref:`manpage-bob-jenkins`
     Configure Jenkins server
+:ref:`manpage-layers`
+    Update or show status of managed layers
 :ref:`manpage-bob-ls`
     List package hierarchy. The output is suitable to be used in non-interactive scripts.
 :ref:`manpage-bob-project`
-    Create project files
+    Create IDE project files
 :ref:`manpage-show`
     Show properties of a package
 :ref:`manpage-bob-status`

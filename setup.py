@@ -77,12 +77,14 @@ data_files = []
 if sys.platform != 'win32':
     data_files.extend([
         ('share/man/man1', [
+            'doc/_build/man/bob.1',
             'doc/_build/man/bob-archive.1',
             'doc/_build/man/bob-build.1',
             'doc/_build/man/bob-clean.1',
             'doc/_build/man/bob-dev.1',
             'doc/_build/man/bob-graph.1',
             'doc/_build/man/bob-jenkins.1',
+            'doc/_build/man/bob-layers.1',
             'doc/_build/man/bob-ls.1',
             'doc/_build/man/bob-project.1',
             'doc/_build/man/bob-query-meta.1',
