@@ -283,12 +283,31 @@ class GitScm(Scm):
         # that the commit is on the selected branch and need the full history!
         await invoker.checkCommand(fetchCmd, retries=self.__retries, cwd=self.__dir)
 
-        # Verify that commit/tag is on requested branch
+        # Smoke test: see if tag/commit exists at all. Otherwise, the check
+        # below will be missleading in its error message.
         commit = self.__commit if self.__commit else "tags/"+self.__tag
+        if await invoker.callCommand(["git", "cat-file", "-e", commit], cwd=self.__dir):
+            msg = "Commit" if self.__commit else "Tag"
+            msg += f" {commit} could not be fetched from the server."
+            if self.__shallow is not None:
+                msg += f" Most probably, the 'shallow' setting was too agressive."
+                if isinstance(self.__shallow, int):
+                    msg += ' Consider switching to a date based shallow cloning ("YYYY-MM-DD").'
+            else:
+                if self.__singleBranch:
+                    msg += " Looks like it does not exist on configured branch."
+                else:
+                    msg += " Looks like it does not exist on any branch."
+            invoker.fail(msg)
+
+        # Verify that commit/tag is on requested branch
         if await invoker.callCommand(["git", "merge-base", "--is-ancestor",
                                      commit, "remotes/origin/"+self.__branch],
                                      cwd=self.__dir):
-            invoker.fail("Branch '{}' does not contain '{}'".format(self.__branch, commit))
+            msg = f"Branch '{self.__branch}' does not contain '{commit}'"
+            if self.__shallow is not None:
+                msg += f" Most probably, the 'shallow' setting was too agressive."
+            invoker.fail(msg)
 
         if headValid:
             branchExists = (await invoker.callCommand(["git", "show-ref", "-q",
