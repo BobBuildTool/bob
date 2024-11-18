@@ -167,7 +167,7 @@ setup(
     url = "https://bobbuildtool.github.io/",
     download_url = "https://github.com/BobBuildTool/bob/releases",
     classifiers = [
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
