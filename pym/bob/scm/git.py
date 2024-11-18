@@ -235,6 +235,9 @@ class GitScm(Scm):
             fetchCmd.append("--depth={}".format(self.__shallow))
         elif isinstance(self.__shallow, str):
             fetchCmd.append("--shallow-since={}".format(self.__shallow))
+        elif await invoker.checkOutputCommand(["git", "rev-parse", "--is-shallow-repository"],
+                                              cwd=self.__dir) == "true":
+            fetchCmd.append("--unshallow")
         fetchCmd.append("origin")
 
         # Calculate appropriate refspec (all/singleBranch/tag)
