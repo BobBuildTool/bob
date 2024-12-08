@@ -470,3 +470,98 @@ class TestSubmodulesStatus(TestCase):
         self.assertEqual(status.flags, {ScmTaint.modified})
         self.assertTrue(status.dirty)
         self.assertTrue(audit["dirty"])
+
+
+class TestRefStatus(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.__repodir = tempfile.TemporaryDirectory()
+        cls.repodir = cls.__repodir.name
+
+        cmds = """\
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+
+            echo -n "hello world" > test.txt
+            git add test.txt
+            git commit -m "first commit"
+            git update-ref refs/bob/foo HEAD
+
+            echo -n "update" > test.txt
+            git commit -a -m "second commit"
+        """
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=cls.repodir)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.__repodir.cleanup()
+
+    def setUp(self):
+        self.__workspaceDir = tempfile.TemporaryDirectory()
+        self.workspace = self.__workspaceDir.name
+
+    def tearDown(self):
+        self.__workspaceDir.cleanup()
+
+    def createGitScm(self, spec = {}):
+        s = {
+            'scm' : "git",
+            'url' : "file://" + os.path.abspath(self.repodir),
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        s.update(spec)
+        return GitScm(s)
+
+    def invokeGit(self, scm):
+        spec = MagicMock(workspaceWorkspacePath=self.workspace, envWhiteList=set())
+        invoker = Invoker(spec, True, True, True, True, True, False)
+        runInEventLoop(scm.invoke(invoker))
+
+    def statusGitScm(self, scm):
+        status = scm.status(self.workspace)
+        _git, dir, extra = scm.getAuditSpec()
+        audit = runInEventLoop(GitAudit.fromDir(self.workspace, dir, extra)).dump()
+        return status, audit
+
+    def testClean(self):
+        scm = self.createGitScm({ "rev" : "refs/bob/foo" })
+        self.invokeGit(scm)
+        status, audit = self.statusGitScm(scm)
+
+        self.assertEqual(status.flags, set())
+        self.assertTrue(status.clean)
+        self.assertFalse(audit["dirty"])
+
+    def testModified(self):
+        scm = self.createGitScm({ "rev" : "refs/bob/foo" })
+        self.invokeGit(scm)
+
+        with open(os.path.join(self.workspace, "test.txt"), "w") as f:
+            f.write("modified")
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.modified})
+        self.assertTrue(status.dirty)
+        self.assertTrue(audit["dirty"])
+
+    def testCommitted(self):
+        scm = self.createGitScm({ "rev" : "refs/bob/foo" })
+        self.invokeGit(scm)
+
+        cmds = """\
+            git config user.email "bob@bob.bob"
+            git config user.name test
+
+            echo "test changed" > test.txt
+            git commit -a -m "user commit"
+        """
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.workspace)
+
+        status, audit = self.statusGitScm(scm)
+        self.assertEqual(status.flags, {ScmTaint.switched, ScmTaint.unpushed_local})
+        self.assertTrue(status.dirty)
+        self.assertFalse(audit["dirty"])
+
