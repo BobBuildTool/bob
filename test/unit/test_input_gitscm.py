@@ -1009,3 +1009,156 @@ class TestRebase(TestCase):
 
             self.invokeGit(workspace, scm)
             self.verify(workspace, "changed")
+
+
+class TestGenericRef(TestCase):
+
+    def setUp(self):
+        self.__repodir = tempfile.TemporaryDirectory()
+        self.repodir = self.__repodir.name
+
+        # Create a commit and a new ref "refs/bob/foobar" that points to that
+        # commit.
+        cmds = """\
+            git init .
+            git config user.email "bob@bob.bob"
+            git config user.name test
+            echo -n "hello world" > test.txt
+            git add test.txt
+            git commit -m "first commit"
+            git update-ref refs/bob/foo HEAD
+
+            echo -n "update" > test.txt
+            git commit -a -m "second commit"
+            git update-ref refs/bob/bar HEAD
+
+            echo -n "final" > test.txt
+            git commit -a -m "third commit"
+        """
+        subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
+
+    def tearDown(self):
+        self.__repodir.cleanup()
+
+    def createGitScm(self, spec = {}):
+        s = {
+            'scm' : "git",
+            'url' : "file://" + os.path.abspath(self.repodir),
+            'recipe' : "foo.yaml#0",
+            '__source' : "Recipe foo",
+        }
+        s.update(spec)
+        return GitScm(s)
+
+    def invokeGit(self, workspace, scm):
+        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+        invoker = Invoker(spec, True, True, True, True, True, False)
+        runInEventLoop(scm.invoke(invoker))
+
+    def switchGit(self, workspace, scm, oldScm):
+        spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
+        invoker = Invoker(spec, True, True, True, True, True, False)
+        runInEventLoop(scm.switch(invoker, oldScm))
+
+    def verify(self, workspace, content, file="test.txt"):
+        with open(os.path.join(workspace, file)) as f:
+            self.assertEqual(f.read(), content)
+
+    def testCheckout(self):
+        """Test simple checkout"""
+        scm = self.createGitScm({ 'rev' : "refs/bob/foo" })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+            # Should also work again
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+
+    def testCheckoutRebase(self):
+        """Test checkout with rebase enabled"""
+        scm = self.createGitScm({
+            'rev' : "refs/bob/foo",
+            'rebase' : True
+        })
+        with tempfile.TemporaryDirectory() as workspace:
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+            # Should also work again
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+
+    def testSwitch(self):
+        """Test switch from branch to ref and back"""
+        with tempfile.TemporaryDirectory() as workspace:
+            # default master branch
+            scm = self.createGitScm()
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "final")
+
+            # switch to ref
+            oldScm = scm
+            scm = self.createGitScm({ 'rev' : "refs/bob/foo" })
+            self.assertTrue(scm.canSwitch(oldScm))
+            self.switchGit(workspace, scm, oldScm)
+            self.verify(workspace, "hello world")
+
+            # switch to other ref
+            oldScm = scm
+            scm = self.createGitScm({ 'rev' : "refs/bob/bar" })
+            self.assertTrue(scm.canSwitch(oldScm))
+            self.switchGit(workspace, scm, oldScm)
+            self.verify(workspace, "update")
+
+            # back to master branch
+            oldScm = scm
+            scm = self.createGitScm()
+            self.assertTrue(scm.canSwitch(oldScm))
+            self.switchGit(workspace, scm, oldScm)
+            self.verify(workspace, "final")
+
+    def testSwitchFailIfCommitted(self):
+        """That that switch fails if user moved away from ref"""
+        with tempfile.TemporaryDirectory() as workspace:
+            scm = self.createGitScm({ 'rev' : "refs/bob/foo" })
+            self.invokeGit(workspace, scm)
+
+            cmds = """\
+                git config user.email "bob@bob.bob"
+                git config user.name test
+                echo -n "changed" > test.txt
+                git commit -a -m "user commit"
+            """
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=workspace)
+
+            oldScm = scm
+            scm = self.createGitScm()
+            self.assertTrue(scm.canSwitch(oldScm))
+            with self.assertRaises(InvocationError):
+                self.switchGit(workspace, scm, oldScm)
+
+    def testUpdateRef(self):
+        """Verify rebase works on moving refs"""
+
+        with tempfile.TemporaryDirectory() as workspace:
+            scm = self.createGitScm({ 'rev' : "refs/bob/foo", 'rebase' : True })
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "hello world")
+
+            # make some local commit to provoke a real rebase
+            cmds = """\
+                git config user.email "bob@bob.bob"
+                git config user.name test
+                echo -n "added" > new.txt
+                git add new.txt
+                git commit -a -m "user commit"
+            """
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=workspace)
+
+            # update ref in upstream repo
+            cmds = "git update-ref refs/bob/foo HEAD"
+            subprocess.check_call([getBashPath(), "-c", cmds], cwd=self.repodir)
+
+            # checkout again, verify rebase
+            self.invokeGit(workspace, scm)
+            self.verify(workspace, "final")
+            self.verify(workspace, "added", "new.txt")
