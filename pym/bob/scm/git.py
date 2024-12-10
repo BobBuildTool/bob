@@ -28,7 +28,8 @@ def dirIsEmpty(p):
         return False
     return os.listdir(p) == []
 
-def getBranchTagCommit(spec):
+def getRefBranchTagCommit(spec):
+    ref = None
     branch = None
     tag = None
     commit = None
@@ -38,6 +39,8 @@ def getBranchTagCommit(spec):
             branch = rev[11:]
         elif rev.startswith("refs/tags/"):
             tag = rev[10:]
+        elif rev.startswith("refs/"):
+            ref = rev
         elif len(rev) == 40:
             commit = rev
         else:
@@ -49,11 +52,11 @@ def getBranchTagCommit(spec):
         # validate commit
         if re.match("^[0-9a-f]{40}$", commit) is None:
             raise ParseError("Invalid commit id: " + str(commit))
-    elif not branch and not tag:
+    elif not ref and not branch and not tag:
         # nothing secified at all -> master branch
         branch = "master"
 
-    return (branch, tag, commit)
+    return (ref, branch, tag, commit)
 
 class GitScm(Scm):
 
@@ -105,7 +108,7 @@ class GitScm(Scm):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
-        self.__branch, self.__tag, self.__commit = getBranchTagCommit(spec)
+        self.__ref, self.__branch, self.__tag, self.__commit = getRefBranchTagCommit(spec)
         self.__remotes = {}
         # convert remotes into separate dictionary
         for key, val in spec.items():
@@ -147,6 +150,16 @@ class GitScm(Scm):
 
     def getProperties(self, isJenkins, pretty=False):
         properties = super().getProperties(isJenkins)
+
+        if self.__commit:
+            rev = self.__commit
+        elif self.__tag:
+            rev = "refs/tags/" + self.__tag
+        elif self.__branch:
+            rev = "refs/heads/" + self.__branch
+        else:
+            rev = self.__ref
+
         properties.update({
             'scm' : 'git',
             'url' : self.__url,
@@ -154,10 +167,7 @@ class GitScm(Scm):
             'tag' : self.__tag,
             'commit' : self.__commit,
             'dir' : self.__dir,
-            'rev' : ( self.__commit if self.__commit else
-                (("refs/tags/" + self.__tag) if self.__tag else
-                    ("refs/heads/" + self.__branch))
-            ),
+            'rev' : rev,
             'retries' : self.__retries,
             'sslVerify' : self.__sslVerify,
             'singleBranch' : self.__singleBranch,
@@ -243,6 +253,8 @@ class GitScm(Scm):
         # Calculate appropriate refspec (all/singleBranch/tag)
         if singleBranch:
             fetchCmd += ["+refs/heads/{0}:refs/remotes/origin/{0}".format(self.__branch)]
+        elif self.__ref:
+            fetchCmd += [self.__ref]
         else:
             fetchCmd += ["+refs/heads/*:refs/remotes/origin/*"]
         if self.__tag:
@@ -253,6 +265,8 @@ class GitScm(Scm):
             await self.__checkoutTagOnBranch(invoker, fetchCmd, switch)
         elif self.__tag or self.__commit:
             await self.__checkoutTag(invoker, fetchCmd, switch)
+        elif self.__ref:
+            await self.__checkoutRef(invoker, fetchCmd, switch)
         else:
             await self.__checkoutBranch(invoker, fetchCmd, switch)
 
@@ -381,6 +395,36 @@ class GitScm(Scm):
             await invoker.checkCommand(["git", "checkout", "-q", "--no-recurse-submodules",
                 self.__commit if self.__commit else "tags/"+self.__tag], cwd=self.__dir)
             # FIXME: will not be called again if interrupted!
+            await self.__checkoutSubmodules(invoker)
+
+    async def __checkoutRef(self, invoker, fetchCmd, switch):
+        oldUpstreamCommit = None
+        if self.__rebase:
+            # The user apparently expects the upstream ref to change. We
+            # remember the last fetched commit in a bob specific config entry.
+            oldBobHead = await invoker.runCommand(["git", "config", "remote.origin.bob-head"],
+                                                  stdout=True, stderr=False, cwd=self.__dir)
+            if oldBobHead.returncode == 0:
+                oldUpstreamCommit = oldBobHead.stdout.rstrip()
+
+        head = await invoker.callCommand(["git", "rev-parse", "--verify", "-q", "HEAD"],
+            stdout=False, cwd=self.__dir)
+        if head != 0 or switch or self.__rebase:
+            await invoker.checkCommand(fetchCmd, retries=self.__retries, cwd=self.__dir)
+            fetchHead = await invoker.checkOutputCommand(["git", "rev-parse", "FETCH_HEAD"],
+                                                         cwd=self.__dir)
+            if self.__rebase and oldUpstreamCommit:
+                await invoker.checkCommand(
+                    ["git", "-c", "submodule.recurse=0", "rebase", "--onto",
+                     fetchHead, oldUpstreamCommit],
+                    cwd=self.__dir)
+            else:
+                await invoker.checkCommand(["git", "checkout", "-q", "--no-recurse-submodules",
+                    fetchHead], cwd=self.__dir)
+
+            # Remember old fetched commit in case we need to rebase later.
+            await invoker.checkCommand(["git", "config", "remote.origin.bob-head", fetchHead],
+                                       cwd=self.__dir)
             await self.__checkoutSubmodules(invoker)
 
     async def __checkoutBranch(self, invoker, fetchCmd, switch):
@@ -619,15 +663,21 @@ class GitScm(Scm):
             # was checked out and the repo is still at this commit.
             oldTag = oldScm.__tag
             oldCommit = oldScm.__commit
+            oldBranch = oldScm.__branch
             if oldCommit:
                 pass # just compare this commit
             elif oldTag:
                 # Convert tag to commit. Beware of annotated commits!
                 oldCommit = await invoker.checkOutputCommand(["git",
                     "rev-parse", "tags/"+oldTag+"^0"], cwd=self.__dir)
-            else:
+            elif oldBranch:
                 # User moved from branch to detached HEAD
                 invoker.fail("Cannot switch: detached HEAD state")
+            else:
+                oldBobHead = await invoker.runCommand(["git", "config", "remote.origin.bob-head"],
+                                                      stdout=True, stderr=False, cwd=self.__dir)
+                if oldBobHead.returncode == 0:
+                    oldCommit = oldBobHead.stdout.rstrip()
 
             curCommit = await invoker.checkOutputCommand(["git", "rev-parse",
                 "HEAD"], cwd=self.__dir)
@@ -653,8 +703,10 @@ class GitScm(Scm):
             ret = self.__commit + " " + self.__dir
         elif self.__tag:
             ret = filt(self.__url) + " refs/tags/" + self.__tag + " " + self.__dir
-        else:
+        elif self.__branch:
             ret = filt(self.__url) + " refs/heads/" + self.__branch + " " + self.__dir
+        else:
+            ret = filt(self.__url) + " " + self.__ref + " " + self.__dir
 
         if self.__submodules:
             ret += " submodules"
@@ -696,8 +748,10 @@ class GitScm(Scm):
             branch.text = self.__commit
         elif self.__tag:
             branch.text = "refs/tags/" + self.__tag
-        else:
+        elif self.__branch:
             branch.text = "refs/heads/" + self.__branch
+        else:
+            branch.text = self.__ref
 
         ElementTree.SubElement(scm, "doGenerateSubmoduleConfigurations").text = "false"
         ElementTree.SubElement(scm, "submoduleCfg", attrib={"class" : "list"})
@@ -759,7 +813,8 @@ class GitScm(Scm):
         return self.__dir
 
     def isDeterministic(self):
-        return bool(self.__tag) or bool(self.__commit)
+        return bool(self.__tag) or bool(self.__commit) or \
+                bool(not self.__rebase and self.__ref)
 
     def hasJenkinsPlugin(self):
         # Cloning a subset of submodules is not supported by the Jenkins
@@ -820,6 +875,15 @@ class GitScm(Scm):
                             joinLines("> unpushed commits on {}:".format(self.__branch),
                                 indent(output, '   ')))
                     onCorrectBranch = True
+            else:
+                currentCommit = self.callGit(workspacePath, 'rev-parse', 'HEAD')
+                refCommit = self.callGit(workspacePath, 'config', 'remote.origin.bob-head',
+                                         check=False)
+                if currentCommit == refCommit:
+                    onCorrectBranch = True
+                else:
+                    status.add(ScmTaint.switched,
+                        f"> rev '{self.__ref}': expected: '{refCommit}', actual: {currentCommit}")
 
             # Check for modifications wrt. checked out commit
             output = self.callGit(workspacePath, 'status', '--porcelain', '--ignore-submodules=all')
@@ -947,8 +1011,10 @@ class GitScm(Scm):
             if self.__tag:
                 # Annotated tags are objects themselves. We need the commit object!
                 refs = ["refs/tags/" + self.__tag + '^{}', "refs/tags/" + self.__tag]
-            else:
+            elif self.__branch:
                 refs = ["refs/heads/" + self.__branch]
+            else:
+                refs = [self.__ref]
             cmdLine = ['git', 'ls-remote', self.__url] + refs
             try:
                 stdout = await check_output(cmdLine, stderr=subprocess.DEVNULL,

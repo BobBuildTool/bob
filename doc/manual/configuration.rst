@@ -1032,6 +1032,10 @@ git
      The symbolic name of a tag.
    * refs/heads/<branchname>, e.g. refs/heads/master.
      The name of a branch.
+   * refs/<refname>, e.g. refs/changes/50/19450/17. A generic ref that is
+     neither a branch nor a tag. Effectively treated like a tag unless
+     ``rebase`` is set to ``true`` in which case updates to the ref will rebase
+     the workspace.
 
    The ``remote-*`` property allows adding extra remotes whereas the part after
    ``remote-`` corresponds to the remote name and the value given corresponds to
