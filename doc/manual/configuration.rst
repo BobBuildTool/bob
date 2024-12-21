@@ -2050,6 +2050,11 @@ Bob will either invoke ``bash`` or ``pwsh``/``powershell`` as script
 interpreter. In either case the command must be present in
 ``$PATH``/``%PATH%``.
 
+.. important::
+   Each layer configures the default language individually. That is, layers
+   with higher precedence will not override the setting of layers with lower
+   precedence.
+
 .. _configuration-config-usr:
 
 User configuration (default.yaml)
