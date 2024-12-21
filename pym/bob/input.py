@@ -3524,7 +3524,35 @@ class RecipeSet:
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
-        self.__parseLayer(LayerSpec(""), "9999", recipesRoot, None)
+        allLayers = self.__parseLayer(LayerSpec(""), "9999", recipesRoot, None)
+
+        # Parse all recipes and classes of all layers. Need to be done last
+        # because only by now we have loaded all plugins.
+        for layer, rootDir, scriptLanguage in allLayers:
+            classesDir = os.path.join(rootDir, 'classes')
+            for root, dirnames, filenames in os.walk(classesDir):
+                for path in fnmatch.filter(filenames, "[!.]*.yaml"):
+                    try:
+                        [r] = Recipe.loadFromFile(self, layer, classesDir,
+                            os.path.relpath(os.path.join(root, path), classesDir),
+                            self.__properties, self.__classSchema, False)
+                        self.__addClass(r)
+                    except ParseError as e:
+                        e.pushFrame(path)
+                        raise
+
+            recipesDir = os.path.join(rootDir, 'recipes')
+            for root, dirnames, filenames in os.walk(recipesDir):
+                for path in fnmatch.filter(filenames, "[!.]*.yaml"):
+                    try:
+                        recipes = Recipe.loadFromFile(self, layer, recipesDir,
+                            os.path.relpath(os.path.join(root, path), recipesDir),
+                            self.__properties, self.__recipeSchema, True, scriptLanguage)
+                        for r in recipes:
+                            self.__addRecipe(r)
+                    except ParseError as e:
+                        e.pushFrame(path)
+                        raise
 
         # Out-of-tree builds may have a dedicated default.yaml
         if recipesRoot:
@@ -3614,7 +3642,7 @@ class RecipeSet:
                 layer = upperLayer + "/" + layer
 
             if layer in self.__layers:
-                return
+                return []
 
             if managedLayers:
                 # SCM backed layers are in build dir, regular layers are in
@@ -3656,8 +3684,9 @@ class RecipeSet:
 
         # First parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
+        allLayers = []
         for l in config.get("layers", []):
-            self.__parseLayer(l, maxVer, recipesRoot, layer)
+            allLayers.extend(self.__parseLayer(l, maxVer, recipesRoot, layer))
 
         # Load plugins and re-create schemas as new keys may have been added
         self.__loadPlugins(rootDir, layer, config.get("plugins", []))
@@ -3671,32 +3700,8 @@ class RecipeSet:
         setColorMode(self._colorModeConfig or self.__uiConfig.get('color', 'auto'))
         setParallelTUIThreshold(self.__uiConfig.get('parallelTUIThreshold', 16))
 
-        # finally parse recipes
-        classesDir = os.path.join(rootDir, 'classes')
-        for root, dirnames, filenames in os.walk(classesDir):
-            for path in fnmatch.filter(filenames, "[!.]*.yaml"):
-                try:
-                    [r] = Recipe.loadFromFile(self, layer, classesDir,
-                        os.path.relpath(os.path.join(root, path), classesDir),
-                        self.__properties, self.__classSchema, False)
-                    self.__addClass(r)
-                except ParseError as e:
-                    e.pushFrame(path)
-                    raise
-
-        scriptLanguage = config["scriptLanguage"]
-        recipesDir = os.path.join(rootDir, 'recipes')
-        for root, dirnames, filenames in os.walk(recipesDir):
-            for path in fnmatch.filter(filenames, "[!.]*.yaml"):
-                try:
-                    recipes = Recipe.loadFromFile(self, layer, recipesDir,
-                        os.path.relpath(os.path.join(root, path), recipesDir),
-                        self.__properties, self.__recipeSchema, True, scriptLanguage)
-                    for r in recipes:
-                        self.__addRecipe(r)
-                except ParseError as e:
-                    e.pushFrame(path)
-                    raise
+        allLayers.append((layer, rootDir, config["scriptLanguage"]))
+        return allLayers
 
     def __parseUserConfig(self, fileName):
         cfg = self.loadYaml(fileName, self.__userConfigSchema)
