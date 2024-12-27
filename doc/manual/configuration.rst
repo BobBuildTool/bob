@@ -957,6 +957,7 @@ git    | ``url``: URL of remote repository
        | ``dissociate``: (Boolean, default false). Dissociate the reference (see man git-clone).
 import | ``url``: Directory path relative to project root.
        | ``prune`` (\*): Delete destination directory before importing files.
+       | ``recipeRelative`` (\*): Whether ``url`` is relative to recipe or project root. (optional)
 svn    | ``url``: URL of SVN module
        | ``revision``: Optional revision number (optional)
        | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
@@ -1109,15 +1110,15 @@ git
 
 import
    The ``import`` SCM copies the directory specified in ``url`` to the
-   workspace. By default the destination is always overwritten and obsolete
+   workspace. By default, the destination is always overwritten and obsolete
    files are deleted. Set ``prune`` to ``False`` to only overwrite if the
    source file was changed more recently than the exiting destination in the
-   workspace. Before Bob 0.18 the default was the other way around (see
+   workspace. Before Bob 0.18, the default was the other way around (see
    :ref:`policies-pruneImportScm`).
 
-   In contrast to the other SCMs that fetch across the network the ``import``
+   In contrast to the other SCMs that fetch across the network, the ``import``
    SCM is always updated, even if ``--build-only`` is used. Because only local
-   files are imported there is no possibility to inadvertely fetch unwanted
+   files are imported, there is no possibility to inadvertently fetch unwanted
    changes from other users. The files should thus always be edited at the
    import source location and not in the workspace.
 
@@ -1125,6 +1126,11 @@ import
       Do not import large source trees when working with Jenkins builds. The
       content is included in the job configuration that will get too large
       otherwise.
+
+   By default, the directory given in ``url`` is interpreted relative to the
+   project root. Alternatively, ``url`` can be made relative to the recipe
+   itself if ``recipeRelative`` is set to ``True``. This is recommended
+   especially for recipes that are included as layers into other projects.
 
 svn
    The `Svn`_ SCM, like git, requires the ``url`` attribute too. If you specify a
