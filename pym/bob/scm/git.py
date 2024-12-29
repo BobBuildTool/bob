@@ -184,6 +184,12 @@ class GitScm(Scm):
             properties.update({GitScm.REMOTE_PREFIX+key : val})
         return properties
 
+    def _getGitConfigOptions(self):
+        config = [ "-c", "submodule.recurse=0" ]
+        if self.__url.startswith("file:") or self.__url.startswith("/"):
+            config += [ "-c", "protocol.file.allow=always" ]
+        return config
+
     async def invoke(self, invoker, switch=False):
         alternatesFile = invoker.joinPath(self.__dir, ".git/objects/info/alternates")
 
@@ -240,7 +246,7 @@ class GitScm(Scm):
         # refspec is kept in the git config.
 
         # Base fetch command with shallow support
-        fetchCmd = ["git", "-c", "submodule.recurse=0", "fetch", "-p"]
+        fetchCmd = ["git", *self._getGitConfigOptions(), "fetch", "-p"]
         if isinstance(self.__shallow, int):
             fetchCmd.append("--depth={}".format(self.__shallow))
         elif isinstance(self.__shallow, str):
@@ -366,8 +372,8 @@ class GitScm(Scm):
                 # move to attic
                 invoker.fail("Cannot switch: Current state woulde be lost.")
 
-            await invoker.checkCommand(["git", "-c", "submodule.recurse=0", "reset",
-                "--keep", commit], cwd=self.__dir)
+            await invoker.checkCommand(["git", *self._getGitConfigOptions(),
+                "reset", "--keep", commit], cwd=self.__dir)
             await self.__updateSubmodulesPost(invoker, preUpdate)
 
     async def __checkoutTag(self, invoker, fetchCmd, switch):
@@ -476,7 +482,7 @@ class GitScm(Scm):
             # commits on the newly fetched upstream.
             if oldUpstreamCommit is not None:
                 await invoker.checkCommand(
-                    ["git", "-c", "submodule.recurse=0", "rebase", "--onto",
+                    ["git", *self._getGitConfigOptions(), "rebase", "--onto",
                      "refs/remotes/origin/"+self.__branch, oldUpstreamCommit],
                     cwd=self.__dir)
             else:
@@ -484,20 +490,20 @@ class GitScm(Scm):
                 # anyway.
                 invoker.warn("Rebasing", self.__dir, "but old upstream commit not known! Please check result.")
                 await invoker.checkCommand(
-                    ["git", "-c", "submodule.recurse=0", "rebase",
+                    ["git", *self._getGitConfigOptions(), "rebase",
                      "refs/remotes/origin/"+self.__branch],
                     cwd=self.__dir)
         else:
             # Just do a fast-forward only merge.
             await invoker.checkCommand(
-                ["git", "-c", "submodule.recurse=0", "merge", "--ff-only",
+                ["git", *self._getGitConfigOptions(), "merge", "--ff-only",
                  "refs/remotes/origin/"+self.__branch],
                 cwd=self.__dir)
 
     async def __checkoutSubmodules(self, invoker):
         if not self.__submodules: return
 
-        args = ["git", "-c", "submodule.recurse=0", "submodule", "update", "--init"]
+        args = ["git", *self._getGitConfigOptions(), "submodule", "update", "--init"]
         if self.__shallowSubmodules:
             args += ["--depth", "1"]
         if self.__recurseSubmodules:
@@ -574,7 +580,7 @@ class GitScm(Scm):
             return {}
 
         # Sync remote URLs into our config in case they were changed
-        args = ["git", "-c", "submodule.recurse=0", "-C", base, "submodule", "sync"]
+        args = ["git", *self._getGitConfigOptions(), "-C", base, "submodule", "sync"]
         await invoker.checkCommand(args, cwd=self.__dir)
 
         # List all paths as per .gitmodules. This gives us the list of all
@@ -603,7 +609,8 @@ class GitScm(Scm):
             }
 
         # Do the update of safe submodules
-        args = ["git", "-c", "submodule.recurse=0", "-C", base, "submodule", "update", "--init"]
+        args = ["git", *self._getGitConfigOptions(), "-C", base,
+                "submodule", "update", "--init"]
         if self.__shallowSubmodules:
             args += ["--depth", "1"]
         args.append("--")
