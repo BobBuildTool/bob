@@ -226,6 +226,7 @@ class RealGitRepositoryTestCase(TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cmds = "\n".join([
                 'git init .',
+                'git config --local protocol.file.allow always',
                 'git config user.email "bob@bob.bob"',
                 'git config user.name test',
                 'git checkout -b master',
@@ -537,7 +538,8 @@ class TestSubmodules(TestCase):
             echo 1 > test.txt
             git add test.txt
             mkdir -p some/deep
-            git submodule add --name whatever ../subsub1 some/deep/path
+            git -c protocol.file.allow=always \
+                submodule add --name whatever ../subsub1 some/deep/path
             git commit -m "commit 1"
             echo 2 > test.txt
             git commit -a -m "commit 2"
@@ -551,7 +553,8 @@ class TestSubmodules(TestCase):
             git config user.name test
             echo 1 > test.txt
             git add test.txt
-            git submodule add ../sub1
+            git -c protocol.file.allow=always \
+                submodule add ../sub1
             git commit -m "commit 1"
             git tag -a -m 'Tag 1' tag1
             cd ..
@@ -633,7 +636,7 @@ class TestSubmodules(TestCase):
             cd ..
 
             cd main
-            git submodule add ../sub2
+            git -c protocol.file.allow=always submodule add ../sub2
             git commit -m "commit 2"
             cd ..
         """

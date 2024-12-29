@@ -31,7 +31,7 @@ git add test.txt
 git commit -m "initial commit"
 git tag -a -m "Tag0" tag0
 d1_c0=$(git rev-parse HEAD)
-git submodule add "$git_submod" submod
+git -c protocol.file.allow=always submodule add "$git_submod" submod
 git commit -m "first commit"
 git tag -a -m "First Tag" tag1
 git checkout -b foobar

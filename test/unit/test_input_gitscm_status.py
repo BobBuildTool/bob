@@ -184,7 +184,8 @@ class TestSubmodulesStatus(TestCase):
             echo sub > test.txt
             git add test.txt
             mkdir -p some/deep
-            git submodule add --name whatever ../subsub some/deep/path
+            git -c protocol.file.allow=always \
+                submodule add --name whatever ../subsub some/deep/path
             git commit -m import
             cd ..
 
@@ -205,8 +206,8 @@ class TestSubmodulesStatus(TestCase):
             git config user.name test
             echo main > test.txt
             git add test.txt
-            git submodule add ../sub
-            git submodule add ../sub2
+            git -c protocol.file.allow=always submodule add ../sub
+            git -c protocol.file.allow=always submodule add ../sub2
             git commit -m import
             cd ..
         """
@@ -387,7 +388,7 @@ class TestSubmodulesStatus(TestCase):
         self.invokeGit(scm)
 
         cmd = """\
-            git submodule update --init
+            git -c protocol.file.allow=always submodule update --init
         """
         subprocess.check_call([getBashPath(), "-c", cmd], cwd=self.workspace)
 
@@ -404,7 +405,7 @@ class TestSubmodulesStatus(TestCase):
 
         cmd = """\
             cd sub
-            git submodule update --init
+            git -c protocol.file.allow=always submodule update --init
         """
         subprocess.check_call([getBashPath(), "-c", cmd], cwd=self.workspace)
 
@@ -462,7 +463,7 @@ class TestSubmodulesStatus(TestCase):
         self.invokeGit(scm)
 
         cmd = """\
-            git submodule update --init sub
+            git -c protocol.file.allow=always submodule update --init sub
         """
         subprocess.check_call([getBashPath(), "-c", cmd], cwd=self.workspace)
 
