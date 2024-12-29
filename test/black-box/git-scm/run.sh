@@ -17,7 +17,7 @@ cp recipe1.yaml "$bob/recipes/t.yaml"
 # Directory to play in
 work=$dir/work
 mkdir "$work"
-git init "$work"
+git init -b master "$work"
 git -C "$work" config user.email "bob@bob.bob"
 git -C "$work" config user.name test
 

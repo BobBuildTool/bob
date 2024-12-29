@@ -12,7 +12,7 @@ cleanup
 # Prepare git repositories
 
 pushd "$git_dir1"
-git init .
+git init -b master .
 git config user.email "bob@bob.bob"
 git config user.name test
 echo "commit-1" > git1.txt
@@ -25,7 +25,7 @@ git tag -a -m "Second Tag" tag2
 popd
 
 pushd "$git_dir2"
-git init .
+git init -b master .
 git config user.email "bob@bob.bob"
 git config user.name test
 echo "commit-1" > git2.txt

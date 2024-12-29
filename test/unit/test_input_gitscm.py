@@ -228,6 +228,7 @@ class RealGitRepositoryTestCase(TestCase):
                 'git init .',
                 'git config user.email "bob@bob.bob"',
                 'git config user.name test',
+                'git checkout -b master',
                 'echo "hello world" > test.txt',
                 'git add test.txt',
                 'git commit -m "first commit"',
@@ -416,6 +417,7 @@ class TestShallow(TestCase):
             git init .
             git config user.email "bob@bob.bob"
             git config user.name test
+            git checkout -b master
 
             for i in $(seq 3) ; do
                 echo "#$i" > test.txt
@@ -520,6 +522,7 @@ class TestSubmodules(TestCase):
             git init .
             git config user.email "bob@bob.bob"
             git config user.name test
+            git checkout -b master
             echo subsub > subsub.txt
             git add subsub.txt
             git commit -m import
@@ -530,6 +533,7 @@ class TestSubmodules(TestCase):
             git init .
             git config user.email "bob@bob.bob"
             git config user.name test
+            git checkout -b master
             echo 1 > test.txt
             git add test.txt
             mkdir -p some/deep
@@ -542,6 +546,7 @@ class TestSubmodules(TestCase):
             # setup main module and add first submodule
             cd main
             git init .
+            git checkout -b master
             git config user.email "bob@bob.bob"
             git config user.name test
             echo 1 > test.txt
@@ -619,6 +624,7 @@ class TestSubmodules(TestCase):
         cmds = """\
             cd sub2
             git init .
+            git checkout -b master
             git config user.email "bob@bob.bob"
             git config user.name test
             echo 2 > test.txt
@@ -882,6 +888,7 @@ class TestRebase(TestCase):
 
         cmds = """\
             git init .
+            git checkout -b master
             git config user.email "bob@bob.bob"
             git config user.name test
             echo -n "hello world" > test.txt
@@ -1023,6 +1030,7 @@ class TestGenericRef(TestCase):
             git init .
             git config user.email "bob@bob.bob"
             git config user.name test
+            git checkout -b master
             echo -n "hello world" > test.txt
             git add test.txt
             git commit -m "first commit"
