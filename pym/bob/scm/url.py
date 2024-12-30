@@ -10,6 +10,7 @@ from ..utils import asHexStr, hashFile, removeUserFromUrl, sslNoVerifyContext, \
         replacePath
 from .scm import Scm, ScmAudit
 from http.client import HTTPException
+from abc import abstractmethod
 import asyncio
 import concurrent.futures.process
 import contextlib
@@ -155,6 +156,99 @@ def dumpMode(mode):
 
 isWin32 = sys.platform == "win32"
 
+
+class Extractor():
+    def __init__(self, dir, file, strip):
+        self.dir = dir
+        self.file = file
+        self.strip = strip
+
+    async def _extract(self, cmds, invoker):
+        destination = invoker.joinPath(self.dir, self.file)
+        canary = invoker.joinPath(self.dir, "." + self.file + ".extracted")
+        if isYounger(destination, canary):
+            for cmd in cmds:
+                if shutil.which(cmd[0]) is None: continue
+                await invoker.checkCommand(cmd, cwd=self.dir)
+                invoker.trace("<touch>", canary)
+                with open(canary, "wb") as f:
+                    pass
+                os.utime(canary)
+                break
+            else:
+                invoker.fail("No suitable extractor found!")
+
+    @abstractmethod
+    async def extract(self, invoker, destination, cwd):
+        return False
+
+# Use the Python tar/zip extraction only on Windows. They are slower and in
+# case of tarfile broken in certain ways (e.g. tarfile will result in
+# different file modes!). But it shouldn't make a difference on Windows.
+class TarExtractor(Extractor):
+    def __init__(self, dir, file, strip):
+        super().__init__(dir, file, strip)
+
+    async def extract(self, invoker):
+        cmds = []
+        if isWin32 and self.strip == 0:
+            cmds.append(["python", "-m", "tarfile", "-e", self.file])
+
+        cmd = ["tar", "-x", "--no-same-owner", "--no-same-permissions",
+                   "-f", self.file]
+        if self.strip > 0:
+            cmd.append("--strip-components={}".format(self.strip))
+        cmds.append(cmd)
+
+        await self._extract(cmds, invoker)
+
+
+class ZipExtractor(Extractor):
+    def __init__(self, dir, file, strip):
+        super().__init__(dir, file, strip)
+        if strip != 0:
+            raise BuildError("Extractor does not support 'stripComponents'!")
+
+    async def extract(self, invoker):
+        cmds = []
+        if isWin32:
+            cmds.append(["python", "-m", "zipfile", "-e", self.file, "."])
+
+        cmds.append(["unzip", "-o", self.file])
+        await self._extract(cmds, invoker)
+
+
+class GZipExtractor(Extractor):
+    def __init__(self, dir, file, strip):
+        super().__init__(dir, file, strip)
+        if strip != 0:
+            raise BuildError("Extractor does not support 'stripComponents'!")
+
+    async def extract(self, invoker):
+        cmds = [["gunzip", "-kf", self.file]]
+        await self._extract(cmds, invoker)
+
+class XZExtractor(Extractor):
+    def __init__(self, dir, file, strip):
+        super().__init__(dir, file, strip)
+        if strip != 0:
+            raise BuildError("Extractor does not support 'stripComponents'!")
+
+    async def extract(self, invoker):
+        cmds = [["unxz", "-kf", self.file]]
+        await self._extract(cmds, invoker)
+
+class SevenZipExtractor(Extractor):
+    def __init__(self, dir, file, strip):
+        super().__init__(dir, file, strip)
+        if strip != 0:
+            raise BuildError("Extractor does not support 'stripComponents'!")
+
+    async def extract(self, invoker):
+        cmds = [["7z", "x", "-y", self.file]]
+        await self._extract(cmds, invoker)
+
+
 class UrlScm(Scm):
 
     __DEFAULTS = {
@@ -212,27 +306,12 @@ class UrlScm(Scm):
         (".zip",       "zip"),
     ]
 
-    # Use the Python tar/zip extraction only on Windows. They are slower and in
-    # case of tarfile broken in certain ways (e.g. tarfile will result in
-    # different file modes!). But it shouldn't make a difference on Windows.
     EXTRACTORS = {
-        "tar"  : [
-            (isWin32, "python", ["-m", "tarfile", "-e", "{}"], None),
-            (True, "tar", ["-x", "--no-same-owner", "--no-same-permissions", "-f", "{}"], "--strip-components={}"),
-        ],
-        "gzip" : [
-            (True, "gunzip", ["-kf", "{}"], None),
-        ],
-        "xz" : [
-            (True, "unxz", ["-kf", "{}"], None),
-        ],
-        "7z" : [
-            (True, "7z", ["x", "-y", "{}"], None),
-        ],
-        "zip" : [
-            (isWin32, "python", ["-m", "zipfile", "-e", "{}", "."], None),
-            (True, "unzip", ["-o", "{}"], None),
-        ],
+        "tar"  : TarExtractor,
+        "gzip" : GZipExtractor,
+        "xz"   : XZExtractor,
+        "7z"   : SevenZipExtractor,
+        "zip"  : ZipExtractor,
     }
 
     def __init__(self, spec, overrides=[], stripUser=None,
@@ -600,19 +679,9 @@ class UrlScm(Scm):
                     await self._put(invoker, workspaceFile, destination, url)
 
         # Run optional extractors
-        extractors = self.__getExtractors()
-        canary = invoker.joinPath(self.__dir, "." + self.__fn + ".extracted")
-        if extractors and isYounger(destination, canary):
-            for cmd in extractors:
-                if shutil.which(cmd[0]) is None: continue
-                await invoker.checkCommand(cmd, cwd=self.__dir)
-                invoker.trace("<touch>", canary)
-                with open(canary, "wb") as f:
-                    pass
-                os.utime(canary)
-                break
-            else:
-                invoker.fail("No suitable extractor found!")
+        extractor = self.__getExtractor()
+        if extractor is not None:
+            await extractor.extract(invoker)
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this url.
@@ -659,38 +728,20 @@ class UrlScm(Scm):
         else:
             return None
 
-    def __getExtractors(self):
-        extractors = None
+    def __getExtractor(self):
+        extractor = None
         if self.__extract in ["yes", "auto", True]:
             for (ext, tool) in UrlScm.EXTENSIONS:
                 if self.__fn.endswith(ext):
-                    extractors = UrlScm.EXTRACTORS[tool]
+                    extractor = UrlScm.EXTRACTORS[tool](self.__dir, self.__fn, self.__strip)
                     break
-            if not extractors and self.__extract != "auto":
+            if extractor is None and self.__extract != "auto":
                 raise ParseError("Don't know how to extract '"+self.__fn+"' automatically.")
         elif self.__extract in UrlScm.EXTRACTORS:
-            extractors = UrlScm.EXTRACTORS[self.__extract]
+            extractor = UrlScm.EXTRACTORS[self.__extract](self.__dir, self.__fn, self.__strip)
         elif self.__extract not in ["no", False]:
             raise ParseError("Invalid extract mode: " + self.__extract)
-
-        if extractors is None:
-            return []
-
-        ret = []
-        for extractor in extractors:
-            if not extractor[0]: continue
-            if self.__strip > 0:
-                if extractor[3] is None:
-                    continue
-                strip = [extractor[3].format(self.__strip)]
-            else:
-                strip = []
-            ret.append([extractor[1]] + [a.format(self.__fn) for a in extractor[2]] + strip)
-
-        if not ret:
-            raise BuildError("Extractor does not support 'stripComponents'!")
-
-        return ret
+        return extractor
 
 
 class UrlAudit(ScmAudit):
