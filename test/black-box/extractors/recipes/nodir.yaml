@@ -1,0 +1,15 @@
+checkoutSCM:
+  - scm: url
+    url: ${INPUT_FILES}/test.tgz
+    digestSHA256: "2fba5ef610331d7d7ac5ee7614d0c3daa78f330dc13399ddc39b2d698c63bca3"
+
+buildScript: |
+  cat > test.sha256 << EOF
+  6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b  test.dat
+  EOF
+  SHA256_FILE=$(pwd)/test.sha256
+  pushd $1
+  sha256sum -c ${SHA256_FILE}
+  popd
+
+packageScript: /bin/true

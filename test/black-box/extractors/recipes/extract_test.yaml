@@ -1,0 +1,47 @@
+root: True
+
+checkoutSCM:
+  - scm: url
+    url: ${INPUT_FILES}/test.tgz
+    dir: tar
+    digestSHA256: "2fba5ef610331d7d7ac5ee7614d0c3daa78f330dc13399ddc39b2d698c63bca3"
+  - scm: url
+    url: ${INPUT_FILES}/test.dat.gz
+    dir: gzip
+    digestSHA256: "35ea2d0c6c815aed2835f41c495d9d3600e156ec561666b5c7f61112a81d6291"
+    if: ${IS_POSIX}
+  - scm: url
+    url: ${INPUT_FILES}/test.dat.xz
+    dir: xz
+    digestSHA256: "d81d8062ec99672a61a56a4be271d55886a63fec319dc0e00f3318a6f01b87c6"
+    if: ${IS_POSIX}
+  - scm: url
+    url: ${INPUT_FILES}/test.7z
+    dir: 7z
+    digestSHA256: "8bc55c46bd4d8974e99223a9f566c7f563bae2f9f8afa787e1d7df69acdf4d04"
+    if: ${IS_POSIX}
+  - scm: url
+    url: ${INPUT_FILES}/test.zip
+    dir: zip
+    digestSHA256: "8e2612b6ab1bacb5c0b342a81925ba6a0349ca8f66db4fc3dd22ddd53ff4f430"
+  - scm: url
+    url: ${INPUT_FILES}/test.dat
+    dir: plain
+    digestSHA256: "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+
+depends:
+  - nodir
+
+buildScript: |
+  cat > test.sha256 << EOF
+  6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b  test.dat
+  EOF
+  SHA256_FILE=$(pwd)/test.sha256
+  for d in $(find $1/ -mindepth 1 -type d); do
+    pushd $d
+    sha256sum -c ${SHA256_FILE}
+    popd
+  done
+
+packageScript: |
+  echo "success"
