@@ -224,6 +224,17 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Move scm to attic if inline switch is not possible (default).")
     group.add_argument('--no-attic', action='store_false', default=None, dest='attic',
         help="Do not move to attic, instead fail the build.")
+    parser.add_argument('--bundle', metavar='BUNDLE', default=None,
+        help="Bundle sources to BUNDLE")
+    parser.add_argument('--bundle-exclude', action='append', default=[],
+        help="Do not add matching packages to bundle.")
+    parser.add_argument('--bundle-indeterministic', default="no",
+        choices=['yes', 'no', 'fail'],
+        help="Bundle indeterministic sources")
+    parser.add_argument('--bundle-vcs', default=False, action='store_true',
+        help="Do not strip version control system informations from bundle.")
+    parser.add_argument('--unbundle', default=False, action="store_true",
+        help="Unbundle BUNDLE specified by --bundle.")
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -315,6 +326,17 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                                             sandboxMode.stablePaths)
         if develop: developPersister.prime(packages)
 
+        if args.bundle and args.build_mode == 'build-only':
+            parser.error("--bundle can't be used with --build-only")
+        bundleSpec = {"path" : args.bundle,
+                      "mode" : "bundle" if not args.unbundle else "unbundle",
+                      "src-upload-indeterministic" : args.bundle_indeterministic,
+                      "src-upload-vcs" : args.bundle_vcs,
+                      "exclude" : args.bundle_exclude}
+        if args.bundle and not args.unbundle:
+            args.always_checkout += ['.*']
+
+        archivers = getArchiver(recipes, bundle=bundleSpec)
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
         setVerbosity(verbosity)
         builder = LocalBuilder(verbosity, args.force,
@@ -323,7 +345,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                                args.no_logfiles)
 
         builder.setExecutor(executor)
-        builder.setArchiveHandler(getArchiver(recipes))
+        builder.setArchiveHandler(archivers)
         builder.setLocalUploadMode(args.upload)
         builder.setLocalDownloadMode(args.download)
         builder.setLocalDownloadLayerMode(args.download_layer)
@@ -339,6 +361,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setShareMode(args.shared, args.install)
         builder.setAtticEnable(args.attic)
         builder.setSlimSandbox(sandboxMode.slimSandbox)
+
         if args.resume: builder.loadBuildState()
 
         backlog = []
@@ -384,6 +407,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
     # tell the user
     if results:
+        archivers.finish()
+
         if len(results) == 1:
             print("Build result is in", results[0])
         else:
