@@ -325,7 +325,7 @@ class JenkinsCacheHelper:
 
 
 class BaseArchive(TarHelper):
-    def __init__(self, spec):
+    def __init__(self, spec, stepActions=None):
         flags = spec.get("flags", ["upload", "download"])
         self.__useDownload = "download" in flags
         self.__useUpload = "upload" in flags
@@ -337,6 +337,7 @@ class BaseArchive(TarHelper):
         self.__wantDownloadJenkins = False
         self.__wantUploadLocal = False
         self.__wantUploadJenkins = False
+        self.__stepActions = ["Upload", "Download"] if stepActions is None else stepActions
 
     @property
     def ignoreErrors(self):
@@ -376,14 +377,14 @@ class BaseArchive(TarHelper):
         loop = asyncio.get_event_loop()
         suffix = ARTIFACT_SUFFIX
         details = " from {}".format(self._remoteName(buildId, suffix))
-        with stepAction(step, "DOWNLOAD", content, details=details) as a:
+        with stepAction(step, self.__stepActions[1].upper(), content, details=details) as a:
             try:
                 ret, msg, kind = await loop.run_in_executor(executor, BaseArchive._downloadPackage,
                     self, buildId, suffix, audit, content, caches, step.getWorkspacePath())
                 if not ret: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Download of package interrupted.")
+                raise BuildError(f"{self.__stepActions[1]} of package interrupted.")
 
     def cachePackage(self, buildId, workspace):
         try:
@@ -413,7 +414,7 @@ class BaseArchive(TarHelper):
         except BuildError as e:
             raise
         except OSError as e:
-            raise BuildError("Cannot download artifact: " + str(e))
+            raise BuildError(f"Cannot {self.__stepActions[1].lower()} artifact: " + str(e))
         except tarfile.TarError as e:
             raise BuildError("Error extracting binary artifact: " + str(e))
         finally:
@@ -464,20 +465,20 @@ class BaseArchive(TarHelper):
         if not self.canUpload():
             return
         if not audit:
-            stepMessage(step, "UPLOAD", "skipped (no audit trail)", SKIPPED,
+            stepMessage(step, self.__stepActions[0].upper(), "skipped (no audit trail)", SKIPPED,
                 IMPORTANT)
             return
 
         loop = asyncio.get_event_loop()
         suffix = ARTIFACT_SUFFIX
         details = " to {}".format(self._remoteName(buildId, suffix))
-        with stepAction(step, "UPLOAD", content, details=details) as a:
+        with stepAction(step, self.__stepActions[0].upper(), content, details=details) as a:
             try:
                 msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadPackage,
                     self, buildId, suffix, audit, content)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Upload of package interrupted.")
+                raise BuildError(f"{self.__stepActions[0]} of package interrupted.")
 
     def _uploadPackage(self, buildId, suffix, audit, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -493,7 +494,7 @@ class BaseArchive(TarHelper):
             if self.__ignoreErrors:
                 return ("error ("+str(e)+")", ERROR)
             else:
-                raise BuildError("Cannot upload artifact: " + str(e))
+                raise BuildError(f"Cannot {self.__stepActions[0].lower()} artifact: " + str(e))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
