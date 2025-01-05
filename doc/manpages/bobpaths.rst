@@ -291,7 +291,7 @@ Alias substitution
 Aliases allow a string to be substituted for the first step of a
 :ref:`relative location path <manpage-bobpaths-locationpath>`. Absolute
 location paths (e.g.  ``/foo``) and relative location paths in predicates (e.g.
-``*[ foo ]``) are not not subject to alias substitution. Aliases are only
+``*[ foo ]``) are not subject to alias substitution. Aliases are only
 substituted once. It is therefore not possible to reference an alias from
 another alias definition.
 
