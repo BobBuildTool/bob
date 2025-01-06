@@ -26,9 +26,9 @@ multiPackage:
                     - name: sandbox-image-2
                       use: [sandbox]
         fingerprintIf: True
-        fingerprintScript: "hostname -A"
+        fingerprintScript: "hostid"
         buildScript: |
-            cp /id.txt . 2>/dev/null || hostname -A > id.txt
+            cp /id.txt . 2>/dev/null || hostid > id.txt
         packageScript: |
             cp -a $1/* .
 

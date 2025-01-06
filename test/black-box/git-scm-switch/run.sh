@@ -14,7 +14,7 @@ cleanup
 # Prepare git repositories
 
 pushd "$git_submod"
-git init .
+git init -b master .
 git config user.email "bob@bob.bob"
 git config user.name test
 echo sub > sub.txt
@@ -23,7 +23,7 @@ git commit -m import
 popd
 
 pushd "$git_dir1"
-git init .
+git init -b master .
 git config user.email "bob@bob.bob"
 git config user.name test
 echo "hello world" > test.txt
@@ -31,7 +31,7 @@ git add test.txt
 git commit -m "initial commit"
 git tag -a -m "Tag0" tag0
 d1_c0=$(git rev-parse HEAD)
-git submodule add "$git_submod" submod
+git -c protocol.file.allow=always submodule add "$git_submod" submod
 git commit -m "first commit"
 git tag -a -m "First Tag" tag1
 git checkout -b foobar
@@ -43,7 +43,7 @@ d1_c2=$(git rev-parse HEAD)
 popd
 
 pushd "$git_dir2"
-git init .
+git init -b master .
 git config user.email "bob@bob.bob"
 git config user.name test
 echo "hello bob" > bob.txt

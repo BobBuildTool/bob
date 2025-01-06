@@ -226,8 +226,10 @@ class RealGitRepositoryTestCase(TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cmds = "\n".join([
                 'git init .',
+                'git config --local protocol.file.allow always',
                 'git config user.email "bob@bob.bob"',
                 'git config user.name test',
+                'git checkout -b master',
                 'echo "hello world" > test.txt',
                 'git add test.txt',
                 'git commit -m "first commit"',
@@ -416,6 +418,7 @@ class TestShallow(TestCase):
             git init .
             git config user.email "bob@bob.bob"
             git config user.name test
+            git checkout -b master
 
             for i in $(seq 3) ; do
                 echo "#$i" > test.txt
@@ -520,6 +523,7 @@ class TestSubmodules(TestCase):
             git init .
             git config user.email "bob@bob.bob"
             git config user.name test
+            git checkout -b master
             echo subsub > subsub.txt
             git add subsub.txt
             git commit -m import
@@ -530,10 +534,12 @@ class TestSubmodules(TestCase):
             git init .
             git config user.email "bob@bob.bob"
             git config user.name test
+            git checkout -b master
             echo 1 > test.txt
             git add test.txt
             mkdir -p some/deep
-            git submodule add --name whatever ../subsub1 some/deep/path
+            git -c protocol.file.allow=always \
+                submodule add --name whatever ../subsub1 some/deep/path
             git commit -m "commit 1"
             echo 2 > test.txt
             git commit -a -m "commit 2"
@@ -542,11 +548,13 @@ class TestSubmodules(TestCase):
             # setup main module and add first submodule
             cd main
             git init .
+            git checkout -b master
             git config user.email "bob@bob.bob"
             git config user.name test
             echo 1 > test.txt
             git add test.txt
-            git submodule add ../sub1
+            git -c protocol.file.allow=always \
+                submodule add ../sub1
             git commit -m "commit 1"
             git tag -a -m 'Tag 1' tag1
             cd ..
@@ -619,6 +627,7 @@ class TestSubmodules(TestCase):
         cmds = """\
             cd sub2
             git init .
+            git checkout -b master
             git config user.email "bob@bob.bob"
             git config user.name test
             echo 2 > test.txt
@@ -627,7 +636,7 @@ class TestSubmodules(TestCase):
             cd ..
 
             cd main
-            git submodule add ../sub2
+            git -c protocol.file.allow=always submodule add ../sub2
             git commit -m "commit 2"
             cd ..
         """
@@ -882,6 +891,7 @@ class TestRebase(TestCase):
 
         cmds = """\
             git init .
+            git checkout -b master
             git config user.email "bob@bob.bob"
             git config user.name test
             echo -n "hello world" > test.txt
@@ -1023,6 +1033,7 @@ class TestGenericRef(TestCase):
             git init .
             git config user.email "bob@bob.bob"
             git config user.name test
+            git checkout -b master
             echo -n "hello world" > test.txt
             git add test.txt
             git commit -m "first commit"

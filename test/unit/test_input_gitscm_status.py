@@ -39,7 +39,7 @@ class TestGitScmStatus(TestCase):
         self.repodir = tempfile.mkdtemp()
         self.repodir_local = tempfile.mkdtemp()
 
-        self.callGit('git init', cwd=self.repodir)
+        self.callGit('git init -b master', cwd=self.repodir)
 
         # setup user name and email for travis
         self.callGit('git config user.email "bob@bob.bob"', cwd=self.repodir)
@@ -168,7 +168,7 @@ class TestSubmodulesStatus(TestCase):
 
             # make sub-submodule
             cd subsub
-            git init .
+            git init -b master .
             git config user.email "bob@bob.bob"
             git config user.name test
             echo subsub > test.txt
@@ -178,19 +178,20 @@ class TestSubmodulesStatus(TestCase):
 
             # setup first submodule
             cd sub
-            git init .
+            git init -b master .
             git config user.email "bob@bob.bob"
             git config user.name test
             echo sub > test.txt
             git add test.txt
             mkdir -p some/deep
-            git submodule add --name whatever ../subsub some/deep/path
+            git -c protocol.file.allow=always \
+                submodule add --name whatever ../subsub some/deep/path
             git commit -m import
             cd ..
 
             # setup second submodule
             cd sub2
-            git init .
+            git init -b master .
             git config user.email "bob@bob.bob"
             git config user.name test
             echo sub2 > test.txt
@@ -200,13 +201,13 @@ class TestSubmodulesStatus(TestCase):
 
             # setup main module
             cd main
-            git init .
+            git init -b master .
             git config user.email "bob@bob.bob"
             git config user.name test
             echo main > test.txt
             git add test.txt
-            git submodule add ../sub
-            git submodule add ../sub2
+            git -c protocol.file.allow=always submodule add ../sub
+            git -c protocol.file.allow=always submodule add ../sub2
             git commit -m import
             cd ..
         """
@@ -387,7 +388,7 @@ class TestSubmodulesStatus(TestCase):
         self.invokeGit(scm)
 
         cmd = """\
-            git submodule update --init
+            git -c protocol.file.allow=always submodule update --init
         """
         subprocess.check_call([getBashPath(), "-c", cmd], cwd=self.workspace)
 
@@ -404,7 +405,7 @@ class TestSubmodulesStatus(TestCase):
 
         cmd = """\
             cd sub
-            git submodule update --init
+            git -c protocol.file.allow=always submodule update --init
         """
         subprocess.check_call([getBashPath(), "-c", cmd], cwd=self.workspace)
 
@@ -462,7 +463,7 @@ class TestSubmodulesStatus(TestCase):
         self.invokeGit(scm)
 
         cmd = """\
-            git submodule update --init sub
+            git -c protocol.file.allow=always submodule update --init sub
         """
         subprocess.check_call([getBashPath(), "-c", cmd], cwd=self.workspace)
 

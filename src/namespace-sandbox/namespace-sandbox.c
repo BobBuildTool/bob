@@ -437,9 +437,15 @@ static void SetupDevices() {
 // Recursively creates the file or directory specified in "path" and its parent
 // directories.
 static int CreateTarget(const char *path, bool is_directory) {
+  static const char* ROOT_DIR = ".";
+
   if (path == NULL) {
     errno = EINVAL;
     return -1;
+  }
+
+  if (strlen(path) == 0) {
+    path = ROOT_DIR;
   }
 
   struct stat sb;

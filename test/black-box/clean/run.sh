@@ -9,7 +9,7 @@ rm -rf default.yaml
 # init a git - repo
 gitDir=$(mktemp -d)
 pushd "${gitDir}"
-git init
+git init -b master
 git config user.email "bob@bob.bob"
 git config user.name test
 echo "git" > test.dat
