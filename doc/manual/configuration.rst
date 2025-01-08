@@ -954,7 +954,7 @@ git    | ``url``: URL of remote repository
        |           local reference repo didn't exitst.
        |   Note: ``references`` are not used for submodules.
        | ``retries`` (\*): Number of retries before the checkout is set to failed.
-       | ``disassociate``: (Boolean, default false). Diasassociate the reference.
+       | ``dissociate``: (Boolean, default false). Dissociate the reference (see man git-clone).
 import | ``url``: Directory path relative to project root.
        | ``prune`` (\*): Delete destination directory before importing files.
 svn    | ``url``: URL of SVN module
