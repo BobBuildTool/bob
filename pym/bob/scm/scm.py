@@ -231,6 +231,9 @@ class Scm(metaclass=ABCMeta):
         ret -= {"if"}
         return ret
 
+    def _getRecipe(self):
+        return self.__recipe
+
     def getSource(self):
         return self.__source
 

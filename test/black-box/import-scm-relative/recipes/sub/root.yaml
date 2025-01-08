@@ -1,0 +1,7 @@
+root: True
+checkoutSCM:
+    scm: import
+    url: data
+    recipeRelative: True
+buildScript: cp -a "$1/"* .
+packageScript: cp -a "$1/"* .

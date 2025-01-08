@@ -116,6 +116,7 @@ class ImportScm(Scm):
     DEFAULTS = {
         schema.Optional('dir') : str,
         schema.Optional('prune') : bool,
+        schema.Optional('recipeRelative') : bool,
     }
 
     __SCHEMA = {
@@ -134,6 +135,11 @@ class ImportScm(Scm):
         self.__data = spec.get("__data")
         self.__projectRoot = spec.get("__projectRoot", projectRoot)
         self.__fixDigestBug = fixDigestBug
+        self.__recipeRelative = spec.get("recipeRelative", False)
+
+    def _getSrcDir(self):
+        rootDir = os.path.dirname(self._getRecipe()) if self.__recipeRelative else self.__projectRoot
+        return os.path.join(rootDir, self.__url)
 
     def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins)
@@ -142,9 +148,10 @@ class ImportScm(Scm):
             'url' : self.__url,
             'dir' : self.__dir,
             'prune' : self.__prune,
+            'recipeRelative' : self.__recipeRelative,
         })
         if isJenkins:
-            ret['__data'] = packTree(self.__url)
+            ret['__data'] = packTree(self._getSrcDir())
         else:
             ret['__projectRoot'] = self.__projectRoot
         return ret
@@ -154,7 +161,7 @@ class ImportScm(Scm):
         os.makedirs(dest, exist_ok=True)
         if self.__prune: emptyDirectory(dest)
         if self.__data is None:
-            src = os.path.join(self.__projectRoot, self.__url)
+            src = self._getSrcDir()
             if not os.path.isdir(src):
                 invoker.fail("Cannot import '{}': not a directory!".format(src))
             copyTree(src, dest, invoker)
