@@ -158,14 +158,15 @@ isWin32 = sys.platform == "win32"
 
 
 class Extractor():
-    def __init__(self, dir, file, strip):
+    def __init__(self, dir, file, strip, separateDownload):
         self.dir = dir
         self.file = file
         self.strip = strip
+        self.separateDownload = separateDownload
 
     async def _extract(self, cmds, invoker):
-        destination = invoker.joinPath(self.dir, self.file)
-        canary = invoker.joinPath(self.dir, "." + self.file + ".extracted")
+        destination = self.getCompressedFilePath(invoker)
+        canary = destination+".extracted"
         if isYounger(destination, canary):
             for cmd in cmds:
                 if shutil.which(cmd[0]) is None: continue
@@ -178,6 +179,10 @@ class Extractor():
             else:
                 invoker.fail("No suitable extractor found!")
 
+    def getCompressedFilePath(self, invoker):
+        downloadFolder = os.path.join(os.pardir, "download") if self.separateDownload else ""
+        return os.path.abspath(invoker.joinPath(downloadFolder, self.dir, self.file)) \
+
     @abstractmethod
     async def extract(self, invoker, destination, cwd):
         return False
@@ -186,16 +191,17 @@ class Extractor():
 # case of tarfile broken in certain ways (e.g. tarfile will result in
 # different file modes!). But it shouldn't make a difference on Windows.
 class TarExtractor(Extractor):
-    def __init__(self, dir, file, strip):
-        super().__init__(dir, file, strip)
+    def __init__(self, dir, file, strip, separateDownload):
+        super().__init__(dir, file, strip, separateDownload)
 
     async def extract(self, invoker):
         cmds = []
+        compressedFilePath = self.getCompressedFilePath(invoker)
         if isWin32 and self.strip == 0:
-            cmds.append(["python", "-m", "tarfile", "-e", self.file])
+            cmds.append(["python", "-m", "tarfile", "-e", compressedFilePath])
 
         cmd = ["tar", "-x", "--no-same-owner", "--no-same-permissions",
-                   "-f", self.file]
+                   "-f", compressedFilePath]
         if self.strip > 0:
             cmd.append("--strip-components={}".format(self.strip))
         cmds.append(cmd)
@@ -204,48 +210,66 @@ class TarExtractor(Extractor):
 
 
 class ZipExtractor(Extractor):
-    def __init__(self, dir, file, strip):
-        super().__init__(dir, file, strip)
+    def __init__(self, dir, file, strip, separateDownload):
+        super().__init__(dir, file, strip, separateDownload)
         if strip != 0:
             raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
         cmds = []
+        compressedFilePath = self.getCompressedFilePath(invoker)
         if isWin32:
-            cmds.append(["python", "-m", "zipfile", "-e", self.file, "."])
+            cmds.append(["python", "-m", "zipfile",
+                   "-e", compressedFilePath, "."])
 
-        cmds.append(["unzip", "-o", self.file])
+        cmds.append(["unzip", "-o", compressedFilePath])
         await self._extract(cmds, invoker)
 
 
 class GZipExtractor(Extractor):
-    def __init__(self, dir, file, strip):
-        super().__init__(dir, file, strip)
+    def __init__(self, dir, file, strip, separateDownload):
+        super().__init__(dir, file, strip, separateDownload)
         if strip != 0:
             raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
-        cmds = [["gunzip", "-kf", self.file]]
-        await self._extract(cmds, invoker)
+        # gunzip extracts the file at the location of the input file. Copy the
+        # downloaded file to the workspace directory prio to uncompressing it
+        cmd = ["gunzip"]
+        if self.separateDownload:
+            shutil.copyfile(self.getCompressedFilePath(invoker),
+                            invoker.joinPath(self.dir, self.file))
+        else:
+            cmd.append("-k")
+        cmd.extend(["-f", self.file])
+        await self._extract([cmd], invoker)
+
 
 class XZExtractor(Extractor):
-    def __init__(self, dir, file, strip):
-        super().__init__(dir, file, strip)
+    def __init__(self, dir, file, strip, separateDownload):
+        super().__init__(dir, file, strip, separateDownload)
         if strip != 0:
             raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
-        cmds = [["unxz", "-kf", self.file]]
-        await self._extract(cmds, invoker)
+        cmd = ["unxz"]
+        if self.separateDownload:
+            shutil.copyfile(self.getCompressedFilePath(invoker),
+                            invoker.joinPath(self.dir, self.file))
+        else:
+            cmd.append("-k")
+        cmd.extend(["-f", self.file])
+        await self._extract([cmd], invoker)
+
 
 class SevenZipExtractor(Extractor):
-    def __init__(self, dir, file, strip):
-        super().__init__(dir, file, strip)
+    def __init__(self, dir, file, strip, separateDownload):
+        super().__init__(dir, file, strip, separateDownload)
         if strip != 0:
             raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
-        cmds = [["7z", "x", "-y", self.file]]
+        cmds = [["7z", "x", "-y", self.getCompressedFilePath(invoker)]]
         await self._extract(cmds, invoker)
 
 
@@ -315,7 +339,8 @@ class UrlScm(Scm):
     }
 
     def __init__(self, spec, overrides=[], stripUser=None,
-                 preMirrors=[], fallbackMirrors=[], defaultFileMode=None):
+                 preMirrors=[], fallbackMirrors=[], defaultFileMode=None,
+                 separateDownload=False):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__digestSha1 = spec.get("digestSHA1")
@@ -354,6 +379,7 @@ class UrlScm(Scm):
         self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
         self.__fallbackMirrorsUpload = spec.get("__fallbackMirrorsUpload")
         self.__fileMode = spec.get("fileMode", 0o600 if defaultFileMode else None)
+        self.__separateDownload = spec.get("__separateDownload", separateDownload)
 
     def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins)
@@ -374,6 +400,7 @@ class UrlScm(Scm):
             'fallbackMirrors' : self.__getFallbackMirrorsUrls(),
             '__fallbackMirrorsUpload' : self.__getFallbackMirrorsUpload(),
             'fileMode' : dumpMode(self.__fileMode) if pretty else self.__fileMode,
+            '__separateDownload': self.__separateDownload,
         })
         return ret
 
@@ -596,6 +623,9 @@ class UrlScm(Scm):
             invoker.fail("Upload not supported for URL scheme: " + url.scheme)
 
     def canSwitch(self, oldScm):
+        if self.__separateDownload != oldScm.__separateDownload:
+            return False
+
         diff = self._diffSpec(oldScm)
         if "scm" in diff:
             return False
@@ -630,7 +660,16 @@ class UrlScm(Scm):
     async def invoke(self, invoker):
         os.makedirs(invoker.joinPath(self.__dir), exist_ok=True)
         workspaceFile = os.path.join(self.__dir, self.__fn)
+        extractor = self.__getExtractor()
+
         destination = invoker.joinPath(self.__dir, self.__fn)
+        if extractor is not None and self.__separateDownload:
+            downloadDestination = invoker.joinPath(os.pardir, "download", self.__dir)
+            # os.makedirs doc:
+            # Note: makedirs() will become confused if the path elements to create include pardir (eg. “..” on UNIX systems).
+            # -> use normpath to collaps up-level reference
+            os.makedirs(os.path.normpath(downloadDestination), exist_ok=True)
+            destination = invoker.joinPath(os.pardir, "download", self.__dir, self.__fn)
 
         # Download only if necessary
         if not self.isDeterministic() or not os.path.isfile(destination):
@@ -679,7 +718,6 @@ class UrlScm(Scm):
                     await self._put(invoker, workspaceFile, destination, url)
 
         # Run optional extractors
-        extractor = self.__getExtractor()
         if extractor is not None:
             await extractor.extract(invoker)
 
@@ -688,7 +726,9 @@ class UrlScm(Scm):
 
         The format is "digest dir extract" if a SHA checksum was specified.
         Otherwise it is "url dir extract". A "s#" is appended if leading paths
-        are stripped where # is the number of stripped elements.
+        are stripped where # is the number of stripped elements. Also appended
+        is "m<fileMode>" if fileMode is set.
+        "sep" is appendend if the archive is not stored in the workspace.
         """
         if self.__stripUser:
             filt = removeUserFromUrl
@@ -698,7 +738,8 @@ class UrlScm(Scm):
                  self.__digestSha1 or filt(self.__url)
                ) + " " + posixpath.join(self.__dir, self.__fn) + " " + str(self.__extract) + \
                ( " s{}".format(self.__strip) if self.__strip > 0 else "" ) + \
-               ( " m{}".format(self.__fileMode) if self.__fileMode is not None else "")
+               ( " m{}".format(self.__fileMode) if self.__fileMode is not None else "") + \
+               ( " sep" if self.__separateDownload else "" )
 
     def getDirectory(self):
         return self.__dir
@@ -733,12 +774,14 @@ class UrlScm(Scm):
         if self.__extract in ["yes", "auto", True]:
             for (ext, tool) in UrlScm.EXTENSIONS:
                 if self.__fn.endswith(ext):
-                    extractor = UrlScm.EXTRACTORS[tool](self.__dir, self.__fn, self.__strip)
+                    extractor = UrlScm.EXTRACTORS[tool](self.__dir, self.__fn,
+                                                        self.__strip, self.__separateDownload)
                     break
             if extractor is None and self.__extract != "auto":
                 raise ParseError("Don't know how to extract '"+self.__fn+"' automatically.")
         elif self.__extract in UrlScm.EXTRACTORS:
-            extractor = UrlScm.EXTRACTORS[self.__extract](self.__dir, self.__fn, self.__strip)
+            extractor = UrlScm.EXTRACTORS[self.__extract](self.__dir, self.__fn,
+                                                          self.__strip, self.__separateDownload)
         elif self.__extract not in ["no", False]:
             raise ParseError("Invalid extract mode: " + self.__extract)
         return extractor

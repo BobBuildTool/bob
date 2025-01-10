@@ -43,6 +43,15 @@ class DummyStep:
     def getPackage(self):
         return DummyPackage()
 
+class TemporaryWorkspace:
+    def __enter__(self):
+        self.tmpDir = tempfile.TemporaryDirectory()
+        ws = os.path.join(self.tmpDir.name, "workspace")
+        os.makedirs(ws)
+        return ws
+    def __exit__(self, exception_type, exception_value, exception_traceback):
+        self.tmpDir.cleanup()
+
 class UrlScmExecutor:
 
     def invokeScm(self, workspace, scm, switch=False, oldScm=None):
@@ -59,16 +68,16 @@ class UrlScmExecutor:
             executor.shutdown()
 
     def createUrlScm(self, spec = {}, preMirrors=[], fallbackMirrors=[],
-                     defaultFileMode=None):
+                     defaultFileMode=None, separateDownload=True):
         s = {
             'scm' : 'url',
             'url' : self.url,
             'recipe' : "foo.yaml#0",
-            '__source' : "Recipe foo",
+            '__source' : "Recipe foo"
         }
         s.update(spec)
         return UrlScm(s, preMirrors=preMirrors, fallbackMirrors=fallbackMirrors,
-                      defaultFileMode=defaultFileMode)
+                      defaultFileMode=defaultFileMode, separateDownload=separateDownload)
 
 class UrlScmTest(UrlScmExecutor):
 
@@ -115,7 +124,7 @@ class UrlScmTest(UrlScmExecutor):
 class TestLiveBuildId(UrlScmTest, TestCase):
 
     def callCalcLiveBuildId(self, scm):
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
             return scm.calcLiveBuildId(workspace)
 
@@ -224,34 +233,34 @@ class TestDigestMatch(UrlScmTest, TestCase):
 
     def testSHA1Match(self):
         scm = self.createUrlScm({ "digestSHA1" : self.urlSha1 })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
 
     def testSHA1Mismatch(self):
         scm = self.createUrlScm({ "digestSHA1" : "0"*40 })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, scm)
 
     def testSHA256Match(self):
         scm = self.createUrlScm({ "digestSHA256" : self.urlSha256 })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
 
     def testSHA256Mismatch(self):
         scm = self.createUrlScm({ "digestSHA256" : "0"*64 })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, scm)
 
     def testSHA512Match(self):
         scm = self.createUrlScm({ "digestSHA512" : self.urlSha512 })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
 
     def testSHA512Mismatch(self):
         scm = self.createUrlScm({ "digestSHA512" : "0"*128 })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, scm)
 
@@ -263,7 +272,7 @@ class TestDownloads(UrlScmTest, TestCase):
             scm = self.createUrlScm({
                 "url" : "http://localhost:{}/test.txt".format(srv.port),
             })
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 self.invokeScm(workspace, scm)
                 fn = os.path.join(workspace, "test.txt")
                 self.assertContent(fn)
@@ -275,7 +284,7 @@ class TestDownloads(UrlScmTest, TestCase):
             scm = self.createUrlScm({
                 "url" : "http://localhost:{}/test.txt".format(srv.port),
             })
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 fn = os.path.join(workspace, "test.txt")
                 self.invokeScm(workspace, scm)
                 self.assertContent(fn)
@@ -296,7 +305,7 @@ class TestDownloads(UrlScmTest, TestCase):
                 "url" : "http://localhost:{}/test.txt".format(srv.port),
                 "retries" : 2
             })
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 self.invokeScm(workspace, scm)
                 self.assertContent(os.path.join(workspace, "test.txt"))
 
@@ -307,7 +316,7 @@ class TestDownloads(UrlScmTest, TestCase):
                 "url" : "http://localhost:{}/test.txt".format(srv.port),
                 "retries" : 1
             })
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 with self.assertRaises(InvocationError):
                     self.invokeScm(workspace, scm)
 
@@ -318,7 +327,7 @@ class TestDownloads(UrlScmTest, TestCase):
             scm = self.createUrlScm({
                 "url" : "http://localhost:{}/invalid.txt".format(srv.port),
             })
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 with self.assertRaises(InvocationError):
                     self.invokeScm(workspace, scm)
 
@@ -328,7 +337,7 @@ class TestDownloads(UrlScmTest, TestCase):
             scm = self.createUrlScm({
                 "url" : "http://localhost:{}/test.txt".format(srv.port),
             })
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 with self.assertRaises(InvocationError):
                     self.invokeScm(workspace, scm)
 
@@ -391,7 +400,7 @@ class TestExtraction:
             "url" : self.tarGzFile,
             "digestSHA1" : self.tarGzDigestSha1,
         })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
             self.assertExists(os.path.join(workspace, "src", "test.txt"))
 
@@ -401,7 +410,7 @@ class TestExtraction:
             "digestSHA1" : self.tarGzDigestSha1,
             "stripComponents" : 1,
         })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
             self.assertNotExists(os.path.join(workspace, "src"))
             self.assertExists(os.path.join(workspace, "test.txt"))
@@ -412,7 +421,7 @@ class TestExtraction:
             "digestSHA1" : self.tarGzDigestSha1,
             "extract" : False,
         })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
             self.assertExists(os.path.join(workspace, "test.tar.gz"))
             self.assertNotExists(os.path.join(workspace, "src"))
@@ -423,7 +432,7 @@ class TestExtraction:
             "url" : self.gzFile,
             "digestSHA256" : self.gzDigestSha256,
         })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
             self.assertExists(os.path.join(workspace, "test.txt.gz"))
             self.assertExists(os.path.join(workspace, "test.txt"))
@@ -434,7 +443,7 @@ class TestExtraction:
             "digestSHA256" : self.gzDigestSha256,
             "stripComponents" : 1,
         })
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, scm)
 
@@ -457,7 +466,7 @@ class TestMirrors(UrlScmTest, TestCase):
                          }
                        ])
 
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, scm)
 
     def testHttpMirrorFailed(self):
@@ -472,7 +481,7 @@ class TestMirrors(UrlScmTest, TestCase):
                         "mirror" : r"http://localhost:{}/\1".format(srv.port),
                     }]
                 )
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     self.invokeScm(workspace, scm)
 
                 self.assertEqual(0, srv.headRequests)
@@ -491,7 +500,7 @@ class TestMirrors(UrlScmTest, TestCase):
                         "upload" : True,
                     }]
                 )
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     self.invokeScm(workspace, scm)
 
                 self.assertEqual(0, srv.getRequests)
@@ -517,7 +526,7 @@ class TestMirrors(UrlScmTest, TestCase):
                              }
                            ])
 
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 self.invokeScm(workspace, scm)
                 self.assertExists(os.path.join(workspace, "evil.txt"))
 
@@ -535,7 +544,7 @@ class TestMirrors(UrlScmTest, TestCase):
                                   }
                                 ])
 
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 self.invokeScm(workspace, scm)
                 self.assertExists(os.path.join(workspace, self.fn))
 
@@ -553,7 +562,7 @@ class TestMirrors(UrlScmTest, TestCase):
                         "mirror" : r"http://localhost:{}/\1".format(srv.port),
                     }]
                 )
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     self.invokeScm(workspace, scm)
 
     def testGracefulMirrorFallback(self):
@@ -585,7 +594,7 @@ class TestMirrors(UrlScmTest, TestCase):
                         ],
                     )
 
-                    with tempfile.TemporaryDirectory() as workspace:
+                    with TemporaryWorkspace() as workspace:
                         self.invokeScm(workspace, scm)
 
                     self.assertEqual(1, m1.getRequests)
@@ -612,7 +621,7 @@ class TestMirrors(UrlScmTest, TestCase):
                         "upload" : True,
                     }]
                 )
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     self.invokeScm(workspace, scm)
 
             self.assertExists(mirrorPath)
@@ -637,7 +646,7 @@ class TestMirrors(UrlScmTest, TestCase):
                         "upload" : True,
                     }]
                 )
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     self.invokeScm(workspace, scm)
 
                 self.assertEqual(2, srv.putRequests)
@@ -660,7 +669,7 @@ class TestMirrors(UrlScmTest, TestCase):
                         "upload" : True,
                     }]
                 )
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     self.invokeScm(workspace, scm)
 
                 self.assertEqual(1, srv.headRequests)
@@ -699,7 +708,7 @@ class TestMirrors(UrlScmTest, TestCase):
                 }],
             )
 
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 self.invokeScm(workspace, scm)
 
             self.assertExists(secondMirrorPath)
@@ -718,7 +727,7 @@ class TestMirrors(UrlScmTest, TestCase):
                              }
                            ])
 
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 with self.assertRaises(InvocationError):
                     self.invokeScm(workspace, scm)
 
@@ -735,7 +744,7 @@ class TestMirrors(UrlScmTest, TestCase):
                              }
                            ])
 
-            with tempfile.TemporaryDirectory() as workspace:
+            with TemporaryWorkspace() as workspace:
                 with self.assertRaises(InvocationError):
                     self.invokeScm(workspace, scm)
 
@@ -748,21 +757,21 @@ class TestFileMode(UrlScmTest, TestCase):
     def testOldDefaultFileMode(self):
         """Test old behaviour of defaultFileMode policy"""
         os.chmod(self.path, 0o764)
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, self.createUrlScm())
             self.assertMode(os.path.join(workspace, self.fn), 0o764)
 
     def testNewDefaultFileMode(self):
         """Test new behaviour of defaultFileMode policy"""
         os.chmod(self.path, 0o764)
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             self.invokeScm(workspace, self.createUrlScm(defaultFileMode=True))
             self.assertMode(os.path.join(workspace, self.fn), 0o600)
 
     def testFileModeOverride(self):
         """Test that fileMode attribute takes precedence"""
         os.chmod(self.path, 0o777)
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             scm = self.createUrlScm({ "fileMode" : 0o640 },
                                     defaultFileMode=True)
             self.invokeScm(workspace, scm)
@@ -770,7 +779,7 @@ class TestFileMode(UrlScmTest, TestCase):
 
     def testSwitch(self):
         os.chmod(self.path, 0o777)
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             oldScm = self.createUrlScm({ "fileMode" : 0o640 }, defaultFileMode=True)
 
             self.invokeScm(workspace, oldScm)
@@ -835,21 +844,21 @@ class TestExtraction(UrlScmExecutor, TestCase):
         for ext in ("tar", "tar.bz2", "tar.gz", "tar.xz", "zip"):
             with self.subTest(extension=ext):
                 self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3." + ext))
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     scm = self.createUrlScm()
                     self.invokeScm(workspace, scm)
                     self.assertTree(workspace)
 
     def testStripComponents(self):
         self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             scm = self.createUrlScm({ "stripComponents" : 1 })
             self.invokeScm(workspace, scm)
             self.assertTree(workspace, "")
 
     def testStripComponentsUnsupported(self):
         self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.zip"))
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             scm = self.createUrlScm({ "stripComponents" : 1 })
             with self.assertRaises(BuildError):
                 self.invokeScm(workspace, scm)
@@ -859,18 +868,27 @@ class TestExtraction(UrlScmExecutor, TestCase):
         for ext in ("gz", "xz"):
             with self.subTest(extension=ext):
                 self.url = makeFileUrl(os.path.abspath("data/url-scm/test.txt." + ext))
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     scm = self.createUrlScm()
                     self.invokeScm(workspace, scm)
-                    self.assertTrue(os.path.exists(os.path.join(workspace, "test.txt." + ext)))
+                    self.assertTrue(os.path.exists(os.path.join(workspace, "..",
+                                                                "download", "test.txt." + ext)))
                     self.assertFileMd5(os.path.join(workspace, "test.txt"),
                                        "d3b07384d113edec49eaa6238ad5ff00")
+
+    def testNoSeparate(self):
+        self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.zip"))
+        with TemporaryWorkspace() as workspace:
+            scm = self.createUrlScm(separateDownload=False)
+            self.invokeScm(workspace, scm)
+            self.assertTrue(os.path.exists(os.path.join(workspace, "foo-1.2.3.zip")))
+            self.assertTree(workspace)
 
     def testNoExtrace(self):
         self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
         for extract in ("no", False):
             with self.subTest(mode=extract):
-                with tempfile.TemporaryDirectory() as workspace:
+                with TemporaryWorkspace() as workspace:
                     scm = self.createUrlScm({ "extract" : extract })
                     self.invokeScm(workspace, scm)
                     self.assertTrue(os.path.exists(os.path.join(workspace, "foo-1.2.3.tar")))
@@ -878,14 +896,14 @@ class TestExtraction(UrlScmExecutor, TestCase):
 
     def testSpecificExtract(self):
         self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             scm = self.createUrlScm({ "extract" : "tar" })
             self.invokeScm(workspace, scm)
             self.assertTree(workspace)
 
     def testWrongSpecificExtract(self):
         self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
-        with tempfile.TemporaryDirectory() as workspace:
+        with TemporaryWorkspace() as workspace:
             scm = self.createUrlScm({ "extract" : "zip" })
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, scm)
