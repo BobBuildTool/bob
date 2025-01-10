@@ -77,6 +77,7 @@ def getScm(spec, overrides=[], recipeSet=None):
             recipeSet and recipeSet.getPolicy('scmIgnoreUser'),
             recipeSet.getPreMirrors() if recipeSet else [],
             recipeSet.getFallbackMirrors() if recipeSet else [],
-            recipeSet and recipeSet.getPolicy('defaultFileMode'))
+            recipeSet and recipeSet.getPolicy('defaultFileMode'),
+            recipeSet and recipeSet.getPolicy('urlScmSeparateDownload'))
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))

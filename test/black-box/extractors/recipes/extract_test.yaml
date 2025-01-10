@@ -25,6 +25,9 @@ checkoutSCM:
     dir: zip
     digestSHA256: "8e2612b6ab1bacb5c0b342a81925ba6a0349ca8f66db4fc3dd22ddd53ff4f430"
 
+depends:
+  - nodir
+
 buildScript: |
   cat > test.sha256 << EOF
   6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b  test.dat
