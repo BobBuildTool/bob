@@ -361,6 +361,9 @@ class Scm(metaclass=ABCMeta):
         """Calculate live build-id from workspace."""
         return None
 
+    def postAttic(self, workspace):
+        pass
+
 class ScmAudit(metaclass=ABCMeta):
     @classmethod
     async def fromDir(cls, workspace, dir, extra):

@@ -786,6 +786,12 @@ class UrlScm(Scm):
             raise ParseError("Invalid extract mode: " + self.__extract)
         return extractor
 
+    def postAttic(self, workspace):
+        if self.__separateDownload:
+            # os.path.exists returns False if os.pardir is in the path -> normalize it
+            downloadDestination = os.path.normpath(os.path.join(workspace, os.pardir, "download", self.__dir))
+            if os.path.exists(downloadDestination):
+                shutil.rmtree(downloadDestination)
 
 class UrlAudit(ScmAudit):
 
