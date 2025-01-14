@@ -6,8 +6,14 @@
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 cleanup
 
+tempdir=$(mktemp -d)
+trap 'rm -rf "${tempdir}"' EXIT
+
 url="$(mangle_path "$(realpath file.txt)")"
 url2="$(mangle_path "$(realpath file2.txt)")"
+
+tar -cvzf $tempdir/file.tgz file.txt
+tar -cvzf $tempdir/file2.tgz file2.txt
 
 # Build and fetch result path
 run_bob dev root -DURL="$url"
@@ -36,3 +42,11 @@ run_bob dev root -DURL="$url2"
 expect_not_exist  "$path/file.txt"
 expect_not_exist  "$path/canary.txt"
 diff -q "$path/file2.txt" file2.txt
+
+cleanup
+run_bob dev root -DURL="$tempdir/file.tgz"
+expect_exist $path/../download/file.tgz
+
+run_bob dev root -DURL="$tempdir/file2.tgz"
+expect_exist $path/../download/file2.tgz
+expect_not_exist $path/../download/file.tgz

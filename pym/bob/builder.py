@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import concurrent.futures
 import datetime
+import fnmatch
 import hashlib
 import io
 import locale
@@ -408,12 +409,23 @@ cd {ROOT}
         self.__executor = None
         self.__attic = True
         self.__slimSandbox = False
+        self.__bundler = DummyArchive()
 
     def setExecutor(self, executor):
         self.__executor = executor
 
     def setArchiveHandler(self, archive):
         self.__archive = archive
+
+    def setBundler(self, bundler, exclude):
+        self.__bundler = bundler
+        self.__bundleExclude = exclude
+        self.__bundler.wantDownloadLocal(True)
+        self.__bundler.wantUploadLocal(True)
+
+    def finishBundle(self):
+        if self.__bundler.canUpload():
+            self.__bundler.finish()
 
     def setLocalDownloadMode(self, mode):
         self.__archive.wantDownloadLocal(mode != 'no')
@@ -1209,6 +1221,8 @@ cd {ROOT}
                                 os.makedirs(atticPath)
                             atticPath = os.path.join(atticPath, atticName)
                             os.rename(scmPath, atticPath)
+                            if scmDir in scmMap:
+                                scmMap[scmDir].postAttic(prettySrcPath)
                             BobState().setAtticDirectoryState(atticPath, scmSpec)
                             atticPaths.add(scmPath, atticPath)
                         del oldCheckoutState[scmDir]
@@ -1242,11 +1256,17 @@ cd {ROOT}
                     oldCheckoutHash = datetime.datetime.now()
                     BobState().setResultHash(prettySrcPath, oldCheckoutHash)
 
-                with stepExec(checkoutStep, "CHECKOUT",
-                              "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
-                    await self._runShell(checkoutStep, "checkout", a)
-                self.__statistic.checkouts += 1
-                checkoutExecuted = True
+                auditPath = os.path.join(os.path.dirname(checkoutStep.getWorkspacePath()),
+                                                 "audit.json.gz")
+                wasunbundled = await self.__bundler.downloadPackage(checkoutStep,
+                        checkoutDigest, auditPath, prettySrcPath, executor=self.__executor)
+
+                if not wasunbundled:
+                    with stepExec(checkoutStep, "CHECKOUT",
+                                  "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
+                        await self._runShell(checkoutStep, "checkout", a)
+                    self.__statistic.checkouts += 1
+                    checkoutExecuted = True
                 currentResultHash.invalidate() # force recalculation
                 # reflect new checkout state
                 BobState().setDirectoryState(prettySrcPath, checkoutState)
@@ -1288,6 +1308,19 @@ cd {ROOT}
         if buildId != checkoutHash:
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
+
+        if self.__bundler.canUpload():
+            if not checkoutStep.isDeterministic():
+                raise BuildError("Refuse to bundle indeterministic checkouts!")
+            for e in self.__bundleExclude:
+                if fnmatch.fnmatch(checkoutStep.getPackage().getName(), e):
+                    break
+            else:
+                auditPath = os.path.join(os.path.dirname(checkoutStep.getWorkspacePath()),
+                                         "audit.json.gz")
+                await self.__bundler.uploadPackage(checkoutStep, checkoutDigest,
+                        auditPath,
+                        checkoutStep.getStoragePath(), executor=self.__executor)
 
     async def _cookBuildStep(self, buildStep, depth, buildBuildId):
         # Add the execution path of the build step to the buildDigest to
@@ -1701,12 +1734,13 @@ cd {ROOT}
 
         # Try to use live build-ids for checkout steps. Do not use them if
         # there is already a workspace or if the package matches one of the
-        # 'always-checkout' patterns. Fall back to a regular checkout if any
-        # condition is not met.
+        # 'always-checkout' patterns or if we want to bundle the sources.
+        # Fall back to a regular checkout if any condition is not met.
         name = step.getPackage().getName()
         path = step.getWorkspacePath()
         if not os.path.exists(step.getWorkspacePath()) and \
            not any(pat.search(name) for pat in self.__alwaysCheckout) and \
+           not self.__bundler.canUpload() and \
            step.hasLiveBuildId() and self.__archive.canDownload():
             with stepAction(step, "QUERY", step.getPackage().getName(), (IMPORTANT, NORMAL)) as a:
                 liveBId = await self.__queryLiveBuildId(step)

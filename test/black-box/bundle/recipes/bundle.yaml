@@ -1,0 +1,19 @@
+root: True
+
+depends:
+  - input-a
+  - input-b
+  - input-c
+  - input-d
+  - name: input-indeterministic
+    if: ${TEST_INDETERMINISTIC_INPUT:-False}
+
+checkoutDeterministic: True
+checkoutScript: |
+  echo "it works" >> bundled_script.txt
+
+buildScript: |
+  cat $1/bundled_script.txt
+
+packageScript: |
+  /bin/true
