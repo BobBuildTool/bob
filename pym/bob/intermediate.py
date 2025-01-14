@@ -553,6 +553,7 @@ class RecipeSetIR:
             'gitCommitOnBranch' : recipeSet.getPolicy('gitCommitOnBranch'),
             'fixImportScmVariant' : recipeSet.getPolicy('fixImportScmVariant'),
             'defaultFileMode' : recipeSet.getPolicy('defaultFileMode'),
+            'urlScmSeparateDownload' : recipeSet.getPolicy('urlScmSeparateDownload'),
         }
         self.__data['archiveSpec'] = recipeSet.archiveSpec()
         self.__data['envWhiteList'] = sorted(recipeSet.envWhiteList())

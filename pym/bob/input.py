@@ -3029,6 +3029,7 @@ class RecipeSet:
                 schema.Optional('defaultFileMode') : bool,
                 schema.Optional('substituteMetaEnv') : bool,
                 schema.Optional('managedLayers') : bool,
+                schema.Optional('urlScmSeparateDownload') : bool,
             },
             error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
@@ -3083,6 +3084,11 @@ class RecipeSet:
             InfoOnce("managedLayers policy is not set. Only unmanaged layers are supported.",
                 help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#managedlayers for more information.")
         ),
+        "urlScmSeparateDownload": (
+            "0.25.1.dev27",
+            InfoOnce("urlScmSeparateDownload policy is not set. Extracted archives of the 'url' SCM are retained in the workspace.",
+                help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#urlscmseparatedownload for more information.")
+        )
     }
 
     _ignoreCmdConfig = False
