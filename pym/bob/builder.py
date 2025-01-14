@@ -1209,6 +1209,8 @@ cd {ROOT}
                                 os.makedirs(atticPath)
                             atticPath = os.path.join(atticPath, atticName)
                             os.rename(scmPath, atticPath)
+                            if scmDir in scmMap:
+                                scmMap[scmDir].postAttic(prettySrcPath)
                             BobState().setAtticDirectoryState(atticPath, scmSpec)
                             atticPaths.add(scmPath, atticPath)
                         del oldCheckoutState[scmDir]
