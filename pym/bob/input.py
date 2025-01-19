@@ -1466,10 +1466,11 @@ corePackageInternal = CorePackageInternal()
 class CorePackage:
     __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
         "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "pkgId", "metaEnv")
+        "pkgId", "metaEnv", "packageName")
 
     def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox,
-                 directDepSteps, indirectDepSteps, states, pkgId, metaEnv):
+                 directDepSteps, indirectDepSteps, states, pkgId, metaEnv,
+                 packageName):
         self.recipe = recipe
         self.tools = tools
         self.sandbox = sandbox
@@ -1479,6 +1480,7 @@ class CorePackage:
         self.states = states
         self.pkgId = pkgId
         self.metaEnv = metaEnv
+        self.packageName = packageName
 
     def refDeref(self, stack, inputTools, inputSandbox, pathsConfig):
         tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathsConfig)
@@ -1514,7 +1516,10 @@ class CorePackage:
 
     def getName(self):
         """Name of the package"""
-        return self.recipe.getPackageName()
+        if self.packageName is None:
+            return self.recipe.getPackageName()
+        else:
+            return self.packageName
 
     def getMetaEnv(self):
         return self.metaEnv
@@ -1522,6 +1527,9 @@ class CorePackage:
     @property
     def jobServer(self):
         return self.recipe.jobServer()
+
+    def isVirtual(self):
+        return self.packageName is not None
 
 class Package(object):
     """Representation of a package that was created from a recipe.
@@ -1571,7 +1579,7 @@ class Package(object):
 
     def getName(self):
         """Name of the package"""
-        return self.getRecipe().getPackageName()
+        return self.__corePackage.getName()
 
     def getMetaEnv(self):
         """meta variables of package"""
@@ -1671,6 +1679,9 @@ class Package(object):
     def isRelocatable(self):
         """Returns True if the packages is relocatable."""
         return self.__corePackage.recipe.isRelocatable()
+
+    def isVirtual(self):
+        return self.__corePackages.isVirtual()
 
 
 # FIXME: implement this on our own without the Template class. How to do proper
@@ -2286,10 +2297,10 @@ class Recipe(object):
         return self.__properties
 
     def prepare(self, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
-                inputTools=Env(), stack=[]):
+                inputTools=Env(), stack=[], packageName=None):
         # already calculated?
         for m in self.__corePackagesByMatch:
-            if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox):
+            if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox, packageName):
                 if set(stack) & m.subTreePackages:
                     raise ParseError("Recipes are cyclic")
                 m.touch(inputEnv, inputTools)
@@ -2390,9 +2401,9 @@ class Recipe(object):
 
             r = self.__recipeSet.getRecipe(recipe)
             try:
-                if r.__packageName in stack:
+                if r.getPackageName() in stack:
                     raise ParseError("Recipes are cyclic (1st package in cylce)")
-                depStack = stack + [r.__packageName]
+                depStack = stack + [r.getPackageName()]
                 p, s = r.prepare(thisDepEnv, sandboxEnabled, depStates,
                                  thisDepSandbox, thisDepTools, depStack)
                 subTreePackages.add(p.getName())
@@ -2543,7 +2554,7 @@ class Recipe(object):
 
         # set fixed built-in variables
         env['BOB_RECIPE_NAME'] = self.__baseName
-        env['BOB_PACKAGE_NAME'] = self.__packageName
+        env['BOB_PACKAGE_NAME'] = self.__packageName if packageName is None else packageName
 
         # record used environment and tools
         env.touch(self.__packageVars | self.__packageVarsWeak)
@@ -2593,7 +2604,8 @@ class Recipe(object):
         # touchedTools = tools.touchedKeys()
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
         p = CorePackage(self, toolsDetached, diffTools, sandbox, diffSandbox,
-                directPackages, indirectPackages, states, uidGen(), metaEnv)
+                directPackages, indirectPackages, states, uidGen(), metaEnv,
+                packageName)
 
         # optional checkout step
         if self.__checkout != (None, None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
@@ -2672,7 +2684,7 @@ class Recipe(object):
                 p = reusableCorePackage
             self.__corePackagesByMatch.insert(0, PackageMatcher(
                 reusableCorePackage, inputEnv, inputTools, inputStates,
-                inputSandbox, subTreePackages))
+                inputSandbox, subTreePackages, packageName))
         elif packageCoreStep.getResultId() != reusedCorePackage.getCorePackageStep().getResultId():
             raise AssertionError("Wrong reusage for " + "/".join(stack))
         else:
@@ -2709,7 +2721,7 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
             help=
 """This error is caused by naming '{PKG}' multiple times in the recipe with incompatible variants.
 Every dependency must only be given once."""
-    .format(PKG=r.corePackage.getName(), CUR=self.__packageName))
+    .format(PKG=r.corePackage.getName()))
 
     def __raiseIncompatibleTools(self, tools, toolDepPackage):
         toolsVars = {}
@@ -2806,8 +2818,62 @@ Every dependency must only be given once."""
         return getLanguage(self.__scriptLanguage)
 
 
+class VirtualPackage:
+    SCHEMA = schema.Or(
+        str,
+        {
+            "multiPackage" : {
+                MULTIPACKAGE_NAME_SCHEMA : str
+            }
+        })
+
+    @staticmethod
+    def loadFromFile(recipeSet, rootDir, fileName):
+        baseName = os.path.splitext( fileName )[0].split( os.sep )
+        fileName = os.path.join(rootDir, fileName)
+        try:
+            for n in baseName: RECIPE_NAME_SCHEMA.validate(n)
+        except schema.SchemaError as e:
+            raise ParseError("Invalid recipe name: '{}'".format(fileName))
+        baseName = "::".join( baseName )
+
+        virtualPackage = recipeSet.loadYaml(fileName, (VirtualPackage.SCHEMA, b''))
+        if isinstance(virtualPackage, str):
+            return [ VirtualPackage(recipeSet, virtualPackage, baseName) ]
+        else:
+            return [
+                VirtualPackage(recipeSet, subSpec, baseName + ("-"+subName if subName else ""))
+                for (subName, subSpec) in virtualPackage["multiPackage"].items()
+            ]
+
+    def __init__(self, recipeSet, target, packageName):
+        self.__recipeSet = recipeSet
+        self.__target = target
+        self.__packageName = packageName
+
+    def prepare(self, env, sandboxEnabled, states, sandbox, tools, stack, packageName=None):
+        target = env.substitute(self.__target, "virtual package")
+        if packageName is None:
+            packageName = self.__packageName
+        return self.__recipeSet.getRecipe(target).prepare(env, sandboxEnabled, states, sandbox,
+                                                          tools, stack,
+                                                          packageName=packageName)
+
+    def getPackageName(self):
+        return self.__packageName
+
+    def resolveClasses(self, env):
+        pass
+
+    def isRoot(self):
+        return False
+
+
 class PackageMatcher:
-    def __init__(self, corePackage, env, tools, states, sandbox, subTreePackages):
+    __slots__ = ( 'corePackage', 'env', 'tools', 'states', 'sandbox',
+                  'subTreePackages', 'packageName')
+
+    def __init__(self, corePackage, env, tools, states, sandbox, subTreePackages, packageName):
         self.corePackage = corePackage
         envData = env.inspect()
         self.env = { name : envData.get(name) for name in env.touchedKeys() }
@@ -2817,8 +2883,9 @@ class PackageMatcher:
         self.states = { n : s.copy() for (n,s) in states.items() }
         self.sandbox = sandbox.resultId if sandbox is not None else None
         self.subTreePackages = subTreePackages
+        self.packageName = packageName
 
-    def matches(self, inputEnv, inputTools, inputStates, inputSandbox):
+    def matches(self, inputEnv, inputTools, inputStates, inputSandbox, packageName):
         for (name, env) in self.env.items():
             if env != inputEnv.get(name): return False
         for (name, tool) in self.tools.items():
@@ -2828,6 +2895,7 @@ class PackageMatcher:
         match = inputSandbox.resultId if inputSandbox is not None else None
         if self.sandbox != match: return False
         if self.states != inputStates: return False
+        if self.packageName != packageName: return False
         return True
 
     def touch(self, inputEnv, inputTools):
@@ -3552,6 +3620,18 @@ class RecipeSet:
                             self.__properties, self.__recipeSchema, True, scriptLanguage)
                         for r in recipes:
                             self.__addRecipe(r)
+                    except ParseError as e:
+                        e.pushFrame(path)
+                        raise
+
+            virtualDir = os.path.join(rootDir, 'virtual')
+            for root, dirnames, filenames in os.walk(virtualDir):
+                for path in fnmatch.filter(filenames, "[!.]*.yaml"):
+                    try:
+                        virtualPackages = VirtualPackage.loadFromFile(self, virtualDir,
+                            os.path.relpath(os.path.join(root, path), virtualDir))
+                        for p in virtualPackages:
+                            self.__addRecipe(p)
                     except ParseError as e:
                         e.pushFrame(path)
                         raise
