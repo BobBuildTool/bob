@@ -344,6 +344,22 @@ New behavior
 
     Unmanaged layers are expected in the same directory.
 
+urlScmSeparateDownload
+~~~~~~~~~~~~~~~~~~~~~~
+
+Introduced in: 1.0
+
+This policy controls where bob places downloaded files of UrlScms if extraction is
+used.
+
+Old behavior
+    The downloaded file could be found in the workspace next to the extracted files.
+
+New behavior
+    The downloaded file is stored next to the workspace in a separate download folder.
+    Only the extracted content is in the workspace.
+
+
 .. _policies-obsolete:
 
 Obsolete policies
