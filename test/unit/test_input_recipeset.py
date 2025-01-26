@@ -28,7 +28,6 @@ class RecipesTmp:
         self.tmpdir = TemporaryDirectory()
         os.chdir(self.tmpdir.name)
         os.mkdir("recipes")
-        os.mkdir("classes")
 
     def tearDown(self):
         os.chdir(self.cwd)
@@ -38,7 +37,7 @@ class RecipesTmp:
         path = os.path.join("",
             *(os.path.join("layers", l) for l in layer),
             "recipes")
-        if path: os.makedirs(path, exist_ok=True)
+        os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, name+".yaml"), "w") as f:
             f.write(textwrap.dedent(content))
 
@@ -46,7 +45,7 @@ class RecipesTmp:
         path = os.path.join("",
             *(os.path.join("layers", l) for l in layer),
             "classes")
-        if path: os.makedirs(path, exist_ok=True)
+        os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, name+".yaml"), "w") as f:
             f.write(textwrap.dedent(content))
 
@@ -61,6 +60,14 @@ class RecipesTmp:
         if path: os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, "default.yaml"), "w") as f:
             f.write(yaml.dump(content))
+
+    def writeAlias(self, name, content, layer=[]):
+        path = os.path.join("",
+            *(os.path.join("layers", l) for l in layer),
+            "aliases")
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, name+".yaml"), "w") as f:
+            f.write(textwrap.dedent(content))
 
     def generate(self, sandboxEnabled=False, env={}):
         recipes = RecipeSet()
@@ -1931,4 +1938,142 @@ class TestScmDefaults(RecipesTmp, TestCase):
         self.assertFalse(props["extract"])
         self.assertEqual(props["stripComponents"], 1)
         self.assertEqual(props["fileName"], "downloaded_file")
+
+
+class TestAliases(RecipesTmp, TestCase):
+    """Test recipe aliasing"""
+
+    def testGlobalAlias(self):
+        """Test global alias"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - virtual
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("real", """\
+            packageScript: "real"
+            """)
+        self.writeAlias("virtual", "real")
+        pkg = self.generate().walkPackagePath("root/virtual")
+        self.assertEqual(pkg.getName(), "virtual")
+        self.assertEqual(pkg.getRecipe().getName(), "real")
+
+    def testGlobalAliasRecursive(self):
+        """Test global alias of an alias"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - level1
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("real", """\
+            packageScript: "real"
+            """)
+        self.writeAlias("level1", "level2")
+        self.writeAlias("level2", "real")
+        pkg = self.generate().walkPackagePath("root/level1")
+        self.assertEqual(pkg.getName(), "level1")
+        self.assertEqual(pkg.getRecipe().getName(), "real")
+
+    def testLocalAlias(self):
+        """Test that the same dependency can be named with different aliases"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: real
+                  alias: virtual1
+                - name: real
+                  alias: virtual2
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("real", """\
+            packageScript: "real"
+            """)
+        packages = self.generate()
+        p1 = self.generate().walkPackagePath("root/virtual1")
+        p2 = self.generate().walkPackagePath("root/virtual2")
+        self.assertEqual(p1.getName(), "virtual1")
+        self.assertEqual(p1.getRecipe().getName(), "real")
+        self.assertEqual(p2.getName(), "virtual2")
+        self.assertEqual(p2.getRecipe().getName(), "real")
+        self.assertEqual(p1.getPackageStep().getVariantId(),
+                         p2.getPackageStep().getVariantId())
+
+    def testLocalAliasWins(self):
+        """A local alias works with global aliases"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: virtual
+                  alias: foo
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("real", """\
+            packageScript: "real"
+            """)
+        self.writeAlias("virtual", "real")
+        pkg = self.generate().walkPackagePath("root/foo")
+        self.assertEqual(pkg.getName(), "foo")
+        self.assertEqual(pkg.getRecipe().getName(), "real")
+
+    def testGlobalAliasDoesntHideCycle(self):
+        """Global aliases cannot hide the fact that recipes are cyclic"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - level1
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("level1", """\
+            depends:
+                - level2
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("level2", """\
+            depends:
+                - level3
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeAlias("level3", "level1")
+        with self.assertRaises(ParseError):
+            packages = self.generate()
+            packages.walkPackagePath("root").getPackageStep()
+
+    def testLocalAliasDoesntHideCycle(self):
+        """Per-dependency aliases cannot hide the fact that recipes are cyclic"""
+        self.writeRecipe("root", """\
+            root: True
+            environment:
+                NAME: "x"
+            depends:
+                - name: level1
+                  alias: "${NAME}x"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("level1", """\
+            depends:
+                - name: level2
+                  alias: "${NAME}x"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("level2", """\
+            depends:
+                - name: level1
+                  alias: "${NAME}x"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        with self.assertRaises(ParseError):
+            packages = self.generate()
+            packages.walkPackagePath("root").getPackageStep()
 
