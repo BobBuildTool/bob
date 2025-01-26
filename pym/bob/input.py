@@ -1824,6 +1824,7 @@ class VarDefineValidator:
 
 RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]+$')
 MULTIPACKAGE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]*$')
+ALIAS_NAME_RE = re.compile(r"[0-9A-Za-z_.+-]+(::[0-9A-Za-z_.+-]+)*")
 
 class UniquePackageList:
     def __init__(self, stack, errorHandler):
@@ -1939,7 +1940,12 @@ class Recipe(object):
     """
 
     class Dependency(object):
-        def __init__(self, recipe, env, fwd, use, cond, tools, checkoutDep, inherit):
+        __slots__ = ('recipe', 'envOverride', 'provideGlobal', 'inherit',
+                     'use', 'useEnv', 'useTools', 'useBuildResult', 'useDeps',
+                     'useSandbox', 'condition', 'toolOverride', 'checkoutDep',
+                     'alias')
+
+        def __init__(self, recipe, env, fwd, use, cond, tools, checkoutDep, inherit, alias):
             self.recipe = recipe
             self.envOverride = env
             self.provideGlobal = fwd
@@ -1953,11 +1959,13 @@ class Recipe(object):
             self.condition = cond
             self.toolOverride = tools
             self.checkoutDep = checkoutDep
+            self.alias = alias
 
         @staticmethod
         def __parseEntry(dep, env, fwd, use, cond, tools, checkoutDep, inherit):
             if isinstance(dep, str):
-                return [ Recipe.Dependency(dep, env, fwd, use, cond, tools, checkoutDep, inherit) ]
+                return [ Recipe.Dependency(dep, env, fwd, use, cond, tools, checkoutDep,
+                                           inherit, None) ]
             else:
                 envOverride = dep.get("environment")
                 if envOverride:
@@ -1978,7 +1986,8 @@ class Recipe(object):
                 if name:
                     if "depends" in dep:
                         raise ParseError("A dependency must not use 'name' and 'depends' at the same time!")
-                    return [ Recipe.Dependency(name, env, fwd, use, cond, tools, checkoutDep, inherit) ]
+                    return [ Recipe.Dependency(name, env, fwd, use, cond, tools,
+                                               checkoutDep, inherit, dep.get("alias")) ]
                 dependencies = dep.get("depends")
                 if dependencies is None:
                     raise ParseError("Either 'name' or 'depends' required for dependencies!")
@@ -2401,8 +2410,15 @@ class Recipe(object):
             # provideDeps to name a disabled dependency. But in case the
             # substiturion fails, the error is silently ignored.
             try:
-                recipe = env.substitute(dep.recipe, "dependency::"+dep.recipe)
-                resolvedDeps.append(recipe)
+                recipeName = env.substitute(dep.recipe, "dependency::"+dep.recipe)
+                if dep.alias is None:
+                    aliasName = None
+                    realName = recipeName
+                else:
+                    realName = aliasName = env.substitute(dep.alias, "alias::"+dep.alias)
+                    if not ALIAS_NAME_RE.fullmatch(aliasName):
+                        raise ParseError(f"Invalid dependency alias: {aliasName}")
+                resolvedDeps.append(realName)
             except ParseError:
                 if skip: continue
                 raise
@@ -2429,7 +2445,7 @@ class Recipe(object):
                         k : depTools[v] for k,v in dep.toolOverride.items() })
                 except KeyError as e:
                     raise ParseError("Cannot remap unkown tool '{}' for dependency '{}'!"
-                        .format(e.args[0], recipe))
+                        .format(e.args[0], realName))
                 thisDepDiffTools = thisDepDiffTools.copy()
                 thisDepDiffTools.update({
                     k : depDiffTools.get(v, v)
@@ -2437,14 +2453,14 @@ class Recipe(object):
 
             if dep.envOverride:
                 thisDepEnv = thisDepEnv.derive(
-                    { key : env.substitute(value, "depends["+recipe+"].environment["+key+"]")
+                    { key : env.substitute(value, "depends["+realName+"].environment["+key+"]")
                       for key, value in dep.envOverride.items() })
 
-            r = self.__recipeSet.getRecipe(recipe)
+            r = self.__recipeSet.getRecipe(recipeName)
             try:
                 p, s = r.prepare(thisDepEnv, sandboxEnabled, depStates,
                                  thisDepSandbox, thisDepTools, stack, aliasName)
-                subTreePackages.add(recipe)
+                subTreePackages.add(recipeName)
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
                 depRef = CoreRef(depCoreStep, [p.getName()], thisDepDiffTools, thisDepDiffSandbox)
@@ -2455,14 +2471,14 @@ class Recipe(object):
             # A dependency should be named only once. Hence we can
             # optimistically create the DepTracker object. If the dependency is
             # named more than one we make sure that it is the same variant.
-            depTrack = thisDeps.setdefault(recipe, DepTracker(depRef))
+            depTrack = thisDeps.setdefault(p.getName(), DepTracker(depRef))
             if depTrack.prime():
                 directPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
                 self.__raiseIncompatibleLocal(depCoreStep)
             else:
                 raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
-                                    .format(recipe))
+                                    .format(p.getName()))
 
             # Remember dependency diffs before changing them
             origDepDiffTools = thisDepDiffTools
@@ -2503,7 +2519,7 @@ class Recipe(object):
                     env.update(sandbox.environment)
                     if dep.provideGlobal: depEnv.update(sandbox.environment)
 
-            maybeProvideDeps.append((recipe, depRef, p.getName(), origDepDiffTools, origDepDiffSandbox))
+            maybeProvideDeps.append((p.getName(), depRef, origDepDiffTools, origDepDiffSandbox))
 
         # check provided dependencies
         providedDeps = set()
@@ -2513,8 +2529,8 @@ class Recipe(object):
                 raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern.pattern))
             providedDeps |= l
 
-        for (recipe, depRef, name, origDepDiffTools, origDepDiffSandbox) in maybeProvideDeps:
-            if recipe in providedDeps:
+        for (name, depRef, origDepDiffTools, origDepDiffSandbox) in maybeProvideDeps:
+            if name in providedDeps:
                 provideDeps.append(depRef)
                 provideDeps.extend([CoreRef(d, [name], origDepDiffTools, origDepDiffSandbox)
                     for d in depRef.refGetDestination().providedDeps])
@@ -3863,6 +3879,7 @@ class RecipeSet:
             schema.Optional('if') : schema.Or(str, IfExpression),
             schema.Optional('tools') : { toolNameSchema : toolNameSchema },
             schema.Optional('checkoutDep') : bool,
+            schema.Optional('alias') : str,
         }
         dependsClause = schema.Schema([
             schema.Or(
