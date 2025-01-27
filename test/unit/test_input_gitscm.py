@@ -460,7 +460,7 @@ class TestShallow(TestCase):
 
         branches = subprocess.check_output(["git", "branch", "-r"],
             cwd=workspace, universal_newlines=True).strip().split("\n")
-        branches = set(b.strip() for b in branches)
+        branches = set(b.strip() for b in branches if "HEAD" not in b)
 
         return (len(log), branches)
 
