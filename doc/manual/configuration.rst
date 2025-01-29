@@ -19,6 +19,12 @@ be included from recipes and other classes to factor out common stuff. Files
 that do not have the '.yaml' extension are ignored when parsing the recipes and
 classes directories.
 
+In case there needs to be a choice between multiple recipes that provide
+interchangeable packages, aliases can be defined that resolve to other recipes.
+The optional ``aliases`` directory holds YAML files that declare alias names.
+The naming structure is the same as in the ``recipes`` and ``classes``
+directory. This is usually known as virtual packages in other build systems.
+
 There are two additional configuration files: ``config.yaml`` and
 ``default.yaml``. The former contains static configuration options while the
 latter holds some options that can have a default value and might be overridden
@@ -28,6 +34,8 @@ the following:
 .. code-block:: none
 
     .
+    ├── aliases
+    │   └── kernel.yaml
     ├── classes
     │   └── make.yaml
     ├── config.yaml
@@ -1220,15 +1228,13 @@ settings from the current entry. See the following example for both formats::
     depends:
         - foo
         - bar
-        -
-            name: toolchain
-            use: [tools, environment]
-            forward: True
-        -
-            if: "${FOOBAR}"
-            depends:
-                - baz
-                - qux
+        - name: toolchain
+          use: [tools, environment]
+          forward: True
+        - if: "${FOOBAR}"
+          depends:
+              - baz
+              - qux
 
 In the first and second case only the package is named, meaning the build
 result of recipe *foo* resp. *bar* is fed as ``$2`` and ``$3`` to the build
@@ -1259,6 +1265,9 @@ The following settings are supported:
 +=============+=================+=====================================================+
 | name        | String          | The name of the required recipe.                    |
 |             |                 | String substitution is applied to this setting.     |
++-------------+-----------------+-----------------------------------------------------+
+| alias       | String          | Alias name of the dependency. Declares alternate    |
+|             |                 | name for this dependency.                           |
 +-------------+-----------------+-----------------------------------------------------+
 | depends     | List of         | A list of dependencies inheriting the settings of   |
 |             | Dependencies    | this entry.                                         |
@@ -1342,6 +1351,32 @@ The following settings are supported:
 |             |                 |                                                     |
 |             |                 | Default: ``true``                                   |
 +-------------+-----------------+-----------------------------------------------------+
+
+Each package in the dependency list must have a unique name. By default, the
+name of the required recipe is used. This ensures that each dependency is named
+only once. Also, provided dependencies from dependencies are merged based on
+the package name (see :ref:`configuration-recipes-providedeps`).
+
+Sometimes it is necessary to depend on the same recipe more than once because
+multiple variants of the same recipe are required. In this case, alias names
+can be used to give each dependency a unique name::
+
+    depends:
+        - name: some::package
+          alias: some::package-alpha
+          environment:
+              VARIANT: alpha
+        - name: some::package
+          alias: some::package-beta
+          environment:
+              VARIANT: beta
+
+This example assumes that the result of ``some::package`` depends on the
+content of ``VARIANT``. The dependencies will be known as
+``some::package-alpha`` and ``some::package-beta``, thus satisfying the unique
+name requirement.  Both packages are based on the identical recipe
+(``some::package``) but are built differently because of the varying
+``VARIANT`` value.
 
 .. _configuration-recipes-env:
 
@@ -1580,6 +1615,8 @@ The :ref:`manpage-query-meta` command can be used to retrieve metaEnvironment va
 All metaEnvironment variables are subject to :ref:`string substitution
 <configuration-principle-subst>`, unless the :ref:`policies-substituteMetaEnv`
 policy is configured for the old behaviour.
+
+.. _configuration-recipes-multipackage:
 
 multiPackage
 ~~~~~~~~~~~~
@@ -1904,6 +1941,49 @@ Jenkins the result will be copied to a separate directory in the Jenkins
 installation and will be used from there. This reduces the job workspace size
 considerably at the expense of having artifacts outside of Jenkins's regular
 control.
+
+.. _configuration-aliases:
+
+Alias definitions
+-----------------
+
+An alias package can be defined by placing an appropriately named YAML file in
+the ``aliases`` directory. The naming convention is identical to the
+``recipes`` directory. That is, the alias name is derived from the file name
+after removing the ``.yaml`` suffix. Subdirectories can be used and the path
+separator is replaced by ``::``.
+
+Examples:
+
+.. code-block:: none
+
+    aliases/foo.yaml
+    aliases/bar/baz.yaml
+
+This will create two alias packages: ``foo`` and ``bar::baz``. Each YAML file
+contains either a single string, e.g.::
+
+    "target::package"
+
+or defines multiple aliases with the help of a ``multiPackage`` dictionary::
+
+    multiPackage:
+        "":  ${CONFIG_SELECT_LIBEGL:-libs::mesa3d}
+        dev: ${CONFIG_SELECT_LIBEGL:-libs::mesa3d}-dev
+        tgt: ${CONFIG_SELECT_LIBEGL:-libs::mesa3d}-tgt
+
+In contrast to recipe or class :ref:`configuration-recipes-multipackage`
+definitions, aliases do not support nesting of ``multiPackage``. Like recipes,
+the key in the ``multiPackage`` is appended to the base package name. Suppose
+the above YAML file is stored as ``aliases/libs/libegl.yaml``, this will define
+the ``libs::libegl``, ``libs::libegl-dev`` and ``libs::libegl-tgt`` aliases. If
+``CONFIG_SELECT_LIBEGL`` is unset, the alias targets will be provided by
+``libs::mesa3d``. Otherwise the variable will hold the alias target package
+name.
+
+The alias string is subject to :ref:`configuration-principle-subst`. This
+enables aliases to select dynamically between different targets based on the
+position in the dependency graph.
 
 .. _configuration-config:
 

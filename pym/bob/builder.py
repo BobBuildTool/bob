@@ -328,7 +328,7 @@ cd {ROOT}
         if step.isCheckoutStep():
             base = step.getPackage().getRecipe().getName()
         else:
-            base = step.getPackage().getName()
+            base = step.getPackage().getRecipe().getPackageName()
         return os.path.join("work", base.replace('::', os.sep), step.getLabel())
 
     @staticmethod
@@ -351,7 +351,7 @@ cd {ROOT}
         if step.isCheckoutStep():
             base = step.getPackage().getRecipe().getName()
         else:
-            base = step.getPackage().getName()
+            base = step.getPackage().getRecipe().getPackageName()
         return os.path.join("dev", step.getLabel(), base.replace('::', os.sep))
 
     @staticmethod

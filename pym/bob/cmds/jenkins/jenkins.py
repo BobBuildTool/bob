@@ -710,7 +710,7 @@ def _genJenkinsJobs(step, jobs, nameCalculator, upload, download, seenPackages, 
     return jj
 
 def jenkinsNameFormatter(step, props):
-    return step.getPackage().getName().replace('::', "/") + "/" + step.getLabel()
+    return step.getPackage().getRecipe().getPackageName().replace('::', "/") + "/" + step.getLabel()
 
 def jenkinsNamePersister(jenkins, wrapFmt, uuid):
 
