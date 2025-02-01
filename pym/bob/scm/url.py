@@ -158,7 +158,11 @@ isWin32 = sys.platform == "win32"
 
 
 class Extractor():
+    SUPPORT_STRIP = False
+
     def __init__(self, dir, file, strip, separateDownload):
+        if strip != 0 and not self.SUPPORT_STRIP:
+            raise BuildError("Extractor does not support 'stripComponents'!")
         self.dir = dir
         self.file = file
         self.strip = strip
@@ -191,8 +195,7 @@ class Extractor():
 # case of tarfile broken in certain ways (e.g. tarfile will result in
 # different file modes!). But it shouldn't make a difference on Windows.
 class TarExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
+    SUPPORT_STRIP = True
 
     async def extract(self, invoker):
         cmds = []
@@ -210,10 +213,6 @@ class TarExtractor(Extractor):
 
 
 class ZipExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
-        if strip != 0:
-            raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
         cmds = []
@@ -227,10 +226,6 @@ class ZipExtractor(Extractor):
 
 
 class GZipExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
-        if strip != 0:
-            raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
         # gunzip extracts the file at the location of the input file. Copy the
@@ -246,10 +241,6 @@ class GZipExtractor(Extractor):
 
 
 class XZExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
-        if strip != 0:
-            raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
         cmd = ["unxz"]
@@ -263,10 +254,6 @@ class XZExtractor(Extractor):
 
 
 class SevenZipExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
-        if strip != 0:
-            raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
         cmds = [["7z", "x", "-y", self.getCompressedFilePath(invoker)]]
