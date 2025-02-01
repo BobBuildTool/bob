@@ -1152,17 +1152,22 @@ url
    is performed. This replaces the initial ``~`` or ``~user`` by the *user*’s
    home directory.
 
-   If a SHA digest is
-   given with ``digestSHA1``, ``digestSHA256`` and/or ``digestSHA512``, the
-   downloaded file will be checked for a matching hash sum. This also makes the
-   URL deterministic for Bob. Otherwise the URL will be checked in each build
-   for updates. Based on the file name ending, Bob will try to extract the
-   downloaded file. You may prevent this by setting the ``extract`` attribute
-   to ``no`` or ``False``. If the heuristic fails, the extraction tool may be
-   specified as ``tar``, ``gzip``, ``xz``, ``7z`` or ``zip`` directly. For
-   ``tar`` files it is possible to strip a configurable number of leading
-   components from file names on extraction by the ``stripComponents``
-   attribute.
+   If a SHA digest is given with ``digestSHA1``, ``digestSHA256`` and/or
+   ``digestSHA512``, the downloaded file will be checked for a matching hash
+   sum. This also makes the URL deterministic for Bob. Otherwise, the URL will
+   be checked in each build for updates.
+
+   Based on the file name ending, Bob will try to extract the downloaded file.
+   You may prevent this by setting the ``extract`` attribute to ``no`` or
+   ``False``. If the heuristic fails, the extraction tool may be specified as
+   ``tar``, ``gzip``, ``xz``, ``7z`` or ``zip`` directly. For ``tar`` files it
+   is possible to strip a configurable number of leading components from file
+   names on extraction by the ``stripComponents`` attribute.
+
+   If the file is extracted, the original file will be kept next to the
+   ``workspace`` to keep the directory clean. If the
+   :ref:`policies-urlScmSeparateDownload` policy is on the old behavour, the
+   downloaded file will still be in put the workspace, though.
 
    .. note::
        Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy) the whole
