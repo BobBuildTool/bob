@@ -40,6 +40,10 @@ buildScript: |
   for d in $(find $1/ -mindepth 1 -type d); do
     pushd $d
     sha256sum -c ${SHA256_FILE}
+    if [[ $d = */gzip || $d = */xz ]] ; then
+      # verify that extracted file retains mode
+      test $(stat -c "%a" test.dat) = "600"
+    fi
     popd
   done
 

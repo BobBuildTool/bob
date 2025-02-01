@@ -192,21 +192,27 @@ class Invoker:
         elif stdout == False:
             stdoutRedir = subprocess.DEVNULL
             stdoutStreams = []
-        else:
+        elif stdout is None:
             stdoutRedir = self.__stdout
             stdoutStreams = [self.__stdoutStream]
+        else:
+            stdoutRedir = stdout
+            stdoutStreams = []
 
         if stderr == True:
             # If stderr should be captured we use a dedicated buffer. This
             # buffer is then returned to the caller at child exit.
             stderrRedir = subprocess.PIPE
             stderrStreams = [io.BytesIO(), self.__stderrStream]
-        elif stdout == False:
+        elif stderr == False:
             stderrRedir = subprocess.DEVNULL
             stderrStreams = []
-        else:
+        elif stderr is None:
             stderrRedir = self.__stderr
             stderrStreams = [self.__stderrStream]
+        else:
+            stderrRedir = stderr
+            stderrStreams = []
 
         # Sanity check on Windows that there are no environment variables that
         # differ only in case. The Windows envrionment is used case insensitive

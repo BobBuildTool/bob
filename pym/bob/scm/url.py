@@ -158,19 +158,23 @@ isWin32 = sys.platform == "win32"
 
 
 class Extractor():
+    SUPPORT_STRIP = False
+
     def __init__(self, dir, file, strip, separateDownload):
+        if strip != 0 and not self.SUPPORT_STRIP:
+            raise BuildError("Extractor does not support 'stripComponents'!")
         self.dir = dir
         self.file = file
         self.strip = strip
         self.separateDownload = separateDownload
 
-    async def _extract(self, cmds, invoker):
+    async def _extract(self, cmds, invoker, stdout=None):
         destination = self.getCompressedFilePath(invoker)
         canary = destination+".extracted"
         if isYounger(destination, canary):
             for cmd in cmds:
                 if shutil.which(cmd[0]) is None: continue
-                await invoker.checkCommand(cmd, cwd=self.dir)
+                await invoker.checkCommand(cmd, cwd=self.dir, stdout=stdout)
                 invoker.trace("<touch>", canary)
                 with open(canary, "wb") as f:
                     pass
@@ -191,8 +195,7 @@ class Extractor():
 # case of tarfile broken in certain ways (e.g. tarfile will result in
 # different file modes!). But it shouldn't make a difference on Windows.
 class TarExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
+    SUPPORT_STRIP = True
 
     async def extract(self, invoker):
         cmds = []
@@ -210,10 +213,6 @@ class TarExtractor(Extractor):
 
 
 class ZipExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
-        if strip != 0:
-            raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
         cmds = []
@@ -226,47 +225,60 @@ class ZipExtractor(Extractor):
         await self._extract(cmds, invoker)
 
 
-class GZipExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
-        if strip != 0:
-            raise BuildError("Extractor does not support 'stripComponents'!")
+class SingleFileExtractor(Extractor):
 
     async def extract(self, invoker):
-        # gunzip extracts the file at the location of the input file. Copy the
-        # downloaded file to the workspace directory prio to uncompressing it
-        cmd = ["gunzip"]
-        if self.separateDownload:
-            shutil.copyfile(self.getCompressedFilePath(invoker),
-                            invoker.joinPath(self.dir, self.file))
+        # The gunzip and unxz tools extracts the file at the location of the
+        # input file. In case the separateDownload policy is active, the
+        # destination might be in a separete folder.
+        src = self.getCompressedFilePath(invoker)
+        dst = invoker.joinPath(self.dir, self.file)
+
+        suffix = dst[-4:]
+        if self.EXT_IGNORE_CASE:
+            suffix = suffix.lower()
+
+        for ext, repl in self.EXT_MAP.items():
+            if suffix.endswith(ext):
+                dst = dst[:-len(ext)] + repl
+                break
         else:
-            cmd.append("-k")
-        cmd.extend(["-f", self.file])
-        await self._extract([cmd], invoker)
+            raise BuildError("unkown suffix")
+
+        with open(dst, 'wb') as f:
+            cmd = [self.CMD, "-c", src]
+            await self._extract([cmd], invoker, f)
+
+        shutil.copystat(src, dst)
 
 
-class XZExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
-        if strip != 0:
-            raise BuildError("Extractor does not support 'stripComponents'!")
+class GZipExtractor(SingleFileExtractor):
+    CMD = "gunzip"
+    EXT_IGNORE_CASE = True
+    EXT_MAP = {
+        ".gz" : "",
+        "-gz" : "",
+        ".z" : "",
+        "-z" : "",
+        "_z" : "",
+        ".tgz" : ".tar",
+        ".taz" : ".tar",
+    }
 
-    async def extract(self, invoker):
-        cmd = ["unxz"]
-        if self.separateDownload:
-            shutil.copyfile(self.getCompressedFilePath(invoker),
-                            invoker.joinPath(self.dir, self.file))
-        else:
-            cmd.append("-k")
-        cmd.extend(["-f", self.file])
-        await self._extract([cmd], invoker)
+
+class XZExtractor(SingleFileExtractor):
+    CMD = "unxz"
+    EXT_IGNORE_CASE = False
+    EXT_MAP = {
+        ".xz" : "",
+        ".lzma" : "",
+        ".lz" : "",
+        ".txz" : ".tar",
+        ".tlz" : ".tar",
+    }
 
 
 class SevenZipExtractor(Extractor):
-    def __init__(self, dir, file, strip, separateDownload):
-        super().__init__(dir, file, strip, separateDownload)
-        if strip != 0:
-            raise BuildError("Extractor does not support 'stripComponents'!")
 
     async def extract(self, invoker):
         cmds = [["7z", "x", "-y", self.getCompressedFilePath(invoker)]]

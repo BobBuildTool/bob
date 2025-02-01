@@ -1,2 +1,3 @@
+bobMinimumVersion: "0.25"
 policies:
   urlScmSeparateDownload: True
