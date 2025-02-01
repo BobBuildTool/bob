@@ -149,6 +149,18 @@ def emptyDirectory(path):
     except OSError as e:
         raise BuildError("Error cleaning '"+path+"': " + str(e))
 
+# Python 3.13 "fixed" absolute path detection on Windows (os.path.isabs). We
+# want to retain the old behaviour and strictly reject paths that are not
+# relative. Reject the following:
+#   * /path     (Unix, absolute path)
+#   * \path     (Windows, absolute to current drive)
+#   * \\path    (Windows, UNC name)
+#   * C:path    (Windows, relative path to designated drive)
+#   * C:\path   (Windws, fully qualified path)
+def isAbsPath(path):
+    prefix = path[:2].replace('\\', '/')
+    return prefix.startswith('/') or prefix.startswith(':', 1)
+
 # Recursively merge entries of two dictonaries.
 #
 # Expect that both arguments have a compatible schema. Dictionaries are merged

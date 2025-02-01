@@ -14,7 +14,7 @@ from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode, setParallelTUIThreshold
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
     updateDicRecursive, hashString, getPlatformTag, getPlatformString, \
-    replacePath, getPlatformEnvWhiteList
+    replacePath, getPlatformEnvWhiteList, isAbsPath
 from itertools import chain
 from os.path import expanduser
 from string import Template
@@ -1272,7 +1272,7 @@ class CoreCheckoutStep(CoreStep):
             knownPaths = []
             for s in self.scmList:
                 p = s.getDirectory()
-                if os.path.isabs(p):
+                if isAbsPath(p):
                     raise ParseError("SCM paths must be relative! Offending path: " + p)
                 for knownPath, knownHasJenkins in knownPaths:
                     if isPrefixPath(p, knownPath):
