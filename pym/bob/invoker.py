@@ -201,7 +201,7 @@ class Invoker:
             # buffer is then returned to the caller at child exit.
             stderrRedir = subprocess.PIPE
             stderrStreams = [io.BytesIO(), self.__stderrStream]
-        elif stdout == False:
+        elif stderr == False:
             stderrRedir = subprocess.DEVNULL
             stderrStreams = []
         else:
