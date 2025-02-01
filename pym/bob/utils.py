@@ -149,6 +149,18 @@ def emptyDirectory(path):
     except OSError as e:
         raise BuildError("Error cleaning '"+path+"': " + str(e))
 
+# Python 3.13 "fixed" absolute path detection on Windows (os.path.isabs). We
+# want to retain the old behaviour and strictly reject paths that are not
+# relative. Reject the following:
+#   * /path     (Unix, absolute path)
+#   * \path     (Windows, absolute to current drive)
+#   * \\path    (Windows, UNC name)
+#   * C:path    (Windows, relative path to designated drive)
+#   * C:\path   (Windws, fully qualified path)
+def isAbsPath(path):
+    prefix = path[:2].replace('\\', '/')
+    return prefix.startswith('/') or prefix.startswith(':', 1)
+
 # Recursively merge entries of two dictonaries.
 #
 # Expect that both arguments have a compatible schema. Dictionaries are merged
@@ -543,26 +555,14 @@ class DirHasher:
 
         return digest
 
-    if (sys.platform == "win32") and (sys.version_info.minor <= 7):
-        # Before Python 3.8 the os.readlink method did not accept byte encoded
-        # file names on Windows.
-        @staticmethod
-        def __hashLink(path):
-            m = hashlib.sha1()
-            try:
-                m.update(os.fsencode(os.readlink(os.fsdecode(path))))
-            except OSError as e:
-                logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
-            return m.digest()
-    else:
-        @staticmethod
-        def __hashLink(path):
-            m = hashlib.sha1()
-            try:
-                m.update(os.readlink(path))
-            except OSError as e:
-                logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
-            return m.digest()
+    @staticmethod
+    def __hashLink(path):
+        m = hashlib.sha1()
+        try:
+            m.update(os.readlink(path))
+        except OSError as e:
+            logging.getLogger(__name__).warning("Cannot hash link: %s", str(e))
+        return m.digest()
 
     def __hashDir(self, prefix, path=b''):
         entries = []
