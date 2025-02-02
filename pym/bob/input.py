@@ -267,8 +267,10 @@ class PluginState:
     def onFinish(self, env, properties):
         """Finish creation of a package.
 
-        The package was computed. The passed *env* and *properties* have their
-        final state after all downstream dependencies have been resolved.
+        The package was computed and is about to be created. The passed *env*
+        and *properties* have their final state after all downstream
+        dependencies have been resolved. The plugin may modify the *env* and
+        *properties* to make final adjustments.
 
         :param env: Complete environment
         :type env: Mapping[str, str]
@@ -2610,6 +2612,9 @@ class Recipe(object):
         env['BOB_RECIPE_NAME'] = self.__baseName
         env['BOB_PACKAGE_NAME'] = self.__packageName if packageName is None else packageName
 
+        # update plugin states
+        for s in states.values(): s.onFinish(env, self.__properties)
+
         # record used environment and tools
         env.touch(self.__packageVars | self.__packageVarsWeak)
         tools.touch(toolDepPackage)
@@ -2722,9 +2727,6 @@ class Recipe(object):
         if self.__provideSandbox:
             packageCoreStep.providedSandbox = CoreSandbox(packageCoreStep,
                 env, sandboxEnabled, self.__provideSandbox)
-
-        # update plugin states
-        for s in states.values(): s.onFinish(env, self.__properties)
 
         if self.__shared:
             if not packageCoreStep.isDeterministic():
