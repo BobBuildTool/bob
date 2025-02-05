@@ -431,6 +431,9 @@ static void SetupDevices() {
   CHECK_CALL(mount("devpts", "dev/pts", "devpts", MS_NOSUID | MS_NOEXEC, "ptmxmode=0666"));
   CHECK_CALL(symlink("pts/ptmx", "dev/ptmx"));
 
+  CreateTarget("dev/shm", true);
+  CHECK_CALL(mount("tmpfs", "dev/shm", "tmpfs", MS_NOSUID | MS_NODEV, NULL));
+
   CHECK_CALL(symlink("/proc/self/fd", "dev/fd"));
 }
 
