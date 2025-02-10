@@ -170,7 +170,8 @@ class Extractor():
 
     async def _extract(self, cmds, invoker, stdout=None):
         destination = self.getCompressedFilePath(invoker)
-        canary = destination+".extracted"
+        (destDir, destFile) = os.path.split(destination)
+        canary = os.path.join(destDir, "."+destFile+".extracted")
         if isYounger(destination, canary):
             for cmd in cmds:
                 if shutil.which(cmd[0]) is None: continue
