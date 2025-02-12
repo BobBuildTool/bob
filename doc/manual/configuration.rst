@@ -1567,9 +1567,10 @@ inherit
 
 Type: List of Strings
 
-Include classes with the given name into the current recipe. Example::
+Include classes with the given name into the current recipe. Examples::
 
-   inherit: [cmake]
+   inherit: [cmake]                          # inherit from cmake class
+   inherit: [rootfs::cpio, rootfs:ext4]      # inherit from cpio and ext4 classes
 
 Classes are searched in the ``classes/`` directory with the given name. The
 syntax of classes is the same as the recipes. In particular classes can inherit
