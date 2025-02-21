@@ -581,6 +581,12 @@ def createHttpHandler(repoPath, username=None, password=None):
                 self.send_response(403)
             self.end_headers()
 
+        def do_OPTIONS(self):
+            self.send_response(200)
+            self.send_header('DAV', '1,2')
+            self.send_header('Allow', "OPTIONS, GET, HEAD, PUT")
+            self.end_headers()
+
     return Handler
 
 class TestLocalArchive(BaseTester, TestCase):

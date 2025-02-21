@@ -19,12 +19,12 @@ it must not be overwritten. The backend should make sure that even on
 concurrent uploads the artifact must appear atomically for unrelated readers.
 """
 
+from .audit import Audit
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
-from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen
+from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat
 from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
-from shlex import quote
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import asyncio
 import concurrent.futures
@@ -36,9 +36,11 @@ import os
 import os.path
 import shutil
 import signal
+import struct
 import subprocess
 import tarfile
 import urllib.parse
+import hashlib
 
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
@@ -64,6 +66,9 @@ def writeFileOrHandle(name, fileobj, content):
 
 class DummyArchive:
     """Archive that does nothing"""
+
+    def canManage(self):
+        return False
 
     def wantDownloadLocal(self, enable):
         pass
@@ -156,6 +161,26 @@ class TarHelper:
             os.makedirs(content)
             self.__extractPackage(tar, audit, content)
 
+    def _extractAudit(self, filename=None, fileobj=None):
+        with tarfileOpen(name=filename, mode="r|*", fileobj=fileobj, errorlevel=1) as tar:
+            # validate
+            if tar.pax_headers.get('bob-archive-vsn') != "1":
+                return
+
+            # find audit trail
+            f = tar.next()
+            while f:
+                if f.name == "meta/audit.json.gz": break
+                f = tar.next()
+            else:
+                raise BuildError("Missing audit trail!")
+
+            # read audit trail
+            auditJsonGz = tar.extractfile(f)
+            auditJson = gzip.GzipFile(fileobj=auditJsonGz)
+
+            return Audit.fromByteStream(auditJson, filename)
+
     def _pack(self, name, fileobj, audit, content):
         pax = { 'bob-archive-vsn' : "1" }
         with gzip.open(name or fileobj, 'wb', 6) as gzf:
@@ -191,6 +216,9 @@ class JenkinsArchive(TarHelper):
 
     def canCache(self):
         return True
+
+    def canManage(self):
+        return False
 
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
         if not audit:
@@ -361,6 +389,9 @@ class BaseArchive(TarHelper):
 
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
+
+    def canManage(self):
+        return False
 
     async def downloadPackage(self, step, buildId, audit, content, caches=[],
                               executor=None):
@@ -557,6 +588,77 @@ class BaseArchive(TarHelper):
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError("Download of fingerprint interrupted.")
 
+    def deleteFile(self, filepath):
+        try:
+            self._delete(filepath)
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return ("error ("+str(e)+")", ERROR)
+            else:
+                raise BuildError("Could not delete file: " + str(e))
+
+    def _delete(self, filepath):
+        raise ArtifactDownloadError("not implemented")
+
+    def listDir(self, path):
+        try:
+            return self._listDir(path)
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return ("error (" + str(e) + ")", ERROR)
+            else:
+                raise BuildError("Could not list dir: " + str(e))
+
+    def _listDir(self, path):
+        raise ArtifactDownloadError("not implemented")
+
+    def stat(self, filepath):
+        try:
+            return self._stat(filepath)
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return ("error (" + str(e) + ")", ERROR)
+            else:
+                raise BuildError("Could not stat file: " + str(e))
+
+    def _stat(self, filepath):
+        raise ArtifactDownloadError("not implemented")
+
+    def getAudit(self, filepath):
+        try:
+            return self._getAudit(filepath)
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return ("error (" + str(e) + ")", ERROR)
+            else:
+                raise BuildError("Could not get audit from file: " + str(e))
+
+    def _getAudit(self, filepath):
+        raise ArtifactDownloadError("not implemented")
+
+    def getArchiveUri(self):
+        try:
+            return self._getArchiveUri()
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return ("error (" + str(e) + ")", ERROR)
+            else:
+                raise BuildError("Could not get archive hash: " + str(e))
+
+    def _getArchiveUri(self):
+        raise ArtifactDownloadError("not implemented")
+
+    def getArchiveName(self):
+        try:
+            return self._getArchiveName()
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return ("error (" + str(e) + ")", ERROR)
+            else:
+                raise BuildError("Could not get archive hash: " + str(e))
+
+    def _getArchiveName(self):
+        raise ArtifactDownloadError("not implemented")
 
 class Tee:
     def __init__(self, fileName, fileObj, buildId, caches, workspace):
@@ -650,6 +752,9 @@ class LocalArchive(BaseArchive):
         self.__fileMode = spec.get("fileMode")
         self.__dirMode = spec.get("directoryMode")
 
+    def canManage(self):
+        return True
+
     def _getPath(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
         packageResultPath = os.path.join(self.__basePath, packageResultId[0:2],
@@ -685,6 +790,29 @@ class LocalArchive(BaseArchive):
         return LocalArchiveUploader(
             NamedTemporaryFile(dir=packageResultPath, delete=False),
             self.__fileMode, packageResultFile, overwrite)
+
+    def _delete(self, filename):
+        try:
+            os.unlink(os.path.join(self.__basePath, filename))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            raise BuildError("Cannot remove {}: {}".format(filename, str(e)))
+
+    def _listDir(self, path):
+        return os.listdir(os.path.join(self.__basePath, path))
+
+    def _stat(self, filename):
+        return binStat(os.path.join(self.__basePath, filename))
+
+    def _getAudit(self, filename):
+        return self._extractAudit(filename=os.path.join(self.__basePath, filename))
+
+    def _getArchiveUri(self):
+        return self.__basePath
+
+    def _getArchiveName(self):
+        return "local archive {}".format(self.__basePath)
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -751,6 +879,9 @@ class HttpArchive(BaseArchive):
                 if not retry: return (False, e)
                 retry = False
 
+    def canManage(self):
+        return True
+
     def _resetConnection(self):
         self._webdav._resetConnection()
 
@@ -813,6 +944,42 @@ class HttpArchive(BaseArchive):
         else:
             raise result
 
+    def _listDir(self, path):
+        path_info = self._webdav.listdir(path)
+        entries = []
+        for info in path_info:
+            if info["path"]:
+                entries.append(info["path"].removeprefix(path + "/"))
+        return entries
+
+    def _delete(self, filename):
+        self._webdav.delete(filename)
+
+    def _stat(self, filename):
+        stats = self._webdav.stat(filename)
+        if stats['etag'] is not None and not stats['etag'].startswith('W/'):
+            return stats['etag']
+        if not stats['mdate'] or not stats['len']:
+            raise ArtifactDownloadError("Missing stats for file " + filename)
+        from email.utils import parsedate_to_datetime
+        return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
+
+    def _getAudit(self, filename):
+        downloader = self._webdav.getPartialDownloader("/".join([self.__url.path, filename]))
+        while True:
+            try:
+                file = io.BytesIO(downloader.get())
+                return self._extractAudit(fileobj=file)
+            except (EOFError, tarfile.ReadError):
+                # partial downloader reached EOF or could not extract the audit from the tarfile, so we get more data
+                downloader.more()
+                pass
+
+    def _getArchiveUri(self):
+        return self.__url.netloc + self.__url.path
+
+    def _getArchiveName(self):
+        return "http archive {}".format(self.__url.netloc + self.__url.path)
 
 class HttpDownloader:
     def __init__(self, archiver, response):
