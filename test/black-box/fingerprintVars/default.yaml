@@ -1,4 +1,5 @@
 archive:
     -
+        name: "local"
         backend: file
         path: "output"

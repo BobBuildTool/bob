@@ -612,6 +612,7 @@ class TestHttpArchive(BaseTester, TestCase):
         super().tearDown()
 
     def _setArchiveSpec(self, spec):
+        spec['name'] = "remote"
         spec['backend'] = "http"
         spec["url"] = "http://{}:{}".format(self.ip, self.port)
 

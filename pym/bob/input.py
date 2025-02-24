@@ -2982,6 +2982,7 @@ class ArchiveValidator:
         self.__validTypes = schema.Schema({'backend': schema.Or('none', 'file', 'http', 'shell', 'azure')},
             ignore_extra_keys=True)
         baseArchive = {
+            'name' : str,
             'backend' : str,
             schema.Optional('flags') : schema.Schema(["download", "upload",
                 "nofail", "nolocal", "nojenkins", "cache"])

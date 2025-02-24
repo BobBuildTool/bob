@@ -385,7 +385,7 @@ def doArchiveScan(archivers, argv):
     args = parser.parse_args(argv)
     for archiver in archivers:
         if args.verbose:
-            print("{}:".format(archiver.getArchiveName()))
+            print("archive '{}':".format(archiver.getArchiveName()))
         scanner = ArchiveScanner(archiver)
         with scanner:
             if not scanner.scan(args.verbose) and args.fail:
@@ -409,7 +409,7 @@ def doArchiveClean(archivers, argv):
 
     for archiver in archivers:
         if args.verbose:
-            print("{}:".format(archiver.getArchiveName()))
+            print("archive '{}':".format(archiver.getArchiveName()))
         scanner = ArchiveScanner(archiver)
         with scanner:
             if not args.noscan:
@@ -455,7 +455,7 @@ def doArchiveFind(archivers, argv):
     args = parser.parse_args(argv)
 
     for archiver in archivers:
-        print("{}:".format(archiver.getArchiveName()))
+        print("archive '{}':".format(archiver.getArchiveName()))
         scanner = ArchiveScanner(archiver)
         with scanner:
             if not args.noscan:
@@ -496,7 +496,7 @@ def doArchive(argv, bobRoot):
     archivers = []
     if args.local:
         # provide local directory as backend
-        archivespec = [{"backend": "file", "path": "{}".format(os.getcwd())}]
+        archivespec = [{"name" : "local", "backend": "file", "path": "{}".format(os.getcwd())}]
         archiver = getSingleArchiver(None, archivespec[0])
         if archiver.archiveCmdSupported():
             archivers.append(archiver)
