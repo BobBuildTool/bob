@@ -17,7 +17,7 @@ Generic command format:
 
 ::
 
-    bob archive [-h] subcommand ...
+    bob archive [-h] [-l] subcommand ...
 
 Available sub-commands:
 
@@ -70,6 +70,10 @@ the included data. Currently the ``bob archive`` command has access to the
 
 Options
 -------
+
+``-l, --local``
+    Instead of working with the archives defined in the user configuration, the command will operate in the working directory.
+    This can be useful for automated tasks running on a server. Make sure to have write access to the working directory.
 
 ``--dry-run``
     Do not actually delete any artifacts but show what would get removed.
