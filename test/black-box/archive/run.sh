@@ -5,21 +5,34 @@ cleanup
 rm -rf default.yaml
 
 # setup local archive
-trap 'rm -rf "${archiveDir}"' EXIT
+trap 'rm -rf "${archiveDir}" "${archiveDir2}"' EXIT
 archiveDir=$(mktemp -d)
-cat >default.yaml <<EOF
+archiveDir2=$(mktemp -d)
+
+
+function create_config () {
+  cat > default.yaml <<EOF
 archive:
   -
     name: "local"
     backend: file
     path: "$(mangle_path "$archiveDir")"
 EOF
-
-function clean_output () {
-  echo $(echo "$@" | sed 1d | sed "s/^[ \t]*//")
+  if [[ "$1" == "multi" ]]; then
+    cat >> default.yaml << EOF
+  -
+    name: "local2"
+    backend: file
+    path: "$(mangle_path "$archiveDir2")"
+EOF
+  fi
 }
 
-function run_tests () {
+function clean_output () {
+  echo $(echo "$@" | sed '/^archive/d' | sed "s/^[ \t]*//")
+}
+
+function run_single_tests () {
   # cleanup
   rm -rf work $archiveDir/*
   if [[ "$1" == "local" ]]; then
@@ -132,7 +145,95 @@ function run_tests () {
   # Make sure invalid audit meta keys are rejected
   expect_fail run_bob build -M "!nv@l1d=key" root-alpha
 }
+
+function run_multi_tests () {
+  # cleanup
+  rm -rf work $archiveDir/*  $archiveDir2/*
+
+  # fill archive
+  run_bob build --download=no --upload root-alpha root-bravo
+  FINGERPRINT=Alice run_bob build --force --download=no --upload root-alpha root-bravo
+
+  # scan should fail as we did not specify one of the archives
+  expect_fail run_bob archive scan
+  # provide -a to scan all archives
+  run_bob archive -a scan
+  # clean up archive databses to allow proper rescanning
+  rm .bob-archive*
+  # scan single archive "local"
+  run_bob archive -b "local" scan
+  rm .bob-archive*
+  # scan single archive "local2"
+  run_bob archive -b "local2" scan
+  rm .bob-archive*
+
+  # test find
+  run_bob archive -a scan
+  # find also fails without specifying an archive
+  expect_fail run_bob archive find 'meta.package == "root-bravo"'
+  # check if file is found in archive 1 and archive 2
+  found1=$(clean_output "$(run_bob archive -b "local" find 'meta.package == "root-bravo"')")
+  found2=$(clean_output "$(run_bob archive -b "local2" find 'meta.package == "root-bravo"')")
+  pushd $archiveDir
+  expect_exist "$found1"
+  pushd $archiveDir2
+  expect_exist "$found2"
+  popd
+  popd
+  # should find the same artifact twice
+  found=$(clean_output "$(run_bob archive -a find 'meta.package == "root-bravo"')")
+  foundarr=($found)
+  test "${foundarr[0]}" == "${foundarr[1]}"
+  pushd $archiveDir
+  expect_exist "${foundarr[0]}"
+  pushd $archiveDir2
+  expect_exist "${foundarr[0]}"
+  popd
+  popd
+
+  # test clean
+  # artifact should only be removed in archive 1
+  run_bob archive -b "local" clean 'meta.package != "root-bravo"'
+  pushd $archiveDir
+  expect_not_exist "${foundarr[0]}"
+  popd
+  pushd $archiveDir2
+  expect_exist "${foundarr[0]}"
+  popd
+  # artifact should now be remove in archive 2, too
+  run_bob archive -b "local2" clean 'meta.package != "root-bravo"'
+  pushd $archiveDir
+  expect_not_exist "${foundarr[0]}"
+  popd
+  pushd $archiveDir2
+  expect_not_exist "${foundarr[0]}"
+  popd
+  # got to "reupload" them
+  rm -rf work $archiveDir/*  $archiveDir2/*
+  run_bob build --download=no --upload root-alpha root-bravo
+  FINGERPRINT=Alice run_bob build --force --download=no --upload root-alpha root-bravo
+  run_bob archive -a scan
+  pushd $archiveDir
+  expect_exist "${foundarr[0]}"
+  popd
+  pushd $archiveDir2
+  expect_exist "${foundarr[0]}"
+  popd
+  # clean from all archives
+  run_bob archive -a clean 'meta.package != "root-bravo"'
+  pushd $archiveDir
+  expect_not_exist "${foundarr[0]}"
+  popd
+  pushd $archiveDir2
+  expect_not_exist "${foundarr[0]}"
+  popd
+}
+
+create_config
 # run tests with configuration with file backend
-run_tests
+run_single_tests
 # run tests with local directory
-run_tests "local"
+run_single_tests "local"
+# tests with two archive backends
+create_config "multi"
+run_multi_tests
