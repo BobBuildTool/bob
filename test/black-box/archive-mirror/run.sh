@@ -12,6 +12,7 @@ upload="$archiveDir/uploads"
 cat >"${upload}.yaml" <<EOF
 archive:
   -
+    name: "local"
     backend: file
     path: "$(mangle_path "$archiveDir/source")"
 EOF
@@ -21,19 +22,23 @@ mirror="$archiveDir/mirror"
 cat >"${mirror}.yaml" <<EOF
 archive:
   -
+    name: "source"
     flags: [download]
     backend: file
     path: "$(mangle_path "$archiveDir/source")"
   -
+    name: "mirror1"
     flags: [download, cache]
     backend: file
     path: "$(mangle_path "$archiveDir/mirror1")"
   -
+    name: "shell1"
     flags: [download, cache]
     backend: shell
     download: "cp \\"$archiveDir/mirror2/\$BOB_REMOTE_ARTIFACT\\" \\"\$BOB_LOCAL_ARTIFACT\\""
     upload: "mkdir -p \\"$archiveDir/mirror2/\${BOB_REMOTE_ARTIFACT%/*}\\" && cp -n \\"\$BOB_LOCAL_ARTIFACT\\" \\"$archiveDir/mirror2/\$BOB_REMOTE_ARTIFACT\\""
   -
+    name: "shell2"
     flags: [download, cache, nofail]
     backend: shell
     upload: "false"

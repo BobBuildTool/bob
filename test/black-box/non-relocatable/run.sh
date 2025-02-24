@@ -22,6 +22,7 @@ writeCfg()
 cat >"${cfg}.yaml" <<EOF
 archive:
    -
+    name: "local"
     backend: file
     path: "$(mangle_path "$uploadDir")"
 EOF
