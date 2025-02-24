@@ -498,6 +498,8 @@ def doArchive(argv, bobRoot):
 
   bob archive {}
 """.format(subHelp))
+    parser.add_argument("-l", "--local", action='store_true',
+                        help="ignore the archive configuration and work on the current directory")
     parser.add_argument('subcommand', help="Subcommand")
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for subcommand")
@@ -505,33 +507,40 @@ def doArchive(argv, bobRoot):
     args = parser.parse_args(argv)
 
     # get archiver
-    recipes = RecipeSet()
-    recipes.parse()
-    archivespec = recipes.archiveSpec()
     archivers = []
-    if isinstance(archivespec, list):
-        if len(archivespec) == 0:
-            raise BobError("No archiver defined")
-        elif len(archivespec) == 1:
-            archiver = getSingleArchiver(recipes, archivespec[0])
+    if args.local:
+        # provide local directory as backend
+        archivespec = [{"backend": "file", "path": "{}".format(os.getcwd())}]
+        archiver = getSingleArchiver(None, archivespec[0])
+        archivers.append(archiver)
+    else:
+        # use the configuration to find suitable archives
+        recipes = RecipeSet()
+        recipes.parse()
+        archivespec = recipes.archiveSpec()
+        if isinstance(archivespec, list):
+            if len(archivespec) == 0:
+                raise BobError("No archiver defined")
+            elif len(archivespec) == 1:
+                archiver = getSingleArchiver(recipes, archivespec[0])
+                if archiver.canManage():
+                    archivers.append(archiver)
+                else:
+                    raise BobError("Archiver does not support the archive command")
+            else:
+                for i in archivespec:
+                    archiver = getSingleArchiver(recipes, i)
+                    if archiver.canManage():
+                        archivers.append(archiver)
+                if len(archivers) == 0:
+                    raise BobError("None of the archivers supports the archive command")
+
+        else:
+            archiver = getSingleArchiver(recipes, archivespec)
             if archiver.canManage():
                 archivers.append(archiver)
             else:
                 raise BobError("Archiver does not support the archive command")
-        else:
-            for i in archivespec:
-                archiver = getSingleArchiver(recipes, i)
-                if archiver.canManage():
-                    archivers.append(archiver)
-            if len(archivers) == 0:
-                raise BobError("None of the archivers supports the archive command")
-
-    else:
-        archiver = getSingleArchiver(recipes, archivespec)
-        if archiver.canManage():
-            archivers.append(archiver)
-        else:
-            raise BobError("Archiver does not support the archive command")
 
     if args.subcommand in availableArchiveCmds:
         availableArchiveCmds[args.subcommand][0](archivers, args.args)
