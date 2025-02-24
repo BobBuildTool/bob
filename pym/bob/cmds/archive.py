@@ -486,6 +486,12 @@ def doArchive(argv, bobRoot):
 """.format(subHelp))
     parser.add_argument("-l", "--local", action='store_true',
                         help="ignore the archive configuration and work on the current directory")
+    parser.add_argument("-a", "--all", action='store_true',
+                        help="execute the command on all suitable archives in the user configuration")
+    parser.add_argument("-b", "--backends", type=str, metavar="names",
+                        help="execute the command on the archive backends provided in a comma-separated list. the names "
+                             "correspond to the archive names from the user configuration. (only useful if multiple "
+                             "archives are declared)")
     parser.add_argument('subcommand', help="Subcommand")
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for subcommand")
@@ -517,12 +523,15 @@ def doArchive(argv, bobRoot):
                 else:
                     raise BobError("Archiver does not support the archive command")
             else:
+                selectedArchives = []
+                if args.backends is not None:
+                    selectedArchives = [s.strip() for s in args.backends.split(",")]
                 for i in archivespec:
                     archiver = getSingleArchiver(recipes, i)
-                    if archiver.archiveCmdSupported():
+                    if (args.all or archiver.getArchiveName() in selectedArchives) and archiver.archiveCmdSupported():
                         archivers.append(archiver)
                 if len(archivers) == 0:
-                    raise BobError("None of the archivers supports the archive command")
+                    raise BobError("None of the archivers supports the archive command. Maybe you did not select any (-b/--backends)?")
 
         else:
             archiver = getSingleArchiver(recipes, archivespec)
