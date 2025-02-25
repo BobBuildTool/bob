@@ -17,6 +17,7 @@ archive:
     name: "local"
     backend: file
     path: "$(mangle_path "$archiveDir")"
+    flags: [download, upload, managed]
 EOF
   if [[ "$1" == "multi" ]]; then
     cat >> default.yaml << EOF
@@ -24,6 +25,7 @@ EOF
     name: "local2"
     backend: file
     path: "$(mangle_path "$archiveDir2")"
+    flags: [download, upload, managed]
 EOF
   fi
 }

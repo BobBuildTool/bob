@@ -502,7 +502,7 @@ def doArchive(argv, bobRoot):
     archivers = []
     if args.local:
         # provide local directory as backend
-        archivespec = [{"name" : "local", "backend": "file", "path": "{}".format(os.getcwd())}]
+        archivespec = [{"name" : "local", "backend": "file", "path": "{}".format(os.getcwd()), "flags" : "[download, upload, managed]"}]
         archiver = getSingleArchiver(None, archivespec[0])
         if archiver.archiveCmdSupported():
             archivers.append(archiver)
