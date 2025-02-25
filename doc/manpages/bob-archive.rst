@@ -32,9 +32,10 @@ Description
 -----------
 
 The bob archive command can be used to manage binary artifact archives.
-The command works on the archives defined in the user configuration :ref:`archive <configuration-config-archive>`.
-The archives to work on need to be specified (`-l`, `-a`, `-b`). These arguments are mutually exclusive.
-It needs write access to the recipe root folder to create an index cache.
+The command works on the archives defined in the user configuration :ref:`archive <configuration-config-archive>` .
+The archives require the `managed` flag.
+The archives to work on need to be explicitly specified (`-l`, `-a`, `-b`). These arguments are mutually exclusive.
+Write access to the recipe root folder to create an index cache is required.
 
 Artifacts are managed by the information included in their :ref:`Audit Trail
 <audit-trail>`. See the Audit Trail documentation for a detailed description of

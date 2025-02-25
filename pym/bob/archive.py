@@ -365,6 +365,7 @@ class BaseArchive(TarHelper):
         self.__useLocal = "nolocal" not in flags
         self.__useJenkins = "nojenkins" not in flags
         self.__useCache = "cache" in flags
+        self.__managed = "managed" in flags
         self.__wantDownloadLocal = False
         self.__wantDownloadJenkins = False
         self.__wantUploadLocal = False
@@ -401,6 +402,9 @@ class BaseArchive(TarHelper):
         raise ArtifactNotFoundError()
 
     def canManage(self):
+        return self.__managed and self._canManage()
+
+    def _canManage(self):
         return False
 
     async def downloadPackage(self, step, buildId, audit, content, caches=[],
@@ -754,7 +758,7 @@ class LocalArchive(BaseArchive):
         self.__fileMode = spec.get("fileMode")
         self.__dirMode = spec.get("directoryMode")
 
-    def canManage(self):
+    def _canManage(self):
         return True
 
     def _getPath(self, buildId, suffix):
@@ -879,7 +883,7 @@ class HttpArchive(BaseArchive):
                 if not retry: return (False, e)
                 retry = False
 
-    def canManage(self):
+    def _canManage(self):
         return True
 
     def _resetConnection(self):
