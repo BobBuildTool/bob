@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ...archive import getArchiver
+from ...archive import getArchiver, BundleArchive
 from ...builder import LocalBuilder
 from ...errors import BuildError
 from ...input import RecipeSet
@@ -223,6 +223,12 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Move scm to attic if inline switch is not possible (default).")
     group.add_argument('--no-attic', action='store_false', default=None, dest='attic',
         help="Do not move to attic, instead fail the build.")
+    parser.add_argument('--bundle', metavar='BUNDLE', default=None,
+        help="Bundle all matching packages to BUNDLE")
+    parser.add_argument('--bundle-exclude', action='append', default=[],
+        help="Do not add matching packages to bundle.")
+    parser.add_argument('--unbundle', default=False, action="store_true",
+        help="Unbundle BUNDLE specified by --bundle.")
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -314,6 +320,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                                             sandboxMode.stablePaths)
         if develop: developPersister.prime(packages)
 
+        if args.bundle and args.build_mode == 'build-only':
+            parser.error("--bundle can't be used with --build-only")
+
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
         setVerbosity(verbosity)
         builder = LocalBuilder(verbosity, args.force,
@@ -338,6 +347,13 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setShareMode(args.shared, args.install)
         builder.setAtticEnable(args.attic)
         builder.setSlimSandbox(sandboxMode.slimSandbox)
+
+        if args.bundle is not None:
+            bundleSpec = {"backend" : "__bundle",
+                          "path" : args.bundle,
+                          "flags" : ["download" if args.unbundle else "upload"]}
+            builder.setBundler(BundleArchive(bundleSpec), args.bundle_exclude)
+
         if args.resume: builder.loadBuildState()
 
         backlog = []
@@ -381,6 +397,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             builder.saveBuildState()
             runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
 
+        builder.finishBundle()
     # tell the user
     if results:
         if len(results) == 1:
