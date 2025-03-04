@@ -636,11 +636,11 @@ class UrlScm(Scm):
             invoker.fail("Upload not supported for URL scheme: " + url.scheme)
 
     def canSwitch(self, oldScm):
-        if self.__separateDownload != oldScm.__separateDownload:
-            return False
-
         diff = self._diffSpec(oldScm)
         if "scm" in diff:
+            return False
+
+        if self.__separateDownload != oldScm.__separateDownload:
             return False
 
         # Filter irrelevant properties
