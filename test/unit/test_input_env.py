@@ -72,12 +72,28 @@ class TestVarDefineValidator(TestCase):
         self.v = VarDefineValidator("foo")
 
     def testValid(self):
-        self.assertEqual(self.v.validate({"FOO": "bar"}), {"FOO": "bar"})
+        self.assertEqual(self.v.validate({"FOO": "bar"}), {"FOO": ("bar", None)})
+        self.assertEqual(
+            self.v.validate({"FOO": {"value" : "bar"}}),
+            {"FOO": ("bar", None)})
+        self.assertEqual(
+            self.v.validate({"FOO": {"value" : "bar", "if" : "condition"}}),
+            {"FOO": ("bar", "condition")})
 
     def testWrongTypes(self):
         self.assertRaises(schema.SchemaError, self.v.validate, "boom")
         self.assertRaises(schema.SchemaError, self.v.validate, {1 : "bar"})
         self.assertRaises(schema.SchemaError, self.v.validate, {"foo" : True})
+        self.assertRaises(schema.SchemaError, self.v.validate,
+                          {"foo" : {}})
+        self.assertRaises(schema.SchemaError, self.v.validate,
+                          {"foo" : []})
+        self.assertRaises(schema.SchemaError, self.v.validate,
+                          {"foo" : {"value" : 1}})
+        self.assertRaises(schema.SchemaError, self.v.validate,
+                          {"foo" : {"value" : "bar", "if" : 1}})
+        self.assertRaises(schema.SchemaError, self.v.validate,
+                          {"foo" : {"value" : "bar", "wrong-key" : "baz"}})
 
     def testWrongNames(self):
         self.assertRaises(schema.SchemaError, self.v.validate, {"0abc" : "bar"})
