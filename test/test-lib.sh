@@ -154,6 +154,15 @@ expect_fail()
 	return 1
 }
 
+expect_success()
+{
+	if "$@" 2>&1 ; then
+		return 0
+	fi
+	echo "Expected command to succeed: $*" >&2
+	return 1
+}
+
 expect_output()
 {
 	local EXP="$1"

@@ -2219,7 +2219,7 @@ Type: Dictionary or list of dictionaries
 
 The ``archive`` key configures the default binary artifact server(s) that
 should be used. It is either directly an archive backend entry or a list of
-archive backends. For each entry at least the ``backend`` key must be
+archive backends. For each entry at least the ``name`` and ``backend`` key must be
 specified. Optionally there can be a ``flags`` key that receives a list of
 various flags, in particular for what operations the backend might be used. See
 the following list for possible flags. The default is ``[download, upload]``.
@@ -2232,7 +2232,9 @@ the following list for possible flags. The default is ``[download, upload]``.
 ``upload``
     Use this archive to upload artifacts. To actually upload to the archive the
     build must be performed with uploads enabled (``--upload``).
-
+``managed``
+    This archive is managed, meaning the files can be iterated and deleted.
+    This is required for the archive command to work.
 ``cache``
     Use this archive to cache downloaded artifacts from other archives. If a
     binary artifact was successfully downloaded from another archive it will
@@ -2296,6 +2298,7 @@ failing upload will fail the whole build.
 Example::
 
    archive:
+      name: "http-archive"
       backend: http
       url: "http://localhost:8001/upload"
 
@@ -2304,6 +2307,7 @@ in the URL. Be careful to escape special characters of the password with proper
 percent encoding::
 
    archive:
+      name: "http-archive"
       backend: http
       url: "https://user:passw%40rd@server.test/artifacts"
 
@@ -2315,10 +2319,12 @@ It is also possible to use separate methods for upload and download::
 
     archive:
         -
+            name: "http-archive"
             backend: http
             url: "http://localhost:8001/archive"
             flags: [download]
         -
+            name: "ssh-archive"
             backend: shell
             upload: "scp -q ${BOB_LOCAL_ARTIFACT} localhost:archive/${BOB_REMOTE_ARTIFACT}"
             download: "scp -q localhost:archive/${BOB_REMOTE_ARTIFACT} ${BOB_LOCAL_ARTIFACT}"
@@ -2328,6 +2334,7 @@ The azure backend can also be used in conjunction with the http backend in case
 of publicly readable containers. Given a typical configuration like this::
 
     archive:
+        name: "azure-archive"
         backend: azure
         account: <account>
         container: <container name>
@@ -2336,6 +2343,7 @@ of publicly readable containers. Given a typical configuration like this::
 the anonymous access to the container can be used like this::
 
     archive:
+        name: "http-archive"
         backend: http
         url: https://<account>.blob.core.windows.net/<container name>
         flags: [download]

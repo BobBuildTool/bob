@@ -54,7 +54,8 @@ class JenkinsTests():
         self.cwd = tempfile.mkdtemp()
         os.chdir(self.cwd)
         self.archive = tempfile.TemporaryDirectory()
-        self.writeDefault({ "archive" : { "backend" : "file",
+        self.writeDefault({ "archive" : { "name" : "local",
+                                          "backend" : "file",
                                           "path" : self.archive.name }})
         self.writeConfig({ "bobMinimumVersion" : "0.20" })
         self.executeBobJenkinsCmd("add test http://localhost:{} -r root"

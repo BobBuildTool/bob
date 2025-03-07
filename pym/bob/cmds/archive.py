@@ -3,12 +3,11 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from ..audit import Audit
 from ..errors import BobError
 from ..utils import binStat, asHexStr, infixBinaryOp, tarfileOpen
+from ..archive import *
+from ..input import RecipeSet
 import argparse
-import gzip
-import json
 import os, os.path
 import pickle
 import pyparsing
@@ -23,15 +22,17 @@ pyparsing.ParserElement.enablePackrat()
 class ArchiveScanner:
     CUR_VERSION = 2
 
-    def __init__(self):
+    def __init__(self, archiver):
         self.__dirSchema = re.compile(r'[0-9a-zA-Z]{2}')
         self.__archiveSchema = re.compile(r'[0-9a-zA-Z]{36,}-1.tgz')
         self.__db = None
         self.__cleanup = False
+        self.__archiver = archiver
+        self.__dbName = ".bob-archive_{}.sqlite3".format(self.__archiver.getArchiveHash())
 
     def __enter__(self):
         try:
-            self.__con = sqlite3.connect(".bob-archive.sqlite3", isolation_level=None)
+            self.__con = sqlite3.connect(self.__dbName, isolation_level=None)
             self.__db = self.__con.cursor()
             self.__db.execute("""\
                 CREATE TABLE IF NOT EXISTS meta(
@@ -56,7 +57,7 @@ class ArchiveScanner:
                 self.__db.execute("INSERT INTO meta VALUES ('vsn', ?)", (self.CUR_VERSION,))
             elif vsn[0] != self.CUR_VERSION:
                 raise BobError("Archive database was created by an incompatible version of Bob!",
-                    help="Delete '.bob-archive.sqlite3' and run again to re-index.")
+                    help="Delete '{}' and run again to re-index.".format(self.__dbName))
         except sqlite3.Error as e:
             raise BobError("Cannot open cache: " + str(e))
         return self
@@ -80,12 +81,12 @@ class ArchiveScanner:
         found = False
         try:
             self.__db.execute("BEGIN")
-            for l1 in os.listdir("."):
+            for l1 in self.__archiver.listDir("."):
                 if not self.__dirSchema.fullmatch(l1): continue
-                for l2 in os.listdir(l1):
+                for l2 in self.__archiver.listDir(l1):
                     if not self.__dirSchema.fullmatch(l2): continue
                     l2 = os.path.join(l1, l2)
-                    for l3 in os.listdir(l2):
+                    for l3 in self.__archiver.listDir(l2):
                         m = self.__archiveSchema.fullmatch(l3)
                         if not m: continue
                         found = True
@@ -95,14 +96,13 @@ class ArchiveScanner:
         finally:
             self.__db.execute("END")
             if verbose and not found:
-                print("Your archive seems to be empty. "
-                      "Are you running 'bob archive' from within the correct directory?",
+                print("Your archive seems to be empty. Nothing to be done here.",
                       file=sys.stderr)
         return found
 
     def __scan(self, fileName, verbose):
         try:
-            st = binStat(fileName)
+            st = self.__archiver.stat(fileName)
             bidHex, sep, suffix = fileName.partition("-")
             bid = bytes.fromhex(bidHex[0:2] + bidHex[3:5] + bidHex[6:])
 
@@ -117,25 +117,10 @@ class ArchiveScanner:
                     (bid,))
 
             # read audit trail
-            if verbose: print("scan", fileName)
-            with tarfileOpen(fileName, errorlevel=1) as tar:
-                # validate
-                if tar.pax_headers.get('bob-archive-vsn') != "1":
-                    print("Not a Bob archive:", fileName, "Ignored!")
-                    return
-
-                # find audit trail
-                f = tar.next()
-                while f:
-                    if f.name == "meta/audit.json.gz": break
-                    f = tar.next()
-                else:
-                    raise Error("Missing audit trail!")
-
-                # read audit trail
-                auditJsonGz = tar.extractfile(f)
-                auditJson = gzip.GzipFile(fileobj=auditJsonGz)
-                audit = Audit.fromByteStream(auditJson, fileName)
+            if verbose: print("\tscan", fileName)
+            audit = self.__archiver.getAudit(fileName)
+            if audit is None:
+                return
 
             # import data
             artifact = audit.getArtifact()
@@ -149,14 +134,19 @@ class ArchiveScanner:
             self.__db.executemany("INSERT OR IGNORE INTO refs VALUES (?, ?)",
                 [ (bid, r) for r in audit.getReferencedBuildIds() ])
         except tarfile.TarError as e:
+            print("tar")
             raise BobError("Cannot read {}: {}".format(fileName, str(e)))
         except OSError as e:
+            print("os")
             raise BobError(str(e))
 
     def remove(self, bid):
         self.__cleanup = True
         self.__db.execute("DELETE FROM files WHERE bid=?",
             (bid,))
+
+    def deleteFile(self, filename):
+        self.__archiver.deleteFile(filename)
 
     def getBuildIds(self):
         self.__db.execute("SELECT bid FROM files")
@@ -386,22 +376,24 @@ def query(scanner, expressions):
     return retained
 
 
-def doArchiveScan(argv):
+def doArchiveScan(archivers, argv):
     parser = argparse.ArgumentParser(prog="bob archive scan")
     parser.add_argument("-v", "--verbose", action='store_true',
         help="Verbose operation")
     parser.add_argument("-f", "--fail", action='store_true',
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
-
-    scanner = ArchiveScanner()
-    with scanner:
-        if not scanner.scan(args.verbose) and args.fail:
-            sys.exit(1)
+    for archiver in archivers:
+        if args.verbose:
+            print("archive '{}':".format(archiver.getArchiveName()))
+        scanner = ArchiveScanner(archiver)
+        with scanner:
+            if not scanner.scan(args.verbose) and args.fail:
+                sys.exit(1)
 
 
 # meta.package == "root" && build.date > "2017-06-19" LIMIT 5 ORDER BY build.date ASC
-def doArchiveClean(argv):
+def doArchiveClean(archivers, argv):
     parser = argparse.ArgumentParser(prog="bob archive clean")
     parser.add_argument('expression', nargs='+',
         help="Expression of artifacts that shall be kept")
@@ -415,44 +407,42 @@ def doArchiveClean(argv):
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
-    scanner = ArchiveScanner()
-    with scanner:
-        if not args.noscan:
-            if not scanner.scan(args.verbose) and args.fail:
-                sys.exit(1)
+    for archiver in archivers:
+        if args.verbose:
+            print("archive '{}':".format(archiver.getArchiveName()))
+        scanner = ArchiveScanner(archiver)
+        with scanner:
+            if not args.noscan:
+                if not scanner.scan(args.verbose) and args.fail:
+                    sys.exit(1)
 
-        # First pass: determine all directly retained artifacts
-        retained = query(scanner, args.expression)
+            # First pass: determine all directly retained artifacts
+            retained = query(scanner, args.expression)
 
-        # Second pass: determine all transitively retained artifacts
-        todo = set()
-        for bid in retained:
-            todo.update(scanner.getReferencedBuildIds(bid))
-        while todo:
-            n = todo.pop()
-            if n in retained: continue
-            retained.add(n)
-            todo.update(scanner.getReferencedBuildIds(n))
+            # Second pass: determine all transitively retained artifacts
+            todo = set()
+            for bid in retained:
+                todo.update(scanner.getReferencedBuildIds(bid))
+            while todo:
+                n = todo.pop()
+                if n in retained: continue
+                retained.add(n)
+                todo.update(scanner.getReferencedBuildIds(n))
 
-        # Third pass: remove everything that is *not* retained
-        for bid in scanner.getBuildIds():
-            if bid in retained: continue
-            victim = asHexStr(bid)
-            victim = os.path.join(victim[0:2], victim[2:4], victim[4:] + "-1.tgz")
-            if args.dry_run:
-                print(victim)
-            else:
-                try:
+            # Third pass: remove everything that is *not* retained
+            for bid in scanner.getBuildIds():
+                if bid in retained: continue
+                victim = asHexStr(bid)
+                victim = os.path.join(victim[0:2], victim[2:4], victim[4:] + "-1.tgz")
+                if args.dry_run:
+                    print(victim)
+                else:
                     if args.verbose:
-                        print("rm", victim)
-                    os.unlink(victim)
-                except FileNotFoundError:
-                    pass
-                except OSError as e:
-                    raise BobError("Cannot remove {}: {}".format(victim, str(e)))
-                scanner.remove(bid)
+                        print("\trm", victim)
+                    scanner.deleteFile(victim)
+                    scanner.remove(bid)
 
-def doArchiveFind(argv):
+def doArchiveFind(archivers, argv):
     parser = argparse.ArgumentParser(prog="bob archive find")
     parser.add_argument('expression', nargs='+',
         help="Expression that artifacts need to match")
@@ -464,18 +454,20 @@ def doArchiveFind(argv):
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
-    scanner = ArchiveScanner()
-    with scanner:
-        if not args.noscan:
-            if not scanner.scan(args.verbose) and args.fail:
-                sys.exit(1)
+    for archiver in archivers:
+        print("archive '{}':".format(archiver.getArchiveName()))
+        scanner = ArchiveScanner(archiver)
+        with scanner:
+            if not args.noscan:
+                if not scanner.scan(args.verbose) and args.fail:
+                    sys.exit(1)
 
-        # First pass: determine all directly retained artifacts
-        retained = query(scanner, args.expression)
+            # First pass: determine all directly retained artifacts
+            retained = query(scanner, args.expression)
 
-    for bid in sorted(retained):
-        bid = asHexStr(bid)
-        print(os.path.join(bid[0:2], bid[2:4], bid[4:] + "-1.tgz"))
+        for bid in sorted(retained):
+            bid = asHexStr(bid)
+            print("\t" + os.path.join(bid[0:2], bid[2:4], bid[4:] + "-1.tgz"))
 
 availableArchiveCmds = {
     "scan" : (doArchiveScan, "Scan archive for new artifacts"),
@@ -492,14 +484,64 @@ def doArchive(argv, bobRoot):
 
   bob archive {}
 """.format(subHelp))
+    parser.add_argument("-l", "--local", action='store_true',
+                        help="ignore the archive configuration and work on the current directory")
+    parser.add_argument("-a", "--all", action='store_true',
+                        help="execute the command on all suitable archives in the user configuration")
+    parser.add_argument("-b", "--backends", type=str, metavar="names",
+                        help="execute the command on the archive backends provided in a comma-separated list. the names "
+                             "correspond to the archive names from the user configuration. (only useful if multiple "
+                             "archives are declared)")
     parser.add_argument('subcommand', help="Subcommand")
     parser.add_argument('args', nargs=argparse.REMAINDER,
                         help="Arguments for subcommand")
 
     args = parser.parse_args(argv)
 
+    # get archiver
+    archivers = []
+    if args.local:
+        # provide local directory as backend
+        archivespec = [{"name" : "local", "backend": "file", "path": "{}".format(os.getcwd()), "flags" : "[download, upload, managed]"}]
+        archiver = getSingleArchiver(None, archivespec[0])
+        if archiver.archiveCmdSupported():
+            archivers.append(archiver)
+        else:
+            raise BobError("Archiver does not support the archive command")
+    else:
+        # use the configuration to find suitable archives
+        recipes = RecipeSet()
+        recipes.parse()
+        archivespec = recipes.archiveSpec()
+        if isinstance(archivespec, list):
+            if len(archivespec) == 0:
+                raise BobError("No archiver defined")
+            elif len(archivespec) == 1:
+                archiver = getSingleArchiver(recipes, archivespec[0])
+                if archiver.archiveCmdSupported():
+                    archivers.append(archiver)
+                else:
+                    raise BobError("Archiver does not support the archive command")
+            else:
+                selectedArchives = []
+                if args.backends is not None:
+                    selectedArchives = [s.strip() for s in args.backends.split(",")]
+                for i in archivespec:
+                    archiver = getSingleArchiver(recipes, i)
+                    if (args.all or archiver.getArchiveName() in selectedArchives) and archiver.archiveCmdSupported():
+                        archivers.append(archiver)
+                if len(archivers) == 0:
+                    raise BobError("None of the archivers supports the archive command. Maybe you did not select any (-b/--backends)?")
+
+        else:
+            archiver = getSingleArchiver(recipes, archivespec)
+            if archiver.archiveCmdSupported():
+                archivers.append(archiver)
+            else:
+                raise BobError("Archiver does not support the archive command")
+
     if args.subcommand in availableArchiveCmds:
-        availableArchiveCmds[args.subcommand][0](args.args)
+        availableArchiveCmds[args.subcommand][0](archivers, args.args)
     else:
         parser.error("Unknown subcommand '{}'".format(args.subcommand))
 
