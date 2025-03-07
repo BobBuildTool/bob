@@ -77,8 +77,8 @@ class ArchiveScanner:
         return False
 
     def scan(self, verbose):
+        found = False
         try:
-            found = False
             self.__db.execute("BEGIN")
             for l1 in os.listdir("."):
                 if not self.__dirSchema.fullmatch(l1): continue
@@ -98,7 +98,7 @@ class ArchiveScanner:
                 print("Your archive seems to be empty. "
                       "Are you running 'bob archive' from within the correct directory?",
                       file=sys.stderr)
-            return found
+        return found
 
     def __scan(self, fileName, verbose):
         try:
