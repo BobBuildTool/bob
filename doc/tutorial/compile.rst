@@ -350,3 +350,31 @@ the zlib packages: ::
 .. raw:: html
 
     <iframe src="../_static/sandbox.html" height="500px" width="100%"></iframe>
+
+Using source bundles
+====================
+
+A source code bundle is a tar file with all the sources needed to build a
+package included. This bundle can be used to compile on a air gapped system, to
+archive the build input, to transfer the sources to a reviewer, ...
+
+To bundle a all the input for a given package you need to build it using
+:ref:`manpage-dev` or :ref:`manpage-build` with the ``--bundle`` option. This
+option takes one argument specifying the name of the bundle file.
+There is also a ``--bundle-exclude`` option which allows it to exclude the
+sources of packages to be excluded from the bundle.
+
+For example to bundle the sources needed to build my_package without the packges
+matching `foo**` use: ::
+
+     $ bob build my_package --bundle my_package_bundle.tar --bundle-exclude foo*
+
+After that you can take the my_package_bundle.tar to another system and use: ::
+
+     $ bob build my_package  --bundle my_package_bundle.tar --unbundle
+
+to build `my_package` without having access to the sources in the recipes.
+
+.. note::
+    The recipes and `bob` are not part of the bundle and need to be handled
+    seperately.

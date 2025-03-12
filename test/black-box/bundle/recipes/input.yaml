@@ -1,0 +1,34 @@
+multiPackage:
+  "a":
+    checkoutSCM:
+      scm: url
+      url: "${INPUT_BASE}/a/test.tgz"
+      digestSHA1: "${INPUT_A_DIGEST}"
+      stripComponents: 1
+  "b":
+    checkoutSCM:
+      scm: url
+      url: "${INPUT_BASE}/b/test.tgz"
+      digestSHA1: "${INPUT_B_DIGEST}"
+      stripComponents: 1
+  "c":
+    checkoutSCM:
+      scm: url
+      url: "${INPUT_BASE}/c/test.tgz"
+      digestSHA1: "${INPUT_C_DIGEST}"
+      stripComponents: 1
+  "d":
+    checkoutSCM:
+      scm: url
+      url: "${INPUT_BASE}/d/test.tgz"
+      digestSHA1: "${INPUT_D_DIGEST}"
+      stripComponents: 1
+  "indeterministic":
+    checkoutScript: |
+      echo foo
+
+buildScript: |
+  /bin/true
+
+packageScript: |
+  /bin/true

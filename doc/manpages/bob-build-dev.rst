@@ -96,6 +96,14 @@ Options
 
     This is the default unless the user changed it in ``default.yaml``.
 
+``--bundle BUNDLE``
+    Bundle all the sources needed to build the package. The output of this is a
+    tar-file containing one tar-file for each source workspace needed to build
+    the package. This also enables `--always-checkout`.
+
+``--bundle-exclude RE``
+    Do not add packages matching (fnmatch) RE to the bundle.
+
 ``--clean``
     Do clean builds by clearing the build directory before executing the build
     commands. It will *not* clean all build results (e.g. like ``make clean``)
@@ -359,6 +367,10 @@ Options
 
 ``-q, --quiet``
     Decrease verbosity (may be specified multiple times)
+
+``--unbundle``
+    Use bundle specified by ``--bundle`` but unbundle the sources from the
+    bundle.
 
 ``-v, --verbose``
     Increase verbosity (may be specified multiple times)
