@@ -1,15 +1,15 @@
 # Sample plugin to modify path name calculation
 #
 # This plugin introduces two new properties to a recipe:
-#  - checkoutDir: optional string that is appended to the source directory
-#  - platform: optional string that is appenden to the build and dist directories
+#  - CheckoutDir: optional string that is appended to the source directory
+#  - Platform: optional string that is appenden to the build and dist directories
 
 from os.path import join
 from bob.errors import ParseError
 from bob.input import PluginState, PluginProperty
 
 def commonFormatter(step, states):
-    s = states['pathFmt']
+    s = states['PathFmt']
     if step.isCheckoutStep():
         base = step.getPackage().getRecipe().getName()
         ext = s.getCheckoutDir()
@@ -35,15 +35,15 @@ class PathFmtState(PluginState):
         self.__platformDir = None
 
     def onEnter(self, env, properties):
-        # checkoutDir is always taken from current recipe
-        self.__checkoutDir = properties['checkoutDir'].getValue()
+        # CheckoutDir is always taken from current recipe
+        self.__checkoutDir = properties['CheckoutDir'].getValue()
         if self.__checkoutDir is not None:
-            self.__checkoutDir = env.substitute(self.__checkoutDir, "checkoutDir")
+            self.__checkoutDir = env.substitute(self.__checkoutDir, "CheckoutDir")
 
-        # platform is passed down to dependencies
-        platform = properties['platform']
+        # Platform is passed down to dependencies
+        platform = properties['Platform']
         if platform.isPresent():
-            self.__platformDir = env.substitute(platform.getValue(), "platform")
+            self.__platformDir = env.substitute(platform.getValue(), "Platform")
 
     def getCheckoutDir(self):
         return self.__checkoutDir
@@ -66,10 +66,10 @@ manifest = {
         'jenkinsNameFormatter' : jenkinsFormatter
     },
     'properties' : {
-        "checkoutDir" : StringProperty,
-        "platform" : StringProperty
+        "CheckoutDir" : StringProperty,
+        "Platform" : StringProperty
     },
     'state' : {
-        "pathFmt" : PathFmtState
+        "PathFmt" : PathFmtState
     }
 }

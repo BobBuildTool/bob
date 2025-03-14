@@ -3470,6 +3470,8 @@ class RecipeSet:
         for (i,j) in properties.items():
             if not isinstance(i, str):
                 raise ParseError("Plugin '"+fileName+"': property name must be a string!")
+            if i[:1].islower():
+                raise ParseError(f"Plugin '{fileName}': property '{i}' must not start lower case!")
             if not issubclass(j, PluginProperty):
                 raise ParseError("Plugin '"+fileName+"': property '" +i+"' has wrong type!")
             if i in self.__properties:
@@ -3482,8 +3484,8 @@ class RecipeSet:
         for (i,j) in states.items():
             if not isinstance(i, str):
                 raise ParseError("Plugin '"+fileName+"': state tracker name must be a string!")
-            if i in ["environment", "tools", "result", "deps", "sandbox"]:
-                raise ParseError("Plugin '"+fileName+"': state tracker has reserved name!")
+            if i[:1].islower():
+                raise ParseError(f"Plugin '{fileName}': state tracker '{i}' must not start lower case!")
             if not issubclass(j, PluginState):
                 raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' has wrong type!")
             if i in self.__states:
