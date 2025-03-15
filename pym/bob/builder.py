@@ -1792,6 +1792,10 @@ cd {ROOT}
         the now invalidated build-id we have to restart the build and check all
         build-ids, build- and package-steps again.
         """
+        if step.isDeterministic() and step.getPackage().getRecipe().getRecipeSet().getPolicy("failUnstableCheckouts"):
+            raise BuildError("Unstable checkoutScript detected! Checkout result did not match previous builds.",
+                             help="The checkoutScript of the package was marked as deterministic. Repeated invocations generated different results, though. Look out for timestamps or similar problems.")
+
         key = (step.getWorkspacePath(), step.getVariantId())
 
         # Invalidate wrong live-build-id
