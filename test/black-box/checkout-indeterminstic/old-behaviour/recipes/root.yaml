@@ -1,0 +1,9 @@
+root: True
+
+checkoutDeterministic: True
+checkoutScript: |
+    date '+%s.%N' > epoch.txt
+
+buildVars: [VARIANT]
+buildScript: "true"
+packageScript: "true"
