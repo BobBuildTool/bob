@@ -10,13 +10,13 @@ buildScript: |
 packageScript: |
   true
 
-# set two different "platform" properties that are inherited
+# set two different "Platform" properties that are inherited
 multiPackage:
   alpha:
-    platform: "alpha"
+    Platform: "alpha"
     environment:
       PLATFORM: "alpha"
   bravo:
-    platform: "bravo"
+    Platform: "bravo"
     environment:
       PLATFORM: "bravo"

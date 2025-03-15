@@ -365,13 +365,13 @@ The following example shows two trivial properties::
     manifest = {
         'apiVersion' : "0.21",
         'properties' : {
-            "checkoutDir" : StringProperty,
-            "platform" : StringProperty
+            "CheckoutDir" : StringProperty,
+            "Platform" : StringProperty
         },
     }
 
-The above example defines two new keywords in recipes: ``checkoutDir`` and
-``platform``. As verified by the ``validate`` method they need to be strings.
+The above example defines two new keywords in recipes: ``CheckoutDir`` and
+``Platform``. As verified by the ``validate`` method, they need to be strings.
 Because :func:`bob.input.PluginProperty.inherit` was not overridden, the recipe
 and higher priority classes will simply replace the value of lower priority
 classes. Other plugin extensions can query the value of a property by calling
@@ -383,6 +383,12 @@ If custom properties need to be propagated in the recipe dependency hierarchy,
 a *property state tracker* is required. A state tracker is a class that is
 invoked on every step when walking the dependency tree to instantiate the
 packages. The state tracker thus has the responsibility to calculate the final
-values associated with the properties for every package. Like properties there
+values associated with the properties for every package. Like properties, there
 can be more than one state tracker. Any state tracker provided by a plugin must
 be derived from :class:`bob.input.PluginState`.
+
+It is not possible to re-define already existing recipe properties. This
+applies both to Bob built-in properties as well as properties defined by other
+plugins.  Because Bob is expected to define new settings in the future, a
+plugin defined properties must not start with a lower case letter. These names
+are reserved for Bob.
