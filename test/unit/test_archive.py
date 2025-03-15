@@ -479,9 +479,8 @@ def createHttpHandler(repoPath, username=None, password=None):
                 challenge = 'Basic ' + base64.b64encode(
                     (username+":"+password).encode("utf-8")).decode("ascii")
                 if self.headers.get('Authorization') != challenge:
-                    self.send_error(401, "Unauthorized")
                     self.send_header("WWW-Authenticate", 'Basic realm="default"')
-                    self.end_headers()
+                    self.send_error(401, "Unauthorized")
                     return None
 
             path = repoPath + self.path

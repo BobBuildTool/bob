@@ -14,11 +14,9 @@ def createHttpHandler(repoPath, args):
                 fs = os.fstat(f.fileno())
             except FileNotFoundError:
                 self.send_error(404, "not found")
-                self.end_headers()
                 return None
             except OSError:
                 self.send_error(500, "internal error")
-                self.end_headers()
                 return None
 
             if "If-Modified-Since" in self.headers:
@@ -46,7 +44,6 @@ def createHttpHandler(repoPath, args):
                 return
             if args.get('retries') > 0:
                 self.send_error(500, "internal error (retries={})".format(args['retries']))
-                self.end_headers()
                 args['retries'] = args.get('retries') - 1
                 return
 
@@ -63,7 +60,6 @@ def createHttpHandler(repoPath, args):
                 return
             if args.get('retries') > 0:
                 self.send_error(500, "internal error")
-                self.end_headers()
                 args['retries'] = args.get('retries') - 1
                 return
 
