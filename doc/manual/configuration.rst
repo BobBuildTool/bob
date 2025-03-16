@@ -1315,7 +1315,9 @@ The following settings are supported:
 |             |                 |    environment:                                     |
 |             |                 |        FOO: value                                   |
 |             |                 |        BAR: baz                                     |
-|             |                 |        BAZ: "${VAR}"                                |
+|             |                 |        BAZ:                                         |
+|             |                 |            value: "${VAR}"                          |
+|             |                 |            if: "${CONDITION}"                       |
 |             |                 |                                                     |
 |             |                 | Value strings in this clause are subject to         |
 |             |                 | :ref:`configuration-principle-subst`.               |
@@ -1388,16 +1390,33 @@ name requirement.  Both packages are based on the identical recipe
 environment
 ~~~~~~~~~~~
 
-Type: Dictionary (String -> String)
+Type::
+
+    {
+        str : str | {
+            "value" : str,
+            Optional("if") : str | IfExpression
+        }
+    }
 
 Defines environment variables in the scope of the current recipe. Any inherited
 variables of the downstream recipe with the same name are overwritten. All
 variables are passed to upstream recipes.
 
-Example::
+The definition of a variable can optionally be guarded by an ``if`` condition.
+Only if the ``if`` property evaluates to true, the variable is actually
+defined. Might be a string or an IfExpression. See
+:ref:`configuration-principle-booleans` for details about the evaluation.
 
-   environment:
-      PKG_VERSION: "1.2.3"
+Examples::
+
+    environment:
+        PKG_VERSION: "1.2.3"
+
+    environment:
+        PKG_VERSION:
+            value: "1.2.3"
+            if: "$(eq,$FOO,bar)"
 
 All environment keys are eligible to variable substitution. The environment of
 the recipe and inherited classes are merged together. Suppose the project has
@@ -1609,7 +1628,14 @@ Not available on Windows.
 metaEnvironment
 ~~~~~~~~~~~~~~~
 
-Type: Dictionary (String -> String)
+Type::
+
+    {
+        str : str | {
+            "value" : str,
+            Optional("if") : str | IfExpression
+        }
+    }
 
 metaEnvironment variables behave like :ref:`configuration-recipes-privateenv` variables.
 They overrule other environment variables and can be used in all steps. In addition all
@@ -1621,6 +1647,11 @@ The :ref:`manpage-query-meta` command can be used to retrieve metaEnvironment va
 All metaEnvironment variables are subject to :ref:`string substitution
 <configuration-principle-subst>`, unless the :ref:`policies-substituteMetaEnv`
 policy is configured for the old behaviour.
+
+The definition of a metaEnvironment variable can optionally be guarded by an
+``if`` condition.  Only if the ``if`` property evaluates to true, the variable
+is actually defined. Might be a string or an IfExpression. See
+:ref:`configuration-principle-booleans` for details about the evaluation.
 
 .. _configuration-recipes-multipackage:
 
@@ -1664,7 +1695,14 @@ header files and other needed files to link with this library.
 privateEnvironment
 ~~~~~~~~~~~~~~~~~~
 
-Type: Dictionary (String -> String)
+Type::
+
+    {
+        str : str | {
+            "value" : str,
+            Optional("if") : str | IfExpression
+        }
+    }
 
 Defines environment variables just for the current recipe. Any inherited
 variables with the same name of the downstream recipe or others that were
@@ -1679,6 +1717,11 @@ Example::
 The ``privateEnvironment`` of the recipe and inherited classes are merged
 together.  See :ref:`configuration-recipes-env` for the merge and string
 substitution behaviour.
+
+The definition of a variable can optionally be guarded by an ``if`` condition.
+Only if the ``if`` property evaluates to true, the variable is actually
+defined. Might be a string or an IfExpression. See
+:ref:`configuration-principle-booleans` for details about the evaluation.
 
 .. _configuration-recipes-providedeps:
 
@@ -1735,6 +1778,9 @@ consuming recipes. Example::
          netAccess: True
          environment:
             CC: gcc
+            CXX:
+               value: g++
+               if: "$ENABLE_CPP"
             LD: ld
          fingerprintIf: True
          fingerprintScript: |
@@ -1761,6 +1807,11 @@ recipe they must define distinct variables because no particular order between
 tools is defined. The values defined in this attribute are subject to variable
 substitution.
 
+The definition of an ``environment`` variable can optionally be guarded by an
+``if`` condition.  Only if the ``if`` property evaluates to true, the variable
+is actually defined. Might be a string or an IfExpression. See
+:ref:`configuration-principle-booleans` for details about the evaluation.
+
 The ``fingerprintScript`` attribute defines a fingerprint script like in a
 normal recipe by :ref:`configuration-recipes-fingerprintScript`. A fingerprint
 script defined by a tool is implicitly added to the fingerprint scripts of all
@@ -1780,7 +1831,14 @@ by giving the relative path directly::
 provideVars
 ~~~~~~~~~~~
 
-Type: Dictionary (String -> String)
+Type::
+
+    {
+        str : str | {
+            "value" : str,
+            Optional("if") : str | IfExpression
+        }
+    }
 
 Declares arbitrary environment variables with values that should be passed to
 the downstream recipe. The values of the declared variables are subject to
@@ -1791,6 +1849,11 @@ package environment. Example::
         ARCH: "arm"
         CROSS_COMPILE: "arm-linux-${ABI}-"
 
+
+The definition of a variable can optionally be guarded by an ``if`` condition.
+Only if the ``if`` property evaluates to true, the variable is actually
+defined. Might be a string or an IfExpression. See
+:ref:`configuration-principle-booleans` for details about the evaluation.
 
 By default these provided variables are not picked up by downstream recipes. This
 must be declared explicitly by a ``use: [environment]`` attribute in the
@@ -1842,6 +1905,11 @@ actually used (i.e. the parent recipe defined ``sandbox`` in the ``use``
 section and the user builds with ``--sandbox``). In this case the variables
 defined here have a higher precedence that the ones defined in ``provideVars``.
 
+The definition of an ``environment`` variable can optionally be guarded by an
+``if`` condition.  Only if the ``if`` property evaluates to true, the variable
+is actually defined. Might be a string or an IfExpression. See
+:ref:`configuration-principle-booleans` for details about the evaluation.
+
 Variable substitution is possible for the mount paths and environment
 variables. See :ref:`configuration-principle-subst` for the available
 substations. The mount paths are also subject to an additional variable
@@ -1865,6 +1933,9 @@ Example::
             - ["\\$SSH_AUTH_SOCK", "\\SSH_AUTH_SOCK", [nofail, nojenkins]]
         environment:
             AUTOCONF_BUILD: "x86_64-linux-gnu"
+            ORIGINAL_ARCH:
+                value: "$AUTOCONF_BUILD"
+                if: "$(ne,$AUTOCONF_BUILD,x86_64-linux-gnu)"
         user: nobody
 
 The example assumes that the variable ``MYREPO`` was set somewhere in the
