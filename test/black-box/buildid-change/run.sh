@@ -28,6 +28,7 @@ rm -rf "$D"
 # create binary archive config
 cat >repo.yaml <<EOF
 archive:
+    name: "local"
     backend: file
     path: "$(mangle_path "$REPO/archive")"
 EOF

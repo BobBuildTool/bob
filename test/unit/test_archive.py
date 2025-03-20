@@ -19,7 +19,7 @@ import threading
 import urllib.parse
 import sys
 
-from bob.archive import DummyArchive, SimpleHttpArchive, getArchiver
+from bob.archive import DummyArchive, HttpArchive, getArchiver
 from bob.errors import BuildError
 from bob.utils import runInEventLoop, getProcessPoolExecutor
 
@@ -479,8 +479,9 @@ def createHttpHandler(repoPath, username=None, password=None):
                 challenge = 'Basic ' + base64.b64encode(
                     (username+":"+password).encode("utf-8")).decode("ascii")
                 if self.headers.get('Authorization') != challenge:
+                    self.send_response(401, "Unauthorized")
                     self.send_header("WWW-Authenticate", 'Basic realm="default"')
-                    self.send_error(401, "Unauthorized")
+                    self.end_headers()
                     return None
 
             path = repoPath + self.path
@@ -499,14 +500,36 @@ def createHttpHandler(repoPath, username=None, password=None):
             return f
 
         def do_HEAD(self):
-            f = self.getCommon()
-            if f: f.close()
+            path = repoPath + self.path
+            # handle folder
+            if path.endswith('/'):
+                if os.path.exists(path):
+                    self.send_response(200)
+                    self.end_headers()
+                else:
+                    self.send_error(404, "Not found")
+            # handle file
+            else:
+                f = self.getCommon()
+                if f: f.close()
 
         def do_GET(self):
-            f = self.getCommon()
-            if f:
-                self.wfile.write(f.read())
-                f.close()
+            path = repoPath + self.path
+            # handle folder
+            if path.endswith('/'):
+                if os.path.exists(path):
+                    self.send_response(200)
+                    # just a random answer for directory
+                    self.wfile.write(path + " is doing fine")
+                    self.end_headers()
+                else:
+                    self.send_error(404, "Not found")
+            # handle file
+            else:
+                f = self.getCommon()
+                if f:
+                    self.wfile.write(f.read())
+                    f.close()
 
         def do_PUT(self):
             length = int(self.headers['Content-Length'])
@@ -558,6 +581,12 @@ def createHttpHandler(repoPath, username=None, password=None):
                 self.send_response(403)
             self.end_headers()
 
+        def do_OPTIONS(self):
+            self.send_response(200)
+            self.send_header('DAV', '1,2')
+            self.send_header('Allow', "OPTIONS, GET, HEAD, PUT")
+            self.end_headers()
+
     return Handler
 
 class TestLocalArchive(BaseTester, TestCase):
@@ -583,6 +612,7 @@ class TestHttpArchive(BaseTester, TestCase):
         super().tearDown()
 
     def _setArchiveSpec(self, spec):
+        spec['name'] = "remote"
         spec['backend'] = "http"
         spec["url"] = "http://{}:{}".format(self.ip, self.port)
 
@@ -590,7 +620,7 @@ class TestHttpArchive(BaseTester, TestCase):
         """Test download on non-existent server"""
 
         spec = { 'url' : "https://127.1.2.3:7257" }
-        archive = SimpleHttpArchive(spec)
+        archive = HttpArchive(spec)
         archive.wantDownloadLocal(True)
         archive.wantUploadLocal(True)
 
@@ -627,7 +657,7 @@ class TestHttpBasicAuthArchive(BaseTester, TestCase):
 
         spec = { }
         self._setArchiveSpec(spec, "wrong_password")
-        archive = SimpleHttpArchive(spec)
+        archive = HttpArchive(spec)
         archive.wantDownloadLocal(True)
         archive.wantUploadLocal(True)
 

@@ -19,32 +19,28 @@ it must not be overwritten. The backend should make sure that even on
 concurrent uploads the artifact must appear atomically for unrelated readers.
 """
 
-from . import BOB_VERSION
+from .audit import Audit
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
-from .utils import asHexStr, removePath, isWindows, sslNoVerifyContext, \
-    getBashPath, tarfileOpen
-from shlex import quote
+from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat
+from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
-import argparse
 import asyncio
-import base64
 import concurrent.futures
 import concurrent.futures.process
 import gzip
-import hashlib
 import http.client
 import io
 import os
 import os.path
 import shutil
 import signal
-import ssl
+import struct
 import subprocess
 import tarfile
-import textwrap
 import urllib.parse
+import hashlib
 
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
@@ -67,9 +63,14 @@ def writeFileOrHandle(name, fileobj, content):
     with open(name, "wb") as f:
         f.write(content)
 
+def namedErrorString(name, err):
+    return "Archive '{}': {}".format(name, err)
 
 class DummyArchive:
     """Archive that does nothing"""
+
+    def canManage(self):
+        return False
 
     def wantDownloadLocal(self, enable):
         pass
@@ -110,6 +111,9 @@ class DummyArchive:
 
     async def downloadLocalFingerprint(self, step, key, executor=None):
         return None
+
+    def getArchiveName(self):
+       return "Dummy"
 
 class ArtifactNotFoundError(Exception):
     pass
@@ -162,6 +166,26 @@ class TarHelper:
             os.makedirs(content)
             self.__extractPackage(tar, audit, content)
 
+    def _extractAudit(self, filename=None, fileobj=None):
+        with tarfileOpen(name=filename, mode="r|*", fileobj=fileobj, errorlevel=1) as tar:
+            # validate
+            if tar.pax_headers.get('bob-archive-vsn') != "1":
+                return
+
+            # find audit trail
+            f = tar.next()
+            while f:
+                if f.name == "meta/audit.json.gz": break
+                f = tar.next()
+            else:
+                raise BuildError("Missing audit trail!")
+
+            # read audit trail
+            auditJsonGz = tar.extractfile(f)
+            auditJson = gzip.GzipFile(fileobj=auditJsonGz)
+
+            return Audit.fromByteStream(auditJson, filename)
+
     def _pack(self, name, fileobj, audit, content):
         pax = { 'bob-archive-vsn' : "1" }
         with gzip.open(name or fileobj, 'wb', 6) as gzf:
@@ -176,6 +200,7 @@ class JenkinsArchive(TarHelper):
 
     def __init__(self, spec):
         self.__xferArtifacts = spec.get("xfer", False)
+        self.__name = spec.get("name", "unknown name")
 
     def wantDownloadLocal(self, enable):
         pass
@@ -198,6 +223,9 @@ class JenkinsArchive(TarHelper):
     def canCache(self):
         return True
 
+    def canManage(self):
+        return False
+
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
         if not audit:
             raise BuildError("Missing audit trail! Cannot proceed without one.")
@@ -206,7 +234,7 @@ class JenkinsArchive(TarHelper):
             with open(self.buildIdName(step), "wb") as f:
                 f.write(buildId)
         except OSError as e:
-            raise BuildError("Cannot store artifact: " + str(e))
+            raise BuildError(namedErrorString(self.__name, "Cannot store artifact: " + str(e)))
 
         if self.__xferArtifacts:
             loop = asyncio.get_event_loop()
@@ -221,7 +249,7 @@ class JenkinsArchive(TarHelper):
                             audit, content)
                         a.setResult(msg, kind)
                 except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                    raise BuildError("Packing of package interrupted.")
+                    raise BuildError(namedErrorString(self.__name, "Packing of package interrupted."))
 
     def _uploadPackage(self, name, buildId, audit, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -230,7 +258,7 @@ class JenkinsArchive(TarHelper):
         try:
             self._pack(name, None, audit, content)
         except (tarfile.TarError, OSError) as e:
-            raise BuildError("Cannot pack artifact: " + str(e))
+            raise BuildError(namedErrorString(self.__name, "Cannot pack artifact: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -248,7 +276,7 @@ class JenkinsArchive(TarHelper):
                 if not ret: a.fail(msg, WARNING)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Extraction of package interrupted.")
+                raise BuildError(namedErrorString(self.__name, "Extraction of package interrupted."))
 
     def _downloadPackage(self, tgzName, buildIdName, buildId, audit, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -265,7 +293,7 @@ class JenkinsArchive(TarHelper):
                 self._extract(f, audit, content)
             return (True, None)
         except (OSError, tarfile.TarError) as e:
-            raise BuildError("Error extracting binary artifact: " + str(e))
+            raise BuildError(namedErrorString(self.__name, "Error extracting binary artifact: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -282,7 +310,7 @@ class JenkinsArchive(TarHelper):
         except FileExistsError:
             return None
         except OSError as e:
-            raise BuildError("Cannot cache artifact: " + str(e))
+            raise BuildError(namedErrorString(self.__name, "Cannot cache artifact: " + str(e)))
 
     async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
         pass
@@ -312,6 +340,9 @@ class JenkinsArchive(TarHelper):
     def _buildIdNameW(workspace):
         return workspace.replace('/', '_') + BUILDID_SUFFIX
 
+    def getArchiveName(self):
+       return self.__name
+
 class JenkinsCacheHelper:
     def __init__(self, f):
         self.__f = f
@@ -327,12 +358,14 @@ class JenkinsCacheHelper:
 class BaseArchive(TarHelper):
     def __init__(self, spec):
         flags = spec.get("flags", ["upload", "download"])
+        self.__name = spec.get("name", "unknown name")
         self.__useDownload = "download" in flags
         self.__useUpload = "upload" in flags
         self.__ignoreErrors = "nofail" in flags
         self.__useLocal = "nolocal" not in flags
         self.__useJenkins = "nojenkins" not in flags
         self.__useCache = "cache" in flags
+        self.__managed = "managed" in flags
         self.__wantDownloadLocal = False
         self.__wantDownloadJenkins = False
         self.__wantUploadLocal = False
@@ -368,6 +401,12 @@ class BaseArchive(TarHelper):
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
 
+    def canManage(self):
+        return self.__managed and self._canManage()
+
+    def _canManage(self):
+        return False
+
     async def downloadPackage(self, step, buildId, audit, content, caches=[],
                               executor=None):
         if not self.canDownload():
@@ -383,18 +422,18 @@ class BaseArchive(TarHelper):
                 if not ret: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Download of package interrupted.")
+                raise BuildError(namedErrorString(self.__name, "Download of package interrupted."))
 
     def cachePackage(self, buildId, workspace):
         try:
             return self._openUploadFile(buildId, ARTIFACT_SUFFIX, False)
         except ArtifactExistsError:
             return None
-        except (ArtifactUploadError, OSError) as e:
+        except (ArtifactUploadError, HttpUploadError, OSError) as e:
             if self.__ignoreErrors:
                 return None
             else:
-                raise BuildError("Cannot cache artifact: " + str(e))
+                raise BuildError(namedErrorString(self.__name, "Cannot cache artifact: " + str(e)))
 
     def _downloadPackage(self, buildId, suffix, audit, content, caches, workspace):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -406,16 +445,18 @@ class BaseArchive(TarHelper):
                 with Tee(name, fileobj, buildId, caches, workspace) as fo:
                     self._extract(fo, audit, content)
             return (True, None, None)
-        except ArtifactNotFoundError:
-            return (False, "not found", WARNING)
-        except ArtifactDownloadError as e:
-            return (False, e.reason, WARNING)
+        except (ArtifactNotFoundError, HttpNotFoundError):
+            return (False, namedErrorString(self.__name, "not found"), WARNING)
+        except (ArtifactDownloadError, HttpDownloadError) as e:
+            return (False, namedErrorString(self.__name, e.reason), WARNING)
+        except ConnectionRefusedError:
+            return (False, namedErrorString(self.__name, "connection failed"), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
-            raise BuildError("Cannot download artifact: " + str(e))
+            raise BuildError(namedErrorString(self.__name, "Cannot download artifact: " + str(e)))
         except tarfile.TarError as e:
-            raise BuildError("Error extracting binary artifact: " + str(e))
+            raise BuildError(namedErrorString(self.__name, "Error extracting binary artifact: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -433,7 +474,7 @@ class BaseArchive(TarHelper):
                 if ret is None: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Download of build-id interrupted.")
+                raise BuildError(namedErrorString(self.__name, "Download of build-id interrupted."))
 
     def _downloadLocalFile(self, key, suffix):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -444,14 +485,16 @@ class BaseArchive(TarHelper):
             with self._openDownloadFile(key, suffix) as (name, fileobj):
                 ret = readFileOrHandle(name, fileobj)
             return (ret, None, None)
-        except ArtifactNotFoundError:
-            return (None, "not found", WARNING)
-        except ArtifactDownloadError as e:
-            return (None, e.reason, WARNING)
+        except (ArtifactNotFoundError, HttpNotFoundError):
+            return (None, namedErrorString(self.__name, "not found"), WARNING)
+        except (ArtifactDownloadError, HttpDownloadError) as e:
+            return (None, namedErrorString(self.__name, e.reason), WARNING)
+        except ConnectionRefusedError:
+            return (None, namedErrorString(self.__name, "connection failed"), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
-            raise BuildError("Cannot download file: " + str(e))
+            raise BuildError(namedErrorString(self.__name, "Cannot download file: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -477,7 +520,7 @@ class BaseArchive(TarHelper):
                     self, buildId, suffix, audit, content)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Upload of package interrupted.")
+                raise BuildError(namedErrorString(self.__name, "Upload of package interrupted."))
 
     def _uploadPackage(self, buildId, suffix, audit, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -487,13 +530,13 @@ class BaseArchive(TarHelper):
         try:
             with self._openUploadFile(buildId, suffix, False) as (name, fileobj):
                 self._pack(name, fileobj, audit, content)
-        except ArtifactExistsError:
-            return ("skipped ({} exists in archive)".format(content), SKIPPED)
-        except (ArtifactUploadError, tarfile.TarError, OSError) as e:
+        except (ArtifactExistsError, HttpAlreadyExistsError):
+            return (namedErrorString(self.__name, "skipped ({} exists in archive)".format(content)), SKIPPED)
+        except (ArtifactUploadError, HttpUploadError, tarfile.TarError, OSError) as e:
             if self.__ignoreErrors:
-                return ("error ("+str(e)+")", ERROR)
+                return (namedErrorString(self.__name, "error ("+str(e)+")"), ERROR)
             else:
-                raise BuildError("Cannot upload artifact: " + str(e))
+                raise BuildError(namedErrorString(self.__name, "Cannot upload artifact: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -510,7 +553,7 @@ class BaseArchive(TarHelper):
                 msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadLocalFile, self, liveBuildId, BUILDID_SUFFIX, buildId)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Upload of build-id interrupted.")
+                raise BuildError(namedErrorString(self.__name, "Upload of build-id interrupted."))
 
     def _uploadLocalFile(self, key, suffix, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -522,11 +565,11 @@ class BaseArchive(TarHelper):
             # never see an ArtifactExistsError.
             with self._openUploadFile(key, suffix, True) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, content)
-        except (ArtifactUploadError, OSError) as e:
+        except (ArtifactUploadError, HttpUploadError, OSError) as e:
             if self.__ignoreErrors:
-                return ("error ("+str(e)+")", ERROR)
+                return (namedErrorString(self.__name, "error ("+str(e)+")"), ERROR)
             else:
-                raise BuildError("Cannot upload file: " + str(e))
+                raise BuildError(namedErrorString(self.__name, "Cannot upload file: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -543,7 +586,7 @@ class BaseArchive(TarHelper):
                 msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadLocalFile, self, key, FINGERPRINT_SUFFIX, fingerprint)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Upload of build-id interrupted.")
+                raise BuildError(namedErrorString(self.__name, "Upload of build-id interrupted."))
 
     async def downloadLocalFingerprint(self, step, key, executor=None):
         if not self.canDownload():
@@ -557,7 +600,70 @@ class BaseArchive(TarHelper):
                 if ret is None: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError("Download of fingerprint interrupted.")
+                raise BuildError(namedErrorString(self.__name, "Download of fingerprint interrupted."))
+
+    def deleteFile(self, filepath):
+        try:
+            self._delete(filepath)
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return (namedErrorString(self.__name, "error ("+str(e)+")"), ERROR)
+            else:
+                raise BuildError(namedErrorString(self.__name, "Could not delete file: " + str(e)))
+
+    def _delete(self, filepath):
+        raise ArtifactDownloadError("not implemented")
+
+    def listDir(self, path):
+        try:
+            return self._listDir(path)
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return (namedErrorString(self.__name, "error (" + str(e) + ")"), ERROR)
+            else:
+                raise BuildError(namedErrorString(self.__name, "Could not list dir: " + str(e)))
+
+    def _listDir(self, path):
+        raise ArtifactDownloadError("not implemented")
+
+    def stat(self, filepath):
+        try:
+            return self._stat(filepath)
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return (namedErrorString(self.__name, "error (" + str(e) + ")"), ERROR)
+            else:
+                raise BuildError(namedErrorString(self.__name, "Could not stat file: " + str(e)))
+
+    def _stat(self, filepath):
+        raise ArtifactDownloadError("not implemented")
+
+    def getAudit(self, filepath):
+        try:
+            return self._getAudit(filepath)
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return (namedErrorString(self.__name, "error (" + str(e) + ")"), ERROR)
+            else:
+                raise BuildError(namedErrorString(self.__name, "Could not get audit from file: " + str(e)))
+
+    def _getAudit(self, filepath):
+        raise ArtifactDownloadError("not implemented")
+
+    def getArchiveUri(self):
+        try:
+            return self._getArchiveUri()
+        except (ArtifactDownloadError, OSError) as e:
+            if self.__ignoreErrors:
+                return (namedErrorString(self.__name, "error (" + str(e) + ")"), ERROR)
+            else:
+                raise BuildError(namedErrorString(self.__name, "Could not get archive hash: " + str(e)))
+
+    def _getArchiveUri(self):
+        raise ArtifactDownloadError("not implemented")
+
+    def getArchiveName(self):
+       return self.__name
 
 
 class Tee:
@@ -652,6 +758,9 @@ class LocalArchive(BaseArchive):
         self.__fileMode = spec.get("fileMode")
         self.__dirMode = spec.get("directoryMode")
 
+    def _canManage(self):
+        return True
+
     def _getPath(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
         packageResultPath = os.path.join(self.__basePath, packageResultId[0:2],
@@ -687,6 +796,27 @@ class LocalArchive(BaseArchive):
         return LocalArchiveUploader(
             NamedTemporaryFile(dir=packageResultPath, delete=False),
             self.__fileMode, packageResultFile, overwrite)
+
+    def _delete(self, filename):
+        try:
+            os.unlink(os.path.join(self.__basePath, filename))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            raise BuildError(namedErrorString(self.__name, "Cannot remove {}: {}".format(filename, str(e))))
+
+    def _listDir(self, path):
+        return os.listdir(os.path.join(self.__basePath, path))
+
+    def _stat(self, filename):
+        return binStat(os.path.join(self.__basePath, filename))
+
+    def _getAudit(self, filename):
+        return self._extractAudit(filename=os.path.join(self.__basePath, filename))
+
+    def _getArchiveUri(self):
+        return self.__basePath
+
 
 class LocalArchiveDownloader:
     def __init__(self, name):
@@ -737,118 +867,69 @@ class LocalArchiveUploader:
         return False
 
 
-class SimpleHttpArchive(BaseArchive):
+class HttpArchive(BaseArchive):
     def __init__(self, spec):
         super().__init__(spec)
         self.__url = urllib.parse.urlparse(spec["url"])
-        self.__connection = None
-        self.__sslVerify = spec.get("sslVerify", True)
+        self._webdav = WebDav(self.__url, spec.get("sslVerify", True))
 
     def __retry(self, request):
         retry = True
         while True:
             try:
                 return (True, request())
-            except (http.client.HTTPException, OSError) as e:
-                self._resetConnection()
+            except (HTTPException, OSError) as e:
+                self._webdav._resetConnection()
                 if not retry: return (False, e)
                 retry = False
 
-    def _makeUrl(self, buildId, suffix):
+    def _canManage(self):
+        return True
+
+    def _resetConnection(self):
+        self._webdav._resetConnection()
+
+    def _makePath(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
         return "/".join([self.__url.path, packageResultId[0:2], packageResultId[2:4],
             packageResultId[4:] + suffix])
 
+    def _makeParentDirs(self, path):
+        (dirs, _, _) = path.rpartition("/")
+        (ok, result) = self.__retry(lambda: self._webdav.mkdir(dirs, dirs.count("/")))
+        if ok:
+            return result
+        else:
+            raise result
+
     def _remoteName(self, buildId, suffix):
         url = self.__url
-        return urllib.parse.urlunparse((url.scheme, url.netloc, self._makeUrl(buildId, suffix), '', '', ''))
+        return urllib.parse.urlunparse((url.scheme, url.netloc, self._makePath(buildId, suffix), '', '', ''))
 
-    def _getConnection(self):
-        if self.__connection is not None:
-            return self.__connection
-
-        url = self.__url
-        if url.scheme == 'http':
-            connection = http.client.HTTPConnection(url.hostname, url.port)
-        elif url.scheme == 'https':
-            ctx = None if self.__sslVerify else sslNoVerifyContext()
-            connection = http.client.HTTPSConnection(url.hostname, url.port,
-                                                     context=ctx)
+    def _exists(self, path):
+        (ok, result) = self.__retry(lambda: self._webdav.exists(path))
+        if ok:
+            return result
         else:
-            raise BuildError("Unsupported URL scheme: '{}'".format(url.schema))
-
-        self.__connection = connection
-        return connection
-
-    def _resetConnection(self):
-        if self.__connection is not None:
-            self.__connection.close()
-            self.__connection = None
-
-    def _getHeaders(self):
-        headers = { 'User-Agent' : 'BobBuildTool/{}'.format(BOB_VERSION) }
-        if self.__url.username is not None:
-            username = urllib.parse.unquote(self.__url.username)
-            passwd = urllib.parse.unquote(self.__url.password)
-            userPass = username + ":" + passwd
-            headers['Authorization'] = 'Basic ' + base64.b64encode(
-                userPass.encode("utf-8")).decode("ascii")
-        return headers
+            raise result
 
     def _openDownloadFile(self, buildId, suffix):
-        (ok, result) = self.__retry(lambda: self.__openDownloadFile(buildId, suffix))
+        path = self._makePath(buildId, suffix)
+        (ok, result) = self.__retry(lambda: self.__openDownloadFile(path))
         if ok:
             return result
         else:
-            raise ArtifactDownloadError(str(result))
+            raise result
 
-    def __openDownloadFile(self, buildId, suffix):
-        connection = self._getConnection()
-        url = self._makeUrl(buildId, suffix)
-        connection.request("GET", url, headers=self._getHeaders())
-        response = connection.getresponse()
-        if response.status == 200:
-            return SimpleHttpDownloader(self, response)
-        else:
-            response.read()
-            if response.status == 404:
-                raise ArtifactNotFoundError()
-            else:
-                raise ArtifactDownloadError("{} {}".format(response.status,
-                                                           response.reason))
+    def __openDownloadFile(self, path):
+        return HttpDownloader(self, self._webdav.download(path))
 
     def _openUploadFile(self, buildId, suffix, overwrite):
-        (ok, result) = self.__retry(lambda: self.__openUploadFile(buildId, suffix, overwrite))
-        if ok:
-            return result
-        else:
-            raise ArtifactUploadError(str(result))
-
-    def __openUploadFile(self, buildId, suffix, overwrite):
-        connection = self._getConnection()
-        url = self._makeUrl(buildId, suffix)
-
+        path = self._makePath(buildId, suffix)
         # check if already there
         if not overwrite:
-            connection.request("HEAD", url, headers=self._getHeaders())
-            response = connection.getresponse()
-            response.read()
-            if response.status == 200:
+            if self._exists(path):
                 raise ArtifactExistsError()
-            elif response.status != 404:
-                raise ArtifactUploadError("HEAD {} {}".format(response.status, response.reason))
-
-        # create temporary file
-        return SimpleHttpUploader(self, url, overwrite)
-
-    def _putUploadFile(self, url, tmp, overwrite):
-        (ok, result) = self.__retry(lambda: self.__putUploadFile(url, tmp, overwrite))
-        if ok:
-            return result
-        else:
-            raise ArtifactUploadError(str(result))
-
-    def __putUploadFile(self, url, tmp, overwrite):
         # Quoting RFC 4918:
         #
         #   A PUT that would result in the creation of a resource without an
@@ -857,62 +938,52 @@ class SimpleHttpArchive(BaseArchive):
         #
         # We don't want to waste bandwith by uploading big artifacts into a
         # missing directory. Thus make sure the directory always exists.
-        self.__makeParentDirs(url)
+        self._makeParentDirs(path)
+        return HttpUploader(self, path, overwrite)
 
-        # Determine file length outself and add a "Content-Length" header. This
-        # used to work in Python 3.5 automatically but was removed later.
-        tmp.seek(0, os.SEEK_END)
-        length = str(tmp.tell())
-        tmp.seek(0)
-        headers = self._getHeaders()
-        headers.update({ 'Content-Length' : length })
-        if not overwrite:
-            headers.update({ 'If-None-Match' : '*' })
-        connection = self._getConnection()
-        connection.request("PUT", url, tmp, headers=headers)
-        response = connection.getresponse()
-        response.read()
-        if response.status == 412:
-            # precondition failed -> lost race with other upload
-            raise ArtifactExistsError()
-        elif response.status not in [200, 201, 204]:
-            raise ArtifactUploadError("PUT {} {}".format(response.status, response.reason))
+    def _putUploadFile(self, path, tmp, overwrite):
+        (ok, result) = self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
+        if ok:
+            return result
+        else:
+            raise result
 
-    def __makeParentDirs(self, url, depth=0):
-        """Create parent directories.
+    def _listDir(self, path):
+        path_info = self._webdav.listdir(path)
+        entries = []
+        for info in path_info:
+            if info["path"]:
+                entries.append(info["path"].removeprefix(path + "/"))
+        return entries
 
-        Our artifacts are stored directory levels deep. Only do the MKCOL up
-        to the base level.
-        """
-        (dirs, _, _) = url.rpartition("/")
-        if not dirs:
-            return
+    def _delete(self, filename):
+        self._webdav.delete(filename)
 
-        response = self.__mkcol(dirs)
-        if response.status == 409 and depth < 2:
-            # 409 Conflict - Parent collection does not exist.
-            self.__makeParentDirs(dirs, depth + 1)
-            response = self.__mkcol(dirs)
+    def _stat(self, filename):
+        stats = self._webdav.stat(filename)
+        if stats['etag'] is not None and not stats['etag'].startswith('W/'):
+            return stats['etag']
+        if not stats['mdate'] or not stats['len']:
+            raise ArtifactDownloadError("Missing stats for file " + filename)
+        from email.utils import parsedate_to_datetime
+        return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
 
-        # We expect to create the directory (201) or it already existed (405).
-        # If the server does not support MKCOL we'd expect a 405 too and hope
-        # for the best...
-        if response.status not in [201, 405]:
-            raise ArtifactUploadError("MKCOL {} {}".format(response.status, response.reason))
+    def _getAudit(self, filename):
+        downloader = self._webdav.getPartialDownloader("/".join([self.__url.path, filename]))
+        while True:
+            try:
+                file = io.BytesIO(downloader.get())
+                return self._extractAudit(fileobj=file)
+            except (EOFError, tarfile.ReadError):
+                # partial downloader reached EOF or could not extract the audit from the tarfile, so we get more data
+                downloader.more()
+                pass
 
-    def __mkcol(self, url):
-        # MKCOL resources must have a trailing slash because they are
-        # directories. Otherwise Apache might send a HTTP 301. Nginx refuses to
-        # create the directory with a 409 which looks odd.
-        if not url.endswith("/"):
-            url += "/"
-        connection = self._getConnection()
-        connection.request("MKCOL", url, headers=self._getHeaders())
-        response = connection.getresponse()
-        response.read()
-        return response
+    def _getArchiveUri(self):
+        return self.__url.netloc + self.__url.path
 
-class SimpleHttpDownloader:
+
+class HttpDownloader:
     def __init__(self, archiver, response):
         self.archiver = archiver
         self.response = response
@@ -924,7 +995,8 @@ class SimpleHttpDownloader:
             self.archiver._resetConnection()
         return False
 
-class SimpleHttpUploader:
+
+class HttpUploader:
     def __init__(self, archiver, url, overwrite):
         self.archiver = archiver
         self.tmp = TemporaryFile()
@@ -1218,7 +1290,7 @@ def getSingleArchiver(recipes, archiveSpec):
     if archiveBackend == "file":
         return LocalArchive(archiveSpec)
     elif archiveBackend == "http":
-        return SimpleHttpArchive(archiveSpec)
+        return HttpArchive(archiveSpec)
     elif archiveBackend == "shell":
         return CustomArchive(archiveSpec, recipes.envWhiteList())
     elif archiveBackend == "azure":

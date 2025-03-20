@@ -251,19 +251,23 @@ class TestUserConfig(RecipesTmp, TestCase):
             {
                 "archivePrepend" : [
                     {
+                        "name" : "local",
                         "backend" : "file",
                         "path" : "/foo/bar",
                     },
                     {
+                        "name" : "remote_prepend",
                         "backend" : "http",
                         "url" : "http://bob.test/prepend",
                     },
                 ],
                 "archive" : {
+                    "name" : "remote",
                     "backend" : "http",
                     "url" : "http://bob.test/main",
                 },
                 "archiveAppend" : {
+                    "name" : "remote_append",
                     "backend" : "http",
                     "url" : "http://bob.test/append",
                 },
@@ -274,18 +278,22 @@ class TestUserConfig(RecipesTmp, TestCase):
         self.assertEqual(
             [
                 {
+                    "name" : "local",
                     "backend" : "file",
                     "path" : "/foo/bar",
                 },
                 {
+                    "name" : "remote_prepend",
                     "backend" : "http",
                     "url" : "http://bob.test/prepend",
                 },
                 {
+                    "name" : "remote",
                     "backend" : "http",
                     "url" : "http://bob.test/main",
                 },
                 {
+                    "name" : "remote_append",
                     "backend" : "http",
                     "url" : "http://bob.test/append",
                 },

@@ -14,6 +14,7 @@ cat >"${cfg}.yaml" <<EOF
 share:
     path: "$(mangle_path "$shareDir")"
 archive:
+    name: "local"
     backend: file
     path: "$(mangle_path "$archiveDir")"
 EOF

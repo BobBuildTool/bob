@@ -17,7 +17,7 @@ Generic command format:
 
 ::
 
-    bob archive [-h] subcommand ...
+    bob archive [-h] [-l] [-a] [-b NAMES] subcommand ...
 
 Available sub-commands:
 
@@ -31,9 +31,11 @@ Available sub-commands:
 Description
 -----------
 
-The bob archive command can be used to manage local binary artifact archives.
-The command must be executed in the root of the archive and needs write access
-to create an index cache.
+The bob archive command can be used to manage binary artifact archives.
+The command works on the archives defined in the user configuration :ref:`archive <configuration-config-archive>` .
+The archives require the `managed` flag.
+The archives to work on need to be explicitly specified (`-l`, `-a`, `-b`). These arguments are mutually exclusive.
+Write access to the recipe root folder to create an index cache is required.
 
 Artifacts are managed by the information included in their :ref:`Audit Trail
 <audit-trail>`. See the Audit Trail documentation for a detailed description of
@@ -71,6 +73,14 @@ the included data. Currently the ``bob archive`` command has access to the
 Options
 -------
 
+``-l, --local``
+    Instead of working with the archives defined in the user configuration, the command will operate in the working directory.
+    This can be useful for automated tasks running on a server. Make sure to have write access to the working directory.
+``-a, --all``
+    Execute the command on all suitable archives defined in the user configuration.
+``-b, --backend NAME``
+    `NAME` is the name of the archive defined in the user configuration. Multiple archives may be provided by repeatedly using `-b`.
+    The command is executed on all of those archives.
 ``--dry-run``
     Do not actually delete any artifacts but show what would get removed.
 

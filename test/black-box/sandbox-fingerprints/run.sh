@@ -16,6 +16,7 @@ ARCHIVE="$(mktemp -d)"
 trap 'rm -rf $ARCHIVE' EXIT
 cat >default.yaml <<EOF
 archive:
+    name: "local"
     backend: file
     path: "$ARCHIVE"
 whitelist:

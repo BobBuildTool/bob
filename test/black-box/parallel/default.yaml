@@ -1,3 +1,4 @@
 archive:
+    name : "local"
     backend: file
     path: /does/not/exist

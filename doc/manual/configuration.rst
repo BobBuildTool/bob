@@ -2220,9 +2220,10 @@ Type: Dictionary or list of dictionaries
 The ``archive`` key configures the default binary artifact server(s) that
 should be used. It is either directly an archive backend entry or a list of
 archive backends. For each entry at least the ``backend`` key must be
-specified. Optionally there can be a ``flags`` key that receives a list of
-various flags, in particular for what operations the backend might be used. See
-the following list for possible flags. The default is ``[download, upload]``.
+specified. Optionally there can be a ``name`` key that is used in log output
+and a ``flags`` key that receives a list of various flags, in particular for
+what operations the backend might be used. See the following list for possible flags.
+The default is ``[download, upload]``.
 
 ``download``
     Use this archive to download artifacts. Note that you still have to
@@ -2232,7 +2233,9 @@ the following list for possible flags. The default is ``[download, upload]``.
 ``upload``
     Use this archive to upload artifacts. To actually upload to the archive the
     build must be performed with uploads enabled (``--upload``).
-
+``managed``
+    This archive is managed, meaning the files can be iterated and deleted.
+    This is required for the archive command to work.
 ``cache``
     Use this archive to cache downloaded artifacts from other archives. If a
     binary artifact was successfully downloaded from another archive it will
@@ -2316,10 +2319,12 @@ It is also possible to use separate methods for upload and download::
     archive:
         -
             backend: http
+            name: "http-archive"
             url: "http://localhost:8001/archive"
             flags: [download]
         -
             backend: shell
+            name: "ssh-archive"
             upload: "scp -q ${BOB_LOCAL_ARTIFACT} localhost:archive/${BOB_REMOTE_ARTIFACT}"
             download: "scp -q localhost:archive/${BOB_REMOTE_ARTIFACT} ${BOB_LOCAL_ARTIFACT}"
             flags: [upload]
