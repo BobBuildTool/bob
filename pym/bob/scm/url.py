@@ -37,7 +37,7 @@ MONTHNAME = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
 
 def isYounger(update, existing):
     if not os.path.exists(existing): return True
-    return os.stat(update).st_mtime > os.stat(existing).st_mtime
+    return os.stat(update).st_mtime_ns > os.stat(existing).st_mtime_ns
 
 def time2HTTPDate(timestamp):
     """Return the timestamp formatted as RFC7231 Section 7.1.1.1 conformant string."""
