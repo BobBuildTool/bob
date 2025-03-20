@@ -17,7 +17,7 @@ Generic command format:
 
 ::
 
-    bob archive [-h] [-l] [-a] [-b NAMES] subcommand ...
+    bob archive [-h] [-l | -a | -b name] subcommand ...
 
 Available sub-commands:
 
