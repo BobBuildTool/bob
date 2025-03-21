@@ -7,6 +7,7 @@ from unittest import TestCase
 import schema
 
 from bob.input import Env, VarDefineValidator
+from bob.errors import ParseError
 
 class TestEnv(TestCase):
 
@@ -65,6 +66,19 @@ class TestEnv(TestCase):
         e1 = Env()
         e1.touch(['foo'])
         self.assertEqual(e1.touchedKeys(), set(['foo']))
+
+    def testSubstituteCondDictErrors(self):
+        e = Env({"A" : "a"})
+
+        self.assertEqual(e.substituteCondDict({ "X" : ("$A", None)}, "prop"),
+                         {"X" : "a"})
+
+        with self.assertRaises(ParseError) as exc:
+            e.substituteCondDict({ "X" : ("$B", None)}, "|prop|")
+        self.assertIn("|prop|", exc.exception.slogan)
+
+        self.assertEqual(e.substituteCondDict({ "X" : ("$B", None)}, "prop", nounset=False),
+                         {"X" : ""})
 
 
 class TestVarDefineValidator(TestCase):

@@ -2085,3 +2085,176 @@ class TestAliases(RecipesTmp, TestCase):
             packages = self.generate()
             packages.walkPackagePath("root").getPackageStep()
 
+
+class TestConditionalEnv(RecipesTmp, TestCase):
+    """Test conditional environment blocks"""
+
+    def testDependendsEnv(self):
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: level1
+                  environment:
+                      V1:
+                          value: "x"
+                          if: "${ENABLE_V1:-0}"
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("level1", """\
+            packageVars: [V1]
+            packageScript: "true"
+            """)
+
+        packages = self.generate()
+        ps = packages.walkPackagePath("root/level1").getPackageStep()
+        self.assertEqual({}, ps.getEnv())
+
+        packages = self.generate(env={"ENABLE_V1" : "1"})
+        ps = packages.walkPackagePath("root/level1").getPackageStep()
+        self.assertEqual({"V1" : "x"}, ps.getEnv())
+
+    def testEnvironment(self):
+        self.writeRecipe("root", """\
+            root: True
+            environment:
+                V1:
+                    value: "x"
+                    if: "${ENABLE_V1:-0}"
+            buildVars: [V1]
+            buildScript: "true"
+            """)
+
+        packages = self.generate()
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({}, ps.getEnv())
+
+        packages = self.generate(env={"ENABLE_V1" : "1"})
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({"V1" : "x"}, ps.getEnv())
+
+    def testMetaEnvironment(self):
+        self.writeRecipe("root", """\
+            root: True
+            metaEnvironment:
+                V1:
+                    value: "x"
+                    if: "${ENABLE_V1:-0}"
+            """)
+
+        # Old substituteMetaEnv policy
+        packages = self.generate()
+        pkg = packages.walkPackagePath("root")
+        self.assertEqual({}, pkg.getMetaEnv())
+
+        packages = self.generate(env={"ENABLE_V1" : "1"})
+        pkg = packages.walkPackagePath("root")
+        self.assertEqual({"V1" : "x"}, pkg.getMetaEnv())
+
+        # New substituteMetaEnv policy
+        self.writeConfig({
+            "policies" : { "substituteMetaEnv" : True },
+        })
+
+        packages = self.generate()
+        pkg = packages.walkPackagePath("root")
+        self.assertEqual({}, pkg.getMetaEnv())
+
+        packages = self.generate(env={"ENABLE_V1" : "1"})
+        pkg = packages.walkPackagePath("root")
+        self.assertEqual({"V1" : "x"}, pkg.getMetaEnv())
+
+    def testPrivateEnvironment(self):
+        self.writeRecipe("root", """\
+            root: True
+            privateEnvironment:
+                V1:
+                    value: "x"
+                    if: "${ENABLE_V1:-0}"
+                V2: y
+            buildVars: [V1, V2]
+            buildScript: "true"
+            """)
+
+        packages = self.generate()
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({"V2" : "y"}, ps.getEnv())
+
+        packages = self.generate(env={"ENABLE_V1" : "1"})
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({"V1" : "x", "V2" : "y"}, ps.getEnv())
+
+    def testProvideToolsEnv(self):
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tool
+                  use: [tools]
+            packageTools: [t1]
+            packageVars: [V1]
+            """)
+        self.writeRecipe("tool", """\
+            provideTools:
+                t1:
+                    path: "."
+                    environment:
+                        V1:
+                            value: "x"
+                            if: "${ENABLE_V1:-0}"
+            """)
+
+        packages = self.generate()
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({}, ps.getEnv())
+
+        packages = self.generate(env={"ENABLE_V1" : "1"})
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({"V1" : "x"}, ps.getEnv())
+
+    def testProvideSandboxEnv(self):
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: sandbox
+                  use: [sandbox]
+            packageVars: [V1]
+            """)
+        self.writeRecipe("sandbox", """\
+            provideSandbox:
+                paths: [bin]
+                environment:
+                    V1:
+                        value: "x"
+                        if: "${ENABLE_V1:-0}"
+            """)
+
+        packages = self.generate(sandboxEnabled=True)
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({}, ps.getEnv())
+
+        packages = self.generate(sandboxEnabled=True, env={"ENABLE_V1" : "1"})
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({"V1" : "x"}, ps.getEnv())
+
+    def testProvideVars(self):
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: lib
+                  use: [environment]
+            packageVars: [V1]
+            """)
+        self.writeRecipe("lib", """\
+            provideVars:
+                V1:
+                    value: "x"
+                    if: "${ENABLE_V1:-0}"
+            """)
+
+        packages = self.generate()
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({}, ps.getEnv())
+
+        packages = self.generate(env={"ENABLE_V1" : "1"})
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({"V1" : "x"}, ps.getEnv())
