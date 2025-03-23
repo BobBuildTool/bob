@@ -90,8 +90,8 @@ class Artifact:
         }
     })
 
-    def __init__(self):
-        self.reset(b'\x00' * 20, b'\x00' * 20, b'\x00' * 20)
+    def __init__(self, date=None):
+        self.reset(b'\x00' * 20, b'\x00' * 20, b'\x00' * 20, date)
 
     @classmethod
     def fromData(cls, data):
@@ -120,7 +120,7 @@ class Artifact:
         digestData(d, h)
         self.__id = h.digest()
 
-    def reset(self, variantId, buildId, resultHash):
+    def reset(self, variantId, buildId, resultHash, date=None):
         self.__variantId = variantId
         self.__buildId = buildId
         self.__resultHash = resultHash
@@ -134,7 +134,7 @@ class Artifact:
             'release'  : u.release,
             'version'  : u.version,
             'machine'  : u.machine,
-            'date'     : datetime.now(timezone.utc).isoformat(),
+            'date'     : (datetime.now(timezone.utc) if date is None else date).isoformat(),
         }
         osRelease = self.__getOsRelease()
         if osRelease is not None:
