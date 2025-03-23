@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from . import BOB_INPUT_HASH
+from . import BOB_INPUT_HASH, DEBUG
 from .errors import BuildError, ParseError
 from .scm import GitAudit, SvnAudit, UrlAudit, ImportAudit, auditFromData
 from .utils import asHexStr, hashFile, binStat
@@ -55,6 +55,7 @@ class HexValidator:
             raise schema.SchemaUnexpectedTypeError("not valid hex str", None)
 
 class Artifact:
+    __slots__ = ['__data']
 
     SCMS = {
         'git' : GitAudit,
@@ -90,6 +91,9 @@ class Artifact:
         }
     })
 
+    REQUIRED_KEYS = frozenset(("variant-id", "build-id", "artifact-id",
+                               "result-hash", "meta", "build", "dependencies"))
+
     def __init__(self, date=None):
         self.reset(b'\x00' * 20, b'\x00' * 20, b'\x00' * 20, date)
 
@@ -113,178 +117,125 @@ class Artifact:
 
         return ret
 
-    def __calculate(self):
-        if self.__id is not None: return
-        d = self.__dump()
+    def __invalidateId(self):
+        if 'artifact-id' in self.__data:
+            del self.__data['artifact-id']
+
+    def __calculateArtifactId(self):
+        if 'artifact-id' in self.__data: return
         h = hashlib.sha1()
-        digestData(d, h)
-        self.__id = h.digest()
+        digestData(self.__data, h)
+        self.__data['artifact-id'] = asHexStr(h.digest())
 
     def reset(self, variantId, buildId, resultHash, date=None):
-        self.__variantId = variantId
-        self.__buildId = buildId
-        self.__resultHash = resultHash
-        self.__recipes = None
-        self.__layers = {}
-        self.__defines = {}
         u = platform.uname()
-        self.__build = {
-            'sysname'  : u.system,
-            'nodename' : u.node,
-            'release'  : u.release,
-            'version'  : u.version,
-            'machine'  : u.machine,
-            'date'     : (datetime.now(timezone.utc) if date is None else date).isoformat(),
+        # Versions of Bob before 0.25 required some fields to be always
+        # present. Keep them for compatibility reasons.
+        self.__data = {
+            "variant-id" : asHexStr(variantId),
+            "build-id" : asHexStr(buildId),
+            "result-hash" : asHexStr(resultHash),
+            "meta" : {},
+            "build" : {
+                'sysname'  : u.system,
+                'nodename' : u.node,
+                'release'  : u.release,
+                'version'  : u.version,
+                'machine'  : u.machine,
+                'date'     : (datetime.now(timezone.utc) if date is None else date).isoformat(),
+            },
+            "env" : "",
+            "scms" : [],
+            "dependencies" : {}
         }
+
         osRelease = self.__getOsRelease()
         if osRelease is not None:
-            self.__build['os-release'] = osRelease
-        self.__env = ""
-        self.__metaEnv = {}
-        self.__scms = []
-        self.__deps = []
-        self.__tools = {}
-        self.__sandbox = None
-        self.__id = None
+            self.__data['build']['os-release'] = osRelease
 
     def load(self, data):
-        self.__id = None
-        self.__variantId = data["variant-id"]
-        self.__buildId = data["build-id"]
-        self.__resultHash = data["result-hash"]
-
-        recipes = data.get("recipes")
-        if recipes is not None:
-            self.__recipes = auditFromData(recipes)
-        else:
-            self.__recipes = None
-
-        layers = data.get("layers")
-        if layers:
-            self.__layers = { name : (audit and auditFromData(audit))
-                              for name, audit in layers.items() }
-        else:
-            self.__layers = {}
-
-        self.__defines = data["meta"]
-        self.__build = data["build"]
-        self.__env = data["env"]
-        self.__metaEnv = data.get("metaEnv", {})
-
-        self.__scms = []
-        scms = data["scms"]
-        for i in scms:
-            self.__scms.append(auditFromData(i))
-
-        deps = data["dependencies"]
-        self.__deps = deps.get("args", [])
-        self.__tools = deps.get("tools", {})
-        self.__sandbox = deps.get("sandbox")
-
-        # validate id
-        self.__calculate()
-        if self.__id != data["artifact-id"]:
-            raise ParseError("Corrupt Audit! Artifact-Id does not match!")
+        if not isinstance(data, dict) or any(k not in data for k in self.REQUIRED_KEYS):
+            raise ParseError("Invalid audit trail")
+        self.__data = data
 
     def dump(self):
-        d = self.__dump()
-        d['artifact-id'] = asHexStr(self.getId())
-        return d
-
-    def __dump(self):
-        dependencies = {}
-        if self.__deps:
-            dependencies["args"] = [ asHexStr(i) for i in self.__deps ]
-        if self.__tools:
-            dependencies["tools"] = { n : asHexStr(t) for (n,t) in self.__tools.items() }
-        if self.__sandbox:
-            dependencies["sandbox"] = asHexStr(self.__sandbox)
-
-        ret = {
-            "variant-id" : asHexStr(self.__variantId),
-            "build-id" : asHexStr(self.__buildId),
-            "result-hash" : asHexStr(self.__resultHash),
-            "meta" : self.__defines,
-            "build" : self.__build,
-            "env" : self.__env,
-            "scms" : [ s.dump() for s in self.__scms ],
-            "dependencies" : dependencies
-        }
-
-        if self.__metaEnv:
-            ret[ "metaEnv"] = self.__metaEnv
-
-        if self.__recipes is not None:
-            ret["recipes"] = self.__recipes.dump()
-
-        if self.__layers: # Explicitly filter empty layers
-            ret["layers"] = { name : (audit and audit.dump())
-                              for name, audit in self.__layers.items() }
-
-        return ret
+        self.__calculateArtifactId()
+        return self.__data
 
     def setRecipes(self, recipes):
-        self.__recipes = recipes
+        if recipes is None:
+            if "recipes" in self.__data:
+                del self.__data["recipes"]
+        else:
+            self.__data["recipes"] = recipes.dump()
+        self.__invalidateId()
 
     def setLayers(self, layers):
-        self.__layers = layers
+        if layers:
+            self.__data['layers'] = { name : (audit and audit.dump())
+                                      for name, audit in layers.items() }
+        elif 'layers' in self.__data:
+            del self.__data['layers']
+        self.__invalidateId()
 
     def setEnv(self, env):
         try:
             with open(env) as f:
-                self.__env = f.read()
+                self.__data["env"] = f.read()
         except OSError as e:
             raise ParseError("Error reading environment: " + str(e))
-        self.__id = None
+        self.__invalidateId()
 
     def addDefine(self, name, value):
-        self.__defines[name] = value
-        self.__id = None
+        self.__data["meta"][name] = value
+        self.__invalidateId()
 
     async def addScm(self, name, workspace, dir, extra):
         scm = Artifact.SCMS.get(name)
         if scm is None:
             raise BuildError("Cannot handle SCM: " + name)
-        self.__scms.append(await scm.fromDir(workspace, dir, extra))
-        self.__id = None
+        self.__data['scms'].append((await scm.fromDir(workspace, dir, extra)).dump())
+        self.__invalidateId()
 
-    def addTool(self, name, tool):
-        self.__tools[name] = tool
-        self.__id = None
+    def addTool(self, name, toolId):
+        self.__data["dependencies"].setdefault("tools", {})[name] = asHexStr(toolId)
+        self.__invalidateId()
 
     def addMetaEnv(self, var, value):
-        self.__metaEnv[var] = value
+        self.__data.setdefault("metaEnv", {})[var] = value
+        self.__invalidateId()
 
-    def setSandbox(self, sandbox):
-        self.__sandbox = sandbox
-        self.__id = None
+    def setSandbox(self, sandboxId):
+        self.__data["dependencies"]["sandbox"] = asHexStr(sandboxId)
+        self.__invalidateId()
 
-    def addArg(self, arg):
-        self.__deps.append(arg)
-        self.__id = None
+    def addArg(self, argId):
+        self.__data["dependencies"].setdefault("args", []).append(asHexStr(argId))
+        self.__invalidateId()
 
     def getId(self):
-        self.__calculate()
-        return self.__id
+        self.__calculateArtifactId()
+        return bytes.fromhex(self.__data['artifact-id'])
 
     def getBuildId(self):
-        return self.__buildId
+        return bytes.fromhex(self.__data['build-id'])
 
     def getReferences(self):
+        deps = self.__data["dependencies"]
         ret = set()
-        for i in self.__deps: ret.add(i)
-        if self.__sandbox: ret.add(self.__sandbox)
-        for i in self.__tools.values(): ret.add(i)
+        for i in deps.get("args", []): ret.add(bytes.fromhex(i))
+        if "sandbox" in deps: ret.add(bytes.fromhex(deps["sandbox"]))
+        for i in deps.get("tools", {}).values(): ret.add(bytes.fromhex(i))
         return ret
 
     def getMetaData(self):
-        return self.__defines
+        return self.__data["meta"]
 
     def getBuildInfo(self):
-        return self.__build
+        return self.__data["build"]
 
     def getMetaEnv(self):
-        return self.__metaEnv
+        return self.__data.get("metaEnv", {})
 
 class Audit:
     SCHEMA = schema.Schema({
@@ -350,23 +301,25 @@ class Audit:
     def load(self, file, name):
         try:
             tree = json.load(io.TextIOWrapper(file, encoding='utf8'))
-            tree = Audit.SCHEMA.validate(tree)
+            if DEBUG['audit']:
+                Audit.SCHEMA.validate(tree)
+                self.__validate()
             self.__artifact = Artifact.fromData(tree["artifact"])
             self.__references = {
-                r["artifact-id"] : Artifact.fromData(r) for r in tree["references"]
+                bytes.fromhex(r["artifact-id"]) : Artifact.fromData(r)
+                for r in tree["references"]
             }
-        except schema.SchemaError as e:
-            raise ParseError(name + ": Invalid audit record: " + str(e),
-                             help="Try updating to the latest Bob version. The audit probably contains new record types.")
-        except ValueError as e:
-            raise ParseError(name + ": Invalid json: " + str(e))
-        self.__validate()
+        except (ValueError, KeyError, TypeError) as e:
+            raise ParseError(name + ": Invalid audit trail: " + str(e))
 
     def save(self, file):
         tree = {
             "artifact" : self.__artifact.dump(),
             "references" : [ a.dump() for a in self.__references.values() ]
         }
+        if DEBUG['audit']:
+            self.__validate()
+            Audit.SCHEMA.validate(tree)
         try:
             with gzip.open(file, 'wb', 6) as gzf:
                 json.dump(tree, io.TextIOWrapper(gzf, encoding='utf8'))
