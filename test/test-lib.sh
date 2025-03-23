@@ -104,16 +104,16 @@ cleanup()
 run_bob()
 {
 	if is_win32 ; then
-		python "$BOB_ROOT/bob" --debug=pkgck,ngd "$@"
+		python "$BOB_ROOT/bob" --debug=pkgck,ngd,audit "$@"
 	else
-		"$BOB_ROOT/bob" --debug=pkgck,ngd "$@"
+		"$BOB_ROOT/bob" --debug=pkgck,ngd,audit "$@"
 	fi
 }
 
 # Run bob on pty. This only works on Linux, though.
 run_bob_tty()
 {
-	script -c "/bin/bash -c \"$BOB_ROOT/bob --debug=pkgck,ngd $*\"" -e /dev/null
+	script -c "/bin/bash -c \"$BOB_ROOT/bob --debug=pkgck,ngd,audit $*\"" -e /dev/null
 }
 
 # Run bob only with the "no global defaults" debug switch. Used for black box

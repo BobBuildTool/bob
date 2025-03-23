@@ -465,7 +465,7 @@ __bob_subcommands()
             elif [[ $prev == "--query" ]] ; then
                __bob_complete_words "nullset nullglob nullfail"
             elif [[ $prev == "--debug" ]] ; then
-               __bob_complete_words "pkgck ngd prof"
+               __bob_complete_words "pkgck ngd prof audit"
             elif [[ $prev == "--color" ]] ; then
                __bob_complete_words "never always auto"
             else
