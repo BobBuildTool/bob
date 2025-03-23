@@ -566,8 +566,8 @@ class AbstractTool:
         """Create concrete tool for given step."""
         path = env.substitute(self.path, "provideTools::path")
         libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
-        environment = { k : env.substitute(v, "provideTools::environment::"+k)
-            for k, v in self.environment.items() }
+        environment = env.substituteCondDict(self.environment,
+                                             "provideTools::environment")
         return CoreTool(coreStepRef, path, libs, self.netAccess, environment,
                         self.fingerprintScript, self.fingerprintIf,
                         self.fingerprintVars)
@@ -698,10 +698,8 @@ class CoreSandbox(CoreItem):
             if (m[0] != "") and (m[1] != ""):
                 self.mounts.append(m)
         self.mounts.extend(recipeSet.getSandboxMounts())
-        self.environment = {
-            k : env.substitute(v, "providedSandbox::environment")
-            for (k, v) in spec.get('environment', {}).items()
-        }
+        self.environment = env.substituteCondDict(spec.get('environment', {}),
+                                                  "providedSandbox::environment")
         self.user = recipeSet.getSandboxUser() or spec.get('user', "nobody")
 
         # Calculate a "resultId" so that only identical sandboxes match
@@ -1793,14 +1791,22 @@ class LayerValidator:
         return LayerSpec(name, RecipeSet.LAYERS_SCM_SCHEMA.validate(_data)[0])
 
 class VarDefineValidator:
-    def __init__(self, keyword):
-        self.__varName = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+    VAR_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+    VAR_DEF = schema.Schema({
+            'value' : str,
+            schema.Optional("if"): schema.Or(str, IfExpression),
+        })
+
+    def __init__(self, keyword, conditional=True):
         self.__keyword = keyword
+        self.__conditional = conditional
 
     def validate(self, data):
         if not isinstance(data, dict):
             raise schema.SchemaUnexpectedTypeError(
                 "{}: must be a dictionary".format(self.__keyword), None)
+
+        data = data.copy()
         for key,value in sorted(data.items()):
             if not isinstance(key, str):
                 raise schema.SchemaUnexpectedTypeError(
@@ -1812,13 +1818,19 @@ class VarDefineValidator:
                     "{}: bad variable '{}'. Environment variables starting with 'BOB_' are reserved!"
                         .format(self.__keyword, key),
                     None)
-            if self.__varName.match(key) is None:
+            if self.VAR_NAME.match(key) is None:
                 raise schema.SchemaWrongKeyError(
                     "{}: bad variable name '{}'.".format(self.__keyword, key),
                     None)
-            if not isinstance(value, str):
+            if isinstance(value, dict) and self.__conditional:
+                self.VAR_DEF.validate(value, error=f"{self.__keyword}: {key}: invalid definition!")
+                data[key] = (value['value'], value.get('if'))
+            elif isinstance(value, str):
+                if self.__conditional:
+                    data[key] = (value, None)
+            else:
                 raise schema.SchemaUnexpectedTypeError(
-                    "{}: bad variable '{}'. Environment variable values must be strings!"
+                    "{}: {}: bad variable definition type."
                         .format(self.__keyword, key),
                     None)
         return data
@@ -2378,8 +2390,7 @@ class Recipe(object):
             "__tools" : tools })
         env = inputEnv.derive()
         for i in self.__varSelf:
-            env.update(( (key, env.substitute(value, "environment::"+key))
-                         for key, value in i.items() ))
+            env.update(env.substituteCondDict(i, "environment"))
         states = { n : s.copy() for (n,s) in inputStates.items() }
 
         # update plugin states
@@ -2455,8 +2466,7 @@ class Recipe(object):
 
             if dep.envOverride:
                 thisDepEnv = thisDepEnv.derive(
-                    { key : env.substitute(value, "depends["+realName+"].environment["+key+"]")
-                      for key, value in dep.envOverride.items() })
+                    env.substituteCondDict(dep.envOverride, "depends["+realName+"].environment"))
 
             r = self.__recipeSet.getRecipe(recipeName)
             try:
@@ -2597,15 +2607,13 @@ class Recipe(object):
 
         # apply private environment
         for i in self.__varPrivate:
-            env = env.derive({ key : env.substitute(value, "privateEnvironment::"+key)
-                               for key, value in i.items() })
+            env.update(env.substituteCondDict(i, "privateEnvironment"))
 
         # meta variables override existing variables
         if self.__recipeSet.getPolicy('substituteMetaEnv'):
-            metaEnv = { key : env.substitute(value, "metaEnvironment::"+key)
-                for key, value in self.__metaEnv.items() }
+            metaEnv = env.substituteCondDict(self.__metaEnv, "metaEnvironment")
         else:
-            metaEnv = self.__metaEnv
+            metaEnv = { k : v[0] for k, v in self.__metaEnv.items() if env.evaluate(v[1], k) }
         env.update(metaEnv)
 
         # set fixed built-in variables
@@ -2711,10 +2719,7 @@ class Recipe(object):
             [CoreRef(buildCoreStep)], doFingerprint, toolDepPackage, toolDepPackageWeak)
 
         # provide environment
-        provideEnv = {}
-        for (key, value) in self.__provideVars.items():
-            provideEnv[key] = env.substitute(value, "provideVars::"+key)
-        packageCoreStep.providedEnv = provideEnv
+        packageCoreStep.providedEnv = env.substituteCondDict(self.__provideVars, "provideVars")
 
         # provide tools
         packageCoreStep.providedTools = { name : tool.prepare(packageCoreStep, env)
@@ -3305,7 +3310,7 @@ class RecipeSet:
                 lambda x: updateDicRecursive(self.__commandConfig, x) if not self._ignoreCmdConfig else None
             ),
             "environment" : BuiltinSetting(
-                VarDefineValidator("environment"),
+                VarDefineValidator("environment", conditional=False),
                 lambda x: self.__defaultEnv.update(x)
             ),
             "fallbackMirror"        : BuiltinSetting(self.MIRRORS_SCHEMA, updateFallbackMirror, True),

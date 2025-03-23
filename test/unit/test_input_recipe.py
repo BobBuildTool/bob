@@ -32,12 +32,12 @@ class TestDependencies(TestCase):
         self.cmpEntry(res[1], "b")
 
     def testMixedList(self):
-        deps = [ "a", { "name" : "b", "environment" : { "foo" : "bar" }} ]
+        deps = [ "a", { "name" : "b", "environment" : { "foo" : ("bar", None) }} ]
         res = list(Recipe.Dependency.parseEntries(deps))
 
         self.assertEqual(len(res), 2)
         self.cmpEntry(res[0], "a")
-        self.cmpEntry(res[1], "b", env={"foo" : "bar" })
+        self.cmpEntry(res[1], "b", env={"foo" : ("bar", None)})
 
     def testNestedList(self):
         deps = [
@@ -58,11 +58,11 @@ class TestDependencies(TestCase):
         deps = [
             "a",
             {
-                "environment" : { "foo" : "1", "bar" : "2" },
+                "environment" : { "foo" : ("1", None), "bar" : ("2", None) },
                 "depends" : [
                     "b",
                     {
-                        "environment" : { "bar" : "3", "baz" : "4" },
+                        "environment" : { "bar" : ("3", None), "baz" : ("4", None) },
                         "depends" : [ "c" ]
                     },
                     "d"
@@ -74,9 +74,9 @@ class TestDependencies(TestCase):
 
         self.assertEqual(len(res), 5)
         self.cmpEntry(res[0], "a")
-        self.cmpEntry(res[1], "b", env={"foo" : "1", "bar" : "2"})
-        self.cmpEntry(res[2], "c", env={"foo" : "1", "bar" : "3", "baz" : "4"})
-        self.cmpEntry(res[3], "d", env={"foo" : "1", "bar" : "2"})
+        self.cmpEntry(res[1], "b", env={"foo" : ("1", None), "bar" : ("2", None)})
+        self.cmpEntry(res[2], "c", env={"foo" : ("1", None), "bar" : ("3", None), "baz" : ("4", None)})
+        self.cmpEntry(res[3], "d", env={"foo" : ("1", None), "bar" : ("2", None)})
         self.cmpEntry(res[4], "e")
 
     def testNestedIf(self):
@@ -660,23 +660,23 @@ class TestEnvironment(RecipeCommon, TestCase):
                 recipe = {
                     "inherit" : ["a", "b"],
                     key : {
-                        "A" : "<lib>${A:-}",
-                        "B" : "<lib>${B:-}",
-                        "C" : "<lib>${C:-}",
+                        "A" : ("<lib>${A:-}", None),
+                        "B" : ("<lib>${B:-}", None),
+                        "C" : ("<lib>${C:-}", None),
                     },
                     "packageVars" : ["A", "B", "C"]
                 }
                 classes = {
                     "a" : {
                         key : {
-                            "A" : "${A:-}<a>",
-                            "B" : "<a>",
+                            "A" : ("${A:-}<a>", None),
+                            "B" : ("<a>", None),
                         },
                     },
                     "b" : {
                         key : {
-                            "B" : "${B:-}<b>",
-                            "C" : "<b>",
+                            "B" : ("${B:-}<b>", None),
+                            "C" : ("<b>", None),
                         },
                     },
                 }
@@ -695,8 +695,8 @@ class TestEnvironment(RecipeCommon, TestCase):
         """Pre 0.25 versions did not apply substitution in metaEnvironment"""
         recipe = {
             "metaEnvironment" : {
-                "A" : "$A",
-                "B" : "$B'",
+                "A" : ("$A", None),
+                "B" : ("$B'", None),
             },
         }
         pkg = self.parseAndPrepare(recipe)
@@ -710,22 +710,22 @@ class TestEnvironment(RecipeCommon, TestCase):
         recipe = {
             "inherit" : ["a", "b"],
             "metaEnvironment" : {
-                "A" : "<lib>${A:-}",
-                "B" : "<lib>${B:-}",
+                "A" : ("<lib>${A:-}", None),
+                "B" : ("<lib>${B:-}", None),
             },
             "packageVars" : ["A", "B", "C"]
         }
         classes = {
             "a" : {
                 "metaEnvironment" : {
-                    "A" : "${A:-}<a>",
-                    "B" : "<a>",
+                    "A" : ("${A:-}<a>", None),
+                    "B" : ("<a>", None),
                 },
             },
             "b" : {
                 "metaEnvironment" : {
-                    "B" : "${B:-}<b>",
-                    "C" : "<b>",
+                    "B" : ("${B:-}<b>", None),
+                    "C" : ("<b>", None),
                 },
             },
         }

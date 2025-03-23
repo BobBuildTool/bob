@@ -556,6 +556,14 @@ class Env(MutableMapping):
         s = self.substitute(condition, "condition on "+prop)
         return not isFalse(s)
 
+    def substituteCondDict(self, values, prop, nounset=True):
+        try:
+            return { key : self.substitute(value, key, nounset)
+                     for key, (value, condition) in values.items()
+                     if self.evaluate(condition, key) }
+        except ParseError as e:
+            raise ParseError(f"{prop}: {e.slogan}")
+
     def touchReset(self):
         self.touched = self.touched + [ set() ]
 
