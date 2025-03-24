@@ -554,6 +554,7 @@ class RecipeSetIR:
             'fixImportScmVariant' : recipeSet.getPolicy('fixImportScmVariant'),
             'defaultFileMode' : recipeSet.getPolicy('defaultFileMode'),
             'urlScmSeparateDownload' : recipeSet.getPolicy('urlScmSeparateDownload'),
+            'failUnstableCheckouts' : recipeSet.getPolicy('failUnstableCheckouts'),
         }
         self.__data['archiveSpec'] = recipeSet.archiveSpec()
         self.__data['envWhiteList'] = sorted(recipeSet.envWhiteList())

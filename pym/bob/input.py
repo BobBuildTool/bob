@@ -3160,6 +3160,7 @@ class RecipeSet:
                 schema.Optional('substituteMetaEnv') : bool,
                 schema.Optional('managedLayers') : bool,
                 schema.Optional('urlScmSeparateDownload') : bool,
+                schema.Optional('failUnstableCheckouts') : bool,
             },
             error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
@@ -3218,7 +3219,12 @@ class RecipeSet:
             "0.25.1.dev27",
             InfoOnce("urlScmSeparateDownload policy is not set. Extracted archives of the 'url' SCM are retained in the workspace.",
                 help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#urlscmseparatedownload for more information.")
-        )
+        ),
+        "failUnstableCheckouts" : (
+            "0.25.1.dev88",
+            InfoOnce("failUnstableCheckouts policy is not set. Unexpected indeterministic checkouts are not flagged as error.",
+                help="See http://bob-build-tool.readthedocs.io/en/latest/manual/policies.html#failunstablecheckouts for more information.")
+        ),
     }
 
     _ignoreCmdConfig = False
