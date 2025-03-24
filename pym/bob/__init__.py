@@ -47,6 +47,7 @@ DEBUG = {
     'ngd' :  False,     # no-global-defaults
     'pkgck' : False,    # package-calculation-checks
     'prof' : False,     # profiling
+    'audit' : False,    # audit verification
 }
 
 # interactive debug shell
