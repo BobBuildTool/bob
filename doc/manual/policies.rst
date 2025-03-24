@@ -362,6 +362,35 @@ New behavior
     Only the extracted content is in the workspace.
 
 
+.. _policies-failUnstableCheckouts:
+
+failUnstableCheckouts
+~~~~~~~~~~~~~~~~~~~~~
+
+Introduced in: 1.0
+
+When using binary artifacts, Bob tries to avoid checkouts as far as possible.
+In doing so, some artifacts may be used while the respective sources are not
+checked out. If these checkouts still have to be performed later on (e.g.
+another variant needs to be built that had no artifact yet), the assumed
+(predicted) sources need to match the previously downloaded artifacts.
+
+Bob handles situations where the checkout step hash was predicted but the
+actual checkout yielded another result by restarting the build.  While this
+case may indeed happen for indeterministic checkouts, it is an error if it
+happens for officially stable checkouts.
+
+Old behaviour
+    Unexpected results of deterministic checkouts are not treated specially.
+    Bob will restart the build and throw away artifacts that relied on the
+    wrongly predicted sources.
+
+New behaviour
+    Instead of restarting the build when encountering an unstable checkout, Bob
+    gives an error message. The user should probably fix the recipe. It is
+    still possible to restart the build manually. This will again prune
+    downloaded artifacts that relied on the wrongly predicted sources.
+
 .. _policies-obsolete:
 
 Obsolete policies
