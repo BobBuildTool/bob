@@ -872,16 +872,17 @@ class HttpArchive(BaseArchive):
         super().__init__(spec)
         self.__url = urllib.parse.urlparse(spec["url"])
         self._webdav = WebDav(self.__url, spec.get("sslVerify", True))
+        self._retries = spec.get("retries", 1)
 
     def __retry(self, request):
-        retry = True
+        retries = self._retries
         while True:
             try:
                 return (True, request())
             except (HTTPException, OSError) as e:
                 self._webdav._resetConnection()
-                if not retry: return (False, e)
-                retry = False
+                if retries == 0: return (False, e)
+                retries -= 1
 
     def _canManage(self):
         return True

@@ -2999,6 +2999,7 @@ class ArchiveValidator:
         httpArchive = baseArchive.copy()
         httpArchive["url"] = HttpUrlValidator()
         httpArchive[schema.Optional("sslVerify")] = bool
+        httpArchive[schema.Optional("retries")] = PositiveValidator()
         shellArchive = baseArchive.copy()
         shellArchive.update({
             schema.Optional('download') : str,
@@ -3064,6 +3065,14 @@ class ToolValidator:
         else:
             self.__schema.validate(data)
             return (data["name"], data.get("if"))
+
+class PositiveValidator:
+    def validate(self, data):
+        if not isinstance(data, int):
+            raise schema.SchemaError(None, "Value must be an integer")
+        if data < 0:
+            raise schema.SchemaError(None, "Int value must not be negative")
+        return data
 
 class RecipeSet:
     """The RecipeSet corresponds to the project root directory.

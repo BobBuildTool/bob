@@ -18,6 +18,7 @@ import tarfile
 import threading
 import urllib.parse
 import sys
+from mocks.http_server import HttpServerMock
 
 from bob.archive import DummyArchive, HttpArchive, getArchiver
 from bob.errors import BuildError
@@ -60,7 +61,7 @@ def run(coro):
     with patch('bob.archive.signal.signal'):
         return runInEventLoop(coro)
 
-class BaseTester:
+class Base:
 
     def __createArtifact(self, bid, version="1"):
         bid = hexlify(bid).decode("ascii")
@@ -89,6 +90,23 @@ class BaseTester:
         with open(name, "wb") as f:
             f.write(b'\x00'*20)
         return name
+
+    def setUp(self):
+        # create repo
+        self.repo = TemporaryDirectory()
+
+        # add artifacts
+        self.dummyFileName = self.__createArtifact(DOWNLOAD_ARITFACT)
+        self.__createArtifact(WRONG_VERSION_ARTIFACT, "0")
+        self.__createBuildId(DOWNLOAD_ARITFACT)
+
+        self.executor = getProcessPoolExecutor()
+
+    def tearDown(self):
+        self.executor.shutdown()
+        self.repo.cleanup()
+
+class BaseTester(Base):
 
     def __testArtifact(self, bid):
         bid = hexlify(bid).decode("ascii")
@@ -152,13 +170,7 @@ class BaseTester:
         return getArchiver(recipes)
 
     def setUp(self):
-        # create repo
-        self.repo = TemporaryDirectory()
-
-        # add artifacts
-        self.dummyFileName = self.__createArtifact(DOWNLOAD_ARITFACT)
-        self.__createArtifact(WRONG_VERSION_ARTIFACT, "0")
-        self.__createBuildId(DOWNLOAD_ARITFACT)
+        super().setUp()
 
         # create ERROR_DOWNLOAD_ARTIFACT that is there but cannot be opened
         bid = hexlify(ERROR_DOWNLOAD_ARTIFACT).decode("ascii")
@@ -177,12 +189,6 @@ class BaseTester:
         os.makedirs(os.path.dirname(name), exist_ok=True)
         with open(name, "wb") as f:
             f.write(b'\x00')
-
-        self.executor = getProcessPoolExecutor()
-
-    def tearDown(self):
-        self.executor.shutdown()
-        self.repo.cleanup()
 
     # standard tests for options
     def testOptions(self):
@@ -672,3 +678,43 @@ class TestCustomArchive(BaseTester, TestCase):
         spec["download"] = "cp {}/$BOB_REMOTE_ARTIFACT $BOB_LOCAL_ARTIFACT".format(self.repo.name)
         spec["upload"] = "mkdir -p {P}/${{BOB_REMOTE_ARTIFACT%/*}} && cp $BOB_LOCAL_ARTIFACT {P}/$BOB_REMOTE_ARTIFACT".format(P=self.repo.name)
 
+class TestHttpArchiveRetries(Base, TestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.spec = {'backend' : 'http', 'name' : 'http-archive', 'flags' : ['download', 'upload', 'managed']}
+
+    def _getHttpArchiveInstance(self, port):
+        self.spec["url"] = "http://localhost:{}/".format(port)
+        recipes = DummyRecipeSet(self.spec)
+        return getArchiver(recipes)
+
+    def _testRetries(self, r):
+        self.spec['retries'] = r
+        # server will fail as often as retries in spec
+        with HttpServerMock(repoPath=self.repo.name, retries=r) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            archive.wantDownloadLocal(True)
+            with TemporaryDirectory() as tmp:
+                audit = os.path.join(tmp, "audit.json.gz")
+                content = os.path.join(tmp, "workspace")
+                self.assertTrue(run(archive.downloadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content,
+                                                            executor=self.executor)))
+        # server fails one more time than retries in archive sepc -> fail
+        with HttpServerMock(repoPath=self.repo.name, retries=r+1) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            archive.wantDownloadLocal(True)
+            with TemporaryDirectory() as tmp:
+                audit = os.path.join(tmp, "audit.json.gz")
+                content = os.path.join(tmp, "workspace")
+                self.assertFalse(run(archive.downloadPackage(DummyStep(), DOWNLOAD_ARITFACT, audit, content,
+                                                             executor=self.executor)))
+
+    def testRetriesWithNoRetries(self):
+        self._testRetries(0)
+
+    def testRetriesWithOneRetry(self):
+        self._testRetries(1)
+
+    def testRetriesWithMultipleRetries(self):
+        self._testRetries(5)
