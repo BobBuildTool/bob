@@ -142,6 +142,14 @@ def removePath(path):
     except OSError as e:
         raise BuildError("Error removing '"+path+"': " + str(e))
 
+def removePrefix(string, prefix):
+    if sys.version_info >= (3, 9):
+        return string.removeprefix(prefix)
+    else:
+        if string.startswith(prefix):
+            string = string[len(prefix):]
+        return string
+
 def emptyDirectory(path):
     try:
         if os.path.exists(path):

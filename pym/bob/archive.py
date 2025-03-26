@@ -23,7 +23,7 @@ from .audit import Audit
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
-from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat
+from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat, removePrefix
 from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import asyncio
@@ -953,7 +953,7 @@ class HttpArchive(BaseArchive):
         entries = []
         for info in path_info:
             if info["path"]:
-                entries.append(info["path"].removeprefix(path + "/"))
+                entries.append(removePrefix(info["path"], path + "/"))
         return entries
 
     def _delete(self, filename):
