@@ -358,7 +358,7 @@ class JenkinsCacheHelper:
 class BaseArchive(TarHelper):
     def __init__(self, spec):
         flags = spec.get("flags", ["upload", "download"])
-        self.__name = spec.get("name", "unknown name")
+        self.__name = spec.get("name", "undefined name")
         self.__useDownload = "download" in flags
         self.__useUpload = "upload" in flags
         self.__ignoreErrors = "nofail" in flags
