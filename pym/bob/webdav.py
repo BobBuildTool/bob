@@ -196,7 +196,7 @@ class WebDav:
         connection.request("DELETE", filepath, headers=headers)
         response = connection.getresponse()
         response.read()
-        if response.status not in [200, 204]:
+        if response.status not in [200, 204, 404]:
             raise HttpDownloadError("DELETE {} {}".format(response.status, response.reason))
 
     def stat(self, file):
