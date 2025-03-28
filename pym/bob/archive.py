@@ -934,7 +934,7 @@ class HttpArchive(BaseArchive):
         return self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
 
     def _listDir(self, path):
-        path_info = self._webdav.listdir(path)
+        path_info = self.__retry(lambda: self._webdav.listdir(path))
         entries = []
         for info in path_info:
             if info["path"]:
@@ -942,10 +942,10 @@ class HttpArchive(BaseArchive):
         return entries
 
     def _delete(self, filename):
-        self._webdav.delete(filename)
+        self.__retry(lambda: self._webdav.delete(filename))
 
     def _stat(self, filename):
-        stats = self._webdav.stat(filename)
+        stats = self.__retry(lambda: self._webdav.stat(filename))
         if stats['etag'] is not None and not stats['etag'].startswith('W/'):
             return stats['etag']
         if not stats['mdate'] or not stats['len']:
@@ -954,14 +954,14 @@ class HttpArchive(BaseArchive):
         return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
 
     def _getAudit(self, filename):
-        downloader = self._webdav.getPartialDownloader("/".join([self.__url.path, filename]))
+        downloader = self.__retry(lambda: self._webdav.getPartialDownloader("/".join([self.__url.path, filename])))
         while True:
             try:
                 file = io.BytesIO(downloader.get())
                 return self._extractAudit(fileobj=file)
             except (EOFError, tarfile.ReadError):
                 # partial downloader reached EOF or could not extract the audit from the tarfile, so we get more data
-                downloader.more()
+                self.__retry(lambda: downloader.more())
                 pass
 
     def _getArchiveUri(self):
