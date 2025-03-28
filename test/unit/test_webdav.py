@@ -127,8 +127,23 @@ class TestWebdav(TestCase):
             webdav.delete(TEST_FILE)
             # file should be deleted
             self.assertFalse(os.path.exists(path))
+            # deleting again should not cause any problems
+            webdav.delete(TEST_FILE)
+            self.assertFalse(os.path.exists(path))
+        with HttpServerMock(self.dir, retries=1) as srv:
+            path = os.path.join(self.dir, TEST_FILE)
+            with open(path, 'w') as f:
+                f.write(TEST_OUTPUT)
+            self.assertTrue(os.path.exists(path))
+            webdav = GetWebdav(srv.port)
+            # first attempt fails, so HttpDownloadError is rasied
             with self.assertRaises(HttpDownloadError) as cm:
                 webdav.delete(TEST_FILE)
+            self.assertTrue(os.path.exists(path))
+            # second attempt will succeed
+            webdav.delete(TEST_FILE)
+            # file should be deleted
+            self.assertFalse(os.path.exists(path))
 
     def testMkdir(self):
         with HttpServerMock(self.dir) as srv:
