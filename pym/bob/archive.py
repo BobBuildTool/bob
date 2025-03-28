@@ -878,10 +878,10 @@ class HttpArchive(BaseArchive):
         retries = self._retries
         while True:
             try:
-                return (True, request())
+                return request()
             except (HTTPException, OSError) as e:
                 self._webdav._resetConnection()
-                if retries == 0: return (False, e)
+                if retries == 0: raise e
                 retries -= 1
 
     def _canManage(self):
@@ -897,30 +897,18 @@ class HttpArchive(BaseArchive):
 
     def _makeParentDirs(self, path):
         (dirs, _, _) = path.rpartition("/")
-        (ok, result) = self.__retry(lambda: self._webdav.mkdir(dirs, dirs.count("/")))
-        if ok:
-            return result
-        else:
-            raise result
+        return self.__retry(lambda: self._webdav.mkdir(dirs, dirs.count("/")))
 
     def _remoteName(self, buildId, suffix):
         url = self.__url
         return urllib.parse.urlunparse((url.scheme, url.netloc, self._makePath(buildId, suffix), '', '', ''))
 
     def _exists(self, path):
-        (ok, result) = self.__retry(lambda: self._webdav.exists(path))
-        if ok:
-            return result
-        else:
-            raise result
+        return self.__retry(lambda: self._webdav.exists(path))
 
     def _openDownloadFile(self, buildId, suffix):
         path = self._makePath(buildId, suffix)
-        (ok, result) = self.__retry(lambda: self.__openDownloadFile(path))
-        if ok:
-            return result
-        else:
-            raise result
+        return self.__retry(lambda: self.__openDownloadFile(path))
 
     def __openDownloadFile(self, path):
         return HttpDownloader(self, self._webdav.download(path))
@@ -943,11 +931,7 @@ class HttpArchive(BaseArchive):
         return HttpUploader(self, path, overwrite)
 
     def _putUploadFile(self, path, tmp, overwrite):
-        (ok, result) = self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
-        if ok:
-            return result
-        else:
-            raise result
+        return self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
 
     def _listDir(self, path):
         path_info = self._webdav.listdir(path)
