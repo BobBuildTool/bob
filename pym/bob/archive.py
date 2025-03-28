@@ -23,7 +23,7 @@ from .audit import Audit
 from .errors import BuildError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
-from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat
+from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat, removePrefix
 from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import asyncio
@@ -358,7 +358,7 @@ class JenkinsCacheHelper:
 class BaseArchive(TarHelper):
     def __init__(self, spec):
         flags = spec.get("flags", ["upload", "download"])
-        self.__name = spec.get("name", "unknown name")
+        self.__name = spec.get("name", "undefined name")
         self.__useDownload = "download" in flags
         self.__useUpload = "upload" in flags
         self.__ignoreErrors = "nofail" in flags
@@ -872,16 +872,17 @@ class HttpArchive(BaseArchive):
         super().__init__(spec)
         self.__url = urllib.parse.urlparse(spec["url"])
         self._webdav = WebDav(self.__url, spec.get("sslVerify", True))
+        self._retries = spec.get("retries", 1)
 
     def __retry(self, request):
-        retry = True
+        retries = self._retries
         while True:
             try:
-                return (True, request())
+                return request()
             except (HTTPException, OSError) as e:
                 self._webdav._resetConnection()
-                if not retry: return (False, e)
-                retry = False
+                if retries == 0: raise e
+                retries -= 1
 
     def _canManage(self):
         return True
@@ -896,30 +897,18 @@ class HttpArchive(BaseArchive):
 
     def _makeParentDirs(self, path):
         (dirs, _, _) = path.rpartition("/")
-        (ok, result) = self.__retry(lambda: self._webdav.mkdir(dirs, dirs.count("/")))
-        if ok:
-            return result
-        else:
-            raise result
+        return self.__retry(lambda: self._webdav.mkdir(dirs, dirs.count("/")))
 
     def _remoteName(self, buildId, suffix):
         url = self.__url
         return urllib.parse.urlunparse((url.scheme, url.netloc, self._makePath(buildId, suffix), '', '', ''))
 
     def _exists(self, path):
-        (ok, result) = self.__retry(lambda: self._webdav.exists(path))
-        if ok:
-            return result
-        else:
-            raise result
+        return self.__retry(lambda: self._webdav.exists(path))
 
     def _openDownloadFile(self, buildId, suffix):
         path = self._makePath(buildId, suffix)
-        (ok, result) = self.__retry(lambda: self.__openDownloadFile(path))
-        if ok:
-            return result
-        else:
-            raise result
+        return self.__retry(lambda: self.__openDownloadFile(path))
 
     def __openDownloadFile(self, path):
         return HttpDownloader(self, self._webdav.download(path))
@@ -942,25 +931,21 @@ class HttpArchive(BaseArchive):
         return HttpUploader(self, path, overwrite)
 
     def _putUploadFile(self, path, tmp, overwrite):
-        (ok, result) = self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
-        if ok:
-            return result
-        else:
-            raise result
+        return self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
 
     def _listDir(self, path):
-        path_info = self._webdav.listdir(path)
+        path_info = self.__retry(lambda: self._webdav.listdir(path))
         entries = []
         for info in path_info:
             if info["path"]:
-                entries.append(info["path"].removeprefix(path + "/"))
+                entries.append(removePrefix(info["path"], path + "/"))
         return entries
 
     def _delete(self, filename):
-        self._webdav.delete(filename)
+        self.__retry(lambda: self._webdav.delete(filename))
 
     def _stat(self, filename):
-        stats = self._webdav.stat(filename)
+        stats = self.__retry(lambda: self._webdav.stat(filename))
         if stats['etag'] is not None and not stats['etag'].startswith('W/'):
             return stats['etag']
         if not stats['mdate'] or not stats['len']:
@@ -969,14 +954,14 @@ class HttpArchive(BaseArchive):
         return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
 
     def _getAudit(self, filename):
-        downloader = self._webdav.getPartialDownloader("/".join([self.__url.path, filename]))
+        downloader = self.__retry(lambda: self._webdav.getPartialDownloader("/".join([self.__url.path, filename])))
         while True:
             try:
                 file = io.BytesIO(downloader.get())
                 return self._extractAudit(fileobj=file)
             except (EOFError, tarfile.ReadError):
                 # partial downloader reached EOF or could not extract the audit from the tarfile, so we get more data
-                downloader.more()
+                self.__retry(lambda: downloader.more())
                 pass
 
     def _getArchiveUri(self):

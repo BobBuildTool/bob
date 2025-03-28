@@ -299,6 +299,53 @@ class TestUserConfig(RecipesTmp, TestCase):
                 },
             ], recipeSet.archiveSpec())
 
+    def testArchiveEntries(self):
+        # valid config
+        self.writeDefault(
+            {
+                "archive": {
+                    "name": "remote",
+                    "backend": "http",
+                    "url": "http://bob.test/main",
+                    "retries": 1
+                }
+            })
+        recipeSet = RecipeSet()
+        recipeSet.parse()
+        self.assertEqual(
+            [{
+                    "name": "remote",
+                    "backend": "http",
+                    "url": "http://bob.test/main",
+                    "retries": 1
+                }], recipeSet.archiveSpec())
+        # string not allowed
+        self.writeDefault(
+            {
+                "archive": {
+                    "name": "remote",
+                    "backend": "http",
+                    "url": "http://bob.test/main",
+                    "retries": "str"
+                }
+            })
+        recipeSet = RecipeSet()
+        with self.assertRaises(ParseError):
+            recipeSet.parse()
+        # negative integer not allowed
+        self.writeDefault(
+            {
+                "archive": {
+                    "name": "remote",
+                    "backend": "http",
+                    "url": "http://bob.test/main",
+                    "retries": -1
+                }
+            })
+        recipeSet = RecipeSet()
+        with self.assertRaises(ParseError):
+            recipeSet.parse()
+
     def testMirrorsAppendPrepend(self):
         """Test pre/fallbackMirrorAppend/Prepend keywords"""
         for prefix in ["pre", "fallback"]:

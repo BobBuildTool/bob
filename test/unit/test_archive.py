@@ -9,7 +9,9 @@ from unittest import TestCase, skipIf
 from unittest.mock import patch
 import asyncio
 import base64
+import gzip
 import http.server
+import posixpath
 import os, os.path
 import socketserver
 import stat
@@ -18,10 +20,12 @@ import tarfile
 import threading
 import urllib.parse
 import sys
+from mocks.http_server import HttpServerMock
 
 from bob.archive import DummyArchive, HttpArchive, getArchiver
 from bob.errors import BuildError
 from bob.utils import runInEventLoop, getProcessPoolExecutor
+from bob.webdav import HTTPException
 
 DOWNLOAD_ARITFACT = b'\x00'*20
 NOT_EXISTS_ARTIFACT = b'\x01'*20
@@ -29,6 +33,8 @@ WRONG_VERSION_ARTIFACT = b'\x02'*20
 ERROR_UPLOAD_ARTIFACT = b'\x03'*20
 ERROR_DOWNLOAD_ARTIFACT = b'\x04'*20
 BROKEN_ARTIFACT = b'\xba\xdc\x0f\xfe'*5
+VALID_ARTIFACT = b'\x05'*20
+EMPTY_AUDIT = '{"artifact":{"variant-id":"1","build-id":"1","artifact-id":"1","result-hash":"1","meta":"1","build":"1","dependencies":{}}, "references":[]}'
 
 UPLOAD1_ARTIFACT = b'\x10'*20
 UPLOAD2_ARTIFACT = b'\x11'*20
@@ -60,19 +66,25 @@ def run(coro):
     with patch('bob.archive.signal.signal'):
         return runInEventLoop(coro)
 
-class BaseTester:
+class Base:
 
-    def __createArtifact(self, bid, version="1"):
+    def _createArtifact(self, bid, version="1", valid_data=False):
         bid = hexlify(bid).decode("ascii")
         name = os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.tgz")
         os.makedirs(os.path.dirname(name), exist_ok=True)
-        return self.__createArtifactByName(name, version)
+        return self.__createArtifactByName(name, version, valid_data)
 
-    def __createArtifactByName(self, name, version="1"):
+    def __createArtifactByName(self, name, version="1", valid_data=False):
         pax = { 'bob-archive-vsn' : version }
         with tarfile.open(name, "w|gz", format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
             with NamedTemporaryFile() as audit:
-                audit.write(b'AUDIT')
+                if valid_data:
+                    # add valid empty audit file
+                    gzf = gzip.GzipFile(mode='wb', fileobj=audit)
+                    gzf.write(EMPTY_AUDIT.encode('utf-8'))
+                    gzf.close()
+                else:
+                    audit.write(b'AUDIT')
                 audit.seek(0)
                 tar.addfile(tar.gettarinfo(arcname="meta/audit.json.gz", fileobj=audit), audit)
             with TemporaryDirectory() as content:
@@ -82,13 +94,24 @@ class BaseTester:
 
         return name
 
-    def __createBuildId(self, bid):
+    def _createBuildId(self, bid):
         bid = hexlify(bid).decode("ascii")
         name = os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.buildid")
         os.makedirs(os.path.dirname(name), exist_ok=True)
         with open(name, "wb") as f:
             f.write(b'\x00'*20)
         return name
+
+    def setUp(self):
+        # create repo
+        self.repo = TemporaryDirectory()
+        self.executor = getProcessPoolExecutor()
+
+    def tearDown(self):
+        self.executor.shutdown()
+        self.repo.cleanup()
+
+class BaseTester(Base):
 
     def __testArtifact(self, bid):
         bid = hexlify(bid).decode("ascii")
@@ -152,14 +175,12 @@ class BaseTester:
         return getArchiver(recipes)
 
     def setUp(self):
-        # create repo
-        self.repo = TemporaryDirectory()
+        super().setUp()
 
         # add artifacts
-        self.dummyFileName = self.__createArtifact(DOWNLOAD_ARITFACT)
-        self.__createArtifact(WRONG_VERSION_ARTIFACT, "0")
-        self.__createBuildId(DOWNLOAD_ARITFACT)
-
+        self.dummyFileName = self._createArtifact(DOWNLOAD_ARITFACT)
+        self._createArtifact(WRONG_VERSION_ARTIFACT, "0")
+        self._createBuildId(DOWNLOAD_ARITFACT)
         # create ERROR_DOWNLOAD_ARTIFACT that is there but cannot be opened
         bid = hexlify(ERROR_DOWNLOAD_ARTIFACT).decode("ascii")
         os.makedirs(os.path.join(self.repo.name, bid[0:2], bid[2:4], bid[4:] + "-1.tgz"), exist_ok=True)
@@ -177,12 +198,6 @@ class BaseTester:
         os.makedirs(os.path.dirname(name), exist_ok=True)
         with open(name, "wb") as f:
             f.write(b'\x00')
-
-        self.executor = getProcessPoolExecutor()
-
-    def tearDown(self):
-        self.executor.shutdown()
-        self.repo.cleanup()
 
     # standard tests for options
     def testOptions(self):
@@ -672,3 +687,94 @@ class TestCustomArchive(BaseTester, TestCase):
         spec["download"] = "cp {}/$BOB_REMOTE_ARTIFACT $BOB_LOCAL_ARTIFACT".format(self.repo.name)
         spec["upload"] = "mkdir -p {P}/${{BOB_REMOTE_ARTIFACT%/*}} && cp $BOB_LOCAL_ARTIFACT {P}/$BOB_REMOTE_ARTIFACT".format(P=self.repo.name)
 
+class TestHttpArchiveRetries(Base, TestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.VALID_FILE = self._createArtifact(VALID_ARTIFACT, valid_data=True)
+        self.spec = {'backend' : 'http', 'name' : 'http-archive', 'flags' : ['download', 'upload', 'managed']}
+
+    def _getHttpArchiveInstance(self, port):
+        self.spec["url"] = "http://localhost:{}/".format(port)
+        recipes = DummyRecipeSet(self.spec)
+        return getArchiver(recipes)
+
+    def _testRetries(self, r):
+        self.spec['retries'] = r
+        # server will fail as often as retries in spec
+        with HttpServerMock(repoPath=self.repo.name, retries=r) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            archive.wantDownloadLocal(True)
+            with TemporaryDirectory() as tmp:
+                audit = os.path.join(tmp, "audit.json.gz")
+                content = os.path.join(tmp, "workspace")
+                self.assertTrue(run(archive.downloadPackage(DummyStep(), VALID_ARTIFACT, audit, content,
+                                                            executor=self.executor)))
+        # server fails one more time than retries in archive sepc -> fail
+        with HttpServerMock(repoPath=self.repo.name, retries=r+1) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            archive.wantDownloadLocal(True)
+            with TemporaryDirectory() as tmp:
+                audit = os.path.join(tmp, "audit.json.gz")
+                content = os.path.join(tmp, "workspace")
+                self.assertFalse(run(archive.downloadPackage(DummyStep(), VALID_ARTIFACT, audit, content,
+                                                             executor=self.executor)))
+
+    def testRetriesWithNoRetries(self):
+        self._testRetries(0)
+
+    def testRetriesWithOneRetry(self):
+        self._testRetries(1)
+
+    def testRetriesWithMultipleRetries(self):
+        self._testRetries(5)
+
+    def testRetriesList(self):
+        self.spec['retries'] = 1
+        with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            self.assertIsNotNone(archive._listDir('/'))
+        with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            with self.assertRaises(HTTPException):
+                archive._listDir('/')
+
+    def testRetriesStat(self):
+        bid = hexlify(VALID_ARTIFACT).decode("ascii")
+        filepath = posixpath.join(bid[0:2], bid[2:4], bid[4:] + "-1.tgz")
+        self.spec['retries'] = 1
+        with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            self.assertIsNotNone(archive._stat(filepath))
+        with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            with self.assertRaises(HTTPException):
+                archive._stat(filepath)
+
+    def testRetriesDelete(self):
+        filename = 'test'
+        filepath = os.path.join(self.repo.name, filename)
+        with open(filepath, 'w') as f:
+            f.write('test')
+        self.spec['retries'] = 1
+        with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            self.assertIsNone(archive._delete(filename))
+        with open(filepath, 'w') as f:
+            f.write('test')
+        with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            with self.assertRaises(HTTPException):
+                archive._delete(filename)
+
+    def testRetriesAudit(self):
+        bid = hexlify(VALID_ARTIFACT).decode("ascii")
+        filepath = posixpath.join(bid[0:2], bid[2:4], bid[4:] + "-1.tgz")
+        self.spec['retries'] = 1
+        with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            self.assertIsNotNone(archive._getAudit(filepath))
+        with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
+            archive = self._getHttpArchiveInstance(srv.port)
+            with self.assertRaises(HTTPException):
+                archive._getAudit(filepath)

@@ -2290,10 +2290,12 @@ Type: Dictionary or list of dictionaries
 
 The ``archive`` key configures the default binary artifact server(s) that
 should be used. It is either directly an archive backend entry or a list of
-archive backends. For each entry at least the ``backend`` key must be
-specified. Optionally there can be a ``name`` key that is used in log output
-and a ``flags`` key that receives a list of various flags, in particular for
-what operations the backend might be used. See the following list for possible flags.
+archive backends. For each entry at least the ``backend`` key must be specified.
+Optionally there can be a ``name`` key that is used in log output, a ``retries`` key
+that determines the amount of retries for failed operations (default is 1,
+only used for `http` backend) and a ``flags`` key that receives a list of various
+flags, in particular for what operations the backend might be used. See the
+following list for possible flags.
 The default is ``[download, upload]``.
 
 ``download``
@@ -2372,6 +2374,8 @@ Example::
    archive:
       backend: http
       url: "http://localhost:8001/upload"
+      retries: 2
+      name: "http-backend"
 
 HTTP basic authentication is supported. The user name and password must be put
 in the URL. Be careful to escape special characters of the password with proper
