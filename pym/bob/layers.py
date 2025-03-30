@@ -207,6 +207,9 @@ class Layer:
     def getPolicy(self, name, location=None):
         return self.__config.getPolicy(name, location)
 
+    def isManaged(self):
+        return self.__scm is not None
+
 class Layers:
     def __init__(self, defines, attic):
         self.__layers = {}
