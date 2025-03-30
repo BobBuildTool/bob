@@ -8,12 +8,15 @@ from ..utils import EventLoopWrapper
 from .build.status import PackagePrinter
 from .helpers import processDefines
 
-def doLayersStatus(argv):
-    parser = argparse.ArgumentParser(prog="bob layers status", description='Query layers SCM status')
+def addDefaultArgs(parser):
     parser.add_argument('-lc', dest="layerConfig", default=[], action='append',
         help="Additional layer config")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
+
+def doLayersStatus(argv):
+    parser = argparse.ArgumentParser(prog="bob layers status", description='Query layers SCM status')
+    addDefaultArgs(parser)
     parser.add_argument('--show-clean', action='store_true',
         help="Show SCM status even if layer is unmodified")
     parser.add_argument('--show-overrides', action='store_true',
@@ -34,10 +37,7 @@ def doLayersStatus(argv):
 
 def doLayersUpdate(argv):
     parser = argparse.ArgumentParser(prog="bob layers update", description='Update layers SCMs')
-    parser.add_argument('-lc', dest="layerConfig", default=[], action='append',
-        help="Additional layer config")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
+    addDefaultArgs(parser)
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--attic', action='store_true', default=None,
         help="Move scm to attic if inline switch is not possible (default).")
