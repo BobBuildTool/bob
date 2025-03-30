@@ -338,6 +338,11 @@ class Layers:
         for (layerDir, status) in sorted(result.items()):
             printer(status, layerDir)
 
+    def __iter__(self):
+        for level in self.__layers.keys():
+            for layer in self.__layers[level]:
+                yield layer
+
 def updateLayers(loop, defines, verbose, attic, layerConfigs, requireManagedLayers=True):
     layers = Layers(defines, attic)
     layers.setLayerConfig(layerConfigs)
