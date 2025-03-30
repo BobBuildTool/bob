@@ -12,7 +12,8 @@ from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
 from ...layers import updateLayers
 from ...share import getShare
 from ...tty import setVerbosity, setTui, Warn
-from ...utils import copyTree, processDefines, EventLoopWrapper, SandboxMode
+from ...utils import copyTree, EventLoopWrapper, SandboxMode
+from ..helpers import processDefines
 import argparse
 import datetime
 import re

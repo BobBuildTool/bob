@@ -707,14 +707,6 @@ def copyTree(src, dst, fileSet = __BlackHoleSet()):
     return ret
 
 
-def processDefines(defs):
-    defines = {}
-    for define in defs:
-        key, _sep, value = define.partition('=')
-        defines[key] = value
-    return defines
-
-
 def infixBinaryOp(handler, *args, **kwargs):
     """Handy wrapper to make sure binary operator handlers are called with only
     two arguments.

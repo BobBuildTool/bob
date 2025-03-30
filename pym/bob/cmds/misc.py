@@ -7,7 +7,7 @@
 
 from ..input import RecipeSet
 from ..errors import ParseError, BuildError
-from ..utils import processDefines
+from .helpers import processDefines
 import argparse
 import codecs
 import sys

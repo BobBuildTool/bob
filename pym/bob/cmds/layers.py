@@ -2,8 +2,9 @@ import argparse
 
 from ..layers import Layers, updateLayers
 from ..tty import NORMAL, setVerbosity
-from ..utils import EventLoopWrapper, processDefines
+from ..utils import EventLoopWrapper
 from .build.status import PackagePrinter
+from .helpers import processDefines
 
 def doLayersStatus(argv):
     parser = argparse.ArgumentParser(prog="bob layers status", description='Query layers SCM status')

@@ -8,7 +8,8 @@ from ...errors import BobError
 from ...generators import generators as defaultGenerators
 from ...input import RecipeSet
 from ...tty import colorize
-from ...utils import processDefines, SandboxMode
+from ...utils import SandboxMode
+from ..helpers import processDefines
 import argparse
 import os
 

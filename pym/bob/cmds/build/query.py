@@ -6,7 +6,7 @@
 from ...builder import LocalBuilder
 from ...errors import ParseError
 from ...input import RecipeSet
-from ...utils import processDefines
+from ..helpers import processDefines
 from string import Formatter
 import argparse
 import os

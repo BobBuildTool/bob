@@ -10,8 +10,9 @@ from ...input import RecipeSet
 from ...languages import StepSpec
 from ...state import BobState, JenkinsConfig
 from ...tty import WarnOnce
-from ...utils import processDefines, runInEventLoop, sslNoVerifyContext, quoteCmdExe, \
+from ...utils import runInEventLoop, sslNoVerifyContext, quoteCmdExe, \
     getPlatformString, SandboxMode, compareVersion
+from ..helpers import processDefines
 from .intermediate import getJenkinsVariantId, PartialIR
 from pathlib import PurePosixPath
 from shlex import quote

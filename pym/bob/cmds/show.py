@@ -6,7 +6,8 @@
 from ..errors import ParseError
 from ..input import RecipeSet
 from ..tty import colorize, ADDED, DELETED, DEFAULT, ADDED_HIGHLIGHT, DELETED_HIGHLIGHT
-from ..utils import asHexStr, processDefines
+from ..utils import asHexStr
+from .helpers import processDefines
 import argparse
 import difflib
 import json
