@@ -1,6 +1,29 @@
 #!/bin/bash -e
 . ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
 
+# Helper to parse the output of 'bob layers ls --format=flat' and grab the
+# commit-IDs from them...
+parse_layers_list()
+{
+	local dst="$2"
+	local KEY VALUE EXCESS SECTION
+
+	# We want to split at '=' for key-value pairs. The extra \r is a
+	# special workaround for Windows. There, the lines will have an
+	# additional carriage return at the end of the line. By using it as
+	# field separator, we can ignore it in a separate EXCESS variable.
+	local NIFS=$(printf "\r=")
+
+	declare -gA "$dst"
+	while IFS="$NIFS" read KEY VALUE EXCESS ; do
+		if [[ $KEY = '['*']' ]] ; then
+			SECTION="${KEY:1:-1}"
+		elif [[ $KEY = "scm.commit" ]] ; then
+			eval $dst[$SECTION]="$VALUE"
+		fi
+	done < "$1"
+}
+
 tmp_dir=$(mktemp -d)
 mkdir -p "$tmp_dir/"{foo,bar,baz,ext}
 foo_dir="$tmp_dir/foo"
@@ -108,10 +131,26 @@ baz_c2=$(git rev-parse HEAD)
 popd # $baz_dir
 
 # just build the root recipe. Layer should be fetched automatically.
-run_bob dev root -DBAR_1_COMMIT=${bar_c0} -DBAR_2_COMMIT=${bar_c1} -DBAR_DIR=${bar_dir} \
+OPTS=(
+	-DBAR_1_COMMIT=${bar_c0} -DBAR_2_COMMIT=${bar_c1} -DBAR_DIR=${bar_dir} \
 	-DBAZ_DIR=${baz_dir} -DBAZ_COMMIT="${baz_c0}" \
 	-DBAZ1_COMMIT="${baz_c2}" \
-	-DFOO_DIR=${foo_dir} -DFOO_COMMIT="${foo_c0}" -vvv
+	-DFOO_DIR=${foo_dir} -DFOO_COMMIT="${foo_c0}"
+)
+run_bob dev root "${OPTS[@]}" -vvv
+
+# Smoke test for listing layers
+run_bob layers ls "${OPTS[@]}"
+run_bob layers ls "${OPTS[@]}" --format json
+run_bob layers ls "${OPTS[@]}" --format flat | tee "$tmp_dir/layers.ls"
+
+# Verify that "bob layers ls" showed us the expected layer commits
+parse_layers_list "$tmp_dir/layers.ls" LAYERS
+expect_equal "${LAYERS[foo]}" "${foo_c0}"
+expect_equal "${LAYERS[bar]}" "${bar_c0}"
+expect_equal "${LAYERS[baz]}" "${baz_c0}"
+expect_equal "${LAYERS[baz1]}" "${baz_c2}"
+unset LAYERS
 
 # run update
 run_bob layers update -DBAR_1_COMMIT=${bar_c0} -DBAR_2_COMMIT=${bar_c1} -DBAR_DIR=${bar_dir} \
