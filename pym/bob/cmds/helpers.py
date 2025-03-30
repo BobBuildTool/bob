@@ -33,6 +33,7 @@ def dumpFlat(doc, prefix=""):
             ret.extend(dumpFlat(v, "{}[{}]".format(prefix, i)))
             i += 1
     else:
-        ret = [ "{}={!r}".format(prefix, doc) ]
+        doc = str(doc).replace('\n', '\\n')
+        ret = [ "{}={}".format(prefix, doc) ]
 
     return ret
