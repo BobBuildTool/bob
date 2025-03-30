@@ -43,6 +43,11 @@ class SvnScm(Scm):
         **__DEFAULTS,
     })
 
+    DEFAULT_VALUES = {
+        "dir" : ".",
+        "sslVerify" : True,
+    }
+
     def __init__(self, spec, overrides=[]):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
@@ -51,7 +56,7 @@ class SvnScm(Scm):
         self.__sslVerify = spec.get('sslVerify', True)
 
     def getProperties(self, isJenkins, pretty=False):
-        ret = super().getProperties(isJenkins)
+        ret = super().getProperties(isJenkins, pretty)
         ret.update({
             'scm' : 'svn',
             "url" : self.__url,
@@ -60,6 +65,11 @@ class SvnScm(Scm):
         })
         if self.__revision:
             ret["revision"] = self.__revision
+
+        if pretty:
+            ret = { k : v for k, v in ret.items()
+                    if v is not None and v != self.DEFAULT_VALUES.get(k) }
+
         return ret
 
     async def invoke(self, invoker):

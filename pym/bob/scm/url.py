@@ -351,6 +351,13 @@ class UrlScm(Scm):
         "zip"  : ZipExtractor,
     }
 
+    DEFAULT_VALUES = {
+        "dir" : ".",
+        "extract" : "auto",
+        "stripComponents" : 0,
+        "sslVerify" : True,
+    }
+
     def __init__(self, spec, overrides=[], stripUser=None,
                  preMirrors=[], fallbackMirrors=[], defaultFileMode=None,
                  separateDownload=False):
@@ -395,7 +402,7 @@ class UrlScm(Scm):
         self.__separateDownload = spec.get("__separateDownload", separateDownload)
 
     def getProperties(self, isJenkins, pretty=False):
-        ret = super().getProperties(isJenkins)
+        ret = super().getProperties(isJenkins, pretty)
         ret.update({
             'scm' : 'url',
             'url' : self.__url,
@@ -409,12 +416,20 @@ class UrlScm(Scm):
             'sslVerify' : self.__sslVerify,
             'retries' : self.__retries,
             'preMirrors' : self.__getPreMirrorsUrls(),
-            '__preMirrorsUpload' : self.__getPreMirrorsUpload(),
             'fallbackMirrors' : self.__getFallbackMirrorsUrls(),
-            '__fallbackMirrorsUpload' : self.__getFallbackMirrorsUpload(),
             'fileMode' : dumpMode(self.__fileMode) if pretty else self.__fileMode,
-            '__separateDownload': self.__separateDownload,
         })
+        if not pretty:
+            ret.update({
+                '__preMirrorsUpload' : self.__getPreMirrorsUpload(),
+                '__fallbackMirrorsUpload' : self.__getFallbackMirrorsUpload(),
+                '__separateDownload': self.__separateDownload,
+            })
+
+        if pretty:
+            ret = { k : v for k, v in ret.items()
+                    if v is not None and v != self.DEFAULT_VALUES.get(k) }
+
         return ret
 
     def __applyMirrors(self, mirrors):

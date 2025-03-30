@@ -104,6 +104,17 @@ class GitScm(Scm):
 
     REMOTE_PREFIX = "remote-"
 
+    DEFAULT_VALUES = {
+        'dir' : ".",
+        'retries' : 0,
+        'sslVerify' : True,
+        'submodules' : False,
+        'recurseSubmodules' : False,
+        'shallowSubmodules' : True,
+        'dissociate' : False,
+        'rebase' : False,
+    }
+
     def __init__(self, spec, overrides=[], stripUser=None, useBranchAndCommit=False):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
@@ -149,7 +160,7 @@ class GitScm(Scm):
                 self.__references]]
 
     def getProperties(self, isJenkins, pretty=False):
-        properties = super().getProperties(isJenkins)
+        properties = super().getProperties(isJenkins, pretty)
 
         if self.__commit:
             rev = self.__commit
@@ -182,6 +193,11 @@ class GitScm(Scm):
         })
         for key, val in self.__remotes.items():
             properties.update({GitScm.REMOTE_PREFIX+key : val})
+
+        if pretty:
+            properties = { k : v for k, v in properties.items()
+                           if v is not None and v != self.DEFAULT_VALUES.get(k) }
+
         return properties
 
     def _getGitConfigOptions(self):
