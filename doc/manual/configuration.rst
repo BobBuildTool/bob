@@ -2141,7 +2141,8 @@ possibility is to provide an SCM-Dictionary (see
 
 If a layer SCM specification is given, Bob takes care of the layer management:
 
-- Layers are checked out / updated during bob-build (except build-only).
+- Layers are checked out / updated automatically during
+  :ref:`manpage-dev`/:ref:`manpage-build` (except ``--build-only`` builds).
 - The ``bob layers`` command can update layers or show their status (see
   :ref:`manpage-layers`).
 
@@ -2152,9 +2153,10 @@ If a layer SCM specification is given, Bob takes care of the layer management:
 
 Only git, svn, url and cvs SCMs are supported for layers. Because layers are
 fetched and updated before any :ref:`configuration-config-usr` is parsed, the
-regular ``whitelist`` and ``scmOverrides`` settings are not used.  Instead,
+regular ``whitelist`` and ``scmOverrides`` settings are not used. Instead,
 layer checkouts are controlled by ``layersWhitelist`` and
-``layersScmOverrides``.
+``layersScmOverrides``. These settings can be optionally overridden from the
+command line by passing a layers configuration file with the ``-lc`` option.
 
 layersWhitelist
 ~~~~~~~~~~~~~~~
