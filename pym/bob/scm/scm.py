@@ -237,13 +237,15 @@ class Scm(metaclass=ABCMeta):
     def getSource(self):
         return self.__source
 
-    def getProperties(self, isJenkins):
+    def getProperties(self, isJenkins, pretty):
         # XXX: keep in sync with SYNTHETIC_SCM_PROPS
-        return {
-            "__source" : self.__source,
+        ret = {
             "recipe" : self.__recipe,
             "overridden" : bool(self.__overrides),
         }
+        if not pretty:
+            ret["__source"] = self.__source
+        return ret
 
     @abstractmethod
     async def invoke(self, invoker):

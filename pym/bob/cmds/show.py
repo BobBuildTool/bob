@@ -6,7 +6,8 @@
 from ..errors import ParseError
 from ..input import RecipeSet
 from ..tty import colorize, ADDED, DELETED, DEFAULT, ADDED_HIGHLIGHT, DELETED_HIGHLIGHT
-from ..utils import asHexStr, processDefines
+from ..utils import asHexStr
+from .helpers import processDefines, dumpYaml, dumpJson, dumpFlat
 import argparse
 import difflib
 import json
@@ -145,41 +146,20 @@ def filterFields(doc, fields):
         return { k:v for k,v in doc.items() if k in fields }
 
 def showPackagesYaml(docs, indent):
-    if indent is None:
-        style = None
-    else:
-        style = False
-
-    return "\n".join(
-        "--- # {}\n{}".format(package,
-                              yaml.dump(doc, default_flow_style=style, indent=indent))
-        for package, doc in docs)
+    return "\n".join("--- # {}\n{}".format(package, dumpYaml(doc, indent))
+                     for package, doc in docs)
 
 def showPackagesJson(docs, indent):
     docs = [ doc for _package, doc in docs ]
     if len(docs) == 1:
         docs = docs[0]
-    return json.dumps(docs, indent=indent, sort_keys=True)
-
-def _showPackageFlat(doc, prefix=""):
-    ret = []
-    if isinstance(doc, dict):
-        for k,v in sorted(doc.items()):
-            ret.extend(_showPackageFlat(v, prefix+"."+k if prefix else k))
-    elif isinstance(doc, list):
-        i = 0
-        for v in doc:
-            ret.extend(_showPackageFlat(v, "{}[{}]".format(prefix, i)))
-            i += 1
-    else:
-        ret = [ "{}={!r}".format(prefix, doc) ]
-    return ret
+    return dumpJson(docs, indent)
 
 def showPackagesFlat(docs):
     ret = []
     for package, doc in docs:
         ret.append("[" + package + "]")
-        ret.extend(_showPackageFlat(doc))
+        ret.extend(dumpFlat(doc))
         ret.append("")
 
     return "\n".join(ret)
@@ -200,8 +180,8 @@ def getSegments(indicator):
     return ret
 
 def diffPackages(left, right, show_common):
-    left = [ l+"\n" for l in _showPackageFlat(left) ]
-    right = [ l+"\n" for l in _showPackageFlat(right) ]
+    left = [ l+"\n" for l in dumpFlat(left) ]
+    right = [ l+"\n" for l in dumpFlat(right) ]
     diff = [ l for l in difflib.Differ().compare(left, right)
              if not l.startswith("  ") or show_common ]
 

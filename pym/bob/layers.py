@@ -207,6 +207,9 @@ class Layer:
     def getPolicy(self, name, location=None):
         return self.__config.getPolicy(name, location)
 
+    def isManaged(self):
+        return self.__scm is not None
+
 class Layers:
     def __init__(self, defines, attic):
         self.__layers = {}
@@ -334,6 +337,11 @@ class Layers:
         # Show results
         for (layerDir, status) in sorted(result.items()):
             printer(status, layerDir)
+
+    def __iter__(self):
+        for level in self.__layers.keys():
+            for layer in self.__layers[level]:
+                yield layer
 
 def updateLayers(loop, defines, verbose, attic, layerConfigs, requireManagedLayers=True):
     layers = Layers(defines, attic)

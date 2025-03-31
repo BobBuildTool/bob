@@ -127,6 +127,11 @@ class ImportScm(Scm):
 
     SCHEMA = schema.Schema({**__SCHEMA, **DEFAULTS})
 
+    DEFAULT_VALUES = {
+        "dir" : ".",
+        "recipeRelative" : False,
+    }
+
     def __init__(self, spec, overrides=[], pruneDefault=None, fixDigestBug=False, projectRoot=""):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
@@ -142,7 +147,7 @@ class ImportScm(Scm):
         return os.path.join(rootDir, self.__url)
 
     def getProperties(self, isJenkins, pretty=False):
-        ret = super().getProperties(isJenkins)
+        ret = super().getProperties(isJenkins, pretty)
         ret.update({
             'scm' : 'import',
             'url' : self.__url,
@@ -152,8 +157,13 @@ class ImportScm(Scm):
         })
         if isJenkins:
             ret['__data'] = packTree(self._getSrcDir())
-        else:
+        elif not pretty:
             ret['__projectRoot'] = self.__projectRoot
+
+        if pretty:
+            ret = { k : v for k, v in ret.items()
+                    if v is not None and v != self.DEFAULT_VALUES.get(k) }
+
         return ret
 
     async def invoke(self, invoker):

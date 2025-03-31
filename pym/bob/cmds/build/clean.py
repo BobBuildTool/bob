@@ -9,7 +9,8 @@ from ...scm import getScm, ScmTaint, ScmStatus
 from ...share import getShare
 from ...state import BobState
 from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT, Warn
-from ...utils import removePath, processDefines
+from ...utils import removePath
+from ..helpers import processDefines
 import argparse
 import os
 

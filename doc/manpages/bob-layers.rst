@@ -15,6 +15,9 @@ Synopsis
 
 ::
 
+    bob layers update [-h] [-lc LAYERCONFIG] [-D DEFINES]
+                      [--indent INDENT | --no-indent]
+                      [--format {yaml,json,flat}]
     bob layers status [-h] [-lc LAYERCONFIG] [-D DEFINES] [--show-clean]
                       [--show-overrides] [-v]
     bob layers update [-h] [-lc LAYERCONFIG] [-D DEFINES]
@@ -23,8 +26,12 @@ Synopsis
 Description
 -----------
 
-Update layers or show their SCM-status. The following sub-commands are
-available:
+Update layers or show their status. The following sub-commands are available:
+
+``ls``
+    List known layers and their properties. There are multiple output formats
+    available. The output of this command is supposed to stay stable and is
+    thus suitable for scripting.
 
 ``update``
     Updates the layers.
@@ -44,6 +51,20 @@ Options
 ``--no-attic``
     Do not move layer workspace to attic if inline SCM switching is not possible.
     Instead a build error is issued.
+
+``--format {yaml,json,flat}``
+   Selects a different output format. Defaults to ``yaml``. The ``flat`` format
+   is an INI-style format where each key/value pair is printed on a separate
+   line.
+
+``--indent INDENT``
+   The ``yaml`` and ``json`` output formats are pretty printed with an
+   indentation of 4 spaces by default. Use this option to chance this to
+   ``INDENT`` number of spaces.
+
+``--no-indent``
+   Disables the pretty printing of the ``yaml`` and ``json`` formats. The
+   output will be more compact but is less readable.
 
 ``-lc LAYERCONFIG``
     Use additional layer configuration file.

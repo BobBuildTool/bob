@@ -6,7 +6,8 @@
 from .. import BOB_VERSION
 from ..input import RecipeSet
 from ..tty import colorize
-from ..utils import processDefines, runInEventLoop
+from ..utils import runInEventLoop
+from .helpers import processDefines
 import argparse
 import asyncio
 import json

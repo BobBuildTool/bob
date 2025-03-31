@@ -9,7 +9,8 @@ from ...scm import getScm, ScmTaint, ScmStatus
 from ...state import BobState
 from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT, SKIPPED, \
     IMPORTANT, NORMAL, INFO, DEBUG, TRACE, HEADLINE
-from ...utils import joinLines, processDefines
+from ...utils import joinLines
+from ..helpers import processDefines
 from textwrap import indent
 import argparse
 import os

@@ -31,6 +31,10 @@ class CvsScm(Scm):
     # Layers have no "dir" and no "if"
     LAYERS_SCHEMA = schema.Schema({ **__SCHEMA })
 
+    DEFAULT_VALUES = {
+        "dir" : ".",
+    }
+
     # Checkout using CVS
     # - mandatory parameters: cvsroot, module
     # - optional parameters: rev, dir (dir is required if there are multiple checkouts)
@@ -42,7 +46,7 @@ class CvsScm(Scm):
         self.__dir = spec.get("dir", ".")
 
     def getProperties(self, isJenkins, pretty=False):
-        ret = super().getProperties(isJenkins)
+        ret = super().getProperties(isJenkins, pretty)
         ret.update({
             'scm' : 'cvs',
             'cvsroot' : self.__cvsroot,
@@ -50,6 +54,11 @@ class CvsScm(Scm):
             'rev' : self.__rev,
             'dir' : self.__dir
         })
+
+        if pretty:
+            ret = { k : v for k, v in ret.items()
+                    if v is not None and v != self.DEFAULT_VALUES.get(k) }
+
         return ret
 
     async def invoke(self, invoker):
