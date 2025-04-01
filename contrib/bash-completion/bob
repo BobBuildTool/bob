@@ -396,9 +396,20 @@ __bob_layers_update()
    __bob_complete_words "-D -v -lc --attic --no-attic"
 }
 
+__bob_layers_ls()
+{
+    if [[ "$prev" = "--format" ]] ; then
+        __bob_complete_words "yaml json flat"
+    elif [[ "$prev" = "--indent" ]] ; then
+        COMPREPLY=( )
+    else
+        __bob_complete_words "-D -lc --indent --no-indent --format"
+    fi
+}
+
 __bob_layers()
 {
-  __bob_subcommands "status update" "layers"
+  __bob_subcommands "status update ls" "layers"
 }
 
 __bob_show()
