@@ -1,0 +1,181 @@
+Bob 1.0 Release Notes
+=====================
+
+Changes made since Bob 0.25.0 include the following.
+
+New features
+------------
+
+Recipes
+~~~~~~~
+
+* The git SCM gained support for generic git refs.
+
+  Previously, Bob could only handle branches (refs/heads/...), tags
+  (refs/tags/...) and plain commits. But Git allows other "refs" (git
+  references) as well. One example is Gerrit where changes can be downloaded as
+  /refs/changes/... refs.
+
+  A generic ref is handled like a tag. It is checked out once and the
+  workspace will be in detached head state. Bob will not expect the ref to
+  change its targeted commit by default. In case the ref does change, the
+  user can enable the ``rebase`` property.
+
+  See :pull:`602`, :issue:`601`.
+
+* The import SCM gained the ability of recipe-relative imports.
+
+  The import SCM base directory is the project root directory. This is
+  useless for recipes in layers because they don't know their location in
+  the project. The new ``recipeRelative`` property can pivot the base
+  directory to the one where the recipe is located.
+
+  See :ref:`configuration-recipes-scm`, :pull:`607`.
+
+* Bob gained support for global package aliases.
+
+  So far, Bob supports string substitution of dependency names. This lets
+  recipes decide the actual dependency at recipe parsing time. That is a
+  local decision of the recipe, though. Sometimes, a common indirection
+  for many dependencies is required.
+
+  Global recipe aliases provide such an indirection. They are configured
+  in the newly recognized "aliases" directory. The alias name is derived
+  from the YAML file name, just like for recipes and classes. If it is
+  just a single alias, the file only contains the target recipe name.
+  Optionally, several aliases can be defined by using a "multiPackage" in
+  the file.
+
+  The alias target is subject to string substitution. See
+  :ref:`configuration-aliases`. (:pull:`609`)
+
+* Dependencies can be aliased individually now.
+
+  Each dependency of a recipe has to have a unique name. This is a problem
+  if two distinct variants of the same dependency need to be used, though.
+  To enable that feature, every dependency can optionally get an alias
+  name. Multiple references to the same dependency can be created, given
+  that each gets its own unique alias.
+
+  If the dependency is provided via ``provideDeps``, the alias name will be
+  used for matching and in the downstream package dependencies. On the
+  other hand, the alias is ignored for recipe cycle analysis. This means
+  that aliases cannot be used to break cyclic recipe dependencies.
+
+  (:issue:`314`, :pull:`609`)
+
+* All environment variables can be definitions conditionally.
+
+  The definition of a variable can optionally be guarded by an ``if``
+  condition. Only if the ``if`` property evaluates to true, the variable is
+  actually defined. Might be a string or an IfExpression.
+
+  Applies to :ref:`configuration-recipes-depends` ``environment``,
+  :ref:`configuration-config-environment`, :ref:`configuration-recipes-metaenv`,
+  :ref:`configuration-recipes-privateenv`, :ref:`configuration-recipes-provideTools`
+  ``environment`` and :ref:`configuration-recipes-provideVars`. (:pull:`626`)
+
+Bob archive
+~~~~~~~~~~~
+
+* The :ref:`manpage-archive` command learned to work on remote repositories.
+
+  Specifically, binary archives that are exposed as WebDAV, can be fully
+  managed by the archive command now. The server URL and settings are read from
+  the project directory. The support has to be enabled for each backend
+  individually by adding the ``managed`` flag to the backend definition in the
+  :ref:`configuration-config-archive` section. (:pull:`617`, :issue:`340`)
+* The "http" archive backend gained the support for retries on server/network
+  failures. The number of retries can be adjusted in the backend configuration.
+  (:pull:`628`)
+
+Bob build/dev
+~~~~~~~~~~~~~
+
+* Bob now fails the build on unexpected indeterministic checkouts.
+
+  Bob handles situations where the checkout step hash was predicted but the
+  actual checkout yielded another result by restarting the build.  While this
+  case may indeed happen for indeterministic checkouts (e.g.  a branch that was
+  pushed while the build was running), it is an error if it happens for
+  officially stable checkouts.
+
+  So instead of restarting the build, Bob now gives an error message. The user
+  should probably fix the recipe. Halting the build at this stage makes the
+  analysis easier.
+
+  Because old projects may inadvertently rely on the old behaviour, it is
+  guarded by the :ref:`policies-failUnstableCheckouts` policy. (:pull:`623`)
+
+Bob layers
+~~~~~~~~~~
+
+* The "layers" command gained the "ls" subcommand.
+
+  The 'bob layers ls' command lists all known layers. For each layer, the
+  directory and the managed/unmanaged disposition is printed at least. For
+  managed layers, the SCM properties are shown additionally. (:issue:`631`,
+  :pull:`632`)
+
+Improvements
+------------
+
+* Bob has been made compatible to Python 3.13. (:pull:`612`)
+* The error message that is given if a git commit/tag is not on the configured
+  branch has been improved. Some heuristics have been added to guess if this is
+  caused by a too aggressive ``shallow`` setting or if the commit exists at all.
+* Removing the ``shallow`` setting from a git checkout will "unshallow" it on
+  the next invocation.
+* Archives that are downloaded and extracted with the url SCM are placed
+  outside the workspace now. Previously, the unextracted archive would clutter
+  the workspace. The new behaviour is subject to the :ref:`policies-urlScmSeparateDownload`
+  policy. (:pull:`606`)
+* Inside the sandbox, ``/dev/shm`` is now mounted as tmpfs by default. Some
+  tools use this while building. E.g. the python multiprocessing library uses
+  this for its locking mechanism. (:pull:`614`)
+* Various documentation improvements (:pull:`616`, :pull:`605`)
+* Moved the invocation of the :meth:`bob.input.PluginState.onFinish` plugin
+  method to before package creation. Previously, the ``onFinish()`` method was
+  almost useless. By moving it before the package creation, it can now modify
+  the environment and custom properties of the package.
+* Binary archives can be given names to distinguish them in the build output if
+  multiple backends are configured. (:pull:`617`)
+* Performance of audit trail processing has been greatly improved. For complex
+  projects the audit trail processing of a package could take minutes. This has
+  been reduced to a couple of seconds. (:issue:`625`, :pull:`627`)
+
+Backwards incompatible changes
+------------------------------
+
+* Support for Python 3.7 has been dropped. (:pull:`612`)
+* Custom recipe properties must not start with lower case letter.
+
+  Just like for custom settings in ``default.yaml``, plugin defined recipe
+  properties and state trackers shall not start with a lower case letter.  This
+  namespace is reserved by Bob for future extensions. (:pull:`622`)
+
+Bug fixes
+---------
+
+* Fixed a crash with multiple layers and custom recipe keywords.
+
+  Plugins might define new recipe/class keywords. Bob could crash if recipes
+  used classes of other layers that were parsed before the plugin that defines
+  the custom keyword was loaded. The parsing logic was fixed to load all plugins
+  before recipes and classes are parsed (:pull:`603`, :issue:`618`)
+* Fixed crash in namespace-sandbox if the root directory is `/`.  This happened
+  for example on systems where the home directory of nobody in ``/etc/passwd``
+  is ``/``. (:pull:`604`)
+* Explicitly allow file protocol if git SCM uses a ``file:`` URL or an absolute
+  path. The fix for `CVE-2022-39253 <https://www.cve.org/CVERecord?id=CVE-2022-39253>`_
+  disallows file mode transfers for submodules. Bob explicitly allows them
+  because it is expected that only known-good commits are checked out from
+  untrusted sources. (:pull:`604`)
+* Fixed the documentation of the git "dissociate" option (:pull:`608`)
+* Fixed the display of the synthetic ``recipe`` property of SCMs on Windows. It
+  incorrectly was subject to string substitution which messed up backslashes of
+  the path. (:pull:`607`)
+* A crash when switching between git and url SCM has been fixed. (:pull:`619`)
+* Fixed the silent dropping of errors when scanning archives with
+  :ref:`manpage-archive`. Previously, the scan would simply stop instead of
+  printing an error. (:pull:`621`)
