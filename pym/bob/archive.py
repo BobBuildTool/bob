@@ -200,7 +200,6 @@ class JenkinsArchive(TarHelper):
 
     def __init__(self, spec):
         self.__xferArtifacts = spec.get("xfer", False)
-        self.__name = spec.get("name", "unknown name")
 
     def wantDownloadLocal(self, enable):
         pass
@@ -234,7 +233,7 @@ class JenkinsArchive(TarHelper):
             with open(self.buildIdName(step), "wb") as f:
                 f.write(buildId)
         except OSError as e:
-            raise BuildError(namedErrorString(self.__name, "Cannot store artifact: " + str(e)))
+            raise BuildError("Cannot store artifact: " + str(e))
 
         if self.__xferArtifacts:
             loop = asyncio.get_event_loop()
@@ -249,7 +248,7 @@ class JenkinsArchive(TarHelper):
                             audit, content)
                         a.setResult(msg, kind)
                 except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                    raise BuildError(namedErrorString(self.__name, "Packing of package interrupted."))
+                    raise BuildError("Packing of package interrupted.")
 
     def _uploadPackage(self, name, buildId, audit, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -258,7 +257,7 @@ class JenkinsArchive(TarHelper):
         try:
             self._pack(name, None, audit, content)
         except (tarfile.TarError, OSError) as e:
-            raise BuildError(namedErrorString(self.__name, "Cannot pack artifact: " + str(e)))
+            raise BuildError("Cannot pack artifact: " + str(e))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -276,7 +275,7 @@ class JenkinsArchive(TarHelper):
                 if not ret: a.fail(msg, WARNING)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError(namedErrorString(self.__name, "Extraction of package interrupted."))
+                raise BuildError("Extraction of package interrupted.")
 
     def _downloadPackage(self, tgzName, buildIdName, buildId, audit, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -293,7 +292,7 @@ class JenkinsArchive(TarHelper):
                 self._extract(f, audit, content)
             return (True, None)
         except (OSError, tarfile.TarError) as e:
-            raise BuildError(namedErrorString(self.__name, "Error extracting binary artifact: " + str(e)))
+            raise BuildError("Error extracting binary artifact: " + str(e))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -310,7 +309,7 @@ class JenkinsArchive(TarHelper):
         except FileExistsError:
             return None
         except OSError as e:
-            raise BuildError(namedErrorString(self.__name, "Cannot cache artifact: " + str(e)))
+            raise BuildError("Cannot cache artifact: " + str(e))
 
     async def uploadLocalLiveBuildId(self, step, liveBuildId, buildId, executor=None):
         pass
@@ -339,9 +338,6 @@ class JenkinsArchive(TarHelper):
     @staticmethod
     def _buildIdNameW(workspace):
         return workspace.replace('/', '_') + BUILDID_SUFFIX
-
-    def getArchiveName(self):
-       return self.__name
 
 class JenkinsCacheHelper:
     def __init__(self, f):
