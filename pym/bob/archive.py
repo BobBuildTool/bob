@@ -63,9 +63,6 @@ def writeFileOrHandle(name, fileobj, content):
     with open(name, "wb") as f:
         f.write(content)
 
-def namedErrorString(name, err):
-    return "Archive '{}': {}".format(name, err)
-
 class DummyArchive:
     """Archive that does nothing"""
 
@@ -403,6 +400,9 @@ class BaseArchive(TarHelper):
     def _canManage(self):
         return False
 
+    def _namedErrorString(self, err):
+        return "Archive '{}': {}".format(self.__name, err)
+
     async def downloadPackage(self, step, buildId, audit, content, caches=[],
                               executor=None):
         if not self.canDownload():
@@ -418,7 +418,7 @@ class BaseArchive(TarHelper):
                 if not ret: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError(namedErrorString(self.__name, "Download of package interrupted."))
+                raise BuildError(self._namedErrorString("Download of package interrupted."))
 
     def cachePackage(self, buildId, workspace):
         try:
@@ -429,7 +429,7 @@ class BaseArchive(TarHelper):
             if self.__ignoreErrors:
                 return None
             else:
-                raise BuildError(namedErrorString(self.__name, "Cannot cache artifact: " + str(e)))
+                raise BuildError(self._namedErrorString("Cannot cache artifact: " + str(e)))
 
     def _downloadPackage(self, buildId, suffix, audit, content, caches, workspace):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -442,17 +442,17 @@ class BaseArchive(TarHelper):
                     self._extract(fo, audit, content)
             return (True, None, None)
         except (ArtifactNotFoundError, HttpNotFoundError):
-            return (False, namedErrorString(self.__name, "not found"), WARNING)
+            return (False, self._namedErrorString("not found"), WARNING)
         except (ArtifactDownloadError, HttpDownloadError) as e:
-            return (False, namedErrorString(self.__name, e.reason), WARNING)
+            return (False, self._namedErrorString(e.reason), WARNING)
         except ConnectionRefusedError:
-            return (False, namedErrorString(self.__name, "connection failed"), WARNING)
+            return (False, self._namedErrorString("connection failed"), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
-            raise BuildError(namedErrorString(self.__name, "Cannot download artifact: " + str(e)))
+            raise BuildError(self._namedErrorString("Cannot download artifact: " + str(e)))
         except tarfile.TarError as e:
-            raise BuildError(namedErrorString(self.__name, "Error extracting binary artifact: " + str(e)))
+            raise BuildError(self._namedErrorString("Error extracting binary artifact: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -470,7 +470,7 @@ class BaseArchive(TarHelper):
                 if ret is None: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError(namedErrorString(self.__name, "Download of build-id interrupted."))
+                raise BuildError(self._namedErrorString("Download of build-id interrupted."))
 
     def _downloadLocalFile(self, key, suffix):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -482,15 +482,15 @@ class BaseArchive(TarHelper):
                 ret = readFileOrHandle(name, fileobj)
             return (ret, None, None)
         except (ArtifactNotFoundError, HttpNotFoundError):
-            return (None, namedErrorString(self.__name, "not found"), WARNING)
+            return (None, self._namedErrorString("not found"), WARNING)
         except (ArtifactDownloadError, HttpDownloadError) as e:
-            return (None, namedErrorString(self.__name, e.reason), WARNING)
+            return (None, self._namedErrorString(e.reason), WARNING)
         except ConnectionRefusedError:
-            return (None, namedErrorString(self.__name, "connection failed"), WARNING)
+            return (None, self._namedErrorString("connection failed"), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
-            raise BuildError(namedErrorString(self.__name, "Cannot download file: " + str(e)))
+            raise BuildError(self._namedErrorString("Cannot download file: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -516,7 +516,7 @@ class BaseArchive(TarHelper):
                     self, buildId, suffix, audit, content)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError(namedErrorString(self.__name, "Upload of package interrupted."))
+                raise BuildError(self._namedErrorString("Upload of package interrupted."))
 
     def _uploadPackage(self, buildId, suffix, audit, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -527,12 +527,12 @@ class BaseArchive(TarHelper):
             with self._openUploadFile(buildId, suffix, False) as (name, fileobj):
                 self._pack(name, fileobj, audit, content)
         except (ArtifactExistsError, HttpAlreadyExistsError):
-            return (namedErrorString(self.__name, "skipped ({} exists in archive)".format(content)), SKIPPED)
+            return (self._namedErrorString("skipped ({} exists in archive)".format(content)), SKIPPED)
         except (ArtifactUploadError, HttpUploadError, tarfile.TarError, OSError) as e:
             if self.__ignoreErrors:
-                return (namedErrorString(self.__name, "error ("+str(e)+")"), ERROR)
+                return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
-                raise BuildError(namedErrorString(self.__name, "Cannot upload artifact: " + str(e)))
+                raise BuildError(self._namedErrorString("Cannot upload artifact: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -549,7 +549,7 @@ class BaseArchive(TarHelper):
                 msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadLocalFile, self, liveBuildId, BUILDID_SUFFIX, buildId)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError(namedErrorString(self.__name, "Upload of build-id interrupted."))
+                raise BuildError(self._namedErrorString("Upload of build-id interrupted."))
 
     def _uploadLocalFile(self, key, suffix, content):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -563,9 +563,9 @@ class BaseArchive(TarHelper):
                 writeFileOrHandle(name, fileobj, content)
         except (ArtifactUploadError, HttpUploadError, OSError) as e:
             if self.__ignoreErrors:
-                return (namedErrorString(self.__name, "error ("+str(e)+")"), ERROR)
+                return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
-                raise BuildError(namedErrorString(self.__name, "Cannot upload file: " + str(e)))
+                raise BuildError(self._namedErrorString("Cannot upload file: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -582,7 +582,7 @@ class BaseArchive(TarHelper):
                 msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadLocalFile, self, key, FINGERPRINT_SUFFIX, fingerprint)
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError(namedErrorString(self.__name, "Upload of build-id interrupted."))
+                raise BuildError(self._namedErrorString("Upload of build-id interrupted."))
 
     async def downloadLocalFingerprint(self, step, key, executor=None):
         if not self.canDownload():
@@ -596,16 +596,16 @@ class BaseArchive(TarHelper):
                 if ret is None: a.fail(msg, kind)
                 return ret
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
-                raise BuildError(namedErrorString(self.__name, "Download of fingerprint interrupted."))
+                raise BuildError(self._namedErrorString("Download of fingerprint interrupted."))
 
     def deleteFile(self, filepath):
         try:
             self._delete(filepath)
         except (ArtifactDownloadError, OSError) as e:
             if self.__ignoreErrors:
-                return (namedErrorString(self.__name, "error ("+str(e)+")"), ERROR)
+                return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
-                raise BuildError(namedErrorString(self.__name, "Could not delete file: " + str(e)))
+                raise BuildError(self._namedErrorString("Could not delete file: " + str(e)))
 
     def _delete(self, filepath):
         raise ArtifactDownloadError("not implemented")
@@ -615,9 +615,9 @@ class BaseArchive(TarHelper):
             return self._listDir(path)
         except (ArtifactDownloadError, OSError) as e:
             if self.__ignoreErrors:
-                return (namedErrorString(self.__name, "error (" + str(e) + ")"), ERROR)
+                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
-                raise BuildError(namedErrorString(self.__name, "Could not list dir: " + str(e)))
+                raise BuildError(self._namedErrorString("Could not list dir: " + str(e)))
 
     def _listDir(self, path):
         raise ArtifactDownloadError("not implemented")
@@ -627,9 +627,9 @@ class BaseArchive(TarHelper):
             return self._stat(filepath)
         except (ArtifactDownloadError, OSError) as e:
             if self.__ignoreErrors:
-                return (namedErrorString(self.__name, "error (" + str(e) + ")"), ERROR)
+                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
-                raise BuildError(namedErrorString(self.__name, "Could not stat file: " + str(e)))
+                raise BuildError(self._namedErrorString("Could not stat file: " + str(e)))
 
     def _stat(self, filepath):
         raise ArtifactDownloadError("not implemented")
@@ -639,9 +639,9 @@ class BaseArchive(TarHelper):
             return self._getAudit(filepath)
         except (ArtifactDownloadError, OSError) as e:
             if self.__ignoreErrors:
-                return (namedErrorString(self.__name, "error (" + str(e) + ")"), ERROR)
+                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
-                raise BuildError(namedErrorString(self.__name, "Could not get audit from file: " + str(e)))
+                raise BuildError(self._namedErrorString("Could not get audit from file: " + str(e)))
 
     def _getAudit(self, filepath):
         raise ArtifactDownloadError("not implemented")
@@ -651,9 +651,9 @@ class BaseArchive(TarHelper):
             return self._getArchiveUri()
         except (ArtifactDownloadError, OSError) as e:
             if self.__ignoreErrors:
-                return (namedErrorString(self.__name, "error (" + str(e) + ")"), ERROR)
+                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
-                raise BuildError(namedErrorString(self.__name, "Could not get archive hash: " + str(e)))
+                raise BuildError(self._namedErrorString("Could not get archive hash: " + str(e)))
 
     def _getArchiveUri(self):
         raise ArtifactDownloadError("not implemented")
@@ -799,7 +799,7 @@ class LocalArchive(BaseArchive):
         except FileNotFoundError:
             pass
         except OSError as e:
-            raise BuildError(namedErrorString(self.__name, "Cannot remove {}: {}".format(filename, str(e))))
+            raise BuildError(self._namedErrorString("Cannot remove {}: {}".format(filename, str(e))))
 
     def _listDir(self, path):
         return os.listdir(os.path.join(self.__basePath, path))
