@@ -401,8 +401,9 @@ class BaseArchive(TarHelper):
         return False
 
     def _namedErrorString(self, err):
-        if self.__name:
-            return "Archive '{}': {}".format(self.__name, err)
+        name = self.getArchiveName()
+        if name:
+            return "{}: {}".format(name, err)
         else:
             return err
 
@@ -753,9 +754,13 @@ class MirrorLeecher:
 class LocalArchive(BaseArchive):
     def __init__(self, spec):
         super().__init__(spec)
-        self.__basePath = os.path.abspath(os.path.expanduser(spec["path"]))
+        self.__path = spec["path"]
+        self.__basePath = os.path.abspath(os.path.expanduser(self.__path))
         self.__fileMode = spec.get("fileMode")
         self.__dirMode = spec.get("directoryMode")
+
+    def getArchiveName(self):
+        return super().getArchiveName() or self.__path
 
     def _canManage(self):
         return True
@@ -872,6 +877,14 @@ class HttpArchive(BaseArchive):
         self.__url = urllib.parse.urlparse(spec["url"])
         self._webdav = WebDav(self.__url, spec.get("sslVerify", True))
         self._retries = spec.get("retries", 1)
+
+    def getArchiveName(self):
+        name = super().getArchiveName()
+        if name:
+            return name
+
+        url = self.__url
+        return urllib.parse.urlunparse((url.scheme, url.netloc, url.path, '', '', ''))
 
     def __retry(self, request):
         retries = self._retries
@@ -1110,6 +1123,13 @@ class AzureArchive(BaseArchive):
         self.__container = spec['container']
         self.__account = spec['account']
         self.__credential = spec.get('key', spec.get('sasToken'))
+
+    def getArchiveName(self):
+        name = super().getArchiveName()
+        if name:
+            return name
+
+        return f"https://{self.__account}.blob.core.windows.net/{self.__container}"
 
     def __getClient(self):
         try:
