@@ -351,7 +351,7 @@ class JenkinsCacheHelper:
 class BaseArchive(TarHelper):
     def __init__(self, spec):
         flags = spec.get("flags", ["upload", "download"])
-        self.__name = spec.get("name", "undefined name")
+        self.__name = spec.get("name")
         self.__useDownload = "download" in flags
         self.__useUpload = "upload" in flags
         self.__ignoreErrors = "nofail" in flags
@@ -401,7 +401,10 @@ class BaseArchive(TarHelper):
         return False
 
     def _namedErrorString(self, err):
-        return "Archive '{}': {}".format(self.__name, err)
+        if self.__name:
+            return "Archive '{}': {}".format(self.__name, err)
+        else:
+            return err
 
     async def downloadPackage(self, step, buildId, audit, content, caches=[],
                               executor=None):
