@@ -45,7 +45,7 @@ jobs:
               run: |
                 git config --global init.defaultBranch master # keep the old name
                 git config --global protocol.file.allow always # roll back CVE-2022-39253
-                eatmydata ./test/run-tests.sh -c xml
+                eatmydata ./test/run-tests.sh -c xml -v
 
             - name: Build Python package
               run: |
@@ -101,7 +101,7 @@ jobs:
                 git config --global init.defaultBranch master # keep the old name
                 git config --global protocol.file.allow always # roll back CVE-2022-39253
                 $env:PATH = "$env:PATH;C:\msys64\usr\bin"
-                bash ./test/run-tests.sh -c xml
+                bash ./test/run-tests.sh -c xml -v
 
             - name: Upload coverage to Codecov
               uses: codecov/codecov-action@v4
