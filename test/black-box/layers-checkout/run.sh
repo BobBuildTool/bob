@@ -31,7 +31,7 @@ bar_dir="$tmp_dir/bar"
 baz_dir="$tmp_dir/baz"
 ext_dir="$tmp_dir/ext"
 trap 'rm -rf "$tmp_dir" layers layers.attic log-status.txt' EXIT
-cleanup
+cleanup layers layers.attic log-status.txt
 
 # build the git layer bar/1
 pushd ${bar_dir}
