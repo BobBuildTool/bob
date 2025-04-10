@@ -5,7 +5,7 @@ set -o pipefail
 usage()
 {
 	cat <<EOF
-usage: ${0##*/} [-h] [-b PATTERN] [-c] [-i PATTERN] [-j JOBS] [-n] [-u PATTERN]
+usage: ${0##*/} [-h] [-b PATTERN] [-c] [-i PATTERN] [-j JOBS] [-n] [-u PATTERN] [-v]
 
 optional arguments:
   -h              show this help message and exit
@@ -14,11 +14,23 @@ optional arguments:
   -i PATTERN      Only execute integration tests matching PATTERN
   -j JOBS         Run JOBS tests in parallel (requires GNU parallel)
   -u PATTERN      Only execute unit tests matching PATTERN
+  -v              Verbose. Show logs or all tests.
 EOF
+}
+
+print_verbose()
+{
+	if [[ ${VERBOSE+true} ]] ; then
+		local prefix=$(printf "%-25s|" "$test_name")
+		stdbuf -oL sed -e "s/\(.*\)/$prefix \1/"
+	else
+		cat >/dev/null
+	fi
 }
 
 run_test()
 {
+	set -o pipefail
 	local ret LOGFILE=$(mktemp)
 	local test_name="${1#*:}"
 
@@ -29,11 +41,15 @@ run_test()
 
 	case "${1%%:*}" in
 		unit)
+			test_name="${test_name%%.py}"
 			pushd unit > /dev/null
-			echo -n "  [unit]        ${test_name%%.py} ... "
-			if $RUN_PYTHON3_COV -m unittest -v $test_name >>"$LOGFILE" 2>&1 ; then
-				echo "ok"
+			[[ "${VERBOSE+true}" ]] || echo -n "  [unit]        $test_name ... "
+			if $RUN_PYTHON3_COV -m unittest -v $test_name 2>&1 | tee -a "$LOGFILE" | print_verbose ; then
+				[[ ${VERBOSE+true} ]] && echo "$test_name: ok" || echo "ok"
 				ret=0
+			elif [[ ${VERBOSE+true} ]] ; then
+				echo "$test_name: FAIL"
+				ret=1
 			else
 				echo "FAIL (log follows...)"
 				ret=1
@@ -43,33 +59,39 @@ run_test()
 			;;
 		black-box)
 			pushd black-box > /dev/null
-			echo -n "  [blackbox]    $test_name ... "
+			[[ "${VERBOSE+true}" ]] || echo -n "  [blackbox]    $test_name ... "
 			(
 				set -o pipefail
 				set -ex
 				cd "$test_name"
 				. run.sh 2>&1 | tee log.txt
-			) >>"$LOGFILE" 2>&1
+			) 2>&1 | tee -a "$LOGFILE" | print_verbose
 
 			ret=$?
-			if [[ $ret -eq 240 ]] ; then
-				echo "skipped"
+			if [[ $ret -eq 0 ]] ; then
+				[[ ${VERBOSE+true} ]] && echo "$test_name: ok" || echo "ok"
+			elif [[ $ret -eq 240 ]] ; then
+				[[ "${VERBOSE+true}" ]] && echo "$test_name: skipped" || echo "skipped"
 				ret=0
-			elif [[ $ret -ne 0 ]] ; then
+			elif [[ ${VERBOSE+true} ]] ; then
+				echo "$test_name: FAIL (exit $ret)"
+				ret=1
+			else
 				echo "FAIL (exit $ret, log follows...)"
 				cat -n "$LOGFILE"
 				ret=1
-			else
-				echo "ok"
 			fi
 			popd > /dev/null
 			;;
 		integration)
 			pushd integration/$test_name > /dev/null
-			echo -n "  [integration] $test_name ... "
-			if $RUN_PYTHON3 run.py >>"$LOGFILE" 2>&1 ; then
-				echo "ok"
+			[[ "${VERBOSE+true}" ]] || echo -n "  [integration] $test_name ... "
+			if $RUN_PYTHON3 run.py 2>&1 | tee -a "$LOGFILE" | print_verbose ; then
+				[[ ${VERBOSE+true} ]] && echo "$test_name: ok" || echo "ok"
 				ret=0
+			elif [[ ${VERBOSE+true} ]] ; then
+				echo "$test_name: FAIL"
+				ret=1
 			else
 				echo "FAIL (log follows...)"
 				ret=1
@@ -122,6 +144,7 @@ RUN_JOBS=
 unset RUN_UNITTEST_PAT
 unset RUN_BLACKBOX_PAT
 unset RUN_INTEGRATION_PAT
+unset VERBOSE
 export PYTHONDEVMODE=1
 export PYTHONASYNCIODEBUG=1
 export PYTHONWARNINGS=error
@@ -134,7 +157,7 @@ if [[ $($RUN_PYTHON3 --version) = "Python 3.9.7" ]] ; then
 fi
 
 # option processing
-while getopts ":hb:c:i:j:u:" opt; do
+while getopts ":hb:c:i:j:u:v" opt; do
 	case $opt in
 		h)
 			usage
@@ -162,6 +185,9 @@ while getopts ":hb:c:i:j:u:" opt; do
 			;;
 		u)
 			RUN_UNITTEST_PAT="$OPTARG"
+			;;
+		v)
+			VERBOSE=1
 			;;
 		\?)
 			echo "Invalid option: -$OPTARG" >&2
@@ -249,11 +275,12 @@ fi
 if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
 	: # No tests matched
 elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
-	export -f run_test
+	export -f run_test print_verbose
 	export RUN_PYTHON3
 	export RUN_PYTHON3_COV
 	export TEST_ENVIRONMENT
-	parallel ${RUN_JOBS:+-j $RUN_JOBS} run_test ::: \
+	export VERBOSE
+	parallel --line-buffer ${RUN_JOBS:+-j $RUN_JOBS} run_test ::: \
 	  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
 else
 	for i in "${RUN_TEST_NAMES[@]}" ; do
