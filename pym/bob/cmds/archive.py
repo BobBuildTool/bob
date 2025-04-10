@@ -399,7 +399,7 @@ def doArchiveScan(archivers, argv):
     args = parser.parse_args(argv)
     for archiver in archivers:
         if args.verbose:
-            print("archive '{}':".format(archiver.getArchiveName()))
+            print("archive '{}':".format(archiver.getArchiveName() or "<unnamed>"))
         scanner = ArchiveScanner(archiver)
         with scanner:
             if not scanner.scan(args.verbose) and args.fail:
@@ -423,7 +423,7 @@ def doArchiveClean(archivers, argv):
 
     for archiver in archivers:
         if args.verbose:
-            print("archive '{}':".format(archiver.getArchiveName()))
+            print("archive '{}':".format(archiver.getArchiveName() or "<unnamed>"))
         scanner = ArchiveScanner(archiver)
         with scanner:
             if not args.noscan:
@@ -469,7 +469,7 @@ def doArchiveFind(archivers, argv):
     args = parser.parse_args(argv)
 
     for archiver in archivers:
-        print("archive '{}':".format(archiver.getArchiveName()))
+        print("archive '{}':".format(archiver.getArchiveName() or "<unnamed>"))
         scanner = ArchiveScanner(archiver)
         with scanner:
             if not args.noscan:

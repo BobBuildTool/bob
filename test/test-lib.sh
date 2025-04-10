@@ -96,7 +96,7 @@ file_url()
 
 cleanup()
 {
-	rm -rf work dev .bob-*
+	rm -rf work dev .bob-* "$@"
 }
 
 # Run bob in testing environment. Adds the "package calculation check" (pkgck)
