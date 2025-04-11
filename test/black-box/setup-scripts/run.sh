@@ -14,7 +14,8 @@ expect_exist dev/dist/root/1/workspace/canary.txt
 if [[ $(uname -o) != Msys ]] ; then
 	rm dev/dist/root/1/workspace/canary.txt
 	script -qfec "./dev/dist/root/1/package.sh shell" /dev/null <<'EOF'
-	foo
+foo
+exit
 EOF
 	expect_exist dev/dist/root/1/workspace/canary.txt
 fi
