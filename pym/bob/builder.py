@@ -718,7 +718,7 @@ cd {ROOT}
                                         "{:02}-{}".format(i, a.getPackage().getName())))
                 i += 1
 
-    async def _runShell(self, step, scriptName, logger, cleanWorkspace=None,
+    async def _runShell(self, step, scriptName, logger, workspaceCreated, cleanWorkspace=None,
                         mode=InvocationMode.CALL):
         workspacePath = step.getWorkspacePath()
         if not os.path.isdir(workspacePath): os.makedirs(workspacePath)
@@ -771,7 +771,7 @@ cd {ROOT}
             executor=self.__executor)
         if step.jobServer() and self.__jobServer:
             invoker.setMakeParameters(self.__jobServer.getMakeFd(), self.__jobs)
-        ret = await invoker.executeStep(mode, cleanWorkspace)
+        ret = await invoker.executeStep(mode, workspaceCreated, cleanWorkspace)
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):
             raise BuildError("User aborted while running {}".format(absRunFile),
@@ -1110,7 +1110,7 @@ cd {ROOT}
                 if checkoutBuildOnlyStateCompatible(checkoutState, oldCheckoutState):
                     with stepExec(checkoutStep, "UPDATE",
                                   "{} {}".format(prettySrcPath, overridesString)) as a:
-                        await self._runShell(checkoutStep, "checkout", a, mode=InvocationMode.UPDATE)
+                        await self._runShell(checkoutStep, "checkout", a, created, mode=InvocationMode.UPDATE)
                     newCheckoutState = oldCheckoutState.copy()
                     newCheckoutState[CHECKOUT_STATE_BUILD_ONLY] = checkoutState[CHECKOUT_STATE_BUILD_ONLY]
                     BobState().setDirectoryState(prettySrcPath, newCheckoutState)
@@ -1235,7 +1235,7 @@ cd {ROOT}
 
                 with stepExec(checkoutStep, "CHECKOUT",
                               "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
-                    await self._runShell(checkoutStep, "checkout", a)
+                    await self._runShell(checkoutStep, "checkout", a, created)
                 self.__statistic.checkouts += 1
                 checkoutExecuted = True
                 currentResultHash.invalidate() # force recalculation
@@ -1302,6 +1302,7 @@ cd {ROOT}
                 stepMessage(buildStep, "PRUNE", "{} (recipe changed)".format(prettyBuildPath),
                     WARNING)
                 emptyDirectory(prettyBuildPath)
+                created = True
             # invalidate build step
             BobState().resetWorkspaceState(prettyBuildPath, buildDigest)
 
@@ -1327,7 +1328,7 @@ cd {ROOT}
                 # build it
                 with stepExec(buildStep, "BUILD", prettyBuildPath, INFO) as buildAction:
                     visibleAction = fullAction if fullAction.visible else buildAction
-                    await self._runShell(buildStep, "build", visibleAction, self.__cleanBuild)
+                    await self._runShell(buildStep, "build", visibleAction, created, self.__cleanBuild)
                 buildHash = hashWorkspace(buildStep)
                 await self._generateAudit(buildStep, depth, buildHash, buildBuildId)
             BobState().setResultHash(prettyBuildPath, buildHash)
@@ -1577,7 +1578,7 @@ cd {ROOT}
                 BobState().setResultHash(prettyPackagePath, datetime.datetime.now())
                 with stepExec(packageStep, "PACKAGE", prettyPackagePath, INFO) as packageAction:
                     visibleAction = fullAction if fullAction.visible else packageAction
-                    await self._runShell(packageStep, "package", visibleAction)
+                    await self._runShell(packageStep, "package", visibleAction, True)
                 packageHash = hashWorkspace(packageStep)
                 packageDigest = await self.__getIncrementalVariantId(packageStep)
                 workspaceChanged = True

@@ -269,7 +269,7 @@ class RealGitRepositoryTestCase(TestCase):
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, True, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker, False))
 
 
 class TestGitRemotes(RealGitRepositoryTestCase):
@@ -453,7 +453,7 @@ class TestShallow(TestCase):
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, True, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker, False))
 
         log = subprocess.check_output(["git", "log", "--oneline"],
             cwd=workspace, universal_newlines=True).strip().split("\n")
@@ -577,7 +577,7 @@ class TestSubmodules(TestCase):
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, True, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker, False))
 
     def updateSub1(self):
         # update sub- and main-module
@@ -917,7 +917,7 @@ class TestRebase(TestCase):
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, True, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker, False))
 
     def verify(self, workspace, content, file="test.txt"):
         with open(os.path.join(workspace, file)) as f:
@@ -1064,7 +1064,7 @@ class TestGenericRef(TestCase):
     def invokeGit(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, True, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker, False))
 
     def switchGit(self, workspace, scm, oldScm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())

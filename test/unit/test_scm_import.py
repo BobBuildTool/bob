@@ -60,7 +60,7 @@ class TestImportScm(TestCase):
     def invokeScm(self, workspace, scm):
         spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
         invoker = Invoker(spec, False, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker, False))
 
     def testProperties(self):
         """Query some static proerties of SCM"""

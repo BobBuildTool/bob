@@ -61,7 +61,7 @@ class CvsScm(Scm):
 
         return ret
 
-    async def invoke(self, invoker):
+    async def invoke(self, invoker, workspaceCreated):
         # If given a ":ssh:" cvsroot, translate that to CVS_RSH using ssh, and ":ext:"
         # (some versions of CVS do that internally)
         m = re.match('^:ssh:(.*)', self.__cvsroot)

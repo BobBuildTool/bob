@@ -238,7 +238,7 @@ class TestSubmodulesStatus(TestCase):
     def invokeGit(self, scm):
         spec = MagicMock(workspaceWorkspacePath=self.workspace, envWhiteList=set())
         invoker = Invoker(spec, True, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker, False))
 
     def statusGitScm(self, scm):
         status = scm.status(self.workspace)
@@ -519,7 +519,7 @@ class TestRefStatus(TestCase):
     def invokeGit(self, scm):
         spec = MagicMock(workspaceWorkspacePath=self.workspace, envWhiteList=set())
         invoker = Invoker(spec, True, True, True, True, True, False)
-        runInEventLoop(scm.invoke(invoker))
+        runInEventLoop(scm.invoke(invoker, False))
 
     def statusGitScm(self, scm):
         status = scm.status(self.workspace)

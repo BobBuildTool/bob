@@ -166,7 +166,7 @@ class ImportScm(Scm):
 
         return ret
 
-    async def invoke(self, invoker):
+    async def invoke(self, invoker, workspaceCreated):
         dest = invoker.joinPath(self.__dir)
         os.makedirs(dest, exist_ok=True)
         if self.__prune: emptyDirectory(dest)
