@@ -30,7 +30,6 @@ import asyncio
 import concurrent.futures
 import concurrent.futures.process
 import gzip
-import http.client
 import io
 import os
 import os.path
