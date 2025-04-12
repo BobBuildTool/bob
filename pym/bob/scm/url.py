@@ -168,11 +168,11 @@ class Extractor():
         self.strip = strip
         self.separateDownload = separateDownload
 
-    async def _extract(self, cmds, invoker, stdout=None):
+    async def _extract(self, cmds, invoker, dirCreated, stdout=None):
         destination = self.getCompressedFilePath(invoker)
         (destDir, destFile) = os.path.split(destination)
         canary = os.path.join(destDir, "."+destFile+".extracted")
-        if isYounger(destination, canary):
+        if dirCreated or isYounger(destination, canary):
             for cmd in cmds:
                 if shutil.which(cmd[0]) is None: continue
                 await invoker.checkCommand(cmd, cwd=self.dir, stdout=stdout)
@@ -189,7 +189,7 @@ class Extractor():
         return os.path.abspath(invoker.joinPath(downloadFolder, self.dir, self.file)) \
 
     @abstractmethod
-    async def extract(self, invoker, destination, cwd):
+    async def extract(self, invoker, dirCreated):
         return False
 
 # Use the Python tar/zip extraction only on Windows. They are slower and in
@@ -198,7 +198,7 @@ class Extractor():
 class TarExtractor(Extractor):
     SUPPORT_STRIP = True
 
-    async def extract(self, invoker):
+    async def extract(self, invoker, dirCreated):
         cmds = []
         compressedFilePath = self.getCompressedFilePath(invoker)
         if isWin32 and self.strip == 0:
@@ -210,12 +210,12 @@ class TarExtractor(Extractor):
             cmd.append("--strip-components={}".format(self.strip))
         cmds.append(cmd)
 
-        await self._extract(cmds, invoker)
+        await self._extract(cmds, invoker, dirCreated)
 
 
 class ZipExtractor(Extractor):
 
-    async def extract(self, invoker):
+    async def extract(self, invoker, dirCreated):
         cmds = []
         compressedFilePath = self.getCompressedFilePath(invoker)
         if isWin32:
@@ -223,12 +223,12 @@ class ZipExtractor(Extractor):
                    "-e", compressedFilePath, "."])
 
         cmds.append(["unzip", "-o", compressedFilePath])
-        await self._extract(cmds, invoker)
+        await self._extract(cmds, invoker, dirCreated)
 
 
 class SingleFileExtractor(Extractor):
 
-    async def extract(self, invoker):
+    async def extract(self, invoker, dirCreated):
         # The gunzip and unxz tools extracts the file at the location of the
         # input file. In case the separateDownload policy is active, the
         # destination might be in a separete folder.
@@ -248,7 +248,7 @@ class SingleFileExtractor(Extractor):
 
         with open(dst, 'wb') as f:
             cmd = [self.CMD, "-c", src]
-            await self._extract([cmd], invoker, f)
+            await self._extract([cmd], invoker, dirCreated, f)
 
         shutil.copystat(src, dst)
 
@@ -281,9 +281,9 @@ class XZExtractor(SingleFileExtractor):
 
 class SevenZipExtractor(Extractor):
 
-    async def extract(self, invoker):
+    async def extract(self, invoker, dirCreated):
         cmds = [["7z", "x", "-y", self.getCompressedFilePath(invoker)]]
-        await self._extract(cmds, invoker)
+        await self._extract(cmds, invoker, dirCreated)
 
 
 class UrlScm(Scm):
@@ -686,7 +686,9 @@ class UrlScm(Scm):
         return True
 
     async def invoke(self, invoker, workspaceCreated):
-        os.makedirs(invoker.joinPath(self.__dir), exist_ok=True)
+        if not os.path.isdir(invoker.joinPath(self.__dir)):
+            os.makedirs(invoker.joinPath(self.__dir), exist_ok=True)
+            workspaceCreated = True
         workspaceFile = os.path.join(self.__dir, self.__fn)
         extractor = self.__getExtractor()
 
@@ -747,7 +749,7 @@ class UrlScm(Scm):
 
         # Run optional extractors
         if extractor is not None:
-            await extractor.extract(invoker)
+            await extractor.extract(invoker, workspaceCreated)
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this url.
