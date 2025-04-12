@@ -222,7 +222,7 @@ class HttpServerMock():
         self.server = HTTPServer(('localhost', 0), self.handler)
 
     def __enter__(self):
-        self.thread = Thread(target=self.server.serve_forever)
+        self.thread = Thread(target=self.server.serve_forever, kwargs={'poll_interval' : 0.1})
         self.thread.start()
         stats = HttpServerStats(self.server.server_address[1])
         self.handler.stats = stats
