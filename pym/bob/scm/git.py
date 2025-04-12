@@ -206,7 +206,7 @@ class GitScm(Scm):
             config += [ "-c", "protocol.file.allow=always" ]
         return config
 
-    async def invoke(self, invoker, switch=False):
+    async def invoke(self, invoker, workspaceCreated, switch=False):
         alternatesFile = invoker.joinPath(self.__dir, ".git/objects/info/alternates")
 
         # make sure the git directory exists
@@ -709,7 +709,7 @@ class GitScm(Scm):
 
         # Try to checkout new state in old workspace. If something fails the
         # old attic logic will take over.
-        await self.invoke(invoker, True)
+        await self.invoke(invoker, False, True)
         return True
 
     def asDigestScript(self):

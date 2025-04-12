@@ -72,7 +72,7 @@ class SvnScm(Scm):
 
         return ret
 
-    async def invoke(self, invoker):
+    async def invoke(self, invoker, workspaceCreated):
         options = [ "--non-interactive" ]
         if not self.__sslVerify:
             options += [ "--trust-server-cert-failures=unknown-ca,cn-mismatch,expired,not-yet-valid,other" ]

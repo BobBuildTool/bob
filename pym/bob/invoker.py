@@ -334,7 +334,7 @@ class Invoker:
 
         return cmdArgs
 
-    async def executeStep(self, mode, clean=False, keepSandbox=False):
+    async def executeStep(self, mode, workspaceCreated, clean=False, keepSandbox=False):
         # make permissions predictable
         os.umask(0o022)
 
@@ -352,8 +352,10 @@ class Invoker:
             clean = self.__spec.clean if self.__spec.clean is not None else clean
             if not os.path.isdir(self.__spec.workspaceWorkspacePath):
                 os.makedirs(self.__spec.workspaceWorkspacePath, exist_ok=True)
+                workspaceCreated = True
             elif clean and mode != InvocationMode.SHELL:
                 emptyDirectory(self.__spec.workspaceWorkspacePath)
+                workspaceCreated = True
 
             if len(self.__makeFds) == 2:
                 makeFlags = self.__spec.env.get("MAKEFLAGS")
@@ -426,7 +428,7 @@ class Invoker:
                     if mode == InvocationMode.UPDATE and not scm.isLocal():
                         continue # Skip non-local SCMs on update-only
                     try:
-                        await scm.invoke(self)
+                        await scm.invoke(self, workspaceCreated)
                     except CmdFailedError as e:
                         self.error(scm.getSource(), "failed")
                         self.error(e.what)

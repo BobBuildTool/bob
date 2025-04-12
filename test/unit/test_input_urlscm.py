@@ -54,7 +54,7 @@ class TemporaryWorkspace:
 
 class UrlScmExecutor:
 
-    def invokeScm(self, workspace, scm, switch=False, oldScm=None):
+    def invokeScm(self, workspace, scm, switch=False, oldScm=None, workspaceCreated=False):
         executor = getProcessPoolExecutor()
         try:
             spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
@@ -63,7 +63,7 @@ class UrlScmExecutor:
             if switch:
                 runInEventLoop(scm.switch(invoker, oldScm))
             else:
-                runInEventLoop(scm.invoke(invoker))
+                runInEventLoop(scm.invoke(invoker, workspaceCreated))
         finally:
             executor.shutdown()
 
@@ -376,7 +376,7 @@ class TestExtraction:
             spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
             invoker = Invoker(spec, False, True, True, True, True, False,
                               executor=executor)
-            runInEventLoop(scm.invoke(invoker))
+            runInEventLoop(scm.invoke(invoker, False))
         finally:
             executor.shutdown()
 

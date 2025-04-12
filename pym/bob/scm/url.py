@@ -685,7 +685,7 @@ class UrlScm(Scm):
         # does not match.
         return True
 
-    async def invoke(self, invoker):
+    async def invoke(self, invoker, workspaceCreated):
         os.makedirs(invoker.joinPath(self.__dir), exist_ok=True)
         workspaceFile = os.path.join(self.__dir, self.__fn)
         extractor = self.__getExtractor()

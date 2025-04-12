@@ -50,14 +50,14 @@ def doInvoke(argv, bobRoot):
             invoker = Invoker(spec, args.preserve_env, True, True, True, False,
                               False, executor=executor)
             ret = loop.run_until_complete(invoker.executeStep(InvocationMode.SHELL,
-                args.clean, args.keep_sandbox))
+                False, args.clean, args.keep_sandbox))
         elif args.mode in ('run', 'update'):
             invoker = Invoker(spec, args.preserve_env, args.no_logfiles,
                 verbosity >= 2, verbosity >= 1, verbosity >= 3, False,
                 executor=executor)
             ret = loop.run_until_complete(invoker.executeStep(
                 InvocationMode.CALL if args.mode == 'run' else InvocationMode.UPDATE,
-                args.clean, args.keep_sandbox))
+                False, args.clean, args.keep_sandbox))
         elif args.mode == 'fingerprint':
             invoker = Invoker(spec, args.preserve_env, True, True, True,
                               verbosity >= 3, False, executor=executor)

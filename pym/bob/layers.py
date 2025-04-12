@@ -155,7 +155,7 @@ class Layer:
             os.makedirs(self.__layerDir)
             self.__created = True
 
-        await self.__scm.invoke(invoker)
+        await self.__scm.invoke(invoker, self.__created)
         log("CHECKOUT: Layer " +
                 "'{}' .. ok".format(self.getName()), EXECUTED, NORMAL)
         BobState().setLayerState(self.__layerDir, newState)
