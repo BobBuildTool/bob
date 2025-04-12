@@ -907,3 +907,30 @@ class TestExtraction(UrlScmExecutor, TestCase):
             scm = self.createUrlScm({ "extract" : "zip" })
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, scm)
+
+    def testWorkspaceDeleted(self):
+        """After the workspace was deleted, the archive is extracted again."""
+        self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
+        with TemporaryWorkspace() as workspace:
+            scm = self.createUrlScm()
+            self.invokeScm(workspace, scm)
+            self.assertTree(workspace)
+
+            shutil.rmtree(workspace)
+            os.mkdir(workspace)
+            self.invokeScm(workspace, scm, workspaceCreated=True)
+            self.assertTree(workspace)
+
+    def testScmDirDeleted(self):
+        """After the subdirectory in the workspace was deleted, the archive is extracted again"""
+        self.url = makeFileUrl(os.path.abspath("data/url-scm/foo-1.2.3.tar"))
+        with TemporaryWorkspace() as workspace:
+            scm = self.createUrlScm({ "dir" : "subdir" })
+            subdir = os.path.join(workspace, "subdir")
+
+            self.invokeScm(workspace, scm)
+            self.assertTree(subdir)
+
+            shutil.rmtree(subdir)
+            self.invokeScm(workspace, scm)
+            self.assertTree(subdir)
