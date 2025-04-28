@@ -542,7 +542,8 @@ class CoreItem:
 
 class AbstractTool:
     __slots__ = ("path", "libs", "netAccess", "environment",
-        "fingerprintScript", "fingerprintIf", "fingerprintVars")
+        "fingerprintScript", "fingerprintIf", "fingerprintVars", "dependTools",
+        "dependToolsWeak")
 
     def __init__(self, spec):
         if isinstance(spec, str):
@@ -553,6 +554,8 @@ class AbstractTool:
             self.fingerprintScript = { lang : "" for lang in ScriptLanguage }
             self.fingerprintIf = False
             self.fingerprintVars = set()
+            self.dependTools = []
+            self.dependToolsWeak = []
         else:
             self.path = spec['path']
             self.libs = spec.get('libs', [])
@@ -561,6 +564,8 @@ class AbstractTool:
             self.fingerprintScript = fetchFingerprintScripts(spec)
             self.fingerprintIf = spec.get("fingerprintIf")
             self.fingerprintVars = set(spec.get("fingerprintVars", []))
+            self.dependTools = spec.get("dependTools", [])
+            self.dependToolsWeak = spec.get("dependToolsWeak", [])
 
     def prepare(self, coreStepRef, env):
         """Create concrete tool for given step."""
@@ -568,16 +573,24 @@ class AbstractTool:
         libs = [ env.substitute(l, "provideTools::libs") for l in self.libs ]
         environment = env.substituteCondDict(self.environment,
                                              "provideTools::environment")
+
+        dependTools = set(name for (name, cond) in self.dependTools
+                               if env.evaluate(cond, "provideTools::dependTools"))
+        dependToolsWeak = set(name for (name, cond) in self.dependToolsWeak
+                                   if env.evaluate(cond, "provideTools::dependToolsWeak"))
+
         return CoreTool(coreStepRef, path, libs, self.netAccess, environment,
                         self.fingerprintScript, self.fingerprintIf,
-                        self.fingerprintVars)
+                        self.fingerprintVars, dependTools, dependToolsWeak)
 
 class CoreTool(CoreItem):
     __slots__ = ("coreStep", "path", "libs", "netAccess", "environment",
-        "fingerprintScript", "fingerprintIf", "fingerprintVars", "resultId")
+        "fingerprintScript", "fingerprintIf", "fingerprintVars", "resultId",
+        "dependTools", "dependToolsWeak")
 
     def __init__(self, coreStep, path, libs, netAccess, environment,
-                 fingerprintScript, fingerprintIf, fingerprintVars):
+                 fingerprintScript, fingerprintIf, fingerprintVars, dependTools,
+                 dependToolsWeak):
         self.coreStep = coreStep
         self.path = path
         self.libs = libs
@@ -586,6 +599,8 @@ class CoreTool(CoreItem):
         self.fingerprintScript = fingerprintScript
         self.fingerprintIf = fingerprintIf
         self.fingerprintVars = fingerprintVars
+        self.dependTools = dependTools
+        self.dependToolsWeak = dependToolsWeak
 
         # Calculate a "resultId" so that only identical tools match
         h = hashlib.sha1()
@@ -608,12 +623,18 @@ class CoreTool(CoreItem):
         fingerprintIfStr = str(fingerprintIf)
         h.update(struct.pack("<I", len(fingerprintIfStr)))
         h.update(fingerprintIfStr.encode('utf8'))
+        h.update(struct.pack("<II", len(dependTools), len(dependToolsWeak)))
+        for key in sorted(dependTools):
+            h.update(key.encode('utf8'))
+        for key in sorted(dependToolsWeak):
+            h.update(key.encode('utf8'))
         self.resultId = h.digest()
 
     def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
         step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathsConfig)
         return Tool(step, self.path, self.libs, self.netAccess, self.environment,
-                    self.fingerprintScript, self.fingerprintVars)
+                    self.fingerprintScript, self.fingerprintVars, self.dependTools,
+                    self.dependToolsWeak)
 
 class Tool:
     """Representation of a tool.
@@ -623,10 +644,10 @@ class Tool:
     """
 
     __slots__ = ("step", "path", "libs", "netAccess", "environment",
-        "fingerprintScript", "fingerprintVars")
+        "fingerprintScript", "fingerprintVars", "dependTools", "dependToolsWeak")
 
     def __init__(self, step, path, libs, netAccess, environment, fingerprintScript,
-                 fingerprintVars):
+                 fingerprintVars, dependTools, dependToolsWeak):
         self.step = step
         self.path = path
         self.libs = libs
@@ -634,6 +655,8 @@ class Tool:
         self.environment = environment
         self.fingerprintScript = fingerprintScript
         self.fingerprintVars = fingerprintVars
+        self.dependTools = dependTools
+        self.dependToolsWeak = dependToolsWeak
 
     def __repr__(self):
         return "Tool({}, {}, {})".format(repr(self.step), self.path, self.libs)
@@ -641,7 +664,9 @@ class Tool:
     def __eq__(self, other):
         return isinstance(other, Tool) and (self.step == other.step) and (self.path == other.path) and \
             (self.libs == other.libs) and (self.netAccess == other.netAccess) and \
-            (self.environment == other.environment)
+            (self.environment == other.environment) and \
+            (self.dependTools == other.dependTools) and \
+            (self.dependToolsWeak == other.dependToolsWeak)
 
     def getStep(self):
         """Return package step that produces the result holding the tool
@@ -678,6 +703,20 @@ class Tool:
         tool.
         """
         return self.environment
+
+    def getDependTools(self):
+        """Get tool dependencies of this tool.
+
+        :return: Set[str]
+        """
+        return self.dependTools
+
+    def getDependToolsWeak(self):
+        """Get weak tool dependencies of this tool.
+
+        :return: Set[str]
+        """
+        return self.dependToolsWeak
 
 
 class CoreSandbox(CoreItem):
@@ -1943,6 +1982,21 @@ def getProvideDepsResolver(pattern):
     else:
         return VerbatimProvideDepsResolver(pattern)
 
+def addTransitiveTools(depSetStrong, depSetWeak, toolsView):
+    todo = set(depSetStrong | depSetWeak)
+    while todo:
+        tool = toolsView.get(todo.pop())
+        if tool is None: continue
+
+        dependTools = tool.dependTools
+        dependToolsWeak = tool.dependToolsWeak
+
+        # All only previously unseen tools to the todo list
+        todo |= (dependTools | dependToolsWeak) - depSetStrong - depSetWeak
+
+        depSetStrong |= dependTools
+        depSetWeak |= dependToolsWeak
+
 class Recipe(object):
     """Representation of a single recipe
 
@@ -2569,20 +2623,27 @@ class Recipe(object):
                 results.append(depRef)
 
         # Calculate used tools. They are conditional.
+        toolsView = tools.inspect()
         env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
             "__tools" : tools })
+
         toolDepCheckout = set(name for (name, cond) in self.__toolDepCheckout
                               if env.evaluate(cond, "checkoutTools"))
         toolDepCheckoutWeak = set(name for (name, cond) in self.__toolDepCheckoutWeak
                                   if env.evaluate(cond, "checkoutToolsWeak"))
+        addTransitiveTools(toolDepCheckout, toolDepCheckoutWeak, toolsView)
+
         toolDepBuild = set(name for (name, cond) in self.__toolDepBuild
                            if env.evaluate(cond, "buildTools")) | toolDepCheckout
         toolDepBuildWeak = set(name for (name, cond) in self.__toolDepBuildWeak
                                if env.evaluate(cond, "buildToolsWeak")) | toolDepCheckoutWeak
+        addTransitiveTools(toolDepBuild, toolDepBuildWeak, toolsView)
+
         toolDepPackage = set(name for (name, cond) in self.__toolDepPackage
                            if env.evaluate(cond, "packageTools")) | toolDepBuild
         toolDepPackageWeak = set(name for (name, cond) in self.__toolDepPackageWeak
                                if env.evaluate(cond, "packageToolsWeak")) | toolDepBuildWeak
+        addTransitiveTools(toolDepPackage, toolDepPackageWeak, toolsView)
 
         # Only keep weak tools that are not strong at the same time.
         toolDepCheckoutWeak -= toolDepCheckout
@@ -2594,7 +2655,6 @@ class Recipe(object):
 
         # apply tool environments
         toolsEnv = set()
-        toolsView = tools.inspect()
         for i in toolDepPackage:
             tool = toolsView.get(i)
             if tool is None: continue
@@ -3968,6 +4028,8 @@ class RecipeSet:
                         schema.Optional('fingerprintScriptPwsh') : str,
                         schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
                         schema.Optional('fingerprintVars') : [ varNameUseSchema ],
+                        schema.Optional('dependTools') : [ ToolValidator(varNameUseSchema) ],
+                        schema.Optional('dependToolsWeak') : [ ToolValidator(varNameUseSchema)  ],
                     })
                 )
             }),
