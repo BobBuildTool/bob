@@ -1523,6 +1523,11 @@ cd {ROOT}
                 packageBuildId, audit, prettyPackagePath, executor=self.__executor)
             if wasDownloaded:
                 self.__statistic.packagesDownloaded += 1
+                # Reject downloads without audit trail. They cannot be verified
+                # and break the audit trail of downstream packages.
+                if not os.path.exists(audit):
+                    raise BuildError("Downloaded artifact misses its audit trail!")
+
                 BobState().setInputHashes(prettyPackagePath,
                     packageInputDownloaded(packageBuildId))
                 packageHash = hashWorkspace(packageStep)
