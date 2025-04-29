@@ -220,6 +220,9 @@ class Artifact:
     def getBuildId(self):
         return bytes.fromhex(self.__data['build-id'])
 
+    def getResultHash(self):
+        return bytes.fromhex(self.__data['result-hash'])
+
     def getReferences(self):
         deps = self.__data["dependencies"]
         ret = set()
