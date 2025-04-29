@@ -1492,7 +1492,7 @@ cd {ROOT}
             dissectPackageInputState(BobState().getInputHashes(prettyPackagePath))
         workspaceChanged = False
         wasDownloaded = False
-        audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
+        audit = os.path.normpath(os.path.join(prettyPackagePath, "..", "audit.json.gz"))
         packageDigest = packageStep.getVariantId()
 
         # prune directory if we previously downloaded/built something different
@@ -1509,6 +1509,7 @@ cd {ROOT}
             stepMessage(packageStep, "PRUNE", "{} ({})".format(prettyPackagePath,
                 reason), WARNING)
             emptyDirectory(prettyPackagePath)
+            removePath(audit)
             BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
             oldInputBuildId = None
             oldInputFingerprint = None
@@ -1522,9 +1523,19 @@ cd {ROOT}
                 packageBuildId, audit, prettyPackagePath, executor=self.__executor)
             if wasDownloaded:
                 self.__statistic.packagesDownloaded += 1
+                # Reject downloads without audit trail. They cannot be verified
+                # and break the audit trail of downstream packages.
+                if not os.path.exists(audit):
+                    raise BuildError("Downloaded artifact misses its audit trail!")
+
+                # Verify integrity of downloaded package to protect against
+                # data corruption.
+                packageHash = hashWorkspace(packageStep)
+                if Audit.fromFile(audit).getArtifact().getResultHash() != packageHash:
+                    raise BuildError("Corrupt downloaded artifact! Extracted content hash does not match audit trail.")
+
                 BobState().setInputHashes(prettyPackagePath,
                     packageInputDownloaded(packageBuildId))
-                packageHash = hashWorkspace(packageStep)
                 workspaceChanged = True
             elif layerDownloadMode == 'forced':
                 raise BuildError("Downloading artifact of layer %s failed" % layer)

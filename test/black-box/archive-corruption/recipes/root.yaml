@@ -1,0 +1,3 @@
+root: True
+packageScript: |
+    echo foo >result.txt
