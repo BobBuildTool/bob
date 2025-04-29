@@ -1492,7 +1492,7 @@ cd {ROOT}
             dissectPackageInputState(BobState().getInputHashes(prettyPackagePath))
         workspaceChanged = False
         wasDownloaded = False
-        audit = os.path.join(prettyPackagePath, "..", "audit.json.gz")
+        audit = os.path.normpath(os.path.join(prettyPackagePath, "..", "audit.json.gz"))
         packageDigest = packageStep.getVariantId()
 
         # prune directory if we previously downloaded/built something different
@@ -1509,6 +1509,7 @@ cd {ROOT}
             stepMessage(packageStep, "PRUNE", "{} ({})".format(prettyPackagePath,
                 reason), WARNING)
             emptyDirectory(prettyPackagePath)
+            removePath(audit)
             BobState().resetWorkspaceState(prettyPackagePath, packageDigest)
             oldInputBuildId = None
             oldInputFingerprint = None
