@@ -1233,11 +1233,26 @@ cd {ROOT}
                     oldCheckoutHash = datetime.datetime.now()
                     BobState().setResultHash(prettySrcPath, oldCheckoutHash)
 
-                with stepExec(checkoutStep, "CHECKOUT",
-                              "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
-                    await self._runShell(checkoutStep, "checkout", a, created)
-                self.__statistic.checkouts += 1
-                checkoutExecuted = True
+                wasDownloaded = False
+                if self.__archive.canDownloadSrc() and created:
+                    audit= os.path.join(os.path.dirname(checkoutStep.getWorkspacePath()),
+                                             "audit.json.gz")
+                    wasDownloaded = await self.__archive.downloadPackage(checkoutStep,
+                        checkoutDigest, audit, prettySrcPath, executor=self.__executor)
+
+                    if wasDownloaded:
+                        if not os.path.exists(audit):
+                            raise BuildError("Downloaded artifact misses its audit trail!")
+                        checkoutHash = hashWorkspace(checkoutStep)
+                        if Audit.fromFile(audit).getArtifact().getResultHash() != checkoutHash:
+                            raise BuildError("Corrupt downloaded artifact! Extracted content hash does not match audit trail.")
+
+                if not wasDownloaded:
+                    with stepExec(checkoutStep, "CHECKOUT",
+                                  "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
+                        await self._runShell(checkoutStep, "checkout", a, created)
+                    self.__statistic.checkouts += 1
+                    checkoutExecuted = True
                 currentResultHash.invalidate() # force recalculation
                 # reflect new checkout state
                 BobState().setDirectoryState(prettySrcPath, checkoutState)
@@ -1279,6 +1294,13 @@ cd {ROOT}
         if buildId != checkoutHash:
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
+
+        if self.__archive.canUploadSrc(checkoutStep, isFreshCheckout):
+            auditPath = os.path.join(os.path.dirname(checkoutStep.getWorkspacePath()),
+                                     "audit.json.gz")
+            await self.__archive.uploadPackage(checkoutStep, checkoutDigest,
+                    auditPath,
+                    checkoutStep.getStoragePath(), executor=self.__executor)
 
     async def _cookBuildStep(self, buildStep, depth, buildBuildId):
         # Add the execution path of the build step to the buildDigest to
