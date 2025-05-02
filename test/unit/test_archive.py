@@ -61,6 +61,12 @@ class DummyStep:
         return DummyPackage()
     def getWorkspacePath(self):
         return "unused"
+    def isCheckoutStep(self):
+        return False
+    def isDeterministic(self):
+        return False
+    def isPackageStep(self):
+        return True
 
 def run(coro):
     with patch('bob.archive.signal.signal'):
