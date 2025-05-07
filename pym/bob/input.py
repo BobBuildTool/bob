@@ -996,6 +996,9 @@ class CoreStep(CoreItem):
         pkgName = self.corePackage.packageName
         if pkgName is not None:
             h.update(pkgName.encode('utf8'))
+        # Add shared status. Actually only relevant for package step but it
+        # doesn't make sense to differentiate here.
+        h.update(b'\x01' if self.corePackage.isShared else b'\x00')
 
         return h.digest()
 
@@ -1488,7 +1491,7 @@ class PackageStep(Step):
         Requires the recipe to be marked as shared and the result must be
         position independent.
         """
-        return self.getPackage().getRecipe().isShared() and self.isRelocatable()
+        return self.getPackage().isShared() and self.isRelocatable()
 
     def isRelocatable(self):
         """Returns True if the package step is relocatable."""
@@ -1509,11 +1512,11 @@ corePackageInternal = CorePackageInternal()
 class CorePackage:
     __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
         "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
-        "pkgId", "metaEnv", "packageName")
+        "pkgId", "metaEnv", "packageName", "isShared")
 
     def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox,
                  directDepSteps, indirectDepSteps, states, pkgId, metaEnv,
-                 packageName):
+                 packageName, isShared):
         self.recipe = recipe
         self.tools = tools
         self.sandbox = sandbox
@@ -1524,6 +1527,7 @@ class CorePackage:
         self.pkgId = pkgId
         self.metaEnv = metaEnv
         self.packageName = packageName
+        self.isShared = isShared
 
     def refDeref(self, stack, inputTools, inputSandbox, pathsConfig):
         tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathsConfig)
@@ -1733,6 +1737,10 @@ class Package(object):
         not equal ``getRecipe().getPackageName()`` as it normally does.
         """
         return self.__corePackage.isAlias()
+
+    def isShared(self):
+        # No public API. Intentionally undocumented.
+        return self.__corePackage.isShared
 
 
 # FIXME: implement this on our own without the Template class. How to do proper
@@ -2336,9 +2344,6 @@ class Recipe(object):
         if self.__package[1] is None:
             self.__package = (None, "", 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
 
-        # final shared value
-        self.__shared = self.__shared == True
-
         if self.__relocatable is None:
             self.__relocatable = True
 
@@ -2385,9 +2390,6 @@ class Recipe(object):
         :meta private:
         """
         return self.__relocatable
-
-    def isShared(self):
-        return self.__shared
 
     def jobServer(self):
         """Returns True if the jobserver should be used to schedule builds for
@@ -2683,6 +2685,12 @@ class Recipe(object):
         # update plugin states
         for s in states.values(): s.onFinish(env, self.__properties)
 
+        # calculate shared property
+        if isinstance(self.__shared, str) or isinstance(self.__shared, IfExpression):
+            isShared = env.evaluate(self.__shared, "shared")
+        else:
+            isShared = self.__shared == True
+
         # record used environment and tools
         env.touch(self.__packageVars | self.__packageVarsWeak)
         tools.touch(toolDepPackage)
@@ -2732,7 +2740,7 @@ class Recipe(object):
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
         p = CorePackage(self, toolsDetached, diffTools, sandbox, diffSandbox,
                 directPackages, indirectPackages, states, uidGen(), metaEnv,
-                packageName)
+                packageName, isShared)
 
         # optional checkout step
         if self.__checkout != (None, None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
@@ -4042,7 +4050,7 @@ class RecipeSet:
                 schema.Optional('user') : schema.Or("nobody", "root", "$USER"),
             }),
             schema.Optional('root') : schema.Or(bool, str, IfExpression),
-            schema.Optional('shared') : bool,
+            schema.Optional('shared') : schema.Or(bool, str, IfExpression),
             schema.Optional('relocatable') : bool,
             schema.Optional('buildNetAccess') : bool,
             schema.Optional('packageNetAccess') : bool,
