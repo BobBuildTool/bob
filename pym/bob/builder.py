@@ -725,10 +725,10 @@ cd {ROOT}
         self.__linkDependencies(step)
 
         # write spec
-        specFile = os.path.join(workspacePath, "..", "step.spec")
-        envFile = os.path.join(workspacePath, "..", "env")
-        logFile = os.path.join(workspacePath, "..", "log.txt")
-        scriptHint = os.path.join(workspacePath, "..", "script")
+        specFile = os.path.normpath(os.path.join(workspacePath, "..", "step.spec"))
+        envFile = os.path.normpath(os.path.join(workspacePath, "..", "env"))
+        logFile = os.path.normpath(os.path.join(workspacePath, "..", "log.txt"))
+        scriptHint = os.path.normpath(os.path.join(workspacePath, "..", "script"))
         spec = StepSpec.fromStep(step, envFile, self.__envWhiteList, logFile,
             scriptHint=scriptHint, isJenkins=step.JENKINS,
             slimSandbox=self.__slimSandbox)

@@ -35,6 +35,7 @@ import os
 import os.path
 import shutil
 import signal
+import socket
 import struct
 import subprocess
 import tarfile
@@ -450,6 +451,8 @@ class BaseArchive(TarHelper):
             return (False, self._namedErrorString(e.reason), WARNING)
         except ConnectionRefusedError:
             return (False, self._namedErrorString("connection failed"), WARNING)
+        except (socket.herror, socket.gaierror) as e:
+            return (False, self._namedErrorString(str(e)), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
