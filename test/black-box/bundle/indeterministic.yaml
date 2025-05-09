@@ -1,0 +1,4 @@
+scmOverrides:
+  - match:
+      url: "*"
+    del: [digestSHA1, commit]
