@@ -1,0 +1,8 @@
+root: True
+
+depends:
+  - git
+  - tar
+
+buildScript: "true"
+packageScript: "true"

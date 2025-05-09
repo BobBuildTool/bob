@@ -1,0 +1,7 @@
+checkoutSCM:
+  scm: url
+  url: ${TAR_URL}
+  digestSHA1: ${TAR_SHA1}
+
+buildScript: "true"
+packageScript: "true"
