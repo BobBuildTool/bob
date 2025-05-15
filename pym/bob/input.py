@@ -1732,7 +1732,7 @@ class Package(object):
         though. In this case, ``isAlias()`` returns true and ``getName()`` does
         not equal ``getRecipe().getPackageName()`` as it normally does.
         """
-        return self.__corePackages.isAlias()
+        return self.__corePackage.isAlias()
 
 
 # FIXME: implement this on our own without the Template class. How to do proper
