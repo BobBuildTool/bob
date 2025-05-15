@@ -2305,3 +2305,112 @@ class TestConditionalEnv(RecipesTmp, TestCase):
         packages = self.generate(env={"ENABLE_V1" : "1"})
         ps = packages.walkPackagePath("root").getPackageStep()
         self.assertEqual({"V1" : "x"}, ps.getEnv())
+
+
+class TestToolDependencies(RecipesTmp, TestCase):
+    """Test dependTools and dependToolsWeak"""
+
+    def testSimpleDeps(self):
+        """dependTools(Weak) are added to using step"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tools
+                  use: [tools]
+            packageTools: [tool-a]
+            """)
+        self.writeRecipe("tools", """\
+            provideTools:
+                tool-a:
+                    path: a
+                    dependTools: [tool-b]
+                    dependToolsWeak: [tool-c]
+                tool-b: b
+                tool-c: c
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertEqual(p.getPackageStep().toolDep, {"tool-a", "tool-b", "tool-c"})
+        self.assertEqual(p.getPackageStep().toolDepWeak, {"tool-c"})
+
+        tools = p.getPackageStep().getTools()
+        self.assertEqual(tools["tool-a"].getDependTools(), {"tool-b"})
+        self.assertEqual(tools["tool-a"].getDependToolsWeak(), {"tool-c"})
+        self.assertEqual(tools["tool-b"].getDependTools(), set())
+        self.assertEqual(tools["tool-b"].getDependToolsWeak(), set())
+
+    def testTransitiveDeps(self):
+        """dependTools(Weak) is resolved recursively"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tools
+                  use: [tools]
+            packageTools: [tool-a]
+            """)
+        self.writeRecipe("tools", """\
+            provideTools:
+                tool-a:
+                    path: a
+                    dependTools: [tool-b]
+                tool-b:
+                    path: b
+                    dependTools: [tool-c]
+                tool-c: c
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertEqual(p.getPackageStep().toolDep, {"tool-a", "tool-b", "tool-c"})
+        self.assertEqual(p.getPackageStep().toolDepWeak, set())
+
+    def testTransitiveMixedDeps(self):
+        """dependTools(Weak) is resolved recursively even when mixing weak and strong"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tools
+                  use: [tools]
+            packageTools: [tool-a]
+            """)
+        self.writeRecipe("tools", """\
+            provideTools:
+                tool-a:
+                    path: a
+                    dependToolsWeak: [tool-b]
+                tool-b:
+                    path: b
+                    dependTools: [tool-c]
+                tool-c: c
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertEqual(p.getPackageStep().toolDep, {"tool-a", "tool-b", "tool-c"})
+        self.assertEqual(p.getPackageStep().toolDepWeak, {"tool-b"})
+
+    def testSimpleDepsUpgrade(self):
+        """dependTools(Weak) weak and strong can be overridden by recipe"""
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tools
+                  use: [tools]
+            buildTools: [tool-a]
+            buildScript: "true"
+            packageToolsWeak: [tool-b]
+            packageTools: [tool-c]
+            """)
+        self.writeRecipe("tools", """\
+            provideTools:
+                tool-a:
+                    path: a
+                    dependTools: [tool-b]
+                    dependToolsWeak: [tool-c]
+                tool-b: b
+                tool-c: c
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertEqual(p.getBuildStep().toolDep, {"tool-a", "tool-b", "tool-c"})
+        self.assertEqual(p.getBuildStep().toolDepWeak, {"tool-c"})
+        self.assertEqual(p.getPackageStep().toolDep, {"tool-a", "tool-b", "tool-c"})
+        self.assertEqual(p.getPackageStep().toolDepWeak, set())

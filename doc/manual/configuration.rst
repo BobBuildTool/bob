@@ -1785,6 +1785,10 @@ consuming recipes. Example::
          fingerprintIf: True
          fingerprintScript: |
             bob-libc-version gcc
+         dependTools: [ binutils ]
+         dependToolsWeak:
+            - name: clang
+              if: "$ENABLE_CLANG"
 
 The ``path`` attribute is always needed.  The ``libs`` attribute, if present,
 must be a list of paths to needed shared libraries. Any path that is specified
@@ -1819,6 +1823,16 @@ recipes that use the particular tool. Use it to automatically apply a
 fingerprint to all recipes whose result will depend on the host environment by
 using the tool.  The ``fingerprintIf`` and ``fingerprintVars`` attributes are
 handled the in the same way.
+
+The ``dependTools`` and ``dependToolsWeak`` attributes can declare dependencies
+of this tool to other tools. If a recipe uses the declared tool, it will
+implicitly get dependencies to the tools listed in these attributes too. The
+syntax is the same as in :ref:`configuration-recipes-tools`. Conditional tool
+dependencies will be evaluated in the context of the tool definition, *not* in
+the context of the tool user. The tools named in ``dependTools`` and
+``dependToolsWeak`` do not need to be present when the tool is defined. Just
+their name is forwarded and added to the  :ref:`configuration-recipes-tools` of
+the using recipe.
 
 If no attributes except ``path`` are present the declaration may be abbreviated
 by giving the relative path directly::
