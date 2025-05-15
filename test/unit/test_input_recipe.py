@@ -742,3 +742,57 @@ class TestEnvironment(RecipeCommon, TestCase):
             "B" : "<lib>b",
             "C" : "<b>",
         })
+
+
+class TestShared(RecipeCommon, TestCase):
+
+    def testBool(self):
+        recipe = {
+            "shared" : True,
+        }
+        p = self.parseAndPrepare(recipe).getPackageStep()
+        self.assertTrue(p.isShared())
+
+        recipe = {
+            "shared" : False,
+        }
+        p = self.parseAndPrepare(recipe).getPackageStep()
+        self.assertFalse(p.isShared())
+
+        recipe = {
+        }
+        p = self.parseAndPrepare(recipe).getPackageStep()
+        self.assertFalse(p.isShared())
+
+    def testString(self):
+        recipe = {
+            "shared" : "True",
+        }
+        p = self.parseAndPrepare(recipe).getPackageStep()
+        self.assertTrue(p.isShared())
+
+        recipe = {
+            "shared" : "0",
+        }
+        p = self.parseAndPrepare(recipe).getPackageStep()
+        self.assertFalse(p.isShared())
+
+    def testStringSubst(self):
+        recipe = {
+            "shared" : "$(eq,$ENABLE,yes)",
+        }
+
+        p = self.parseAndPrepare(recipe, env={"ENABLE" : "yes"}).getPackageStep()
+        self.assertTrue(p.isShared())
+        p = self.parseAndPrepare(recipe, env={"ENABLE" : "no"}).getPackageStep()
+        self.assertFalse(p.isShared())
+
+    def testIfExpr(self):
+        recipe = {
+            "shared" : IfExpression('"$ENABLE" == "yes"'),
+        }
+
+        p = self.parseAndPrepare(recipe, env={"ENABLE" : "yes"}).getPackageStep()
+        self.assertTrue(p.isShared())
+        p = self.parseAndPrepare(recipe, env={"ENABLE" : "no"}).getPackageStep()
+        self.assertFalse(p.isShared())
