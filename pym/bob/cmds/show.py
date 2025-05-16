@@ -35,7 +35,7 @@ def dumpPackage(package):
             "deterministic" : package.getPackageStep().isDeterministic(),
         },
         "scriptLanguage" : recipe.scriptLanguage.index.value,
-        "shared" : recipe.isShared(),
+        "shared" : package.isShared(),
         "metaEnvironment" : package.getMetaEnv(),
         "relocatable" : package.isRelocatable(),
         "jobServer" : recipe.jobServer(),

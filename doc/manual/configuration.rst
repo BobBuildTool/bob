@@ -2018,7 +2018,7 @@ either case the command must be present in ``$PATH``/``%PATH%``.
 shared
 ~~~~~~
 
-Type: Boolean
+Type: Boolean | String | IfExpression (:ref:`configuration-principle-booleans`)
 
 Marking a recipe as shared implies that the result may be shared between
 different projects or workspaces. Only completely deterministic packages may be
