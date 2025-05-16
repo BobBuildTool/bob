@@ -2134,6 +2134,7 @@ class Recipe(object):
     def __init__(self, recipeSet, recipe, layer, sourceFile, baseDir, packageName, baseName,
                  properties, isRecipe=True, anonBaseClass=None, scriptLanguage=ScriptLanguage.BASH):
         self.__recipeSet = recipeSet
+        self.__primarySource = sourceFile
         self.__sources = [ sourceFile ] if anonBaseClass is None else []
         self.__classesResolved = False
         self.__inherit = recipe.get("inherit", [])
@@ -2360,6 +2361,9 @@ class Recipe(object):
     def getRecipeSet(self):
         """Get the :class:`RecipeSet` to which the recipe belongs"""
         return self.__recipeSet
+
+    def getPrimarySource(self):
+        return self.__primarySource
 
     def getSources(self):
         return self.__sources
@@ -3477,14 +3481,18 @@ class RecipeSet:
 
     def __addRecipe(self, recipe):
         name = recipe.getPackageName()
-        if name in self.__recipes:
-            raise ParseError("Package "+name+" already defined")
+        existing = self.__recipes.get(name)
+        if existing is not None:
+            source = existing.getPrimarySource()
+            raise ParseError(f"Package {name} already defined by {source}!")
         self.__recipes[name] = recipe
 
     def __addClass(self, recipe):
         name = recipe.getPackageName()
-        if name in self.__classes:
-            raise ParseError("Class "+name+" already defined")
+        existing = self.__classes.get(name)
+        if existing is not None:
+            source = existing.getPrimarySource()
+            raise ParseError(f"Class {name} already defined by {source}!")
         self.__classes[name] = recipe
 
     def __loadPlugins(self, rootDir, layer, plugins):
@@ -3761,7 +3769,7 @@ class RecipeSet:
                             self.__properties, self.__classSchema, False)
                         self.__addClass(r)
                     except ParseError as e:
-                        e.pushFrame(path)
+                        e.setPath(os.path.join(root, path))
                         raise
 
             recipesDir = os.path.join(rootDir, 'recipes')
@@ -3774,7 +3782,7 @@ class RecipeSet:
                         for r in recipes:
                             self.__addRecipe(r)
                     except ParseError as e:
-                        e.pushFrame(path)
+                        e.setPath(os.path.join(root, path))
                         raise
 
             aliasesDir = os.path.join(rootDir, 'aliases')
@@ -3786,7 +3794,7 @@ class RecipeSet:
                         for p in aliasPackages:
                             self.__addRecipe(p)
                     except ParseError as e:
-                        e.pushFrame(path)
+                        e.setPath(os.path.join(root, path))
                         raise
 
         # Out-of-tree builds may have a dedicated default.yaml
