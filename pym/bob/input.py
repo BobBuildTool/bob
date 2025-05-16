@@ -2134,6 +2134,7 @@ class Recipe(object):
     def __init__(self, recipeSet, recipe, layer, sourceFile, baseDir, packageName, baseName,
                  properties, isRecipe=True, anonBaseClass=None, scriptLanguage=ScriptLanguage.BASH):
         self.__recipeSet = recipeSet
+        self.__primarySource = sourceFile
         self.__sources = [ sourceFile ] if anonBaseClass is None else []
         self.__classesResolved = False
         self.__inherit = recipe.get("inherit", [])
@@ -2360,6 +2361,9 @@ class Recipe(object):
     def getRecipeSet(self):
         """Get the :class:`RecipeSet` to which the recipe belongs"""
         return self.__recipeSet
+
+    def getPrimarySource(self):
+        return self.__primarySource
 
     def getSources(self):
         return self.__sources
