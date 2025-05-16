@@ -33,6 +33,10 @@ class ParseError(BobError):
     def __init__(self, slogan, *args, **kwargs):
         BobError.__init__(self, slogan, "Parse", "Processing stack", *args, **kwargs)
 
+    def setPath(self, path):
+        self.stackSlogan = "Offending file"
+        self.stack = [path]
+
 class BuildError(BobError):
     def __init__(self, slogan, *args, **kwargs):
         BobError.__init__(self, slogan, "Build", "Failed package", *args, **kwargs)
