@@ -612,10 +612,13 @@ def funMatch(args, **options):
         else:
             raise ParseError('match only supports the ignore case flag "i"')
 
-    if re.search(args[1],args[0],flags):
-        return "true"
-    else:
-        return "false"
+    try:
+        if re.search(args[1],args[0],flags):
+            return "true"
+        else:
+            return "false"
+    except re.error as e:
+        raise ParseError("Invalid $(match) regex '{}': {}".format(e.pattern, e))
 
 def funIfThenElse(args, **options):
     if len(args) != 3: raise ParseError("if-then-else expects three arguments")
