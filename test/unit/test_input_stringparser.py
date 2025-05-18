@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from bob.stringparser import StringParser
 from bob.stringparser import funEqual, funNotEqual, funNot, funOr, \
     funAnd, funMatch, funIfThenElse, funSubst, funStrip, \
-    funSandboxEnabled, funToolDefined, funToolEnv
+    funSandboxEnabled, funToolDefined, funToolEnv, funResubst
 from bob.errors import ParseError
 
 def echo(args, **options):
@@ -256,3 +256,23 @@ class TestStringFunctions(TestCase):
         # Get real var
         self.assertEqual(funToolEnv(["foo", "bar"], __tools=tools), "baz")
         self.assertEqual(funToolEnv(["foo", "bar", "def"], __tools=tools), "baz")
+
+    def testResubst(self):
+        # Wrong number of arguments
+        with self.assertRaises(ParseError):
+            funResubst(["foo", "bar"])
+        with self.assertRaises(ParseError):
+            funResubst(["foo", "bar", "baz", "extra", "toomuch"])
+
+        # Unsupported flag
+        with self.assertRaises(ParseError):
+            funResubst(["a", "b", "abc", "%"])
+
+        # broken regex
+        with self.assertRaises(ParseError):
+            funResubst([r'\c', "b", "abc"])
+
+        self.assertEqual(funResubst(["X", "Y", "AXBXCX"]), "AYBYCY")
+        self.assertEqual(funResubst([r"\.[^.]+$", "", "1.2.3"]), "1.2")
+        self.assertEqual(funResubst(["[X]", "Y", "AXBx"]), "AYBx")
+        self.assertEqual(funResubst(["[x]", "Y", "AXBx", "i"]), "AYBY")
