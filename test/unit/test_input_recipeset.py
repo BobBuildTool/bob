@@ -5,7 +5,7 @@
 
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import Mock
+from unittest.mock import MagicMock, patch
 import os
 import textwrap
 import yaml
@@ -67,6 +67,14 @@ class RecipesTmp:
             "aliases")
         os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, name+".yaml"), "w") as f:
+            f.write(textwrap.dedent(content))
+
+    def writePlugin(self, name, content, layer=[]):
+        path = os.path.join("",
+            *(os.path.join("layers", l) for l in layer),
+            "plugins")
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, name+".py"), "w") as f:
             f.write(textwrap.dedent(content))
 
     def generate(self, sandboxEnabled=False, env={}):
@@ -2414,3 +2422,47 @@ class TestToolDependencies(RecipesTmp, TestCase):
         self.assertEqual(p.getBuildStep().toolDepWeak, {"tool-c"})
         self.assertEqual(p.getPackageStep().toolDep, {"tool-a", "tool-b", "tool-c"})
         self.assertEqual(p.getPackageStep().toolDepWeak, set())
+
+class TestPlugins(RecipesTmp, TestCase):
+
+    def testWarnStringFunCollision(self):
+        """A warning is issued if a plugin defines post-1.0 string function"""
+        self.writeRecipe("root", """\
+            root: True
+            privateEnvironment:
+                VAR1: "$(resubst,X,Y,AXBX)"
+                VAR2: "$(custom)"
+            packageVars: [VAR1, VAR2]
+            """)
+        self.writeConfig({
+            "plugins" : [ "funs" ]
+        })
+        self.writePlugin("funs", """\
+            def resubst(args, **options):
+                return "plugin called"
+            def custom(args, **options):
+                return "custom called"
+
+            manifest = {
+                'apiVersion' : "1.0",
+                'stringFunctions' : {
+                    "resubst" : resubst,
+                    "custom" : custom,
+                }
+            }
+            """)
+
+        warnObjMock = MagicMock()
+        warnClassMock = MagicMock(return_value=warnObjMock)
+
+        # Patch "Warn" class import at bob.input module
+        with patch('bob.input.Warn', warnClassMock):
+            p = self.generate().walkPackagePath("root")
+
+        # The parser should warn about the "resubst" collision
+        warnObjMock.warn.assert_called()
+        self.assertIn("resubst", warnClassMock.call_args.args[0])
+
+        # Make sure the plugin is called instead of the internal implementation.
+        self.assertEqual(p.getPackageStep().getEnv(),
+                         {"VAR1" : "plugin called", "VAR2" : "custom called"})
