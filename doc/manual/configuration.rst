@@ -396,6 +396,10 @@ The following built in string functions are supported:
   undefined in the tools :ref:`configuration-recipes-provideTools` environment
   definition unless the optional ``default`` is given, which is then used
   instead.
+* ``$(resubst,pattern,replacement,text[,flags])``: Replace all matches of the
+  regular expression ``pattern`` in ``text`` with ``replacement``. Flags are
+  optional. The only currently supported flag is ``i`` to ignore case while
+  searching.
 
 The following built in string functions are additionally supported in
 :ref:`package path queries <manpage-bobpaths>`. They cannot be used in recipes
