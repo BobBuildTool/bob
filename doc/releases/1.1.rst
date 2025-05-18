@@ -1,0 +1,44 @@
+Bob 1.1 Release Notes
+=====================
+
+Changes made since Bob 1.0 include the following.
+
+New features
+------------
+
+* Bob gained the ability to express dependencies between tools.
+
+  A tool declared by :ref:`configuration-recipes-provideTools` can specify
+  additional tool dependencies via ``dependTools`` and/or ``dependToolsWeak``.
+  If a recipe uses the declared tool, all specified dependencies will be added
+  implicitly to the used tool list.
+
+  See :pull:`639`.
+* The :ref:`configuration-recipes-shared` attribute was upgraded to a full
+  boolean property.
+
+  Previously, the ``shared`` attribute could just be set statically to
+  ``True``.  Now it is possible to use a boolean expression to control the
+  sharing based on the recipe input.
+
+  See :pull:`640`.
+
+Improvements
+------------
+
+* Bob has been made more resilient with respect to binary artifact corruptions.
+
+  Any downloaded artifact is checked for its integrity. Specifically, the
+  checksum of the extracted files is compared to the audit trail. This should
+  detect any accidental corruptions. See :issue:`636` and :pull:`637`.
+* Bob now prints the full file name of files where the YAML parsing has failed.
+  (:issue:`641`, :pull:`642`).
+* The ``$(resubst)`` regular expression :ref:`string substitution function
+  <configuration-principle-subst>` has been added. (:pull:`643`)
+
+Bug fixes
+---------
+
+* DNS resolution failures are not treated as error any more when downloading
+  artifacts. (:pull:`638`)
+* A crash in :meth:`bob.input.Package.isAlias` has been fixed.
