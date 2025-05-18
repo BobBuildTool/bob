@@ -612,10 +612,13 @@ def funMatch(args, **options):
         else:
             raise ParseError('match only supports the ignore case flag "i"')
 
-    if re.search(args[1],args[0],flags):
-        return "true"
-    else:
-        return "false"
+    try:
+        if re.search(args[1],args[0],flags):
+            return "true"
+        else:
+            return "false"
+    except re.error as e:
+        raise ParseError("Invalid $(match) regex '{}': {}".format(e.pattern, e))
 
 def funIfThenElse(args, **options):
     if len(args) != 3: raise ParseError("if-then-else expects three arguments")
@@ -682,6 +685,27 @@ def funMatchScm(args, **options):
 
     return "false"
 
+def funResubst(args, **options):
+    try:
+        [3, 4].index(len(args))
+    except ValueError:
+        raise ParseError("$(resubst) expects either three or four arguments")
+
+    flags = 0
+    if len(args) == 4:
+        if args[3] == 'i':
+            flags = re.IGNORECASE
+        else:
+            raise ParseError('$(resubst) only supports the ignore case flag "i"')
+
+    try:
+        return re.sub(args[0], args[1], args[2], flags=flags)
+    except re.error as e:
+        raise ParseError("Invalid $(resubst) regex '{}': {}".format(e.pattern, e))
+
+# Attention: do *not* add any new functions here. That will break existing
+# plugins that define a function with the same name. Use EXTRA_STRING_FUNS for
+# new functions instead.
 DEFAULT_STRING_FUNS = {
     "eq" : funEqual,
     "or" : funOr,
@@ -696,4 +720,8 @@ DEFAULT_STRING_FUNS = {
     "subst" : funSubst,
     "match" : funMatch,
     "matchScm" : funMatchScm,
+}
+
+EXTRA_STRING_FUNS = {
+    "resubst" : funResubst,
 }
