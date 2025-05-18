@@ -197,6 +197,10 @@ class TestStringFunctions(TestCase):
         self.assertRaises(ParseError, funMatch, ["a","b","x"])
         self.assertRaises(ParseError, funMatch, ["a","b","i","y"])
 
+        # broken regex
+        with self.assertRaises(ParseError):
+            funMatch(["b", r'\c'])
+
     def testIfThenElse(self):
         self.assertRaises(ParseError, funIfThenElse, ["a", "b"])
         self.assertEqual(funIfThenElse(["true", "a", "b"]), "a")
