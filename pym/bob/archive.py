@@ -118,6 +118,9 @@ class DummyArchive:
     def getArchiveName(self):
        return "Dummy"
 
+    def finish(self):
+        return True
+
 class ArtifactNotFoundError(Exception):
     pass
 
@@ -332,6 +335,9 @@ class JenkinsArchive(TarHelper):
 
     async def downloadLocalFingerprint(self, step, key, executor=None):
         return None
+
+    def finish(self):
+        return True
 
     @staticmethod
     def tgzName(step):
@@ -704,6 +710,8 @@ class BaseArchive(TarHelper):
     def getArchiveName(self):
        return self.__name
 
+    def finish(self):
+        return True
 
 class Tee:
     def __init__(self, fileName, fileObj, buildId, caches, workspace):
@@ -1333,6 +1341,9 @@ class MultiArchive:
             if ret is not None: break
         return ret
 
+    def finish(self):
+        for i in self.__archives:
+            i.finish()
 
 def getSingleArchiver(recipes, archiveSpec):
     archiveBackend = archiveSpec.get("backend", "none")
