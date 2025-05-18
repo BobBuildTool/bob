@@ -25,15 +25,17 @@ from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
 from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat, removePrefix
 from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
-from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
+from tempfile import mkstemp, NamedTemporaryFile, TemporaryDirectory, TemporaryFile, gettempdir
 import asyncio
 import concurrent.futures
 import concurrent.futures.process
 import errno
 import gzip
 import io
+import re
 import os
 import os.path
+import pathlib
 import shutil
 import signal
 import socket
@@ -42,6 +44,7 @@ import subprocess
 import tarfile
 import urllib.parse
 import hashlib
+import zipfile
 
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
@@ -944,6 +947,88 @@ class LocalArchiveUploader:
             os.unlink(self.tmp.name)
         return False
 
+class BundleArchiveDownloader:
+    def __init__(self, bundle, name):
+        self.__bundle = bundle
+        self.__name = name
+
+    def __enter__(self):
+        try:
+            self._zip = zipfile.ZipFile(self.__bundle, mode='r')
+            self.fd = self._zip.open(self.__name)
+        except KeyError as e:
+            raise ArtifactDownloadError(f"{self.__name} not found in {self.__bundle}.")
+        except OSError as e:
+            raise ArtifactDownloadError(str(e))
+        return (None, self.fd)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.fd.close()
+        return False
+
+class BundleArchive(LocalArchive):
+    def __init__(self, spec):
+        self.__file = spec.get("path")
+        self.__mode = spec.get("mode")
+        self.__bundle = self.__mode == "bundle"
+        self.__exclude = spec.get("exclude")
+        spec["flags"] = ["src-upload" if self.__bundle else "src-download"]
+        if self.__bundle:
+            self.__tempdir = spec.get("tempdir")
+            spec["path"] = spec.get("tempdir")
+        super().__init__(spec)
+
+    def canDownload(self):
+        return False
+
+    def canUpload(self):
+        return False
+
+    def canDownloadSrc(self):
+        return not self.__bundle
+
+    def _canUploadSrc(self, step):
+        if self.__exclude is not None:
+            for p in self.__exclude:
+                if re.match(p, step.getPackage().getName()):
+                    return False
+        return self.__bundle
+
+    def canUploadSrc(self, step, freshCheckout=None):
+        return self._canUploadSrc(step)
+
+    def _getZipPath(self, buildId, suffix):
+        packageResultId = buildIdToName(buildId)
+        return "/".join([packageResultId[0:2],
+                         packageResultId[2:4],
+                         packageResultId[4:]]) + suffix
+
+    def _openDownloadFile(self, buildId, suffix):
+        packageResultFile = self._getZipPath(buildId, suffix)
+        return BundleArchiveDownloader(self.__file,
+                                       self._getZipPath(buildId, suffix))
+    def finish(self, success):
+        if not self.__bundle:
+            return True
+        try:
+            if success:
+                print(f"Finalizing bundle: {self.__file}")
+                bundleDir = pathlib.Path(self.__tempdir)
+                with zipfile.ZipFile(self.__file, mode="a") as bundleZip:
+                    names = bundleZip.namelist()
+                    for file_path in bundleDir.rglob("*"):
+                        rpath = str(file_path.relative_to(bundleDir))
+                        if os.path.isdir(file_path):
+                            rpath += os.sep
+                        if rpath in names:
+                            if not os.path.isdir(file_path):
+                               print(f"Not adding {rpath}. Exists in bundle!")
+                            continue
+                        else:
+                            bundleZip.write(file_path,
+                                arcname=rpath)
+        except OSError as e:
+            raise BuildError("Unable to create bundle zip file" + str(e))
 
 class HttpArchive(BaseArchive):
     def __init__(self, spec):
@@ -1380,10 +1465,12 @@ def getSingleArchiver(recipes, archiveSpec):
         return DummyArchive()
     elif archiveBackend == "__jenkins":
         return JenkinsArchive(archiveSpec)
+    elif archiveBackend == "__bundle":
+        return BundleArchive(archiveSpec)
     else:
         raise BuildError("Invalid archive backend: "+archiveBackend)
 
-def getArchiver(recipes, jenkins=None):
+def getArchiver(recipes, jenkins=None, bundle=None):
     archiveSpec = recipes.archiveSpec()
     if jenkins is not None:
         jenkins = jenkins.copy()
@@ -1392,6 +1479,14 @@ def getArchiver(recipes, jenkins=None):
             archiveSpec = [jenkins] + archiveSpec
         else:
             archiveSpec = [jenkins, archiveSpec]
+
+    if bundle is not None and bundle.get("path") is not None:
+        bundle = bundle.copy()
+        bundle["backend"] = "__bundle"
+        if isinstance(archiveSpec, list):
+            archiveSpec = [bundle] + archiveSpec
+        else:
+            archiveSpec = [bundle, archiveSpec]
 
     if isinstance(archiveSpec, list):
         if len(archiveSpec) == 0:
