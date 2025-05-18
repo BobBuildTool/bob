@@ -10,7 +10,8 @@ from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
     auditFromDir, auditFromProperties, getScm, SYNTHETIC_SCM_PROPS
 from .state import BobState
-from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression
+from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression, \
+    EXTRA_STRING_FUNS
 from .tty import InfoOnce, Warn, WarnOnce, setColorMode, setParallelTUIThreshold
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
     updateDicRecursive, hashString, getPlatformTag, getPlatformString, \
@@ -3756,6 +3757,18 @@ class RecipeSet:
 
         # Begin with root layer
         allLayers = self.__parseLayer(LayerSpec(""), "9999", recipesRoot, None)
+
+        # Add string functions added after 1.0. We did not reserve a namespace
+        # and we better not break existing recipes.
+        collisions = set(self.__stringFunctions.keys()) & set(EXTRA_STRING_FUNS.keys())
+        if collisions:
+            for k, v in EXTRA_STRING_FUNS.items():
+                if k not in collisions:
+                    self.__stringFunctions[k] = v
+            collisions = ", ".join(sorted(collisions))
+            Warn(f"Bob internal string functions shadowed by plugins: {collisions}").warn()
+        else:
+            self.__stringFunctions.update(EXTRA_STRING_FUNS)
 
         # Parse all recipes and classes of all layers. Need to be done last
         # because only by now we have loaded all plugins.

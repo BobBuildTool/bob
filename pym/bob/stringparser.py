@@ -685,6 +685,9 @@ def funMatchScm(args, **options):
 
     return "false"
 
+# Attention: do *not* add any new functions here. That will break existing
+# plugins that define a function with the same name. Use EXTRA_STRING_FUNS for
+# new functions instead.
 DEFAULT_STRING_FUNS = {
     "eq" : funEqual,
     "or" : funOr,
@@ -699,4 +702,7 @@ DEFAULT_STRING_FUNS = {
     "subst" : funSubst,
     "match" : funMatch,
     "matchScm" : funMatchScm,
+}
+
+EXTRA_STRING_FUNS = {
 }
