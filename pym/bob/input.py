@@ -2160,6 +2160,7 @@ class Recipe(object):
         self.__buildVars |= self.__checkoutVars
         self.__buildVarsWeak = set(recipe.get("buildVarsWeak", []))
         self.__buildVarsWeak |= self.__checkoutVarsWeak
+        self.__packageDepends = recipe.get("packageDepends")
         self.__packageVars = set(recipe.get("packageVars", []))
         self.__packageVars |= self.__buildVars
         self.__packageVarsWeak = set(recipe.get("packageVarsWeak", []))
@@ -2312,6 +2313,7 @@ class Recipe(object):
             if self.__shared is None: self.__shared = cls.__shared
             if self.__relocatable is None: self.__relocatable = cls.__relocatable
             if self.__jobServer is None: self.__jobServer = cls.__jobServer
+            if self.__packageDepends is None: self.__packageDepends = cls.__packageDepends
             tmp = cls.__provideTools.copy()
             tmp.update(self.__provideTools)
             self.__provideTools = tmp
@@ -2351,6 +2353,9 @@ class Recipe(object):
 
         if self.__jobServer is None:
             self.__jobServer = False
+
+        if self.__packageDepends is None:
+            self.__packageDepends = False
 
         # Optimize provideDeps
         self.__provideDeps = [ getProvideDepsResolver(d) for d in self.__provideDeps ]
@@ -2788,8 +2793,11 @@ class Recipe(object):
         packageDigestEnv = env.prune(self.__packageVars)
         packageEnv = ( env.prune(self.__packageVars | self.__packageVarsWeak)
             if self.__packageVarsWeak else packageDigestEnv )
+        packageDeps = [CoreRef(buildCoreStep)]
+        if self.__packageDepends:
+            packageDeps.extend(results)
         packageCoreStep = p.createCorePackageStep(self.__package, packageDigestEnv, packageEnv,
-            [CoreRef(buildCoreStep)], doFingerprint, toolDepPackage, toolDepPackageWeak)
+            packageDeps, doFingerprint, toolDepPackage, toolDepPackageWeak)
 
         # provide environment
         packageCoreStep.providedEnv = env.substituteCondDict(self.__provideVars, "provideVars")
@@ -4083,6 +4091,7 @@ class RecipeSet:
             schema.Optional('scriptLanguage') : schema.And(schema.Or("bash", "PowerShell"),
                                                            schema.Use(ScriptLanguage)),
             schema.Optional('jobServer') : bool,
+            schema.Optional('packageDepends') : bool,
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
