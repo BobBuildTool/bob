@@ -493,6 +493,8 @@ class BaseArchive(TarHelper):
             return (None, self._namedErrorString(e.reason), WARNING)
         except ConnectionRefusedError:
             return (None, self._namedErrorString("connection failed"), WARNING)
+        except (socket.herror, socket.gaierror) as e:
+            return (None, self._namedErrorString(str(e)), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
