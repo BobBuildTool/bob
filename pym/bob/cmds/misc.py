@@ -268,7 +268,7 @@ are used:
 def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
         description="Query recipe and class files of package.")
-    parser.add_argument('package', help="(Sub-)package to query")
+    parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
     parser.add_argument('-D', default=[], action='append', dest="defines",
         help="Override default environment variable")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
@@ -292,9 +292,14 @@ def doQueryRecipe(argv, bobRoot):
     recipes = RecipeSet()
     recipes.setConfigFiles(args.configFile)
     recipes.parse(defines)
-    package = recipes.generatePackages(lambda s,m: "unused", args.sandbox).walkPackagePath(args.package)
+    packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
 
-    for fn in package.getRecipe().getSources():
+    result = set()
+    for p in args.packages:
+        for package in packages.queryPackagePath(p):
+            result.update(package.getRecipe().getSources())
+
+    for fn in sorted(result):
         print(fn)
 
 def doInit(argv, bobRoot):
