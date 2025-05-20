@@ -17,12 +17,14 @@ Synopsis
 
     bob query-recipe [-h] [-D DEFINES] [-c CONFIGFILE]
                      [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
-                     package
+                     packages [packages ...]
 
 Description
 -----------
 
-Query recipe and class files of package.
+Print the involved recipe and class files of packages. Each file name is
+printed only once, even if multiple packages are specied that share source
+files.
 
 Options
 -------
