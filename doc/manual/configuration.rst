@@ -548,7 +548,7 @@ a script for the same step are joined in front of this script in the order the
 inheritance is specified. The inheritance graph is traversed depth first and
 every class is included exactly once.
 
-Dependencies of the recipe are by default only available to the
+Dependencies of the recipe are generally only available to the
 ``buildScript``. The path to the previous step (checkout workspace for
 ``buildScript``, build workspace for ``packageScript``) is always passed in
 ``$1``. Other dependencies are available in the order in which they were
@@ -556,7 +556,8 @@ declared at the :ref:`configuration-recipes-depends` section of the recipe. If
 a dependencies ``checkoutDep`` flag is set to ``True`` it will also be
 available to the ``checkoutScript``. This should be used carefully as it makes
 the checkout of the recipe sources dependent on the result of another
-dependency.
+dependency. Enabling the :ref:`configuration-recipes-packagedepends` property
+will make the dependencies available to the package step too.
 
 During execution of the script only the environment variables SHELL, USER,
 TERM, HOME and anything that was declared via {checkout,build,package}Vars
@@ -1693,6 +1694,20 @@ A typical use case for this feature are recipes for libraries. There are two
 packages that are built from a library: a ``-target`` packet that has the
 shared libraries needed during runtime and a ``-dev`` packet that has the
 header files and other needed files to link with this library.
+
+.. _configuration-recipes-packagedepends:
+
+packageDepends
+~~~~~~~~~~~~~~
+
+Type: Boolean
+
+Defaults to ``False``. If enabled, all dependencies that are named in the
+:ref:`configuration-recipes-depends` section are available during the package
+step execution too. By default, just the build step has access to them.
+
+Enabling this property is useful for recipes that only need a package script.
+Typical examples are recipes that create images or that just gather packages.
 
 .. _configuration-recipes-privateenv:
 
