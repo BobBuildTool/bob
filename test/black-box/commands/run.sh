@@ -20,7 +20,7 @@ for c in $cmds; do
 	case "$c" in
 		archive | init | jenkins | layers | help | _*)
 			;;
-		clean)
+		clean | ls-recipes)
 			run_bob $c -DBAR=1 -c testconfig
 			;;
 		project)

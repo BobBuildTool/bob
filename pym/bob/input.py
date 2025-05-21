@@ -4122,6 +4122,9 @@ class RecipeSet:
         self.__userConfigSchema = (schema.Schema(userConfigSchemaSpec), self.__pluginSettingsDeps)
 
 
+    def getRecipes(self):
+        return self.__recipes.keys()
+
     def getRecipe(self, packageName):
         if packageName not in self.__recipes:
             raise ParseError("Package {} requested but not found.".format(packageName))
