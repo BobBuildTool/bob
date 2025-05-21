@@ -850,6 +850,32 @@ class TestDependencies(RecipesTmp, TestCase):
         self.assertNotEqual(pb_e.getPackageStep().getSandbox(), None)
         self.assertNotEqual(pd.getPackageStep().getSandbox(), None)
 
+    def testPackageDepends(self):
+        """Test that checkoutDepends enables dependencies in package step"""
+
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - lib1
+                - lib2
+            packageDepends: True
+            packageScript: "true"
+            """)
+        self.writeRecipe("lib1", "")
+        self.writeRecipe("lib2", "")
+
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda x,y: "unused")
+        p = packages.walkPackagePath("root")
+        self.assertEqual(len(p.getPackageStep().getArguments()), 3)
+        self.assertEqual(p.getPackageStep().getArguments()[0].getPackage().getName(),
+                         "root")
+        self.assertEqual(p.getPackageStep().getArguments()[1].getPackage().getName(),
+                         "lib1")
+        self.assertEqual(p.getPackageStep().getArguments()[2].getPackage().getName(),
+                         "lib2")
+
 class TestDependencyEnv(RecipesTmp, TestCase):
     """Tests related to "environment" block in dependencies"""
 
