@@ -22,6 +22,16 @@ New features
   sharing based on the recipe input.
 
   See :pull:`640`.
+* Package steps can now optionally get access to all dependencies.
+
+  So far, dependencies named in the "depends" section were only available
+  during the build step. Sometimes recipes only need to gather results from
+  other packages. For this case, it is nice to have the dependencies available
+  in the package step too. The :ref:`configuration-recipes-packagedepends`
+  boolean attribute optionally enables access to all dependencies in the
+  package step.
+
+  See :issue:`647` and :pull:`645`.
 
 Improvements
 ------------
@@ -35,6 +45,9 @@ Improvements
   (:issue:`641`, :pull:`642`).
 * The ``$(resubst)`` regular expression :ref:`string substitution function
   <configuration-principle-subst>` has been added. (:pull:`643`)
+* Bob :ref:`manpage-bob-query-recipe` learned to handle generic :ref:`package path
+  queries <manpage-bobpaths>`. It is now possible to find the source files of
+  multiple packages at once. (:pull:`648`)
 
 Bug fixes
 ---------
