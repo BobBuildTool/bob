@@ -16,6 +16,7 @@ Contents:
    bob-jenkins
    bob-layers
    bob-ls
+   bob-ls-recipes
    bobpaths
    bob-project
    bob-query-meta
