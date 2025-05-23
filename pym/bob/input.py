@@ -2981,17 +2981,18 @@ class AliasPackage:
 
         alias = recipeSet.loadYaml(fileName, (AliasPackage.SCHEMA, b''))
         if isinstance(alias, str):
-            return [ AliasPackage(recipeSet, alias, baseName) ]
+            return [ AliasPackage(recipeSet, alias, baseName, fileName) ]
         else:
             return [
-                AliasPackage(recipeSet, subAlias, baseName + ("-"+subName if subName else ""))
+                AliasPackage(recipeSet, subAlias, baseName + ("-"+subName if subName else ""), fileName)
                 for (subName, subAlias) in alias["multiPackage"].items()
             ]
 
-    def __init__(self, recipeSet, target, packageName):
+    def __init__(self, recipeSet, target, packageName, fileName):
         self.__recipeSet = recipeSet
         self.__target = target
         self.__packageName = packageName
+        self.__source = fileName
 
     def prepare(self, env, sandboxEnabled, states, sandbox, tools, stack, packageName=None):
         target = env.substitute(self.__target, "alias package")
@@ -3009,6 +3010,9 @@ class AliasPackage:
 
     def isRoot(self):
         return False
+
+    def getPrimarySource(self):
+        return self.__source
 
 
 class PackageMatcher:
