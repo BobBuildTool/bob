@@ -30,7 +30,8 @@ __bob_complete_dir()
 }
 
 __bob_commands="build dev clean graph help init jenkins ls project status \
-                query-scm query-recipe query-path query-meta show layers"
+                query-scm query-recipe query-path query-meta show layers \
+                ls-recipes"
 
 # Complete a Bob path
 #
@@ -431,6 +432,12 @@ __bob_show()
             --dev-sandbox --strict-sandbox --show-empty
             --show-common --indent --no-indent --format -f"
     fi
+}
+
+__bob_ls_recipes()
+{
+    __bob_complete_path "-c -D --sandbox --no-sandbox --slim-sandbox --dev-sandbox --strict-sandbox
+        --all --used --orphaned --sources"
 }
 
 __bob_subcommands()

@@ -1,0 +1,6 @@
+root: True
+
+depends:
+    - lib
+
+buildScript: "true"

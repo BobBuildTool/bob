@@ -340,3 +340,66 @@ project root directory at PROJECT.
             f.write(os.path.abspath(args.project))
     except OSError as e:
         raise ParseError("Cannot create project link: " + str(e))
+
+def doLsRecipes(argv, bobRoot):
+    parser = argparse.ArgumentParser(prog="bob ls-recipes", description="List all known recipes.")
+    parser.add_argument('-D', default=[], action='append', dest="defines",
+        help="Override default environment variable")
+    parser.add_argument('-c', dest="configFile", default=[], action='append',
+        help="Use config File")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sandbox', action='store_true', default=False,
+        help="Enable sandboxing")
+    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
+        help="Enable slim sandboxing")
+    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
+        help="Enable development sandboxing")
+    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
+        help="Enable strict sandboxing")
+    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
+        help="Disable sandboxing (default)")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--all', action='store_const', dest='mode', const='all', default='all',
+                       help="List all recipes (default)")
+    group.add_argument('--used', action='store_const', dest='mode', const='used',
+                       help="List recipes used for packages")
+    group.add_argument('--orphaned', action='store_const', dest='mode', const='orphaned',
+                       help="List unused recipes")
+
+    parser.add_argument('--sources', action='store_true', help="Show recipe source files")
+
+    args = parser.parse_args(argv)
+
+    defines = processDefines(args.defines)
+
+    recipes = RecipeSet()
+    recipes.setConfigFiles(args.configFile)
+    recipes.parse(defines)
+
+    if args.mode in ('used', 'orphaned'):
+        packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
+        used = set(p.getName() for p in packages.queryPackagePath("//*"))
+
+    if args.mode in ('all', 'orphaned'):
+        # filter virtual root recipe
+        available = set(r for r in recipes.getRecipes() if r != "")
+
+    if args.sources:
+        def show(p):
+            print(p, *recipes.getRecipe(p).getSources(), sep="\t")
+    else:
+        def show(p):
+            print(p)
+
+    if args.mode == 'all':
+        for i in sorted(available):
+            show(i)
+    elif args.mode == 'used':
+        for i in sorted(used):
+            show(i)
+    else:
+        assert args.mode == 'orphaned'
+        for i in sorted(available - used):
+            show(i)

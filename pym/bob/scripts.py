@@ -107,6 +107,11 @@ def __jenkinsExecute(*args, **kwargs):
     from .cmds.jenkins.exec import doJenkinsExecute
     return doJenkinsExecute(*args, **kwargs)
 
+def __lsrecipes(*args, **kwargs):
+     from .cmds.misc import doLsRecipes
+     doLsRecipes(*args, **kwargs)
+     return 0
+
 availableCommands = {
     "archive"       : ('hl', __archive, "Manage binary artifact archives"),
     "build"         : ('hl', __build, "Build (sub-)packages in release mode"),
@@ -122,6 +127,7 @@ availableCommands = {
     "show"          : ('hl', __show, "Show properties of a package"),
     "status"        : ('hl', __status, "Show SCM status"),
 
+    "ls-recipes"    : ('ll', __lsrecipes, "List all known recipes"),
     "query-scm"     : ('ll', __queryscm, "Query SCM information"),
     "query-recipe"  : ('ll', __queryrecipe, "Query package sources"),
     "query-path"    : ('ll', __querypath, "Query path information"),
