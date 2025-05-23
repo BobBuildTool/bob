@@ -3014,6 +3014,9 @@ class AliasPackage:
     def getPrimarySource(self):
         return self.__source
 
+    def getSources(self):
+        return [self.__source]
+
 
 class PackageMatcher:
     __slots__ = ( 'corePackage', 'env', 'tools', 'states', 'sandbox',
