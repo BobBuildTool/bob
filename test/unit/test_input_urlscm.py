@@ -341,7 +341,7 @@ class TestDownloads(UrlScmTest, TestCase):
                 with self.assertRaises(InvocationError):
                     self.invokeScm(workspace, scm)
 
-class TestExtraction:
+class TestExtraction(TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -355,7 +355,7 @@ class TestExtraction:
             f.write("Hello world!")
 
         cls.tarGzFile = os.path.join(cls.dir, "test.tar.gz")
-        subprocess.run(["tar", "-zcf", cls.tarGzFile, src],
+        subprocess.run(["tar", "-C", cls.dir, "-zcf", "test.tar.gz", "src"],
             cwd=cls.dir, check=True)
         with open(cls.tarGzFile, "rb") as f:
             cls.tarGzDigestSha1 = hashlib.sha1(f.read()).digest().hex()
@@ -444,7 +444,7 @@ class TestExtraction:
             "stripComponents" : 1,
         })
         with TemporaryWorkspace() as workspace:
-            with self.assertRaises(InvocationError):
+            with self.assertRaises(BuildError):
                 self.invokeScm(workspace, scm)
 
 
