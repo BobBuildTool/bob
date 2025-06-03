@@ -175,7 +175,14 @@ class Extractor():
         if dirCreated or isYounger(destination, canary):
             for cmd in cmds:
                 if shutil.which(cmd[0]) is None: continue
-                await invoker.checkCommand(cmd, cwd=self.dir, stdout=stdout)
+                if stdout:
+                    # Extracts to stdout. We must open the destination only
+                    # after we have confirmed that we run the extractor!
+                    # Otherwise we truncate the file.
+                    with open(stdout, 'wb') as f:
+                        await invoker.checkCommand(cmd, cwd=self.dir, stdout=f)
+                else:
+                    await invoker.checkCommand(cmd, cwd=self.dir, stdout=stdout)
                 invoker.trace("<touch>", canary)
                 with open(canary, "wb") as f:
                     pass
@@ -246,9 +253,8 @@ class SingleFileExtractor(Extractor):
         else:
             raise BuildError("unkown suffix")
 
-        with open(dst, 'wb') as f:
-            cmd = [self.CMD, "-c", src]
-            await self._extract([cmd], invoker, dirCreated, f)
+        cmd = [self.CMD, "-c", src]
+        await self._extract([cmd], invoker, dirCreated, dst)
 
         shutil.copystat(src, dst)
 
