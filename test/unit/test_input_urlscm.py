@@ -341,7 +341,7 @@ class TestDownloads(UrlScmTest, TestCase):
                 with self.assertRaises(InvocationError):
                     self.invokeScm(workspace, scm)
 
-class TestExtraction:
+class TestExtraction(TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -355,7 +355,7 @@ class TestExtraction:
             f.write("Hello world!")
 
         cls.tarGzFile = os.path.join(cls.dir, "test.tar.gz")
-        subprocess.run(["tar", "-zcf", cls.tarGzFile, src],
+        subprocess.run(["tar", "-C", cls.dir, "-zcf", "test.tar.gz", "src"],
             cwd=cls.dir, check=True)
         with open(cls.tarGzFile, "rb") as f:
             cls.tarGzDigestSha1 = hashlib.sha1(f.read()).digest().hex()
@@ -437,6 +437,35 @@ class TestExtraction:
             self.assertExists(os.path.join(workspace, "test.txt.gz"))
             self.assertExists(os.path.join(workspace, "test.txt"))
 
+    def testGzDoubleInvocation(self):
+        """Invoking the SCM twice does not touch the extracted file"""
+        scm = self.createUrlScm({
+            "url" : self.gzFile,
+            "digestSHA256" : self.gzDigestSha256,
+        })
+        with TemporaryWorkspace() as workspace:
+            self.invokeScm(workspace, scm)
+
+            test_txt_gz = os.path.join(workspace, "test.txt.gz")
+            test_txt = os.path.join(workspace, "test.txt")
+            with open(test_txt_gz, "rb") as f:
+                self.assertEqual(self.gzDigestSha256,
+                                 hashlib.sha256(f.read()).digest().hex())
+            with open(test_txt, "r") as f:
+                self.assertEqual("Hello world!", f.read())
+            first_txt_gz_ts = os.stat(test_txt_gz).st_mtime_ns
+            first_txt_ts = os.stat(test_txt).st_mtime_ns
+
+            self.invokeScm(workspace, scm)
+            with open(test_txt_gz, "rb") as f:
+                self.assertEqual(self.gzDigestSha256,
+                                 hashlib.sha256(f.read()).digest().hex())
+            with open(test_txt, "r") as f:
+                self.assertEqual("Hello world!", f.read())
+            self.assertEqual(first_txt_gz_ts, os.stat(test_txt_gz).st_mtime_ns)
+            self.assertEqual(first_txt_ts, os.stat(test_txt).st_mtime_ns)
+
+
     def testGzStripComponentsNotSupported(self):
         scm = self.createUrlScm({
             "url" : self.gzFile,
@@ -444,7 +473,7 @@ class TestExtraction:
             "stripComponents" : 1,
         })
         with TemporaryWorkspace() as workspace:
-            with self.assertRaises(InvocationError):
+            with self.assertRaises(BuildError):
                 self.invokeScm(workspace, scm)
 
 
