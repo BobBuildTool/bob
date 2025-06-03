@@ -527,7 +527,7 @@ class UrlScm(Scm):
 
         return True, None
 
-    async def _fetch(self, invoker, url, workspaceFile, destination, mode):
+    async def _fetch(self, invoker, url, destination, mode):
         if url.scheme in ['', 'file']:
             # Verify that host name is empty or "localhost"
             if url.netloc not in ['', 'localhost']:
@@ -537,7 +537,7 @@ class UrlScm(Scm):
                 if isYounger(url.path, destination):
                     if os.path.isdir(destination):
                         invoker.fail("Destination", destination, "is an existing directory!")
-                    invoker.trace("<cp>", url.path, workspaceFile)
+                    invoker.trace("<cp>", url.path, destination)
                     with tempfile.TemporaryDirectory(dir=os.path.dirname(destination)) as tmpDir:
                         tmpFile = os.path.join(tmpDir, self.__fn)
                         # Keep mtime when copying. Otherwise we would update
@@ -553,8 +553,7 @@ class UrlScm(Scm):
         elif url.scheme in ["http", "https", "ftp"]:
             retries = self.__retries
             while True:
-                invoker.trace("<wget>", url.geturl(), ">",
-                        workspaceFile, "retires:", retries)
+                invoker.trace("<wget>", url.geturl(), ">", destination, "retires:", retries)
                 try:
                     updated, err = await invoker.runInExecutor(UrlScm._download, self, url, destination, mode)
                     if err:
@@ -613,7 +612,7 @@ class UrlScm(Scm):
 
         return None
 
-    async def _put(self, invoker, workspaceFile, source, url):
+    async def _put(self, invoker, source, url):
         if url.scheme in ['', 'file']:
             # Verify that host name is empty or "localhost"
             if url.netloc not in ['', 'localhost']:
@@ -624,7 +623,7 @@ class UrlScm(Scm):
             if isYounger(source, url.path):
                 if os.path.isdir(url.path):
                     invoker.fail("Destination", url.path, "is an existing directory!")
-                invoker.trace("<cp>", workspaceFile, url.path)
+                invoker.trace("<cp>", source, url.path)
                 destDir = os.path.dirname(url.path)
                 os.makedirs(destDir, exist_ok=True)
                 with tempfile.TemporaryDirectory(dir=destDir) as tmpDir:
@@ -634,7 +633,7 @@ class UrlScm(Scm):
         elif url.scheme in ["http", "https"]:
             retries = self.__retries
             while True:
-                invoker.trace("<wput>", workspaceFile, ">", url.geturl(), "retires:", retries)
+                invoker.trace("<wput>", source, ">", url.geturl(), "retires:", retries)
                 try:
                     err = await invoker.runInExecutor(UrlScm._upload, self, source, url)
                     if err:
@@ -689,7 +688,6 @@ class UrlScm(Scm):
         if not os.path.isdir(invoker.joinPath(self.__dir)):
             os.makedirs(invoker.joinPath(self.__dir), exist_ok=True)
             workspaceCreated = True
-        workspaceFile = os.path.join(self.__dir, self.__fn)
         extractor = self.__getExtractor()
 
         destination = invoker.joinPath(self.__dir, self.__fn)
@@ -714,7 +712,7 @@ class UrlScm(Scm):
                 if err:
                     # Output previously failed download attempt as warning
                     invoker.warn(err)
-                downloaded, err = await self._fetch(invoker, url, workspaceFile, destination, mode)
+                downloaded, err = await self._fetch(invoker, url, destination, mode)
                 if err is None:
                     break
             else:
@@ -725,17 +723,17 @@ class UrlScm(Scm):
 
         # Always verify file hashes
         if self.__digestSha1:
-            invoker.trace("<sha1sum>", workspaceFile)
+            invoker.trace("<sha1sum>", destination)
             d = hashFile(destination, hashlib.sha1).hex()
             if d != self.__digestSha1:
                 invoker.fail("SHA1 digest did not match! expected:", self.__digestSha1, "got:", d)
         if self.__digestSha256:
-            invoker.trace("<sha256sum>", workspaceFile)
+            invoker.trace("<sha256sum>", destination)
             d = hashFile(destination, hashlib.sha256).hex()
             if d != self.__digestSha256:
                 invoker.fail("SHA256 digest did not match! expected:", self.__digestSha256, "got:", d)
         if self.__digestSha512:
-            invoker.trace("<sha512sum>", workspaceFile)
+            invoker.trace("<sha512sum>", destination)
             d = hashFile(destination, hashlib.sha512).hex()
             if d != self.__digestSha512:
                 invoker.fail("SHA512 digest did not match! expected:", self.__digestSha512, "got:", d)
@@ -745,7 +743,7 @@ class UrlScm(Scm):
         if downloaded:
             for url, upload in urls:
                 if upload:
-                    await self._put(invoker, workspaceFile, destination, url)
+                    await self._put(invoker, destination, url)
 
         # Run optional extractors
         if extractor is not None:
