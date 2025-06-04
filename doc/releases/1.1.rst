@@ -6,6 +6,9 @@ Changes made since Bob 1.0 include the following.
 New features
 ------------
 
+Recipes
+~~~~~~~
+
 * Bob gained the ability to express dependencies between tools.
 
   A tool declared by :ref:`configuration-recipes-provideTools` can specify
@@ -33,6 +36,17 @@ New features
 
   See :issue:`647` and :pull:`645`.
 
+Bob ls-recipes
+~~~~~~~~~~~~~~
+
+Bob gained a new command: :ref:`manpage-ls-recipes`. It can be used to list all
+known recipes. In contrast to the :ref:`manpage-bob-ls` command, which works on
+packages, this command works on recipes. Additionally, the ouput can be
+filtered to show only used recipes or recipes that are currently orphaned,
+i.e., not referenced by a root package.
+
+See :pull:`649`.
+
 Improvements
 ------------
 
@@ -55,3 +69,6 @@ Bug fixes
 * DNS resolution failures are not treated as error any more when downloading
   artifacts. (:pull:`638`)
 * A crash in :meth:`bob.input.Package.isAlias` has been fixed.
+* Fixed repeated invocation of deterministic URL SCMs with gz/xz compressed
+  files that are uncompressed by Bob. Previously, the file would be truncated
+  if the checkout step got re-executed for whatever reason. (:pull:`650`)
