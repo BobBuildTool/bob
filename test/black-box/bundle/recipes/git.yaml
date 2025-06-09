@@ -1,0 +1,7 @@
+checkoutSCM:
+  scm: git
+  url: ${GIT_URL}
+  commit: ${GIT_COMMIT}
+
+buildScript: "true"
+packageScript: "true"
