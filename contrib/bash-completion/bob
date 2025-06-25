@@ -29,6 +29,17 @@ __bob_complete_dir()
                  compgen -d -P "$2" -S / -- "$1" ) )
 }
 
+# Complete file
+__bob_complete_file()
+{
+   local IFS=$'\n'
+   COMPREPLY=( $(for i in "${chroot[@]}" ; do eval ls "$i" || exit ; done
+                 compgen -f -P "$2" -- "$1" ) )
+   for ((i=0; i < ${#COMPREPLY[@]}; i++)); do
+      [ -d "${COMPREPLY[$i]}" ] && COMPREPLY[$i]=${COMPREPLY[$i]}/
+   done
+}
+
 __bob_commands="build dev clean graph help init jenkins ls project status \
                 query-scm query-recipe query-path query-meta show layers \
                 ls-recipes"
