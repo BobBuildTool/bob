@@ -274,14 +274,18 @@ fi
 # execute all tests, possibly in parallel
 if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
 	: # No tests matched
-elif type -p parallel >/dev/null && [[ ${RUN_JOBS:-} != 1 ]] ; then
+elif [[ ${RUN_JOBS:-} != 1 ]] ; then
 	export -f run_test print_verbose
 	export RUN_PYTHON3
 	export RUN_PYTHON3_COV
 	export TEST_ENVIRONMENT
 	export VERBOSE
-	parallel --line-buffer ${RUN_JOBS:+-j $RUN_JOBS} run_test ::: \
-	  "${RUN_TEST_NAMES[@]}" || : $((FAILED+=$?))
+	# Run the tests in parallel and pipe them trough a dummy sed with line
+	# buffering.  This prevents the output from being interleaced.
+	echo "${RUN_TEST_NAMES[@]}" \
+		| xargs -P ${RUN_JOBS:-$(nproc)} -n 1 \
+			bash -c 'run_test "$@" | stdbuf -oL sed -e ""' bash \
+		|| : $((FAILED+=$?))
 else
 	for i in "${RUN_TEST_NAMES[@]}" ; do
 		if ! run_test "$i" ; then

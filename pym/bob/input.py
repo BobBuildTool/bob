@@ -3938,8 +3938,12 @@ class RecipeSet:
         config = self.loadConfigYaml(self.loadYaml, rootDir)
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
-            raise ParseError("Layer '{}' requires a higher Bob version than root project!"
-                                .format(layer))
+            if upperLayer:
+                upperLayer = f"layer '{upperLayer}'"
+            else:
+                upperLayer = "the root project"
+            raise ParseError(f"Layer '{layer}' requires a higher Bob version ({minVer}) than {upperLayer} ({maxVer})!",
+                             help=f"You need to adjust the bobMinimumVersion of {upperLayer} to be higher or equal to layer '{layer}'. Watch out for newly introduced policies between the two versions!")
         maxVer = minVer # sub-layers must not have a higher bobMinimumVersion
 
         # Determine policies. The root layer determines the default settings
