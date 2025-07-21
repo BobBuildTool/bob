@@ -169,8 +169,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Increase verbosity (may be specified multiple times)")
     parser.add_argument('--no-logfiles', default=None, action='store_true',
         help="Disable logFile generation.")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
+    parser.add_argument('-D', metavar="VAR=VALUE", default=[], action='append', dest="defines",
+        help="Override default or set environment variable <VAR> with value <VALUE>")
     parser.add_argument('-c', dest="configFile", default=[], action='append',
         help="Use config File")
     parser.add_argument('-lc', dest="layerConfig", default=[], action='append',
@@ -179,8 +179,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Preserve environment variable")
     parser.add_argument('-E', dest="preserve_env", default=False, action='store_true',
         help="Preserve whole environment")
-    parser.add_argument('-M', default=[], action='append', dest="meta",
-        help="Add meta key to audit trail")
+    parser.add_argument('-M', metavar="VAR=VALUE", default=[], action='append', dest="meta",
+        help="Add meta variable <VAR> to audit trail")
     parser.add_argument('--upload', default=None, action='store_true',
         help="Upload to binary archive")
     parser.add_argument('--link-deps', default=None, help="Add linked dependencies to workspace paths",
