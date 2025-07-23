@@ -309,6 +309,7 @@ class UrlScm(Scm):
         schema.Optional('digestSHA1') : str,
         schema.Optional('digestSHA256') : str,
         schema.Optional('digestSHA512') : str,
+        schema.Optional('headers') : schema.Schema({str : str}),
     }
 
     DEFAULTS = {
@@ -406,6 +407,7 @@ class UrlScm(Scm):
         self.__fallbackMirrorsUpload = spec.get("__fallbackMirrorsUpload")
         self.__fileMode = spec.get("fileMode", 0o600 if defaultFileMode else None)
         self.__separateDownload = spec.get("__separateDownload", separateDownload)
+        self.__headers = spec.get("headers", {})
 
     def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins, pretty)
@@ -424,6 +426,7 @@ class UrlScm(Scm):
             'preMirrors' : self.__getPreMirrorsUrls(),
             'fallbackMirrors' : self.__getFallbackMirrorsUrls(),
             'fileMode' : dumpMode(self.__fileMode) if pretty else self.__fileMode,
+            'headers' : self.__headers
         })
         if not pretty:
             ret.update({
@@ -482,6 +485,7 @@ class UrlScm(Scm):
     def _download(self, url, destination, mode):
         headers = {}
         headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
+        headers.update(self.__headers)
         context = None if self.__sslVerify else sslNoVerifyContext()
         if os.path.isfile(destination) and (url.scheme in ["http", "https"]):
             # Try to avoid download if possible
