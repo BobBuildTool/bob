@@ -15,11 +15,12 @@ Synopsis
 
 ::
 
-    bob build [-h] [--destination DEST] [-j [JOBS]] [-k] [-f] [-n] [-p]
-              [--without-provided] [-A | --audit] [-b | -B | --normal]
+    bob build [-h, --help] [--destination DEST] [-j, --jobs [JOBS]] [-k, --keep-going] [-f, --force]
+              [-n, --no-deps] [-p, --with-provided] [--without-provided] [-A | --no-audit]
+              [-b, --build-only | -B, --checkout-only | --normal]
               [--clean | --incremental] [--always-checkout RE] [--resume]
-              [-q] [-v] [--no-logfiles] [-D DEFINES] [-c CONFIGFILE]
-              [-lc LAYERCONFIG] [-e NAME] [-E] [-M META] [--upload]
+              [-q, --quiet] [-v, --verbose] [--no-logfiles] [-D VAR=VALUE] [-c CONFIGFILE]
+              [-lc LAYERCONFIG] [-e NAME] [-E] [-M VAR=VALUE] [--upload]
               [--link-deps] [--no-link-deps] [--download MODE]
               [--download-layer MODE] [--shared | --no-shared]
               [--install | --no-install]

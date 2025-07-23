@@ -170,6 +170,9 @@ Options
     forced=<layer regex>
       like 'yes' above, but fail if any download fails
 
+``-h, --help``
+    Show this help message and exit.
+
 ``--incremental``
     Reuse build directory for incremental builds.
 
@@ -302,7 +305,7 @@ Options
     will skip the execution of it if this is not the case. With this option Bob
     not use that optimization and will execute all build steps.
 
-``-j, --jobs``
+``-j, --jobs [JOBS]``
     Specifies the number of jobs to run simultaneously.
 
     Any checkout/build/package step that needs to be executed are counted as a
