@@ -985,7 +985,7 @@ url    | ``url``: File that should be downloaded
        | ``stripComponents`` (\*): Number of leading components stripped from file name
        |                           (optional, tar files only)
        | ``retries`` (\*): Number of retries before the checkout is set to failed.
-       | ``headers``: A list of dictionaries with key value fields used as extra headers for requests. (optional)
+       | ``headers``: A dictionary of key value pairs used as extra headers for requests. (optional)
 ====== =======================================================================================
 
 The following synthetic attributes exist. They are generated internally
