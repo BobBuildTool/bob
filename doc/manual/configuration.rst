@@ -880,13 +880,13 @@ checkoutSCM
 
 Type: SCM-Dictionary or List of SCM-Dictionaries
 
-Bob understands several source code management systems natively. On one hand it
-enables the usage of dedicated plugins on a Jenkins server. On the other hand
+Bob understands several source code management systems natively. On one hand, it
+enables the usage of dedicated plugins on a Jenkins server. On the other hand,
 Bob can manage the checkout step workspace much better in the development build
 mode.
 
-All SCMs are fetched/updated before the checkoutScript of the package are run.
-The checkoutScript should not move or modify the checkoutSCM directories,
+All SCMs are fetched/updated before the ``checkoutScript`` of the package is run.
+The ``checkoutScript`` should not move or modify the ``checkoutSCM`` directories,
 though.
 
 If the package consists of a single git module you can specify the SCM directly::
@@ -934,63 +934,10 @@ can use :ref:`bobpaths_string_literals` and :ref:`bobpaths_string_function_calls
 to express a condition (see :ref:`configuration-principle-booleans`). The SCM
 will only be considered if the condition passes.
 
-
-Currently the following ``scm`` values are supported:
-
-====== =======================================================================================
-scm    Additional attributes
-====== =======================================================================================
-cvs    | ``cvsroot``: repository location ("``:ext:...``", path name, etc.)
-       | ``module``: module name
-       | ``rev``: revision, branch, or tag name (optional)
-git    | ``url``: URL of remote repository
-       | ``branch`` (\*): Branch to check out (optional, default: master)
-       | ``tag``: Checkout this tag (optional, overrides branch attribute)
-       | ``commit``: SHA1 commit Id to check out (optional, overrides branch or tag attribute)
-       | ``rebase`` (\*): Rebase local branch instead of fast-forward merge update (optional, defaults to false)
-       | ``rev``: Canonical git-rev-parse revision specification (optional, see below)
-       | ``remote-*``: additional remote repositories (optional, see below)
-       | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
-       | ``shallow`` (\*): Number of commits or cutoff date that should be fetched (optional)
-       | ``singleBranch`` (\*): Fetch only single branch instead of all (optional)
-       | ``submodules`` (\*): Whether to clone all / a subset of submodules. (optional)
-       | ``recurseSubmodules`` (\*): Recusively clone submodules (optional, defaults to false)
-       | ``shallowSubmodules`` (\*): Clone submodules shallowly (optional, defaults to true)
-       | ``references`` (\*): Git reference. A local reference repo to be used as
-       |       alternate (see man git-clone).
-       |       A list of strings or a dictionaries with
-       |        ``url``: (optional, Regex-String, default: ``.*``). The matching part
-       |           of the remote URL is replaced by
-       |        ``repo``: (String) local storage path.
-       |        ``optional``: (Boolean, default True). Marks the reference as
-       |           optional if true. Otherwise a error is raised if the
-       |           local reference repo didn't exitst.
-       |   Note: ``references`` are not used for submodules.
-       | ``retries`` (\*): Number of retries before the checkout is set to failed.
-       | ``dissociate``: (Boolean, default false). Dissociate the reference (see man git-clone).
-import | ``url``: Directory path relative to project root.
-       | ``prune`` (\*): Delete destination directory before importing files.
-       | ``recipeRelative`` (\*): Whether ``url`` is relative to recipe or project root. (optional)
-svn    | ``url``: URL of SVN module
-       | ``revision``: Optional revision number (optional)
-       | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
-url    | ``url``: File that should be downloaded
-       | ``digestSHA1``: Expected SHA1 digest of the file (optional)
-       | ``digestSHA256``: Expected SHA256 digest of the file (optional)
-       | ``digestSHA512``: Expected SHA512 digest of the file (optional)
-       | ``extract`` (\*): Extract directive (optional, default: auto)
-       | ``fileName`` (\*): Local file name (optional, default: url file name)
-       | ``fileMode`` (\*): File mode (optional, default depends on :ref:`policies-defaultFileMode` policy)
-       | ``sslVerify`` (\*): Whether to verify the SSL certificate when fetching (optional)
-       | ``stripComponents`` (\*): Number of leading components stripped from file name
-       |                           (optional, tar files only)
-       | ``retries`` (\*): Number of retries before the checkout is set to failed.
-       | ``headers``: A dictionary of key value pairs used as extra headers for requests. (optional)
-====== =======================================================================================
-
-The following synthetic attributes exist. They are generated internally
-and cannot be set in the recipe. They are intended to be matched in queries
-or to show additional information.
+Each SCM supports a number of specific attributes. See the description of each
+SCM below for the details. Additionally, the following synthetic attributes
+exist. They are generated internally and cannot be set in the recipe. They are
+intended to be matched in queries or to show additional information.
 
 * ``overridden``: Boolean that is true if a :ref:`configuration-config-scmOverrides`
   was applied. Otherwise false.
@@ -1005,6 +952,18 @@ whether to verify the SSL certificate when fetching. If unset, it defaults to
 using this option.
 
 cvs
+   The CVS SCM supports the following attributes:
+
+   +----------------------------+-------------------------------------------------------------------------------+
+   | Attribute                  | Description                                                                   |
+   +============================+===============================================================================+
+   | ``cvsroot``                | Repository location. ("``:ext:...``", path name, etc.)                        |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``module``                 | Module name.                                                                  |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``rev``                    | Revision, branch, or tag name. (optional)                                     |
+   +----------------------------+-------------------------------------------------------------------------------+
+
    The CVS SCM requires a ``cvsroot``, which is what you would normally put in
    your CVSROOT environment variable or pass to CVS using ``-d``. If you specify
    a revision, branch, or tag name, Bob will check out that instead of the HEAD.
@@ -1016,9 +975,63 @@ cvs
    ``CVS_RSH`` value into the recipe using ``checkoutVars``.
 
 git
+   The ``git`` SCM supports the following attributes:
+
+   +----------------------------+-------------------------------------------------------------------------------+
+   | Attribute                  | Description                                                                   |
+   +============================+===============================================================================+
+   | ``url``                    | URL of remote repository.                                                     |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``branch``\*               | Branch to check out. (optional, default: master)                              |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``tag``                    | Checkout this tag. (optional, overrides branch attribute)                     |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``commit``                 | SHA1 commit Id to check out. (optional, overrides branch or tag attribute)    |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``rebase``\*               | Rebase local branch instead of fast-forward merge update. (optional, defaults |
+   |                            | to ``false``)                                                                 |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``rev``                    | Canonical git-rev-parse revision specification. (optional, see below)         |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``remote-*``               | Additional remote repositories. (optional, see below)                         |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``sslVerify``\*            | Whether to verify the SSL certificate when fetching. (optional)               |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``shallow``\*              | Number of commits or cutoff date that should be fetched. (optional)           |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``singleBranch``\*         | Fetch only single branch instead of all. (optional)                           |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``submodules``\*           | Whether to clone all / a subset of submodules. (optional)                     |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``recurseSubmodules``\*    | Recursively clone submodules (optional, defaults to false)                    |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``shallowSubmodules``\*    | Clone submodules shallowly (optional, defaults to true)                       |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``references``\*           | Git reference. A local reference repository to be used as alternate (see man  |
+   |                            | git-clone). A list of strings (paths) or a dictionaries with the following    |
+   |                            | attributes:                                                                   |
+   |                            |                                                                               |
+   |                            | ``url``                                                                       |
+   |                            |     The matching part of the remote URL is replaced by ``repo``. (optional,   |
+   |                            |     Regex-String, default: ``.*``)                                            |
+   |                            | ``repo``                                                                      |
+   |                            |     Local storage path. (String)                                              |
+   |                            | ``optional``                                                                  |
+   |                            |    Marks the reference as optional if true. Otherwise a error is raised if    |
+   |                            |    the local reference repo didn't exist.: (Boolean, optional, default:       |
+   |                            |    ``True``)                                                                  |
+   |                            |                                                                               |
+   |                            | Note: ``references`` are not used for submodules.                             |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``retries``\*              | Number of retries before the checkout is set to failed. (optional)            |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``dissociate``             | Dissociate the reference (see man git-clone). (Boolean, optional, defaults to |
+   |                            | ``false``)                                                                    |
+   +----------------------------+-------------------------------------------------------------------------------+
+
    The ``git`` SCM requires at least an ``url`` attribute. The URL might be any
-   valid Git URL. To checkout a branch other than *master* add a ``branch``
-   attribute with the branch name. To checkout a tag instead of a branch specify
+   valid Git URL. To checkout a branch other than *master*, add a ``branch``
+   attribute with the branch name. To checkout a tag instead of a branch, specify
    it with ``tag``. You may specify the commit id directly with a ``commit``
    attribute too.
 
@@ -1114,7 +1127,7 @@ git
    including possible sub-submodules.
 
    .. attention:: Bob makes certain assumptions about your git usage. If any of
-      the following conditions are violated you may run into undefined
+      the following conditions are violated, you may run into undefined
       behaviour:
 
       * Tags never change. You must not replace a tag with different content.
@@ -1123,6 +1136,18 @@ git
       * The build result is not influenced by shallow clones.
 
 import
+   The ``import`` SCM supports the following attributes:
+
+   +----------------------------+-------------------------------------------------------------------------------+
+   | Attribute                  | Description                                                                   |
+   +============================+===============================================================================+
+   | ``url``                    | Directory path relative to project root or recipe.                            |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``prune``\*                | Delete destination directory before importing files.                          |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``recipeRelative``\*       | Whether ``url`` is relative to recipe or project root. (optional)             |
+   +----------------------------+-------------------------------------------------------------------------------+
+
    The ``import`` SCM copies the directory specified in ``url`` to the
    workspace. By default, the destination is always overwritten and obsolete
    files are deleted. Set ``prune`` to ``False`` to only overwrite if the
@@ -1150,7 +1175,47 @@ svn
    The `Svn`_ SCM, like git, requires the ``url`` attribute too. If you specify a
    numeric ``revision`` Bob considers the SCM as deterministic.
 
+   +----------------------------+-------------------------------------------------------------------------------+
+   | Attribute                  | Description                                                                   |
+   +============================+===============================================================================+
+   | ``url``                    | URL of SVN module.                                                            |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``revision``               | Optional revision number. (optional)                                          |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``sslVerify``\*            | Whether to verify the SSL certificate when fetching. (boolean, optional)      |
+   +----------------------------+-------------------------------------------------------------------------------+
+
 url
+   The ``url`` SCM supports the following attributes:
+
+   +----------------------------+-------------------------------------------------------------------------------+
+   | Attribute                  | Description                                                                   |
+   +============================+===============================================================================+
+   | ``url``                    | File that should be downloaded.                                               |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``digestSHA1``             | Expected SHA1 digest of the file. (optional)                                  |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``digestSHA256``           | Expected SHA256 digest of the file. (optional)                                |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``digestSHA512``           | Expected SHA512 digest of the file. (optional)                                |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``extract``\*              | Extract directive. (optional, default: ``auto``)                              |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``fileName``\*             | Local file name. (optional, default: url file name)                           |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``fileMode``\*             | File mode. (optional, default depends on :ref:`policies-defaultFileMode`      |
+   |                            | policy)                                                                       |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``sslVerify``\*            | Whether to verify the SSL certificate when fetching. (optional)               |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``stripComponents``\*      | Number of leading components stripped from file name. (optional, tar files    |
+   |                            | only)                                                                         |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``retries``\*              | Number of retries before the checkout is set to failed.                       |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``headers``                | A dictionary of key value pairs used as extra headers for requests. (optional)|
+   +----------------------------+-------------------------------------------------------------------------------+
+
    The ``url`` SCM naturally needs an ``url`` attribute. This might be a proper
    URL (e.g. ``http://foo.bar/baz.tgz``) or a file name. The supported URL
    schemas depend on Pythons ``urllib`` module but ``http``, ``https``, ``ftp``
@@ -1176,7 +1241,7 @@ url
    downloaded file will still be in put the workspace, though.
 
    .. note::
-       Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy) the whole
+       Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy), the whole
        directory where the file is downloaded is claimed by the SCM. It is not
        possible to fetch multiple files in the same directory. This is done to
        separate possibly extracted files safely from other checkouts.
@@ -1336,7 +1401,7 @@ The following settings are supported:
 | if          | String |        | See :ref:`configuration-principle-booleans` for     |
 |             | IfExpression    | evaluation details. The dependency is only          |
 |             |                 | considered if the string/expression evaluates to    |
-|             |                 | true. The follwing two examples are equivilent::    |
+|             |                 | true. The following two examples are equivalent::   |
 |             |                 |                                                     |
 |             |                 |      if: "$(or,$(eq,$FOO,bar),$BAZ)"                |
 |             |                 |                                                     |

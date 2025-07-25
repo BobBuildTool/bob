@@ -207,6 +207,10 @@ html_static_path = ['_static', 'cheatsheet']
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'Bobdoc'
 
+# A list of CSS files.
+html_css_files = [
+    'css/custom.css',
+]
 
 # -- Options for LaTeX output ---------------------------------------------
 
