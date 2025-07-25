@@ -985,6 +985,7 @@ url    | ``url``: File that should be downloaded
        | ``stripComponents`` (\*): Number of leading components stripped from file name
        |                           (optional, tar files only)
        | ``retries`` (\*): Number of retries before the checkout is set to failed.
+       | ``headers``: A dictionary of key value pairs used as extra headers for requests. (optional)
 ====== =======================================================================================
 
 The following synthetic attributes exist. They are generated internally
@@ -1186,6 +1187,11 @@ url
    command syntax. Examples: ``0764``, ``"u=rwx,g=rw,o=r"``. The ``fileMode``
    defaults to ``0600``/``"u=rw"`` unless the :ref:`policies-defaultFileMode`
    policy is configured for the old behaviour.
+
+   Some requests might need additional header fields set, e.g. a token required for
+   authentication. These additional header fields can be provided using the
+   ``headers`` attribute, which expects a list of key value pairs, with string
+   substitution applied to the value.
 
 .. _configuration-recipes-checkoutUpdateIf:
 
