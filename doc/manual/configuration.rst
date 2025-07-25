@@ -880,13 +880,13 @@ checkoutSCM
 
 Type: SCM-Dictionary or List of SCM-Dictionaries
 
-Bob understands several source code management systems natively. On one hand it
-enables the usage of dedicated plugins on a Jenkins server. On the other hand
+Bob understands several source code management systems natively. On one hand, it
+enables the usage of dedicated plugins on a Jenkins server. On the other hand,
 Bob can manage the checkout step workspace much better in the development build
 mode.
 
-All SCMs are fetched/updated before the checkoutScript of the package are run.
-The checkoutScript should not move or modify the checkoutSCM directories,
+All SCMs are fetched/updated before the ``checkoutScript`` of the package is run.
+The ``checkoutScript`` should not move or modify the ``checkoutSCM`` directories,
 though.
 
 If the package consists of a single git module you can specify the SCM directly::
@@ -1017,8 +1017,8 @@ cvs
 
 git
    The ``git`` SCM requires at least an ``url`` attribute. The URL might be any
-   valid Git URL. To checkout a branch other than *master* add a ``branch``
-   attribute with the branch name. To checkout a tag instead of a branch specify
+   valid Git URL. To checkout a branch other than *master*, add a ``branch``
+   attribute with the branch name. To checkout a tag instead of a branch, specify
    it with ``tag``. You may specify the commit id directly with a ``commit``
    attribute too.
 
@@ -1114,7 +1114,7 @@ git
    including possible sub-submodules.
 
    .. attention:: Bob makes certain assumptions about your git usage. If any of
-      the following conditions are violated you may run into undefined
+      the following conditions are violated, you may run into undefined
       behaviour:
 
       * Tags never change. You must not replace a tag with different content.
@@ -1176,7 +1176,7 @@ url
    downloaded file will still be in put the workspace, though.
 
    .. note::
-       Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy) the whole
+       Starting with Bob 0.14 (see :ref:`policies-tidyUrlScm` policy), the whole
        directory where the file is downloaded is claimed by the SCM. It is not
        possible to fetch multiple files in the same directory. This is done to
        separate possibly extracted files safely from other checkouts.
@@ -1336,7 +1336,7 @@ The following settings are supported:
 | if          | String |        | See :ref:`configuration-principle-booleans` for     |
 |             | IfExpression    | evaluation details. The dependency is only          |
 |             |                 | considered if the string/expression evaluates to    |
-|             |                 | true. The follwing two examples are equivilent::    |
+|             |                 | true. The following two examples are equivalent::   |
 |             |                 |                                                     |
 |             |                 |      if: "$(or,$(eq,$FOO,bar),$BAZ)"                |
 |             |                 |                                                     |
