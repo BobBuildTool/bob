@@ -113,6 +113,10 @@ run_test()
 # this script from "git rebase --exec" and blow up the git related tests.
 unset "${!GIT_@}"
 
+# Make umask predictable. In particular, the Jenkins integration tests will
+# fail if the umask is wrong.
+umask 022
+
 # move to root directory
 cd "${0%/*}/.."
 . ./test/test-lib.sh
