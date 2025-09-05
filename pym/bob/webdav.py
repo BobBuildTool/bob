@@ -4,7 +4,7 @@ from .utils import sslNoVerifyContext
 import base64
 import http.client
 import os
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlsplit, urlparse
 from xml.etree.ElementTree import fromstring
 
 class HTTPException(Exception):
@@ -55,14 +55,38 @@ class WebDav:
             return self.__connection
 
         url = self.__url
+        proxy_env = url.scheme + "_proxy"
+        proxy = os.getenv(proxy_env)
+        if proxy is None and url.scheme != "http":
+            proxy = os.getenv(proxy_env.upper())
+        if proxy is None:
+            proxy = os.getenv("all_proxy", os.getenv("ALL_PROXY"))
+
+        host = url.hostname
+        port = url.port
+        tunnel_host = tunnel_port = None
+        if proxy is not None:
+            try:
+                tunnel_host, tunnel_port = host, port
+                parts = urlparse(proxy)
+                host = parts.hostname
+                port = parts.port
+                if parts.scheme not in ['http', 'https']:
+                    raise BuildError(f"Unsupported proxy scheme: {parts.scheme}.");
+            except ValueError as e:
+                raise BuildError(f"Unsupported proxy setting: {proxy}: {e}");
+
         if url.scheme == 'http':
-            connection = http.client.HTTPConnection(url.hostname, url.port)
+            connection = http.client.HTTPConnection(host, port)
         elif url.scheme == 'https':
             ctx = None if self.__sslVerify else sslNoVerifyContext()
-            connection = http.client.HTTPSConnection(url.hostname, url.port,
+            connection = http.client.HTTPSConnection(host, port,
                                                      context=ctx)
         else:
             raise BuildError("Unsupported URL scheme: '{}'".format(url.scheme))
+
+        if tunnel_host is not None:
+            connection.set_tunnel(tunnel_host, tunnel_port)
 
         self.__connection = connection
         return connection
