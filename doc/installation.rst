@@ -231,6 +231,23 @@ MSYS2
 Follow the standard MSYS2 installation. Then install ``python3`` and
 ``python-pip`` and use one of the install methods above.
 
+Proxy settings
+==============
+
+If Bob is used behind a proxy you need to configure the environment variables
+``http_proxy`` and ``https_proxy`` or ``all_proxy``. Except for the `http_proxy`
+uppercase names can also be used
+
+Note: the url-scheme is required in the URL, e.g. ::
+
+   export http_proxy=http://my_proxy:1234
+   export HTTPS_PROXY=http://my_proxy:1234
+
+ATM only ``http`` and ``https`` proxies are supported.
+
+Other SCMs might use different configurations, e.g. `git config https.proxy` or ssh-config.
+Please consult the respective user manual.
+
 .. _PyYAML: http://pyyaml.org/
 .. _schema: https://pypi.org/project/schema/
 .. _python-magic: https://pypi.org/project/python-magic/
