@@ -2426,6 +2426,12 @@ The default is ``[download, upload]``.
     flag, any upload problem will be treated as error. Downloads are not
     affected by this flag. They already ignore network errors by default.
 
+``strictdownload``
+    By default, downloads from an archive ignore most network errors (i.e.  no
+    route to host, connection refused). With this flag, all network errors are
+    treated as error. In any case, it is never an error if a download does not
+    find the requested archive on the backend.
+
 ``nolocal``
     Do not use this archive in local builds.
 
