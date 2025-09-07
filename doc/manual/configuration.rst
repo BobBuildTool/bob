@@ -2422,10 +2422,9 @@ The default is ``[download, upload]``.
     cache artifacts locally on slow network connections.
 
 ``nofail``
-    Don't fail the build if the upload or download from this archive fails. In
-    any case it is never an error if a download does not find the requested
-    archive on the backend. This option additionally suppresses other errors
-    such as unknown hosts or interrupted transfers.
+    Don't fail the build if the upload to this archive fails. Without this
+    flag, any upload problem will be treated as error. Downloads are not
+    affected by this flag. They already ignore network errors by default.
 
 ``nolocal``
     Do not use this archive in local builds.
