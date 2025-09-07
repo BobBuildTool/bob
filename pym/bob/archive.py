@@ -29,6 +29,7 @@ from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import asyncio
 import concurrent.futures
 import concurrent.futures.process
+import errno
 import gzip
 import io
 import os
@@ -46,6 +47,16 @@ ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
 FINGERPRINT_SUFFIX = ".fprnt"
+
+SOFT_DOWNLOAD_ERRORS = {
+    'ECONNREFUSED', # Connection refused
+    'EHOSTDOWN',    # Host is down
+    'EHOSTUNREACH', # No route to host
+    'ENETDOWN',     # Network is down
+    'ENETUNREACH',  # Network is unreachable
+    'ETIMEDOUT',    # Connection timed out
+}
+
 
 def buildIdToName(bid):
     return asHexStr(bid) + ARCHIVE_GENERATION
@@ -449,13 +460,13 @@ class BaseArchive(TarHelper):
             return (False, self._namedErrorString("not found"), WARNING)
         except (ArtifactDownloadError, HttpDownloadError) as e:
             return (False, self._namedErrorString(e.reason), WARNING)
-        except ConnectionRefusedError:
-            return (False, self._namedErrorString("connection failed"), WARNING)
         except (socket.herror, socket.gaierror) as e:
             return (False, self._namedErrorString(str(e)), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
+            if errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
+                return (False, self._namedErrorString(os.strerror(e.errno)), WARNING)
             raise BuildError(self._namedErrorString("Cannot download artifact: " + str(e)))
         except tarfile.TarError as e:
             raise BuildError(self._namedErrorString("Error extracting binary artifact: " + str(e)))
@@ -491,13 +502,13 @@ class BaseArchive(TarHelper):
             return (None, self._namedErrorString("not found"), WARNING)
         except (ArtifactDownloadError, HttpDownloadError) as e:
             return (None, self._namedErrorString(e.reason), WARNING)
-        except ConnectionRefusedError:
-            return (None, self._namedErrorString("connection failed"), WARNING)
         except (socket.herror, socket.gaierror) as e:
             return (None, self._namedErrorString(str(e)), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
+            if errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
+                return (None, self._namedErrorString(os.strerror(e.errno)), WARNING)
             raise BuildError(self._namedErrorString("Cannot download file: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
