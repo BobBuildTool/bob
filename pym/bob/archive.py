@@ -366,6 +366,7 @@ class BaseArchive(TarHelper):
         self.__useDownload = "download" in flags
         self.__useUpload = "upload" in flags
         self.__ignoreUploadErrors = "nofail" in flags
+        self.__ignoreDownloadErrors = "strictdownload" not in flags
         self.__useLocal = "nolocal" not in flags
         self.__useJenkins = "nojenkins" not in flags
         self.__useCache = "cache" in flags
@@ -465,7 +466,7 @@ class BaseArchive(TarHelper):
         except BuildError as e:
             raise
         except OSError as e:
-            if errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
+            if self.__ignoreDownloadErrors and errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
                 return (False, self._namedErrorString(os.strerror(e.errno)), WARNING)
             raise BuildError(self._namedErrorString("Cannot download artifact: " + str(e)))
         except tarfile.TarError as e:
@@ -507,7 +508,7 @@ class BaseArchive(TarHelper):
         except BuildError as e:
             raise
         except OSError as e:
-            if errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
+            if self.__ignoreDownloadErrors and errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
                 return (None, self._namedErrorString(os.strerror(e.errno)), WARNING)
             raise BuildError(self._namedErrorString("Cannot download file: " + str(e)))
         finally:
