@@ -11,7 +11,6 @@ from .utils import asHexStr, hashPath, getPlatformTag, EventLoopWrapper
 import argparse
 import logging
 import sys
-import traceback
 import os
 
 def __archive(*args, **kwargs):
@@ -178,6 +177,7 @@ def catchErrors(fun, *args, **kwargs):
         print(colorize("""An internal Exception has occured. This should not have happenend.
 Please open an issue at https://github.com/BobBuildTool/bob with the following backtrace:""", "31;1"), file=sys.stderr)
         print("Bob version", BOB_VERSION, file=sys.stderr)
+        import traceback
         traceback.print_exc(file=sys.stderr)
         ret = 3
 
