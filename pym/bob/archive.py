@@ -447,6 +447,26 @@ class BaseArchive(TarHelper):
             else:
                 raise BuildError(self._namedErrorString("Cannot cache artifact: " + str(e)))
 
+    def _handleDownloadException(self, err, message, softerror_return):
+        # https://github.com/python/cpython/blob/4c0d7bc52afcd6b34b1085a52bb33ae695f656e5/Lib/test/support/socket_helper.py#L251
+        # urllib can wrap original socket errors multiple times (!), we must
+        # unwrap to get at the original error.
+        while True:
+            a = err.args
+            if len(a) >= 1 and isinstance(a[0], OSError):
+                err = a[0]
+            # The error can also be wrapped as args[1]:
+            #    except socket.error as msg:
+            #        raise OSError('socket error', msg) from msg
+            elif len(a) >= 2 and isinstance(a[1], OSError):
+                err = a[1]
+            else:
+                break
+
+        if self.__ignoreDownloadErrors and errno.errorcode[err.errno] in SOFT_DOWNLOAD_ERRORS:
+            return (softerror_return, self._namedErrorString(os.strerror(err.errno)), WARNING)
+        raise BuildError(self._namedErrorString(message + ": " + str(err)))
+
     def _downloadPackage(self, buildId, suffix, audit, content, caches, workspace):
         # Set default signal handler so that KeyboardInterrupt is raised.
         # Needed to gracefully handle ctrl+c.
@@ -465,10 +485,8 @@ class BaseArchive(TarHelper):
             return (False, self._namedErrorString(str(e)), WARNING)
         except BuildError as e:
             raise
-        except OSError as e:
-            if self.__ignoreDownloadErrors and errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
-                return (False, self._namedErrorString(os.strerror(e.errno)), WARNING)
-            raise BuildError(self._namedErrorString("Cannot download artifact: " + str(e)))
+        except (OSError, urllib.error.URLError) as e:
+            return self._handleDownloadException(e, "Cannot download artifact", False)
         except tarfile.TarError as e:
             raise BuildError(self._namedErrorString("Error extracting binary artifact: " + str(e)))
         finally:
@@ -507,10 +525,8 @@ class BaseArchive(TarHelper):
             return (None, self._namedErrorString(str(e)), WARNING)
         except BuildError as e:
             raise
-        except OSError as e:
-            if self.__ignoreDownloadErrors and errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
-                return (None, self._namedErrorString(os.strerror(e.errno)), WARNING)
-            raise BuildError(self._namedErrorString("Cannot download file: " + str(e)))
+        except (OSError, urllib.error.URLError) as e:
+            return self._handleDownloadException(e, "Cannot download file", None)
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -633,7 +649,7 @@ class BaseArchive(TarHelper):
     def listDir(self, path):
         try:
             return self._listDir(path)
-        except (ArtifactDownloadError, OSError) as e:
+        except (ArtifactDownloadError, HTTPException, OSError) as e:
             if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
@@ -645,7 +661,7 @@ class BaseArchive(TarHelper):
     def stat(self, filepath):
         try:
             return self._stat(filepath)
-        except (ArtifactDownloadError, OSError) as e:
+        except (ArtifactDownloadError, HTTPException, OSError) as e:
             if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
@@ -907,16 +923,12 @@ class HttpArchive(BaseArchive):
         while True:
             try:
                 return request()
-            except (HTTPException, OSError) as e:
-                self._webdav._resetConnection()
+            except (HTTPException, OSError, urllib.error.URLError) as e:
                 if retries == 0: raise e
                 retries -= 1
 
     def _canManage(self):
         return True
-
-    def _resetConnection(self):
-        self._webdav._resetConnection()
 
     def _makePath(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
@@ -1003,9 +1015,7 @@ class HttpDownloader:
     def __enter__(self):
         return (None, self.response)
     def __exit__(self, exc_type, exc_value, traceback):
-        # reset connection on abnormal termination
-        if exc_type is not None:
-            self.archiver._resetConnection()
+        self.response.close()
         return False
 
 
