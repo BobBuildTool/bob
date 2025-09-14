@@ -89,11 +89,11 @@ will be moved to the final location as the last step.
    ``sendfile_max_chunk 2m;`` directive. Otherwise the download of files
    larger than 2 GiB will fail on Linux.
 
-Even though not yet available, Bob will probably gain archive maintenance
-support through the :ref:`manpage-archive` command in the future. This will
-require full WebDAV support. The Nginx core server does not support all
-required methods, though.  Fortunately, the external nginx-dav-ext-module
-provides the missing methods. If enabled, add the following to the location::
+Bob supportes artifact repository maintenance through the
+:ref:`manpage-archive` command which requires full WebDAV support. The Nginx
+core server does not support all required methods, though.  Fortunately, the
+external nginx-dav-ext-module provides the missing methods. If enabled, add the
+following to the location::
 
     location / {
          dav_methods PUT DELETE MKCOL COPY MOVE;

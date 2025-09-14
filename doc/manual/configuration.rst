@@ -2414,7 +2414,8 @@ The default is ``[download, upload]``.
     build must be performed with uploads enabled (``--upload``).
 ``managed``
     This archive is managed, meaning the files can be iterated and deleted.
-    This is required for the archive command to work.
+    This is required for the archive command to work. Only supported with the
+    ``file`` and ``http`` backends so far.
 ``cache``
     Use this archive to cache downloaded artifacts from other archives. If a
     binary artifact was successfully downloaded from another archive it will

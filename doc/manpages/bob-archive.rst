@@ -35,7 +35,7 @@ The bob archive command can be used to manage binary artifact archives.
 The command works on the archives defined in the user configuration :ref:`archive <configuration-config-archive>` .
 The archives require the `managed` flag.
 The archives to work on need to be explicitly specified (`-l`, `-a`, `-b`). These arguments are mutually exclusive.
-Write access to the recipe root folder to create an index cache is required.
+Write access to the current working directory is required to create an index cache.
 
 Artifacts are managed by the information included in their :ref:`Audit Trail
 <audit-trail>`. See the Audit Trail documentation for a detailed description of
@@ -74,13 +74,20 @@ Options
 -------
 
 ``-l, --local``
-    Instead of working with the archives defined in the user configuration, the command will operate in the working directory.
-    This can be useful for automated tasks running on a server. Make sure to have write access to the working directory.
+    Instead of working with the archives defined in the user configuration, the
+    command will operate in the current working directory. This can be useful
+    for automated tasks running on a server. Make sure to have write access to
+    the working directory.
+
 ``-a, --all``
-    Execute the command on all suitable archives defined in the user configuration.
+    Execute the command on all suitable archives defined in the user
+    configuration.
+
 ``-b, --backend NAME``
-    `NAME` is the name of the archive defined in the user configuration. Multiple archives may be provided by repeatedly using `-b`.
-    The command is executed on all of those archives.
+    `NAME` is the name of the archive defined in the user configuration.
+    Multiple archives may be provided by repeatedly using `-b`.  The command is
+    executed on all of those archives.
+
 ``--dry-run``
     Do not actually delete any artifacts but show what would get removed.
 
@@ -177,9 +184,22 @@ scan
     drive it could be advantageous to scan the archive with a cron job over
     night.
 
-Notes
------
+Typical usage
+-------------
 
-``bob archive`` only works for local binary artifact archives. If you're using a
-remote archive, you need shell access and a working Bob installation on the
-machine providing your archive in order to be able to use ``bob archive``.
+Suppose you have a machine where binary artifacts are stored in a local
+directory. The following command can be called from a cron job to retain only
+artifacts from the last two years::
+
+    bob archive -l clean "build.date >= \"$(date -u -Idate -d-2years)\""
+
+Another option is to do the maintenance based on the archives configured in a
+project. You need to set the ``managed`` flag for archives in the
+:ref:`configuration-config-archive` section to be maintained by ``bob archive``.
+Change into the project directory and call the same command, this time with
+the ``-a`` (all) option, though::
+
+    bob archive -a clean "build.date >= \"$(date -u -Idate -d-2years)\""
+
+This will read ``default.yaml`` and do the maintenance remotely. This is only
+supported for the ``file`` and ``http`` backends, though.
