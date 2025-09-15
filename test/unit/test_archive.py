@@ -643,6 +643,19 @@ class TestHttpArchive(BaseTester, TestCase):
         run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused", executor=self.executor))
         self.assertEqual(run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20, executor=self.executor)), None)
 
+    def testInvalidServerFail(self):
+        """Test download on non-existent server w/ strictdownload"""
+
+        spec = { 'url' : "https://127.1.2.3:7257", 'flags' : ["download", "strictdownload"] }
+        archive = HttpArchive(spec)
+        archive.wantDownloadLocal(True)
+        archive.wantUploadLocal(True)
+
+        with self.assertRaises(BuildError):
+            run(archive.downloadPackage(DummyStep(), b'\x00'*20, "unused", "unused", executor=self.executor))
+        with self.assertRaises(BuildError):
+            run(archive.downloadLocalLiveBuildId(DummyStep(), b'\x00'*20, executor=self.executor))
+
 class TestHttpBasicAuthArchive(BaseTester, TestCase):
 
     USERNAME = "bob"

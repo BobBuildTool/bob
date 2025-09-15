@@ -29,6 +29,7 @@ from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import asyncio
 import concurrent.futures
 import concurrent.futures.process
+import errno
 import gzip
 import io
 import os
@@ -46,6 +47,16 @@ ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
 FINGERPRINT_SUFFIX = ".fprnt"
+
+SOFT_DOWNLOAD_ERRORS = {
+    'ECONNREFUSED', # Connection refused
+    'EHOSTDOWN',    # Host is down
+    'EHOSTUNREACH', # No route to host
+    'ENETDOWN',     # Network is down
+    'ENETUNREACH',  # Network is unreachable
+    'ETIMEDOUT',    # Connection timed out
+}
+
 
 def buildIdToName(bid):
     return asHexStr(bid) + ARCHIVE_GENERATION
@@ -193,7 +204,7 @@ class TarHelper:
 
 
 class JenkinsArchive(TarHelper):
-    ignoreErrors = False
+    ignoreUploadErrors = False
 
     def __init__(self, spec):
         self.__xferArtifacts = spec.get("xfer", False)
@@ -354,7 +365,8 @@ class BaseArchive(TarHelper):
         self.__name = spec.get("name")
         self.__useDownload = "download" in flags
         self.__useUpload = "upload" in flags
-        self.__ignoreErrors = "nofail" in flags
+        self.__ignoreUploadErrors = "nofail" in flags
+        self.__ignoreDownloadErrors = "strictdownload" not in flags
         self.__useLocal = "nolocal" not in flags
         self.__useJenkins = "nojenkins" not in flags
         self.__useCache = "cache" in flags
@@ -365,8 +377,8 @@ class BaseArchive(TarHelper):
         self.__wantUploadJenkins = False
 
     @property
-    def ignoreErrors(self):
-        return self.__ignoreErrors
+    def ignoreUploadErrors(self):
+        return self.__ignoreUploadErrors
 
     def wantDownloadLocal(self, enable):
         self.__wantDownloadLocal = enable
@@ -430,7 +442,7 @@ class BaseArchive(TarHelper):
         except ArtifactExistsError:
             return None
         except (ArtifactUploadError, HttpUploadError, OSError) as e:
-            if self.__ignoreErrors:
+            if self.__ignoreUploadErrors:
                 return None
             else:
                 raise BuildError(self._namedErrorString("Cannot cache artifact: " + str(e)))
@@ -449,13 +461,13 @@ class BaseArchive(TarHelper):
             return (False, self._namedErrorString("not found"), WARNING)
         except (ArtifactDownloadError, HttpDownloadError) as e:
             return (False, self._namedErrorString(e.reason), WARNING)
-        except ConnectionRefusedError:
-            return (False, self._namedErrorString("connection failed"), WARNING)
         except (socket.herror, socket.gaierror) as e:
             return (False, self._namedErrorString(str(e)), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
+            if self.__ignoreDownloadErrors and errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
+                return (False, self._namedErrorString(os.strerror(e.errno)), WARNING)
             raise BuildError(self._namedErrorString("Cannot download artifact: " + str(e)))
         except tarfile.TarError as e:
             raise BuildError(self._namedErrorString("Error extracting binary artifact: " + str(e)))
@@ -491,13 +503,13 @@ class BaseArchive(TarHelper):
             return (None, self._namedErrorString("not found"), WARNING)
         except (ArtifactDownloadError, HttpDownloadError) as e:
             return (None, self._namedErrorString(e.reason), WARNING)
-        except ConnectionRefusedError:
-            return (None, self._namedErrorString("connection failed"), WARNING)
         except (socket.herror, socket.gaierror) as e:
             return (None, self._namedErrorString(str(e)), WARNING)
         except BuildError as e:
             raise
         except OSError as e:
+            if self.__ignoreDownloadErrors and errno.errorcode[e.errno] in SOFT_DOWNLOAD_ERRORS:
+                return (None, self._namedErrorString(os.strerror(e.errno)), WARNING)
             raise BuildError(self._namedErrorString("Cannot download file: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
@@ -537,7 +549,7 @@ class BaseArchive(TarHelper):
         except (ArtifactExistsError, HttpAlreadyExistsError):
             return (self._namedErrorString("skipped ({} exists in archive)".format(content)), SKIPPED)
         except (ArtifactUploadError, HttpUploadError, tarfile.TarError, OSError) as e:
-            if self.__ignoreErrors:
+            if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
                 raise BuildError(self._namedErrorString("Cannot upload artifact: " + str(e)))
@@ -570,7 +582,7 @@ class BaseArchive(TarHelper):
             with self._openUploadFile(key, suffix, True) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, content)
         except (ArtifactUploadError, HttpUploadError, OSError) as e:
-            if self.__ignoreErrors:
+            if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
                 raise BuildError(self._namedErrorString("Cannot upload file: " + str(e)))
@@ -610,7 +622,7 @@ class BaseArchive(TarHelper):
         try:
             self._delete(filepath)
         except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreErrors:
+            if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
                 raise BuildError(self._namedErrorString("Could not delete file: " + str(e)))
@@ -622,7 +634,7 @@ class BaseArchive(TarHelper):
         try:
             return self._listDir(path)
         except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreErrors:
+            if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
                 raise BuildError(self._namedErrorString("Could not list dir: " + str(e)))
@@ -634,7 +646,7 @@ class BaseArchive(TarHelper):
         try:
             return self._stat(filepath)
         except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreErrors:
+            if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
                 raise BuildError(self._namedErrorString("Could not stat file: " + str(e)))
@@ -646,7 +658,7 @@ class BaseArchive(TarHelper):
         try:
             return self._getAudit(filepath)
         except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreErrors:
+            if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
                 raise BuildError(self._namedErrorString("Could not get audit from file: " + str(e)))
@@ -658,7 +670,7 @@ class BaseArchive(TarHelper):
         try:
             return self._getArchiveUri()
         except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreErrors:
+            if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
             else:
                 raise BuildError(self._namedErrorString("Could not get archive hash: " + str(e)))
@@ -684,7 +696,7 @@ class Tee:
             for c in caches:
                 mirror = c.cachePackage(buildId, workspace)
                 if mirror is not None:
-                    self.__caches.append(MirrorWriter(mirror, c.ignoreErrors))
+                    self.__caches.append(MirrorWriter(mirror, c.ignoreUploadErrors))
         except:
             for c in self.__caches: c.abort()
             raise
@@ -703,15 +715,15 @@ class Tee:
                     except ArtifactExistsError:
                         pass
                     except (ArtifactUploadError, OSError) as e:
-                        if not c.ignoreErrors:
+                        if not c.ignoreUploadErrors:
                             raise BuildError("Cannot cache artifact: " + str(e))
         finally:
             for c in self.__caches: c.abort()
         return False
 
 class MirrorWriter:
-    def __init__(self, uploader, ignoreErrors):
-        self.ignoreErrors = ignoreErrors
+    def __init__(self, uploader, ignoreUploadErrors):
+        self.ignoreUploadErrors = ignoreUploadErrors
         self.__finalizer = uploader.__exit__
         self.__fileName, self.__fileObj = uploader.__enter__()
         if self.__fileName is not None:
@@ -747,7 +759,7 @@ class MirrorLeecher:
                 except (ArtifactUploadError, OSError) as e:
                     del self.__caches[i]
                     c.abort()
-                    if not c.ignoreErrors:
+                    if not c.ignoreUploadErrors:
                         raise BuildError("Cannot cache artifact: " + str(e))
         return ret
 
