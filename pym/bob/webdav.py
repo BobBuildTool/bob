@@ -157,6 +157,7 @@ class WebDav:
         base_path = self.__url.path
         # create a full path ending with trailing / (should prevent http 301 - moved permanently)
         path = '/'.join([base_path, path.strip('/'), ''])
+        dir_infos = []
         if self.exists(path):
             headers = self._getHeaders()
             # Depth: 1 - applies to the resource and the immediate children (infinity usually prohibited by server)
@@ -174,7 +175,6 @@ class WebDav:
                 raise HttpDownloadError("PROPFIND {} {}".format(e.status, e.reason))
             # get all dav responses from multistatusresponse
             tree = fromstring(content)
-            dir_infos = []
             for resp in tree.findall(".//{DAV:}response"):
                 # only need the path in case the full URL is included
                 href = unquote(urlsplit(resp.findtext(".//{DAV:}href")).path)
@@ -187,7 +187,7 @@ class WebDav:
                 dir_info['href'] = href
                 dir_info['path'] = href[len(base_path):].strip('/')
                 dir_infos.append(dir_info)
-            return dir_infos
+        return dir_infos
 
     def delete(self, filename):
         base_path = self.__url.path

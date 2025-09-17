@@ -204,8 +204,7 @@ class TestWebdav(TestCase):
             checkEntries(res, False, [base_path + TEST_FILE])
 
             self.__repodir.cleanup()
-            # listdir on non-existing dir should return None
-            self.assertIsNone(webdav.listdir('/'))
+            self.assertTrue(len(webdav.listdir('/')) == 0)
 
     def testStat(self):
         with HttpServerMock(self.dir) as srv:
