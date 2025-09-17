@@ -98,3 +98,27 @@ class TestJenkinsSetOptions(JenkinsTests, TestCase):
         self.assertEqual(BobState().getJenkinsConfig("test").sandbox.mode, "dev")
         self.executeBobJenkinsCmd("set-options test --strict-sandbox")
         self.assertEqual(BobState().getJenkinsConfig("test").sandbox.mode, "strict")
+
+    def testPostBuildClean(self):
+        self.executeBobJenkinsCmd("set-options test -o jobs.clean.post-build=never")
+        self.assertFalse(BobState().getJenkinsConfig("test").postBuildCleanSuccess)
+        self.assertFalse(BobState().getJenkinsConfig("test").postBuildCleanFailure)
+
+        self.executeBobJenkinsCmd("set-options test -o jobs.clean.post-build=on-success")
+        self.assertTrue(BobState().getJenkinsConfig("test").postBuildCleanSuccess)
+        self.assertFalse(BobState().getJenkinsConfig("test").postBuildCleanFailure)
+
+        self.executeBobJenkinsCmd("set-options test -o jobs.clean.post-build=on-failure")
+        self.assertFalse(BobState().getJenkinsConfig("test").postBuildCleanSuccess)
+        self.assertTrue(BobState().getJenkinsConfig("test").postBuildCleanFailure)
+
+        self.executeBobJenkinsCmd("set-options test -o jobs.clean.post-build=always")
+        self.assertTrue(BobState().getJenkinsConfig("test").postBuildCleanSuccess)
+        self.assertTrue(BobState().getJenkinsConfig("test").postBuildCleanFailure)
+
+        self.executeBobJenkinsCmd("set-options test -o jobs.clean.post-build=")
+        self.assertFalse(BobState().getJenkinsConfig("test").postBuildCleanSuccess)
+        self.assertFalse(BobState().getJenkinsConfig("test").postBuildCleanFailure)
+
+        with self.assertRaises(SystemExit):
+            self.executeBobJenkinsCmd("set-options test -o jobs.clean.post-build=foo")
