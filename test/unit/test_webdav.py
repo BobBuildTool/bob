@@ -177,15 +177,19 @@ class TestWebdav(TestCase):
             self.assertEqual(len(paths), len(entries))
             [self.assertTrue(checkyEntry(x, is_dir, paths)) for x in entries]
 
+        def touch(path):
+            with open(path,'a') as f:
+                pass
+
         with HttpServerMock(self.dir) as srv:
             # create some simple directory structure
             path1 = os.path.join(self.dir, TEST_PATH1, TEST_PATH2)
             path2 = os.path.join(self.dir, TEST_PATH2, TEST_PATH1)
             os.makedirs(path1)
             os.makedirs(path2)
-            open(os.path.join(path1, TEST_FILE), 'a')
-            open(os.path.join(path1, TEST_FILE2), 'a')
-            open(os.path.join(path2, TEST_FILE), 'a')
+            touch(os.path.join(path1, TEST_FILE))
+            touch(os.path.join(path1, TEST_FILE2))
+            touch(os.path.join(path2, TEST_FILE))
             # check if listdir returns the proper content
             webdav = GetWebdav(srv.port)
             res = webdav.listdir('/')
@@ -200,8 +204,7 @@ class TestWebdav(TestCase):
             checkEntries(res, False, [base_path + TEST_FILE])
 
             self.__repodir.cleanup()
-            # listdir on non-existing dir should return None
-            self.assertIsNone(webdav.listdir('/'))
+            self.assertTrue(len(webdav.listdir('/')) == 0)
 
     def testStat(self):
         with HttpServerMock(self.dir) as srv:
