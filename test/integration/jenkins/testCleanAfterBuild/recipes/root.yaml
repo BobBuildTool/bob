@@ -1,0 +1,7 @@
+root: true
+
+packageScriptBash: |
+    pwd > result.txt
+
+packageScriptPwsh: |
+    (pwd).path | Out-File -FilePath result.txt -Encoding ASCII -NoNewline
