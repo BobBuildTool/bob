@@ -470,6 +470,24 @@ class JenkinsJob:
             xml.etree.ElementTree.SubElement(preBuildClean, "cleanupParameter")
             xml.etree.ElementTree.SubElement(preBuildClean, "externalDelete")
 
+        # post build clean
+        postBuildClean = publishers.find("hudson.plugins.ws__cleanup.WsCleanup")
+        if postBuildClean is not None: publishers.remove(postBuildClean)
+        if config.postBuildCleanSuccess or config.postBuildCleanFailure:
+            postBuildClean = xml.etree.ElementTree.SubElement(publishers,
+                "hudson.plugins.ws__cleanup.WsCleanup",
+                attrib={"plugin" : "ws-cleanup@0.30"})
+            xml.etree.ElementTree.SubElement(postBuildClean, "deleteDirs").text = "true"
+            xml.etree.ElementTree.SubElement(postBuildClean, "cleanWhenSuccess").text = \
+                "true" if config.postBuildCleanSuccess else "false"
+            xml.etree.ElementTree.SubElement(postBuildClean, "cleanWhenUnstable").text = \
+                "true" if config.postBuildCleanSuccess else "false"
+            xml.etree.ElementTree.SubElement(postBuildClean, "cleanWhenFailure").text = \
+                "true" if config.postBuildCleanFailure else "false"
+            xml.etree.ElementTree.SubElement(postBuildClean, "cleanWhenNotBuilt").text = "false"
+            xml.etree.ElementTree.SubElement(postBuildClean, "cleanWhenAborted").text = "false"
+            xml.etree.ElementTree.SubElement(postBuildClean, "notFailBuild").text = "true"
+
         # add authtoken if set in options
         if auth:
             auth.text = config.authtoken

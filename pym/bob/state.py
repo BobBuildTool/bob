@@ -154,6 +154,9 @@ class JenkinsConfig:
             import re
             if not re.fullmatch(r"[0-9A-Za-z._-]+", key):
                 errorHandler("Invalid audit meta variable name: " + key)
+        elif key == "jobs.clean.post-build":
+            if value not in ("never", "on-success", "on-failure", "always"):
+                errorHandler("jobs.clean.post-build must be any of: never/on-success/on-failure/always")
         elif key in ("jobs.gc.deps.artifacts", "jobs.gc.deps.builds",
                      "jobs.gc.root.artifacts", "jobs.gc.root.builds"):
             try:
@@ -279,6 +282,14 @@ class JenkinsConfig:
     @property
     def windows(self):
         return self.hostPlatform in ("cygwin", "msys", "win32")
+
+    @property
+    def postBuildCleanSuccess(self):
+        return self.__options.get("jobs.clean.post-build") in ["on-success", "always"]
+
+    @property
+    def postBuildCleanFailure(self):
+        return self.__options.get("jobs.clean.post-build") in ["on-failure", "always"]
 
     def getGcNum(self, root, key):
         key = "jobs.gc." + ("root" if root else "deps") + "." + key

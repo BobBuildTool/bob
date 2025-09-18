@@ -255,11 +255,31 @@ def testSvnModule(jc):
         assertNotEqual(status["number"], newStatus["number"])
         assertEqual(jc.getLastBuildResult("testSvnModule-root", "result.txt"), b'asdf')
 
+def testCleanAfterBuild(jc):
+    prepare("testCleanAfterBuild")
+    subprocess.run(bob + ["jenkins", "add", "local", "http://bob:test@localhost:8080/",
+                    "-o", "jobs.clean.post-build=always",
+                    "-r", "root", "-p", "testCleanAfterBuild-"], check=True,
+                    cwd="testCleanAfterBuild")
+    subprocess.run(bob + ["jenkins", "push", "local"], check=True,
+                   cwd="testCleanAfterBuild")
+
+    jc.drainBuildQueue()
+    status = jc.getLastBuildStatus("testCleanAfterBuild-root")
+    print(jc.getLastBuildLog("testCleanAfterBuild-root"))
+    assertEqual(status["result"], "SUCCESS")
+    wsPath = jc.getLastBuildResult("testCleanAfterBuild-root", "result.txt").strip()
+    assertEqual(os.path.exists(wsPath), False)
+
+    subprocess.run(bob + ["jenkins", "prune", "local"], check=True,
+                   cwd="testCleanAfterBuild")
+
 
 TESTS = (
     ("Simple build", testSimpleBuild),
     ("Git module", testGitModule),
     ("Subversion module", testSvnModule),
+    ("Clean after build", testCleanAfterBuild),
     # TODO: Multiple SCMs
 )
 

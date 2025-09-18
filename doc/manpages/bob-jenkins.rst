@@ -475,6 +475,27 @@ audit.meta.<var>
    ``meta.<var>`` to select artifacts built by this project. Variables that are
    defined by Bob itself (e.g. ``meta.jenkins-node``) cannot be redefined!
 
+jobs.clean.post-build
+   Controls whether the workspace of the Jenkins jobs should be cleaned after a
+   job was run. By default, the workspace is kept (``never``). Use the other
+   values to reduce disk usage. This most probably makes sense if the
+   ``--clean`` option is active because the workspace is erased before the
+   build anyway.
+
+   never
+        Always retain the workspace after building a job. This is the default.
+
+   on-success
+        Clean the workspace after a successful build. If a job fails, the
+        workspace is retained.
+
+   on-failure
+        Clean the workspace if a job failed. If a job succeeds, the workspace
+        is kept.
+
+   always
+        Always clean the workspace after a job was built.
+
 jobs.gc.deps.artifacts
    The number of build artifacts that are retained of intermediate or leaf
    jobs. Only useful for ``artifacts.copy=jenkins``. Protocols and build logs
