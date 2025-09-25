@@ -96,6 +96,23 @@ Options
 
     This is the default unless the user changed it in ``default.yaml``.
 
+``--bundle BUNDLE``
+    Bundle all the sources needed to build the package. The output of this is
+    a zip-file containing all sources required to build the package. This also
+    enables `--always-checkout` and `--clean-checkout` and can not be used
+    along with `--build-only`.
+
+``--bundle-exclude BUNDLE_EXCLUDE``
+    Do not add packages matching a given regular expression (regex) to the
+    bundle. Can be specified multiple times.
+
+``--bundle-vcs``
+    Add files used by version control systems to the bundle.
+
+``--unbundle BUNDLE``
+    Try to download sources from BUNDLE first. The BUNDLE should be the zip
+    file created with the ``--bundle`` option.
+
 ``--clean``
     Do clean builds by clearing the build directory before executing the build
     commands. It will *not* clean all build results (e.g. like ``make clean``)
@@ -362,6 +379,9 @@ Options
 
 ``-q, --quiet``
     Decrease verbosity (may be specified multiple times)
+
+``--unbundle``
+    Use bundle specified by ``--bundle`` as source input.
 
 ``-v, --verbose``
     Increase verbosity (may be specified multiple times)

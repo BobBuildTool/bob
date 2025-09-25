@@ -350,3 +350,30 @@ the zlib packages: ::
 .. raw:: html
 
     <iframe src="../_static/sandbox.html" height="500px" width="100%"></iframe>
+
+Using source bundles
+====================
+
+A source code bundle is a zip file containing all the sources required to build a
+package. Such a bundle can be used to compile on a air gapped system, to
+archive the build input, to transfer the sources to a reviewer, ...
+
+To create a bundle for a given package you need to build this package using
+:ref:`manpage-dev` or :ref:`manpage-build` with the ``--bundle`` option. This
+option takes one argument specifying the name of the bundle file. Several other
+`bundle` arguments are available to control what goes into the bundle. Refer to
+the manpages for a detailed description of those.
+
+For example to bundle the sources needed to build `my_package` use: ::
+
+     $ bob build my_package --bundle my_package_bundle.zip
+
+After that you can take the my_package_bundle.tar to another system and use: ::
+
+     $ bob build my_package --unbundle my_package_bundle.zip
+
+to build `my_package` from the bundled-sources.
+
+.. note::
+    The recipes and `bob` are not part of the bundle and need to be handled
+    separately. It's strongly recommended to use matching recipes.

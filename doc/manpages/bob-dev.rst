@@ -26,6 +26,8 @@ Synopsis
             [--install | --no-install]
             [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
             [--clean-checkout] [--attic | --no-attic]
+            [--bundle BUNDLE | --unbundle BUNDLE]
+            [--bundle-exclude BUNDLE_EXCLUDE] [--bundle-vcs]
             PACKAGE [PACKAGE ...]
 
 Description
