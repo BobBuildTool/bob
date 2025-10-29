@@ -47,7 +47,7 @@ class ScmOverride:
             if key not in scm: return False
             if type(scm[key]) != type(value): return False
             if isinstance(value, str):
-                value = env.substitute(value, "svmOverride::match")
+                value = env.substitute(value, "scmOverride::match")
                 if not fnmatch.fnmatchcase(scm[key], value): return False
             else:
                 if scm[key] != value: return False
@@ -62,9 +62,9 @@ class ScmOverride:
             (other.__match, other.__del, other.__set, other.__replace))
 
     def __applyEnv(self, env):
-        rm = [ env.substitute(d, "svmOverrides::del") for d in self.__del ]
+        rm = [ env.substitute(d, "scmOverrides::del") for d in self.__del ]
         set = {
-            k : env.substitute(v, "svmOverrides::set: "+k) if isinstance(v, str) else v
+            k : env.substitute(v, "scmOverrides::set: "+k) if isinstance(v, str) else v
             for (k,v) in self.__set.items()
         }
         return rm, set
