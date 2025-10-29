@@ -65,7 +65,7 @@ def lsFlat(layers):
     return "\n".join(ret)
 
 def doLayersLs(argv):
-    parser = argparse.ArgumentParser(prog="bob layers update",
+    parser = argparse.ArgumentParser(prog="bob layers ls",
                                      description='List layers and their SCMs')
     addDefaultArgs(parser)
 
