@@ -526,7 +526,7 @@ class MassiveParallelTtyUI(BaseTUI):
 
         job = self.__nextJob()
         name = step.getPackage().getName()
-        self.__jobs[job] = name
+        self.__jobs[job] = "{} {}".format(action, name)
         self._print(job, "{:10}{} - {}".format(action, name, message), EXECUTED, "Start")
         msg = "{:10}{} - {}{}".format(action, name, message, details)
         return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails)
