@@ -176,8 +176,6 @@ class Layer:
         return self.__name
 
     def parse(self, yamlCache):
-        configSchema = (schema.Schema({**RecipeSet.STATIC_CONFIG_SCHEMA_SPEC,
-                                       **RecipeSet.STATIC_CONFIG_LAYER_SPEC}), b'')
         config = RecipeSet.loadConfigYaml(yamlCache.loadYaml, self.__layerDir)
         self.__config = self.__upperConfig.derive(config, self.__name == "")
 
