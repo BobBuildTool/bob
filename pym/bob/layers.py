@@ -1,6 +1,5 @@
 import datetime
 import os
-import schema
 import shutil
 from textwrap import indent
 from .errors import BuildError, ParseError
@@ -264,7 +263,6 @@ class Layers:
                 BobState().delLayerState(d)
 
     def collect(self, loop, update, verbose=0, requireManagedLayers=True):
-        configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
         config = LayersConfig()
         with YamlCache() as yamlCache:
             for c in reversed(self.__layerConfigFiles):
@@ -272,7 +270,7 @@ class Layers:
                 if not os.path.exists(c):
                     raise BuildError(f"Layer config file {c} not found" )
 
-                config = config.derive(yamlCache.loadYaml(c, configSchema))
+                config = config.derive(RecipeSet.loadLayersConfigYaml(yamlCache.loadYaml, c))
 
             rootLayers = Layer("", config, self.__defines, self.__projectRoot)
             rootLayers.parse(yamlCache)

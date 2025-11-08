@@ -3912,6 +3912,11 @@ class RecipeSet:
         return ret
 
     @classmethod
+    def loadLayersConfigYaml(cls, loadYaml, fileName):
+        configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
+        return loadYaml(fileName, configSchema)
+
+    @classmethod
     def calculatePolicies(cls, config):
         minVer = config.get("bobMinimumVersion", "0.16")
         ret = { name : (True if compareVersion(ver, minVer) <= 0 else None, warn)
