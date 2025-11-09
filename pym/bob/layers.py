@@ -7,42 +7,26 @@ from .invoker import CmdFailedError, InvocationError, Invoker
 from .scm import getScm, ScmOverride, ScmStatus, ScmTaint
 from .state import BobState
 from .stringparser import Env
-from .input import RecipeSet, Scm, YamlCache
+from .input import RecipeSet, Scm, YamlCache, LayersConfig
 from .utils import INVALID_CHAR_TRANS, getPlatformString, getPlatformEnvWhiteList, compareVersion, joinLines
 from .tty import DEBUG, EXECUTED, INFO, NORMAL, IMPORTANT, SKIPPED, WARNING, log
 
-class LayersConfig:
-    def __init__(self):
-        self.__platform = getPlatformString()
-        self.__whiteList = getPlatformEnvWhiteList(self.__platform)
-        self.__scmOverrides = []
-        self.__policies = None
+class RecipeSetFacade:
+    """Wrap a LayersConfig and a policy list so that it appears as RecipeSet."""
 
-    def derive(self, config, rootLayer=False):
-        """Create a new LayersConfig by adding the passed config to this one."""
-        ret = LayersConfig()
-        ret.__whiteList = set(self.__whiteList)
-        ret.__scmOverrides = self.__scmOverrides[:]
-        ret.__policies = self.__policies
-
-        ret.__whiteList.update([c.upper() if self.__platform == "win32" else c
-            for c in config.get("layersWhitelist", []) ])
-        ret.__scmOverrides[0:0] = [ ScmOverride(o) for o in config.get("layersScmOverrides", []) ]
-
-        if rootLayer:
-            ret.__policies = RecipeSet.calculatePolicies(config)
-
-        return ret
+    def __init__(self, layerConfig, policies):
+        self.__layerConfig = layerConfig
+        self.__policies = policies
 
     # The following is required by bob.input.Scm
 
     SCM_SCHEMA = RecipeSet.LAYERS_SCM_SCHEMA
 
     def envWhiteList(self):
-        return self.__whiteList
+        return self.__layerConfig.envWhiteList()
 
     def scmOverrides(self):
-        return self.__scmOverrides
+        return self.__layerConfig.scmOverrides()
 
     # The following methods are required for bob.input.RecipeSet compatibility.
 
@@ -81,12 +65,13 @@ class LayerStepSpec:
 
 
 class Layer:
-    def __init__(self, name, upperConfig, defines, projectRoot, scm=None):
+    def __init__(self, name, upperConfig, defines, projectRoot, scm=None, policies=None):
         self.__name = name
         self.__upperConfig = upperConfig
         self.__defines = defines
         self.__projectRoot = projectRoot
         self.__scm = scm
+        self.__policies = policies
         self.__created = False
 
         # SCM backed layers are in build dir, regular layers are in project dir.
@@ -175,11 +160,14 @@ class Layer:
         return self.__name
 
     def parse(self, yamlCache):
-        config = RecipeSet.loadConfigYaml(yamlCache.loadYaml, self.__layerDir)
-        self.__config = self.__upperConfig.derive(config, self.__name == "")
+        projectConfig, layerConfig = RecipeSet.loadConfigYaml(yamlCache.loadYaml, self.__layerDir, self.__upperConfig)
+        if self.__name == "":
+            # Policies are determined by the root layer only
+            self.__policies = RecipeSet.calculatePolicies(projectConfig)
 
+        self.__config = RecipeSetFacade(layerConfig, self.__policies)
         configYaml = os.path.join(self.__layerDir, "config.yaml")
-        for l in config.get('layers', []):
+        for l in projectConfig.get('layers', []):
             scmSpec = l.getScm()
             if scmSpec is None:
                 layerScm = None
@@ -190,10 +178,11 @@ class Layer:
                                overrides=self.__config.scmOverrides(),
                                recipeSet=self.__config)
             self.__subLayers.append(Layer(l.getName(),
-                                          self.__config,
+                                          layerConfig,
                                           self.__defines,
                                           self.__projectRoot,
-                                          layerScm))
+                                          layerScm,
+                                          self.__policies))
 
     def getSubLayers(self):
         return self.__subLayers
@@ -270,7 +259,7 @@ class Layers:
                 if not os.path.exists(c):
                     raise BuildError(f"Layer config file {c} not found" )
 
-                config = config.derive(RecipeSet.loadLayersConfigYaml(yamlCache.loadYaml, c))
+                config = RecipeSet.loadLayersConfigYaml(yamlCache.loadYaml, c, config)
 
             rootLayers = Layer("", config, self.__defines, self.__projectRoot)
             rootLayers.parse(yamlCache)
