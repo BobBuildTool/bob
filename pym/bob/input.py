@@ -3182,6 +3182,32 @@ class PositiveValidator:
             raise schema.SchemaError(None, "Int value must not be negative")
         return data
 
+
+class LayersConfig:
+    def __init__(self):
+        self.__platform = getPlatformString()
+        self.__whiteList = getPlatformEnvWhiteList(self.__platform)
+        self.__scmOverrides = []
+
+    def derive(self, config):
+        """Create a new LayersConfig by adding the passed config to this one."""
+        ret = LayersConfig()
+        ret.__whiteList = set(self.__whiteList)
+        ret.__scmOverrides = self.__scmOverrides[:]
+
+        ret.__whiteList.update([c.upper() if self.__platform == "win32" else c
+            for c in config.get("layersWhitelist", []) ])
+        ret.__scmOverrides[0:0] = [ ScmOverride(o) for o in config.get("layersScmOverrides", []) ]
+
+        return ret
+
+    def envWhiteList(self):
+        return self.__whiteList
+
+    def scmOverrides(self):
+        return self.__scmOverrides
+
+
 class RecipeSet:
     """The RecipeSet corresponds to the project root directory.
 
@@ -3888,7 +3914,7 @@ class RecipeSet:
         self.__addRecipe(self.__rootRecipe)
 
     @classmethod
-    def loadConfigYaml(cls, loadYaml, rootDir):
+    def loadConfigYaml(cls, loadYaml, rootDir, upperLayerConfig = LayersConfig()):
         configYaml = os.path.join(rootDir, "config.yaml")
         def preValidate(data):
             if not isinstance(data, dict):
@@ -3909,12 +3935,12 @@ class RecipeSet:
         if compareVersion(minVer, "0.16") < 0:
             raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
 
-        return ret
+        return (ret, upperLayerConfig.derive(ret))
 
     @classmethod
-    def loadLayersConfigYaml(cls, loadYaml, fileName):
+    def loadLayersConfigYaml(cls, loadYaml, fileName, upperLayerConfig):
         configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
-        return loadYaml(fileName, configSchema)
+        return upperLayerConfig.derive(loadYaml(fileName, configSchema))
 
     @classmethod
     def calculatePolicies(cls, config):
@@ -3961,7 +3987,7 @@ class RecipeSet:
         else:
             rootDir = recipesRoot
 
-        config = self.loadConfigYaml(self.loadYaml, rootDir)
+        config, _ = self.loadConfigYaml(self.loadYaml, rootDir)
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
             if upperLayer:
