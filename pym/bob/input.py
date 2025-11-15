@@ -3275,7 +3275,9 @@ class RecipeSet:
                     'replacement' : str
                 })
             })
-        }])
+        }]),
+        schema.Optional('layersInclude') : [str],
+        schema.Optional('layersRequire') : [str],
     }
 
     STATIC_CONFIG_SCHEMA_SPEC = {
@@ -3935,12 +3937,31 @@ class RecipeSet:
         if compareVersion(minVer, "0.16") < 0:
             raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
 
-        return (ret, upperLayerConfig.derive(ret))
+        layerConfig = cls.__parseLayersConfigYaml(ret, loadYaml, configYaml, upperLayerConfig)
+
+        return (ret, layerConfig)
 
     @classmethod
     def loadLayersConfigYaml(cls, loadYaml, fileName, upperLayerConfig):
         configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
-        return upperLayerConfig.derive(loadYaml(fileName, configSchema))
+        cfg = loadYaml(fileName, configSchema)
+        return cls.__parseLayersConfigYaml(cfg, loadYaml, fileName, upperLayerConfig)
+
+    @classmethod
+    def __parseLayersConfigYaml(cls, cfg, loadYaml, fileName, upperLayerConfig):
+        ret = upperLayerConfig
+
+        for p in reversed(cfg.get("layersInclude", [])):
+            p = os.path.join(os.path.dirname(fileName), p) + ".yaml"
+            ret = cls.loadLayersConfigYaml(loadYaml, p, ret)
+
+        for p in reversed(cfg.get("layersRequire", [])):
+            p = os.path.join(os.path.dirname(fileName), p) + ".yaml"
+            if not os.path.isfile(p):
+                raise ParseError(f"Include file '{p}' (required by '{fileName}') does not exist!")
+            ret = cls.loadLayersConfigYaml(loadYaml, p, ret)
+
+        return ret.derive(cfg)
 
     @classmethod
     def calculatePolicies(cls, config):
