@@ -2262,10 +2262,32 @@ layer checkouts are controlled by ``layersWhitelist`` and
 ``layersScmOverrides``. These settings can be optionally overridden from the
 command line by passing a layers configuration file with the ``-lc`` option.
 
-layersWhitelist
-~~~~~~~~~~~~~~~
+layers{Include,Require}
+~~~~~~~~~~~~~~~~~~~~~~~
 
-Whitelist for layers update only. See :ref:`configuration-config-whitelist`.
+Project configuration files may optionally include *layer configuration files*.
+Such layer configuration files are included relative to the currently processed
+file. They only support a subset of the project configuration file keys,
+namely ``layersInclude``, ``layersRequire``, ``layersScmOverrides`` and
+``layersWhitelist``.
+
+The settings of the included files have a higher precedence than the current
+file. Included files (``layersInclude``) do not need to exist and are silently
+ignored if missing. Includes are specified without the ``.yaml`` extension::
+
+    layersInclude:
+        - overrides
+
+Project/layer configuration files may also require specific files to be
+included. The ``layersRequire`` keyword behaves just like the ``layersInclude``
+keyword with the exception that Bob raises a parsing error if the file to be
+included cannot be found::
+
+     layersRequire:
+        - overrides
+        - /path/to/some/file
+
+Required include files have a lower precedence than optional include files.
 
 .. _configuration-config-layersScmOverrides:
 
@@ -2274,6 +2296,21 @@ layersScmOverrides
 
 :ref:`configuration-config-scmOverrides` used by layers checkout / update.
 Conditional overrides are not supported.
+
+layersWhitelist
+~~~~~~~~~~~~~~~
+
+Type: List of strings
+
+Whitelist of envrionment variables for layers update (:ref:`manpage-layers`).
+Each key in the list names an environment variable that is passed-through to
+the tool (e.g. git) that updates layers. A typical use case is
+``SSH_AGENT_PID`` and ``SSH_AUTH_SOCK`` to allow authentication even with
+password protected SSH keys::
+
+    layersWhitelist: [SSH_AGENT_PID, SSH_AUTH_SOCK]
+
+See :ref:`configuration-config-whitelist`.
 
 .. _configuration-config-plugins:
 
