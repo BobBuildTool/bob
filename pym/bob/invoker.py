@@ -74,6 +74,30 @@ class LogWriteProtocol(asyncio.SubprocessProtocol):
             for f in self.__stdErr: f.write(data)
 
 
+__sandboxHelperPath = None
+
+def getSandboxHelperPath():
+    global __sandboxHelperPath
+    if __sandboxHelperPath is None:
+        # If Bob is run from the source directly we have to make sure that
+        # the sandbox helper is up-to-date and use it from there. Otherwise
+        # we assume that Bob is properly installed and that
+        # bob-namespace-sandbox is in $PATH.
+        try:
+            from .develop.make import makeSandboxHelper
+            sandboxHelper = makeSandboxHelper()
+        except ImportError:
+            # Determine absolute path here. We set $PATH when running in
+            # the sandbox so we might not find it anymore.
+            sandboxHelper = shutil.which("bob-namespace-sandbox")
+            if sandboxHelper is None:
+                raise BuildError("Could not find bob-namespace-sandbox in $PATH! Please check your Bob installation.")
+
+        __sandboxHelperPath = sandboxHelper
+
+    return __sandboxHelperPath
+
+
 class InvocationMode(Enum):
     CALL = 'call'
     SHELL = 'shell'
@@ -152,26 +176,6 @@ class Invoker:
             self.__logFile = DEVNULL
         except OSError as e:
             self.error("Cannot close log file:", str(e))
-
-    def __getSandboxHelperPath(self):
-        if self.__sandboxHelperPath is None:
-            # If Bob is run from the source directly we have to make sure that
-            # the sandbox helper is up-to-date and use it from there. Otherwise
-            # we assume that Bob is properly installed and that
-            # bob-namespace-sandbox is in $PATH.
-            try:
-                from .develop.make import makeSandboxHelper
-                sandboxHelper = makeSandboxHelper()
-            except ImportError:
-                # Determine absolute path here. We set $PATH when running in
-                # the sandbox so we might not find it anymore.
-                sandboxHelper = shutil.which("bob-namespace-sandbox")
-                if sandboxHelper is None:
-                    raise BuildError("Could not find bob-namespace-sandbox in $PATH! Please check your Bob installation.")
-
-            self.__sandboxHelperPath = sandboxHelper
-
-        return self.__sandboxHelperPath
 
     async def __runCommand(self, args, cwd, stdout=None, stderr=None,
                            check=False, env=None, universal_newlines=True,
@@ -277,7 +281,7 @@ class Invoker:
         if sys.platform != "linux":
             self.fail("Sandbox builds are only supported on Linux!")
 
-        cmdArgs = [ self.__getSandboxHelperPath() ]
+        cmdArgs = [ getSandboxHelperPath() ]
         #FIXME: if verbosity >= 4: cmdArgs.append('-D')
         cmdArgs.extend(["-S", tmpDir])
         cmdArgs.extend(["-H", "bob"])
@@ -318,7 +322,7 @@ class Invoker:
         whiteoutTmpDir = os.path.join(tmpDir, "whiteout")
         os.mkdir(whiteoutTmpDir)
 
-        cmdArgs = [ self.__getSandboxHelperPath() ]
+        cmdArgs = [ getSandboxHelperPath() ]
         cmdArgs.extend(["-S", sandboxTmpDir])
         cmdArgs.append("-i")
         cmdArgs.extend(["-d", "/tmp"])
@@ -333,6 +337,23 @@ class Invoker:
         cmdArgs.extend(["-M", whiteoutTmpDir, "-w", os.getcwd()])
 
         return cmdArgs
+
+    @staticmethod
+    def ensureSandboxUsable():
+        if sys.platform != "linux":
+            self.fail("Sandbox builds are only supported on Linux!")
+
+        try:
+            ret = subprocess.run([getSandboxHelperPath(), "-C"], stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL).returncode
+            if ret != 0:
+                raise BuildError("Your system does not support unprivileged containers! You need to build without sandbox (--no-sandbox).",
+                                 help="Make sure /proc/sys/kernel/unprivileged_userns_clone is 1."
+                                      " In case you use Docker, consider using the 'unconfined' seccomp profile."
+                                      " See https://bob-build-tool.readthedocs.io/en/latest/installation.html#sandbox-capabilities for more details.",
+                                 returncode=3)
+        except OSError as e:
+            raise BuildError("Error executing sandbox helper: " + str(e))
 
     async def executeStep(self, mode, workspaceCreated, clean=False, keepSandbox=False):
         # make permissions predictable
