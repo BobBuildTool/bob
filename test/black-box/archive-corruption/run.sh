@@ -1,5 +1,5 @@
 #!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 cleanup
 
 # Test that corruptions of binary artifacts are detected...

@@ -118,8 +118,8 @@ unset "${!GIT_@}"
 umask 022
 
 # move to root directory
-cd "${0%/*}/.."
-. ./test/test-lib.sh
+. "${0%/*}/test-lib.sh" ".."
+cd ..
 export PATH="$PWD:$PATH"
 
 # determine test environment

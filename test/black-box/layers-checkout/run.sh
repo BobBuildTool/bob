@@ -1,5 +1,5 @@
-#!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+#!/bin/bash -ex
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # Helper to parse the output of 'bob layers ls --format=flat' and grab the
 # commit-IDs from them...
