@@ -3,7 +3,7 @@
 # Check the various inline upgrade options of git. Will also provoke failures
 # to verify that the attic mode is still triggered.
 #
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 git_dir1=$(mktemp -d)
 git_dir2=$(mktemp -d)
