@@ -6,6 +6,8 @@ directory. To build outside of the project directory, the build-tree must first
 be initialized with :ref:`bob init <manpage-bob-init>`. Any number of build
 trees may refer to the same project. Inside the external build-tree, there may
 be a dedicated ``default.yaml``, overriding settings from the project.
+Likewise, there can be a dedicated *layer configuration* ``config.yaml`` file
+in the external build-tree.
 
 By default, managed layers are updated by the command before the build, unless
 the ``--build-only`` option is given.
