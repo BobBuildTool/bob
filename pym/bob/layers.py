@@ -160,8 +160,15 @@ class Layer:
         return self.__name
 
     def parse(self, yamlCache):
-        projectConfig, layerConfig = RecipeSet.loadConfigYaml(yamlCache.loadYaml, self.__layerDir, self.__upperConfig)
-        if self.__name == "":
+        isRootLayer = self.__name == ""
+        layerConfig = self.__upperConfig
+
+        # Parse optional out-of-tree build config.yaml
+        if self.__projectRoot and isRootLayer and os.path.exists("config.yaml"):
+            layerConfig = RecipeSet.loadLayersConfigYaml(yamlCache.loadYaml, "config.yaml", layerConfig)
+
+        projectConfig, layerConfig = RecipeSet.loadConfigYaml(yamlCache.loadYaml, self.__layerDir, layerConfig)
+        if isRootLayer:
             # Policies are determined by the root layer only
             self.__policies = RecipeSet.calculatePolicies(projectConfig)
 
@@ -203,7 +210,7 @@ class Layers:
         self.__defines = defines
         self.__layerConfigFiles = []
 
-        self.__projectRoot = os.getcwd()
+        self.__projectRoot = ""
         if os.path.isfile(".bob-project"):
             try:
                 with open(".bob-project") as f:
