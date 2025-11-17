@@ -9,6 +9,7 @@ from ...errors import BuildError
 from ...input import RecipeSet
 from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
     RecipeSetIR
+from ...invoker import Invoker
 from ...layers import updateLayers
 from ...share import getShare
 from ...tty import setVerbosity, setTui, Warn
@@ -351,6 +352,9 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 # automatically include provided deps when exporting
                 build_provided = (args.destination and args.build_provided == None) or args.build_provided
                 if build_provided: providedBacklog.extend(packageStep._getProvidedDeps())
+
+        if sandboxMode.mode != "no":
+            Invoker.ensureSandboxUsable()
 
         success = runHook(recipes, 'preBuildHook',
             ["/".join(p.getPackage().getStack()) for p in backlog])

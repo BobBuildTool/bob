@@ -44,6 +44,9 @@ def doInvoke(argv, bobRoot):
     except OSError as e:
         raise BuildError("Error reading spec: " + str(e))
 
+    if spec.hasSandbox:
+        Invoker.ensureSandboxUsable()
+
     # Let's do it...
     with EventLoopWrapper() as (loop, executor):
         if args.mode == 'shell':
