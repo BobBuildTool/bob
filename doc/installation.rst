@@ -183,12 +183,18 @@ environment. Check if ::
    $ cat /proc/sys/kernel/unprivileged_userns_clone
    1
 
-yields "1". If the file exists and the setting is 0 you will get an "operation
+yields "1". If the file exists and the setting is 0, you will get an "operation
 not permitted" error when building. Add the line ::
 
    kernel.unprivileged_userns_clone = 1
 
 to your ``/etc/sysctl.conf`` (or wherever your distro stores that).
+
+If you are using Docker, you must relax the security settings as they block
+nested containers by default. Adding ``--security-opt seccomp=unconfined
+--security-opt apparmor=unconfined`` to the ``docker run`` command should
+provide enough privileges inside the container to use Bob's sandbox
+capabilities.
 
 .. _installation-windows:
 
