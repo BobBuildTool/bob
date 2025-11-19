@@ -288,7 +288,7 @@ elif [[ ${RUN_JOBS:-} != 1 ]] ; then
 	# buffering.  This prevents the output from being interleaced.
 	echo "${RUN_TEST_NAMES[@]}" \
 		| xargs -P ${RUN_JOBS:-$(nproc)} -n 1 \
-			bash -c 'run_test "$@" | stdbuf -oL sed -e ""' bash \
+			bash -o pipefail -c 'run_test "$@" | stdbuf -oL sed -e ""' bash \
 		|| : $((FAILED+=$?))
 else
 	for i in "${RUN_TEST_NAMES[@]}" ; do
