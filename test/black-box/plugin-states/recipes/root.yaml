@@ -1,14 +1,42 @@
 root: True
 
+environment:
+    PRE_NUM_CHILDREN: "$(numChildren)"
+    PRE_USED_CHILDREN: "$(usedChildren)"
+    PRE_SKIPPED_CHILDREN: "$(skippedChildren)"
+
 depends:
-  - lib1
-  - lib2
+  - name: lib1
+    use: [result, CountChildren]
+    environment:
+        PARENT_CHILDREN: "$(usedChildren):$(skippedChildren)"
+  - name: lib2
+    use: [result]
+    environment:
+        PARENT_CHILDREN: "$(usedChildren):$(skippedChildren)"
+
+privateEnvironment:
+    POST_NUM_CHILDREN: "$(numChildren)"
+    POST_USED_CHILDREN: "$(usedChildren)"
+    POST_SKIPPED_CHILDREN: "$(skippedChildren)"
 
 buildScript: |
   true
 
+packageVars:
+    - PRE_NUM_CHILDREN
+    - PRE_USED_CHILDREN
+    - PRE_SKIPPED_CHILDREN
+    - POST_NUM_CHILDREN
+    - POST_USED_CHILDREN
+    - POST_SKIPPED_CHILDREN
 packageScript: |
-  true
+    test $PRE_NUM_CHILDREN      -eq 0
+    test $PRE_USED_CHILDREN     -eq 0
+    test $PRE_SKIPPED_CHILDREN  -eq 0
+    test $POST_NUM_CHILDREN     -eq 2
+    test $POST_USED_CHILDREN    -eq 1
+    test $POST_SKIPPED_CHILDREN -eq 1
 
 # set two different "Platform" properties that are inherited
 multiPackage:

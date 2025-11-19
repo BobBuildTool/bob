@@ -1,3 +1,5 @@
+privateEnvironment:
+    NUM_CHILDREN: "$(numChildren)"
 # set property for special checkout subdirectory
 CheckoutDir: "special"
 checkoutVars: [PLATFORM]
@@ -5,5 +7,8 @@ checkoutScript: |
   echo "lib1 $PLATFORM"
 buildScript: |
   true
+packageVars: [NUM_CHILDREN, PARENT_CHILDREN]
 packageScript: |
+  test "$NUM_CHILDREN" -eq 0
+  test "$PARENT_CHILDREN" = "0:0"
   true

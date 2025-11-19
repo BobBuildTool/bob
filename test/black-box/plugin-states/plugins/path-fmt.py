@@ -59,7 +59,7 @@ class StringProperty(PluginProperty):
 
 
 manifest = {
-    'apiVersion' : "0.20",
+    'apiVersion' : "1.1",
     'hooks' : {
         'releaseNameFormatter' : releaseFormatter,
         'developNameFormatter' : developFormatter,
