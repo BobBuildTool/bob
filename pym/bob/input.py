@@ -265,6 +265,17 @@ class PluginState:
         """
         pass
 
+    def onSkip(self, downstream):
+        """Do not use provided state of downstream package.
+
+        This method is called if the name of the state tracker is missing in
+        the ``use`` clause of the dependency. The default implementation does
+        nothing.
+
+        :param bob.input.PluginState downstream: State of downstream package
+        """
+        pass
+
     def onFinish(self, env, properties):
         """Finish creation of a package.
 
@@ -2573,6 +2584,9 @@ class Recipe(object):
                 if n in dep.use:
                     s.onUse(depCoreStep.corePackage.states[n])
                     if dep.provideGlobal: depStates[n].onUse(depCoreStep.corePackage.states[n])
+                else:
+                    s.onSkip(depCoreStep.corePackage.states[n])
+                    if dep.provideGlobal: depStates[n].onSkip(depCoreStep.corePackage.states[n])
             if dep.useDeps:
                 indirectPackages.extend(
                     CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox)
