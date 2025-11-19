@@ -461,7 +461,8 @@ class StringLiteral(BaseASTNode):
                 "package" : pkg,
                 "recipe" : pkg.getRecipe(),
                 "sandbox" : (pkg._getSandboxRaw() or sandboxSentinel).isEnabled(),
-                "__tools" : pkgStep.getTools()
+                "__tools" : pkgStep.getTools(),
+                "states" : pkg.getPluginStates(),
             })
             env.setFuns(self.stringFunctions)
             return env.substitute(self.literal, self.literal, False)

@@ -2463,6 +2463,7 @@ class Recipe(object):
         diffTools = { }
 
         # make copies because we will modify them
+        states = { n : s.copy() for (n,s) in inputStates.items() }
         sandbox = inputSandbox
         inputTools = inputTools.copy()
         inputTools.touchReset()
@@ -2470,11 +2471,10 @@ class Recipe(object):
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
         inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-            "__tools" : tools })
+            "__tools" : tools, "states" : states })
         env = inputEnv.derive()
         for i in self.__varSelf:
             env.update(env.substituteCondDict(i, "environment"))
-        states = { n : s.copy() for (n,s) in inputStates.items() }
 
         # update plugin states
         for s in states.values(): s.onEnter(env, self.__properties)
@@ -2498,7 +2498,7 @@ class Recipe(object):
 
         for dep in self.__deps:
             env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-                "__tools" : tools })
+                "__tools" : tools, "states" : states })
 
             skip = dep.condition and not all(env.evaluate(cond, "dependency "+dep.recipe)
                                                           for cond in dep.condition)
@@ -2657,7 +2657,7 @@ class Recipe(object):
         # Calculate used tools. They are conditional.
         toolsView = tools.inspect()
         env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-            "__tools" : tools })
+            "__tools" : tools, "states" : states })
 
         toolDepCheckout = set(name for (name, cond) in self.__toolDepCheckout
                               if env.evaluate(cond, "checkoutTools"))
@@ -3868,11 +3868,12 @@ class RecipeSet:
 
         # resolve recipes and their classes
         rootRecipes = []
+        states = { n:s() for (n,s) in self.__states.items() }
         for recipe in self.__recipes.values():
             try:
                 recipeEnv = env.copy()
                 recipeEnv.setFunArgs({ "recipe" : recipe, "sandbox" : False,
-                    "__tools" : {} })
+                    "__tools" : {}, "states" : states })
                 recipe.resolveClasses(recipeEnv)
             except ParseError as e:
                 e.pushFrame(recipe.getPackageName())
