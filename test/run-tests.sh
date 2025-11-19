@@ -45,10 +45,10 @@ run_test()
 			pushd unit > /dev/null
 			[[ "${VERBOSE+true}" ]] || echo -n "  [unit]        $test_name ... "
 			if $RUN_PYTHON3_COV -m unittest -v $test_name 2>&1 | tee -a "$LOGFILE" | print_verbose ; then
-				[[ ${VERBOSE+true} ]] && echo "$test_name: ok" || echo "ok"
+				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok" || echo "ok"
 				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
-				echo "$test_name: FAIL"
+				echo "$test_name: finished: FAIL"
 				ret=1
 			else
 				echo "FAIL (log follows...)"
@@ -69,12 +69,12 @@ run_test()
 
 			ret=$?
 			if [[ $ret -eq 0 ]] ; then
-				[[ ${VERBOSE+true} ]] && echo "$test_name: ok" || echo "ok"
+				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok" || echo "ok"
 			elif [[ $ret -eq 240 ]] ; then
-				[[ "${VERBOSE+true}" ]] && echo "$test_name: skipped" || echo "skipped"
+				[[ "${VERBOSE+true}" ]] && echo "$test_name: finished: skipped" || echo "skipped"
 				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
-				echo "$test_name: FAIL (exit $ret)"
+				echo "$test_name: finished: FAIL (exit $ret)"
 				ret=1
 			else
 				echo "FAIL (exit $ret, log follows...)"
@@ -87,10 +87,10 @@ run_test()
 			pushd integration/$test_name > /dev/null
 			[[ "${VERBOSE+true}" ]] || echo -n "  [integration] $test_name ... "
 			if $RUN_PYTHON3 run.py 2>&1 | tee -a "$LOGFILE" | print_verbose ; then
-				[[ ${VERBOSE+true} ]] && echo "$test_name: ok" || echo "ok"
+				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok" || echo "ok"
 				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
-				echo "$test_name: FAIL"
+				echo "$test_name: finished: FAIL"
 				ret=1
 			else
 				echo "FAIL (log follows...)"
