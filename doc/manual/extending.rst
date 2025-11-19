@@ -164,6 +164,9 @@ passed:
 * ``recipe``: the current :class:`bob.input.Recipe`
 * ``sandbox``: ``True`` if a sandbox *image* is used. ``False`` if no sandbox image was
   configured or if it is disabled (e.g. ``--no-sandbox`` option was specified).
+* ``states``: a Mapping[str, :class:`bob.input.PluginState`] which holds the
+  state of all *property state tracker* objects. See `Custom recipe properties`_
+  below.
 
 In the future additional keyword args may be added without notice. Such string
 functions should therefore have a catch-all ``**kwargs`` parameter. A sample implementation
