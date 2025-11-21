@@ -341,7 +341,11 @@ class Invoker:
     @staticmethod
     def ensureSandboxUsable():
         if sys.platform != "linux":
-            self.fail("Sandbox builds are only supported on Linux!")
+            # We just ignore the problem. On Windows the user will get a proper
+            # error message when the step is executed. Worse, the sandbox is
+            # always enabled on "bob build" which would trigger a false alarm
+            # here...
+            return
 
         try:
             ret = subprocess.run([getSandboxHelperPath(), "-C"], stdout=subprocess.DEVNULL,

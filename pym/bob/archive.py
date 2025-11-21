@@ -49,12 +49,12 @@ BUILDID_SUFFIX = ".buildid"
 FINGERPRINT_SUFFIX = ".fprnt"
 
 SOFT_DOWNLOAD_ERRORS = {
-    'ECONNREFUSED', # Connection refused
-    'EHOSTDOWN',    # Host is down
-    'EHOSTUNREACH', # No route to host
-    'ENETDOWN',     # Network is down
-    'ENETUNREACH',  # Network is unreachable
-    'ETIMEDOUT',    # Connection timed out
+    errno.ECONNREFUSED, # Connection refused
+    errno.EHOSTDOWN,    # Host is down
+    errno.EHOSTUNREACH, # No route to host
+    errno.ENETDOWN,     # Network is down
+    errno.ENETUNREACH,  # Network is unreachable
+    errno.ETIMEDOUT,    # Connection timed out
 }
 
 
@@ -463,7 +463,7 @@ class BaseArchive(TarHelper):
             else:
                 break
 
-        if self.__ignoreDownloadErrors and errno.errorcode[err.errno] in SOFT_DOWNLOAD_ERRORS:
+        if self.__ignoreDownloadErrors and err.errno in SOFT_DOWNLOAD_ERRORS:
             return (softerror_return, self._namedErrorString(os.strerror(err.errno)), WARNING)
         raise BuildError(self._namedErrorString(message + ": " + str(err)))
 

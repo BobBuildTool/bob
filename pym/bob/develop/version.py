@@ -62,7 +62,7 @@ def getVersion():
 
     if not version:
         # Last fallback. See PEP 440 and adjust accordingly.
-        version = "1.1.dev999+unknown"
+        version = "1.2.dev999+unknown"
 
     return version
 
