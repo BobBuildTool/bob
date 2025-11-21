@@ -1,7 +1,13 @@
+privateEnvironment:
+    NUM_CHILDREN: "$(numChildren)"
+
 checkoutVars: [PLATFORM]
 checkoutScript: |
   echo "lib2 $PLATFORM"
 buildScript: |
   true
+packageVars: [NUM_CHILDREN, PARENT_CHILDREN]
 packageScript: |
+  test "$NUM_CHILDREN" -eq 0
+  test "$PARENT_CHILDREN" = "1:0"
   true

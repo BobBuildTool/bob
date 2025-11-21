@@ -265,6 +265,17 @@ class PluginState:
         """
         pass
 
+    def onSkip(self, downstream):
+        """Do not use provided state of downstream package.
+
+        This method is called if the name of the state tracker is missing in
+        the ``use`` clause of the dependency. The default implementation does
+        nothing.
+
+        :param bob.input.PluginState downstream: State of downstream package
+        """
+        pass
+
     def onFinish(self, env, properties):
         """Finish creation of a package.
 
@@ -2452,6 +2463,7 @@ class Recipe(object):
         diffTools = { }
 
         # make copies because we will modify them
+        states = { n : s.copy() for (n,s) in inputStates.items() }
         sandbox = inputSandbox
         inputTools = inputTools.copy()
         inputTools.touchReset()
@@ -2459,11 +2471,10 @@ class Recipe(object):
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
         inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-            "__tools" : tools })
+            "__tools" : tools, "states" : states })
         env = inputEnv.derive()
         for i in self.__varSelf:
             env.update(env.substituteCondDict(i, "environment"))
-        states = { n : s.copy() for (n,s) in inputStates.items() }
 
         # update plugin states
         for s in states.values(): s.onEnter(env, self.__properties)
@@ -2487,7 +2498,7 @@ class Recipe(object):
 
         for dep in self.__deps:
             env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-                "__tools" : tools })
+                "__tools" : tools, "states" : states })
 
             skip = dep.condition and not all(env.evaluate(cond, "dependency "+dep.recipe)
                                                           for cond in dep.condition)
@@ -2573,6 +2584,9 @@ class Recipe(object):
                 if n in dep.use:
                     s.onUse(depCoreStep.corePackage.states[n])
                     if dep.provideGlobal: depStates[n].onUse(depCoreStep.corePackage.states[n])
+                else:
+                    s.onSkip(depCoreStep.corePackage.states[n])
+                    if dep.provideGlobal: depStates[n].onSkip(depCoreStep.corePackage.states[n])
             if dep.useDeps:
                 indirectPackages.extend(
                     CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox)
@@ -2643,7 +2657,7 @@ class Recipe(object):
         # Calculate used tools. They are conditional.
         toolsView = tools.inspect()
         env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-            "__tools" : tools })
+            "__tools" : tools, "states" : states })
 
         toolDepCheckout = set(name for (name, cond) in self.__toolDepCheckout
                               if env.evaluate(cond, "checkoutTools"))
@@ -3854,11 +3868,12 @@ class RecipeSet:
 
         # resolve recipes and their classes
         rootRecipes = []
+        states = { n:s() for (n,s) in self.__states.items() }
         for recipe in self.__recipes.values():
             try:
                 recipeEnv = env.copy()
                 recipeEnv.setFunArgs({ "recipe" : recipe, "sandbox" : False,
-                    "__tools" : {} })
+                    "__tools" : {}, "states" : states })
                 recipe.resolveClasses(recipeEnv)
             except ParseError as e:
                 e.pushFrame(recipe.getPackageName())
