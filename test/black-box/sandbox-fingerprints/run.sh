@@ -1,5 +1,5 @@
 #!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # Build a fingerprinted artifact inside and outside of a sandbox. The
 # fingerprint script yields the same result. Thus the artifact should be shared

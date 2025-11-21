@@ -1,5 +1,5 @@
 #!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # Run a simple PowerShell recipe. It also uses a minimal sandbox that mounts
 # the full host. Just see if exeuction works even if $PATH is empty in the

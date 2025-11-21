@@ -3,7 +3,7 @@
 #  Litmus test for "url" SCM with files.
 #  Verify that a file name in place of an URL works.
 #
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 cleanup
 
 # Source file. If shell didn't give us an absolute file name, bail out early.

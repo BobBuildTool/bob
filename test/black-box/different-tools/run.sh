@@ -1,5 +1,5 @@
 #!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # This is a regression test. Deeper in the dependency tree (lib2) there is a
 # dependency to a tool (foo). One root recipe defines the tool while the other

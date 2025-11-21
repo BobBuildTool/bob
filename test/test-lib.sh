@@ -1,16 +1,15 @@
 # This file holds common test functions and is sourced by run-tests.sh or the
 # black box tests directly. It is not intended to be executed directly.
 
+cd "$(dirname "$0")"
+
 # Check if already sourced
 if [[ "$(type -t run_bob)" == function ]] ; then
 	return
 fi
 
-if [[ -d "pym/bob" ]] ; then
-	BOB_ROOT="${PWD}"
-elif [[ -d "../../../pym/bob" ]] ; then
-	BOB_ROOT="${PWD}/../../.."
-else
+BOB_ROOT="$PWD/$1"
+if [[ ! -d "$BOB_ROOT/pym/bob" ]] ; then
 	echo "From where are you calling me?" >&2
 	exit 1
 fi
