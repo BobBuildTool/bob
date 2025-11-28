@@ -55,6 +55,7 @@ SOFT_DOWNLOAD_ERRORS = {
     errno.ENETDOWN,     # Network is down
     errno.ENETUNREACH,  # Network is unreachable
     errno.ETIMEDOUT,    # Connection timed out
+    socket.EAI_AGAIN,   # Temp. failure in name resolution
 }
 
 
