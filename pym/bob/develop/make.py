@@ -41,11 +41,15 @@ def makeSandboxHelper():
     inputDate = findYoungest(inputPath)
     if inputDate > resultDate:
         import subprocess
+        import tempfile
         print("Build", resultPath, "...", file=sys.stderr)
         sources = [ os.path.join("src", "namespace-sandbox", s)
             for s in ('namespace-sandbox.c', 'network-tools.c', 'process-tools.c') ]
-        subprocess.run(["cc", "-o", "bin/bob-namespace-sandbox", "-std=c99",
-            "-g"] + sources + ["-lm"], cwd=bobRoot)
+        with tempfile.TemporaryDirectory(dir=os.path.join(bobRoot, "bin")) as tmpdir:
+            tmp = os.path.join(tmpdir, "bob-namespace-sandbox")
+            subprocess.run(["cc", "-o", tmp, "-std=c99", "-g"] + sources + ["-lm"],
+                           cwd=bobRoot, check=True)
+            os.rename(tmp, resultPath)
 
     return resultPath
 
