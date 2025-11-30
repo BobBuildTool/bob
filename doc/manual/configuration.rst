@@ -2904,12 +2904,12 @@ are applied after string substitution. The general syntax looks like the followi
           "${BOB_RECIPE_NAME}" == "foo"
 
 The ``scmOverrides`` key takes a list of one or more override specifications.
-You can select overrides using a ``if`` expression. If ``if`` condition evaluates to true
+You can select overrides using an ``if`` expression. If ``if`` condition evaluates to true,
 the override is first matched via pattens that are in the ``match`` section.
 All entries under ``match`` must be matching for the override to apply. The
 right side of a match entry can use shell globbing patterns.
 
-If an override is matching the actions are then applied in the following order:
+If an override is matching, the actions are then applied in the following order:
 
  * ``del``: The list of attributes that are removed.
  * ``set``: The attributes and their values are taken, overwriting previous values.
@@ -2918,11 +2918,12 @@ If an override is matching the actions are then applied in the following order:
    ``replacement``. Each occurrence of ``pattern`` is replaced by
    ``replacement``.
 
-All overrides values are mangled through :ref:`configuration-principle-subst`. Mangling is
-performed during calculation of the checkoutStep so that the full environment for this step is
+The ``match``, ``del`` and ``set`` values are mangled through
+:ref:`configuration-principle-subst`. Mangling is performed during calculation
+of the affected package so that the full environment of this package is
 available for substitution.
 
-When an override is applied the ``overridden`` property of the SCM is set to
+When an override is applied, the ``overridden`` property of the SCM is set to
 true. This property can be used with the ``matchScm`` function in package
 queries to find packages whose SCM(s) have been overridden.
 
