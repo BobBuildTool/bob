@@ -1,5 +1,5 @@
 #!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # Regression test for #438 to see if jenkins jobs can still be generated even
 # if identical package (prog) is built inside and outside of sandbox in same

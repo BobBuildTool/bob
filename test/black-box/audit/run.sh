@@ -1,5 +1,5 @@
 #!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # Check that we can build without an audit trail. Such artifacts must not be
 # uploaded. Artifacts that depend on another without audit trail must also not

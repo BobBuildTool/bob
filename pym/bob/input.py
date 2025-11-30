@@ -3182,6 +3182,32 @@ class PositiveValidator:
             raise schema.SchemaError(None, "Int value must not be negative")
         return data
 
+
+class LayersConfig:
+    def __init__(self):
+        self.__platform = getPlatformString()
+        self.__whiteList = getPlatformEnvWhiteList(self.__platform)
+        self.__scmOverrides = []
+
+    def derive(self, config):
+        """Create a new LayersConfig by adding the passed config to this one."""
+        ret = LayersConfig()
+        ret.__whiteList = set(self.__whiteList)
+        ret.__scmOverrides = self.__scmOverrides[:]
+
+        ret.__whiteList.update([c.upper() if self.__platform == "win32" else c
+            for c in config.get("layersWhitelist", []) ])
+        ret.__scmOverrides[0:0] = [ ScmOverride(o) for o in config.get("layersScmOverrides", []) ]
+
+        return ret
+
+    def envWhiteList(self):
+        return self.__whiteList
+
+    def scmOverrides(self):
+        return self.__scmOverrides
+
+
 class RecipeSet:
     """The RecipeSet corresponds to the project root directory.
 
@@ -3249,7 +3275,9 @@ class RecipeSet:
                     'replacement' : str
                 })
             })
-        }])
+        }]),
+        schema.Optional('layersInclude') : [str],
+        schema.Optional('layersRequire') : [str],
     }
 
     STATIC_CONFIG_SCHEMA_SPEC = {
@@ -3888,7 +3916,7 @@ class RecipeSet:
         self.__addRecipe(self.__rootRecipe)
 
     @classmethod
-    def loadConfigYaml(cls, loadYaml, rootDir):
+    def loadConfigYaml(cls, loadYaml, rootDir, upperLayerConfig = LayersConfig()):
         configYaml = os.path.join(rootDir, "config.yaml")
         def preValidate(data):
             if not isinstance(data, dict):
@@ -3909,7 +3937,31 @@ class RecipeSet:
         if compareVersion(minVer, "0.16") < 0:
             raise ParseError("Projects before bobMinimumVersion 0.16 are not supported!")
 
-        return ret
+        layerConfig = cls.__parseLayersConfigYaml(ret, loadYaml, configYaml, upperLayerConfig)
+
+        return (ret, layerConfig)
+
+    @classmethod
+    def loadLayersConfigYaml(cls, loadYaml, fileName, upperLayerConfig):
+        configSchema = (schema.Schema(RecipeSet.STATIC_CONFIG_LAYER_SPEC), b'')
+        cfg = loadYaml(fileName, configSchema)
+        return cls.__parseLayersConfigYaml(cfg, loadYaml, fileName, upperLayerConfig)
+
+    @classmethod
+    def __parseLayersConfigYaml(cls, cfg, loadYaml, fileName, upperLayerConfig):
+        ret = upperLayerConfig
+
+        for p in reversed(cfg.get("layersInclude", [])):
+            p = os.path.join(os.path.dirname(fileName), p) + ".yaml"
+            ret = cls.loadLayersConfigYaml(loadYaml, p, ret)
+
+        for p in reversed(cfg.get("layersRequire", [])):
+            p = os.path.join(os.path.dirname(fileName), p) + ".yaml"
+            if not os.path.isfile(p):
+                raise ParseError(f"Include file '{p}' (required by '{fileName}') does not exist!")
+            ret = cls.loadLayersConfigYaml(loadYaml, p, ret)
+
+        return ret.derive(cfg)
 
     @classmethod
     def calculatePolicies(cls, config):
@@ -3956,7 +4008,7 @@ class RecipeSet:
         else:
             rootDir = recipesRoot
 
-        config = self.loadConfigYaml(self.loadYaml, rootDir)
+        config, _ = self.loadConfigYaml(self.loadYaml, rootDir)
         minVer = config.get("bobMinimumVersion", "0.16")
         if compareVersion(maxVer, minVer) < 0:
             if upperLayer:

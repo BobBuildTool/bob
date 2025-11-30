@@ -3,7 +3,7 @@
 # Verify that digests can be added/removed/modified without re-downloading a
 # file.
 #
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 cleanup
 
 tempdir=$(mktemp -d)

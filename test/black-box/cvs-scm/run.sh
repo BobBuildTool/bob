@@ -2,7 +2,7 @@
 #
 #  Quick functionality test for CVS
 #
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # FIXME: does not really work on native windows
 if is_win32 ; then

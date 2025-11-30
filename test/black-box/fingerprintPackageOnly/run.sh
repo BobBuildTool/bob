@@ -1,5 +1,5 @@
 #!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # If the fingerprinting is enabled by a tool that is only used in the package
 # step then the build step must not be fingerprinted. Make sure that the

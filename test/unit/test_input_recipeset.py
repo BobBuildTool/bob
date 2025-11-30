@@ -11,8 +11,9 @@ import textwrap
 import yaml
 
 from bob import DEBUG
-from bob.input import RecipeSet
+from bob.input import RecipeSet, YamlCache, LayersConfig
 from bob.errors import ParseError, BobError
+from bob.scm import ScmOverride
 from bob.utils import runInEventLoop
 
 from mocks.intermediate import MockIR, MockIRStep
@@ -2492,3 +2493,125 @@ class TestPlugins(RecipesTmp, TestCase):
         # Make sure the plugin is called instead of the internal implementation.
         self.assertEqual(p.getPackageStep().getEnv(),
                          {"VAR1" : "plugin called", "VAR2" : "custom called"})
+
+class TestLayersConfig(RecipesTmp, TestCase):
+    """Test parsing of layer configuration files"""
+
+    def testInclude(self):
+        """Test parsing config.yaml including a layer configuration file"""
+        with open("config.yaml", "w") as f:
+            f.write("layersInclude:\n")
+            f.write("    - user\n")
+        with open("user.yaml", "w") as f:
+            f.write("layersWhitelist: [FOO]\n")
+
+        with YamlCache() as yamlCache:
+            _, cfg = RecipeSet.loadConfigYaml(yamlCache.loadYaml, ".")
+
+        self.assertIn("FOO", cfg.envWhiteList())
+
+    def testIncludeMissing(self):
+        """A missing layer configuration file is ignored"""
+        with open("config.yaml", "w") as f:
+            f.write("layersInclude:\n")
+            f.write("    - user\n")
+
+        with YamlCache() as yamlCache:
+            _, cfg = RecipeSet.loadConfigYaml(yamlCache.loadYaml, ".")
+
+    def testRequire(self):
+        """Test parsing config.yaml requiring another file"""
+        with open("config.yaml", "w") as f:
+            f.write("layersRequire:\n")
+            f.write("    - user\n")
+        with open("user.yaml", "w") as f:
+            f.write("layersWhitelist: [FOO]\n")
+
+        with YamlCache() as yamlCache:
+            _, cfg = RecipeSet.loadConfigYaml(yamlCache.loadYaml, ".")
+
+        self.assertIn("FOO", cfg.envWhiteList())
+
+    def testRequireMissing(self):
+        """Missing required includes throw an error"""
+        with open("config.yaml", "w") as f:
+            f.write("layersRequire:\n")
+            f.write("    - user\n")
+
+        with self.assertRaises(ParseError):
+            with YamlCache() as yamlCache:
+                RecipeSet.loadConfigYaml(yamlCache.loadYaml, ".")
+
+    def testInvalidKeys(self):
+        """Layer configuration files only support a subset of keys"""
+        with open("layerconfig.yaml", "w") as f:
+            f.write('bobMinimumVersion: "1.0"\n')
+
+        with self.assertRaises(ParseError):
+            with YamlCache() as yamlCache:
+                RecipeSet.loadLayersConfigYaml(yamlCache.loadYaml, "layerconfig.yaml", LayersConfig())
+
+    def testPrecedence(self):
+        """Included files have a higher precedence than required files"""
+
+        with open("config.yaml", "w") as f:
+            f.write(textwrap.dedent("""\
+                layersRequire:
+                    - require_l1
+                layersInclude:
+                    - include_l1
+                layersScmOverrides:
+                    - set:
+                        url: root
+                layersWhitelist: [ROOT]
+                """))
+        with open("require_l1.yaml", "w") as f:
+            f.write(textwrap.dedent("""\
+                layersInclude:
+                    - require_l2
+                layersScmOverrides:
+                    - set:
+                        url: require_l1
+                layersWhitelist: [REQUIRE_L1]
+                """))
+
+        with open("require_l2.yaml", "w") as f:
+            f.write(textwrap.dedent("""\
+                layersScmOverrides:
+                    - set:
+                        url: require_l2
+                layersWhitelist: [REQUIRE_L2]
+                """))
+        with open("include_l1.yaml", "w") as f:
+            f.write(textwrap.dedent("""\
+                layersRequire:
+                    - include_l2
+                layersScmOverrides:
+                    - set:
+                        url: include_l1
+                layersWhitelist: [INCLUDE_L1]
+                """))
+
+        with open("include_l2.yaml", "w") as f:
+            f.write(textwrap.dedent("""\
+                layersScmOverrides:
+                    - set:
+                        url: include_l2
+                layersWhitelist: [INCLUDE_L2]
+                """))
+
+        with YamlCache() as yamlCache:
+            _, cfg = RecipeSet.loadConfigYaml(yamlCache.loadYaml, ".")
+
+        self.assertIn("ROOT", cfg.envWhiteList())
+        self.assertIn("REQUIRE_L1", cfg.envWhiteList())
+        self.assertIn("REQUIRE_L2", cfg.envWhiteList())
+        self.assertIn("INCLUDE_L1", cfg.envWhiteList())
+        self.assertIn("INCLUDE_L2", cfg.envWhiteList())
+
+        self.assertEqual([ ScmOverride({ "set" : { "url" : "root" }}),
+                           ScmOverride({ "set" : { "url" : "require_l1" }}),
+                           ScmOverride({ "set" : { "url" : "require_l2" }}),
+                           ScmOverride({ "set" : { "url" : "include_l1" }}),
+                           ScmOverride({ "set" : { "url" : "include_l2" }}) ],
+                         cfg.scmOverrides())

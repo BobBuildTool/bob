@@ -69,13 +69,16 @@ Options
 ``-lc LAYERCONFIG``
     Use additional layer configuration file.
 
-    This is special kind of configuration file to control the layers checkout. Only
-    ``layersWhitelist`` and ``layersScmOverrides`` are supported.
+    This configuration file is used to control the layers checkout. It support
+    only a subset of the :ref:`configuration-config` file keys, namely
+    ``layersInclude``, ``layersRequire``, ``layersScmOverrides`` and
+    ``layersWhitelist``
 
     The ``.yaml`` suffix is appended automatically and the configuration file
-    is searched relative to the project root directory unless an absolute path
-    is given. If multiple layer configuration files are passed, all files are
-    parsed. Later files on the command line have higher precedence.
+    is searched relative to the build directory, unless an absolute path is
+    given. This option can be given multiple times. The files will be parsed in
+    the order as they appeared on the command line. Later files on the command
+    line have a higher precedence.
 
 ``-D VAR=VALUE``
     Override default or set environment variable.

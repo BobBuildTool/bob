@@ -2,7 +2,7 @@
 #
 #  Quick functionality test for git
 #
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 dir=$(mktemp -d)
 echo "Using scratch dir: $dir"

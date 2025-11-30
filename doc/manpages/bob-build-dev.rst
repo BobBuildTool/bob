@@ -1,11 +1,16 @@
 Build tree location
 -------------------
 
-The build can be done directly in the project root directory or in a separate
-directory. To build outside of the project directory the build-tree must first
+The build can be done directly in the project root directory or in a separate build
+directory. To build outside of the project directory, the build-tree must first
 be initialized with :ref:`bob init <manpage-bob-init>`. Any number of build
-trees may refer to the same project. Inside the external build-tree there may
+trees may refer to the same project. Inside the external build-tree, there may
 be a dedicated ``default.yaml``, overriding settings from the project.
+Likewise, there can be a dedicated *layer configuration* ``config.yaml`` file
+in the external build-tree.
+
+By default, managed layers are updated by the command before the build, unless
+the ``--build-only`` option is given.
 
 Sandboxing
 ----------
@@ -247,7 +252,8 @@ Options
     reason.
 
 ``-B, --checkout-only``
-    Don't build, just check out sources
+    Don't build, just check out sources. In case the project uses managed
+    layers, these are updated as well.
 
 ``-D VAR=VALUE``
     Override default or set environment variable.
@@ -281,11 +287,14 @@ Options
     exception is the ``import`` SCM which will still update the workspace even
     if this option is present.
 
+    In case the project uses managed layers, the option additionally prevents
+    the automatic update of these.
+
 ``-c CONFIGFILE``
     Use additional configuration file.
 
     The ``.yaml`` suffix is appended automatically and the configuration file
-    is searched relative to the project root directory unless an absolute path
+    is searched relative to the build directory, unless an absolute path
     is given. Bob will parse these user configuration files after
     *default.yaml*. They are using the same schema.
 
@@ -327,13 +336,16 @@ Options
 ``-lc LAYERCONFIG``
     Use additional layer configuration file.
 
-    This is special kind of configuration file to control the layers checkout. Only
-    ``layersWhitelist`` and ``layersScmOverrides`` are supported. Layers are
-    updated automatically unless ``--build-only`` is given too.
+    This configuration file is used to control the layers checkout. It support
+    only a subset of the :ref:`configuration-config` file keys, namely
+    ``layersInclude``, ``layersRequire``, ``layersScmOverrides`` and
+    ``layersWhitelist``
 
     The ``.yaml`` suffix is appended automatically and the configuration file
-    is searched relative to the project root directory unless an absolute path
-    is given.
+    is searched relative to the build directory, unless an absolute path is
+    given. This option can be given multiple times. The files will be parsed in
+    the order as they appeared on the command line. Later files on the command
+    line have a higher precedence.
 
 ``--no-attic``
     Do not move checkout workspace to attic if inline SCM switching is not possible.

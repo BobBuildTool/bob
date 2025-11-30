@@ -1,5 +1,5 @@
-#!/bin/bash -e
-. ../../test-lib.sh 2>/dev/null || { echo "Must run in script directory!" ; exit 1 ; }
+#!/bin/bash -ex
+source "$(dirname "$0")/../../test-lib.sh" "../../.."
 
 # Helper to parse the output of 'bob layers ls --format=flat' and grab the
 # commit-IDs from them...
@@ -25,11 +25,12 @@ parse_layers_list()
 }
 
 tmp_dir=$(mktemp -d)
-mkdir -p "$tmp_dir/"{foo,bar,baz,ext}
+mkdir -p "$tmp_dir/"{foo,bar,baz,ext,build}
 foo_dir="$tmp_dir/foo"
 bar_dir="$tmp_dir/bar"
 baz_dir="$tmp_dir/baz"
 ext_dir="$tmp_dir/ext"
+build_dir="$tmp_dir/build"
 trap 'rm -rf "$tmp_dir" layers layers.attic log-status.txt' EXIT
 cleanup layers layers.attic log-status.txt
 
@@ -232,6 +233,25 @@ old_dir="$tmp_dir/legacy"
 mkdir -p "$old_dir/recipes"
 expect_fail run_bob -C "$old_dir" layers update
 expect_fail run_bob -C "$old_dir" layers status
+
+
+# Build the root recipe out-of-tree. Layer should be fetched automatically.
+run_bob init . "$build_dir"
+run_bob -C "$build_dir" dev root "${OPTS[@]}" -vvv
+
+# An out-of-tree build can have a config.yaml as layer configuration.
+cat >"$build_dir/config.yaml" <<EOF
+layersScmOverrides:
+  -
+    match:
+      url: "file://$(mangle_path "${foo_dir}")"
+    del: [branch, tag, commit]
+    set:
+      branch: "branch_override"
+EOF
+expect_not_exist "$build_dir/layers/foo/override"
+run_bob -C "$build_dir" layers update "${OPTS[@]}" -vv
+expect_exist "$build_dir/layers/foo/override"
 
 # remove layers + clean
 cleanup
