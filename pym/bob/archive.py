@@ -465,7 +465,7 @@ class BaseArchive(TarHelper):
                 break
 
         if self.__ignoreDownloadErrors and err.errno in SOFT_DOWNLOAD_ERRORS:
-            return (softerror_return, self._namedErrorString(os.strerror(err.errno)), WARNING)
+            return (softerror_return, self._namedErrorString(str(err)), WARNING)
         raise BuildError(self._namedErrorString(message + ": " + str(err)))
 
     def _downloadPackage(self, buildId, suffix, audit, content, caches, workspace):
