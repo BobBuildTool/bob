@@ -144,7 +144,7 @@ locally::
 
     preMirrorPrepend:
         scm: url
-        url: "https?://.*/(.*)"
+        url: "https?://(.*)"
         mirror: "~/.cache/bob/mirror/\\1"
         upload: True
     share:
