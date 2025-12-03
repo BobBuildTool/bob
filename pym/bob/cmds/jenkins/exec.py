@@ -223,7 +223,7 @@ def doJenkinsExecuteRun(argv, bobRoot):
     with EventLoopWrapper() as (loop, executor):
         setVerbosity(TRACE)
         builder = LocalBuilder(TRACE, False, False, False, False, envWhiteList,
-                bobRoot, False, True)
+                bobRoot, False, True, False)
         builder.setBuildDistBuildIds(dependencyBuildIds)
         builder.setExecutor(executor)
         builder.setArchiveHandler(getArchiver(

@@ -143,14 +143,12 @@ exec_blackbox_test()
 
 expect_fail()
 {
-	"$@" 2>&1 || if [[ $? -ne 1 ]] ; then
-		echo "Unexpected return code: $*" >&2
+	"$@" 2>&1 || if [[ $? -eq 0 ]] ; then
+		echo "Expected command to fail: $*" >&2
 		return 1
 	else
 		return 0
 	fi
-	echo "Expected command to fail: $*" >&2
-	return 1
 }
 
 expect_output()

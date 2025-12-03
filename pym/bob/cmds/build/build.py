@@ -23,6 +23,7 @@ import subprocess
 import stat
 import sys
 import time
+import tempfile
 
 from .state import DevelopDirOracle
 
@@ -225,6 +226,16 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         help="Move scm to attic if inline switch is not possible (default).")
     group.add_argument('--no-attic', action='store_false', default=None, dest='attic',
         help="Do not move to attic, instead fail the build.")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--bundle', metavar='BUNDLE', default=None,
+        help="Bundle sources to BUNDLE")
+    group.add_argument('--unbundle', metavar='BUNDLE', default=None,
+        help="Prefer sources from BUNDLE.")
+    parser.add_argument('--bundle-exclude', action='append', default=[],
+        help="Do not add matching packages to bundle.")
+    parser.add_argument('--bundle-vcs', default=False, action='store_true',
+        help="Do not strip version control system informations from bundle.")
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -316,15 +327,38 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                                             sandboxMode.stablePaths)
         if develop: developPersister.prime(packages)
 
+        if args.bundle and args.build_mode == 'build-only':
+            parser.error("--bundle can't be used with --build-only")
+
+        bundleSpec = None
+        bundleTemp = None
+        if args.bundle is not None:
+            bundleTemp = tempfile.TemporaryDirectory(dir=os.getcwd(),
+                                            prefix=".bundle")
+            bundleSpec = {"path" : args.bundle,
+                          "mode" : "bundle",
+                          "flags" : ["src-upload"],
+                          "src-upload-vcs" : args.bundle_vcs,
+                          "exclude" : args.bundle_exclude,
+                          "tempdir" : bundleTemp.name}
+            args.always_checkout += ['.*']
+            args.clean_checkout = True
+        if args.unbundle is not None:
+            bundleSpec = {"path" : args.unbundle,
+                          "flags" : ["src-download"],
+                          "mode" : "unbundle"}
+
+
+        archivers = getArchiver(recipes, bundle=bundleSpec)
         verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
         setVerbosity(verbosity)
         builder = LocalBuilder(verbosity, args.force,
                                args.no_deps, True if args.build_mode == 'build-only' else False,
                                args.preserve_env, envWhiteList, bobRoot, args.clean,
-                               args.no_logfiles)
+                               args.no_logfiles, args.unbundle is not None)
 
         builder.setExecutor(executor)
-        builder.setArchiveHandler(getArchiver(recipes))
+        builder.setArchiveHandler(archivers)
         builder.setLocalUploadMode(args.upload)
         builder.setLocalDownloadMode(args.download)
         builder.setLocalDownloadLayerMode(args.download_layer)
@@ -340,6 +374,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setShareMode(args.shared, args.install)
         builder.setAtticEnable(args.attic)
         builder.setSlimSandbox(sandboxMode.slimSandbox)
+
         if args.resume: builder.loadBuildState()
 
         backlog = []
@@ -384,10 +419,14 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         finally:
             if args.jobs > 1: setTui(1)
             builder.saveBuildState()
+            archivers.finish(success)
+            if bundleTemp is not None:
+                bundleTemp.cleanup()
             runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
 
     # tell the user
     if results:
+
         if len(results) == 1:
             print("Build result is in", results[0])
         else:

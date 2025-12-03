@@ -25,15 +25,17 @@ from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
 from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat, removePrefix
 from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
-from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
+from tempfile import mkstemp, NamedTemporaryFile, TemporaryDirectory, TemporaryFile, gettempdir
 import asyncio
 import concurrent.futures
 import concurrent.futures.process
 import errno
 import gzip
 import io
+import re
 import os
 import os.path
+import pathlib
 import shutil
 import signal
 import socket
@@ -42,6 +44,7 @@ import subprocess
 import tarfile
 import urllib.parse
 import hashlib
+import zipfile
 
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
@@ -96,7 +99,13 @@ class DummyArchive:
     def canDownload(self):
         return False
 
+    def canDownloadSrc(self):
+        return False
+
     def canUpload(self):
+        return False
+
+    def canUploadSrc(self, step, freshCheckout=None):
         return False
 
     def canCache(self):
@@ -123,6 +132,9 @@ class DummyArchive:
 
     def getArchiveName(self):
        return "Dummy"
+
+    def finish(self, success):
+        return True
 
 class ArtifactNotFoundError(Exception):
     pass
@@ -195,13 +207,13 @@ class TarHelper:
 
             return Audit.fromByteStream(auditJson, filename)
 
-    def _pack(self, name, fileobj, audit, content):
+    def _pack(self, name, fileobj, audit, content, filter):
         pax = { 'bob-archive-vsn' : "1" }
         with gzip.open(name or fileobj, 'wb', 6) as gzf:
             with tarfileOpen(name, "w", fileobj=gzf,
                              format=tarfile.PAX_FORMAT, pax_headers=pax) as tar:
                 tar.add(audit, "meta/" + os.path.basename(audit))
-                tar.add(content, arcname="content")
+                tar.add(content, arcname="content", filter=filter)
 
 
 class JenkinsArchive(TarHelper):
@@ -225,8 +237,14 @@ class JenkinsArchive(TarHelper):
     def canDownload(self):
         return True
 
+    def canDownloadSrc(self):
+        return False
+
     def canUpload(self):
         return True
+
+    def canUploadSrc(self, step, freshCheckout=None):
+        return False
 
     def canCache(self):
         return True
@@ -264,7 +282,7 @@ class JenkinsArchive(TarHelper):
         # Needed to gracefully handle ctrl+c.
         signal.signal(signal.SIGINT, signal.default_int_handler)
         try:
-            self._pack(name, None, audit, content)
+            self._pack(name, None, audit, content, None)
         except (tarfile.TarError, OSError) as e:
             raise BuildError("Cannot pack artifact: " + str(e))
         finally:
@@ -376,6 +394,9 @@ class BaseArchive(TarHelper):
         self.__wantDownloadJenkins = False
         self.__wantUploadLocal = False
         self.__wantUploadJenkins = False
+        self.__srcUpload = "src-upload" in flags
+        self.__srcDownload = "src-download" in flags
+        self.__srcUploadVCS = spec.get("src-upload-vcs", False)
 
     @property
     def ignoreUploadErrors(self):
@@ -397,15 +418,30 @@ class BaseArchive(TarHelper):
         return self.__useDownload and ((self.__wantDownloadLocal and self.__useLocal) or
                                        (self.__wantDownloadJenkins and self.__useJenkins))
 
+    def canDownloadSrc(self):
+        return self.__srcDownload and ((self.__wantDownloadLocal and self.__useLocal) or
+                 (self.__wantDownloadJenkins and self.__useJenkins))
+
     def canUpload(self):
         return self.__useUpload and ((self.__wantUploadLocal and self.__useLocal) or
                                      (self.__wantUploadJenkins and self.__useJenkins))
+
+    def canUploadSrc(self, step, freshCheckout=None):
+        return (self.__srcUpload and (True if freshCheckout is None else freshCheckout) and
+                ((self.__wantUploadLocal and self.__useLocal) or
+                 (self.__wantUploadJenkins and self.__useJenkins)))
 
     def canCache(self):
         return self.__useCache
 
     def _openDownloadFile(self, buildId, suffix):
         raise ArtifactNotFoundError()
+
+    def _srcUploadVcsFilter(tarinfo):
+        if tarinfo.isdir() and (".git" in tarinfo.name or
+                                ".svn" in tarinfo.name):
+            return None
+        return tarinfo
 
     def canManage(self):
         return self.__managed and self._canManage()
@@ -422,7 +458,8 @@ class BaseArchive(TarHelper):
 
     async def downloadPackage(self, step, buildId, audit, content, caches=[],
                               executor=None):
-        if not self.canDownload():
+        if not ((self.canDownload() and not step.isCheckoutStep()) or (self.canDownloadSrc()
+                and step.isCheckoutStep())):
             return False
 
         loop = asyncio.get_event_loop()
@@ -537,8 +574,13 @@ class BaseArchive(TarHelper):
         raise ArtifactUploadError("not implemented")
 
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
-        if not self.canUpload():
+        if step.isPackageStep() and not self.canUpload() or \
+           step.isCheckoutStep() and not self.canUploadSrc(step):
             return
+
+        if step.isCheckoutStep() and not step.isDeterministic():
+            return
+
         if not audit:
             stepMessage(step, "UPLOAD", "skipped (no audit trail)", SKIPPED,
                 IMPORTANT)
@@ -550,19 +592,20 @@ class BaseArchive(TarHelper):
         with stepAction(step, "UPLOAD", content, details=details) as a:
             try:
                 msg, kind = await loop.run_in_executor(executor, BaseArchive._uploadPackage,
-                    self, buildId, suffix, audit, content)
+                    self, buildId, suffix, audit, content,
+                    (BaseArchive._srcUploadVcsFilter if step.isCheckoutStep() and not self.__srcUploadVCS else None))
                 a.setResult(msg, kind)
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError(self._namedErrorString("Upload of package interrupted."))
 
-    def _uploadPackage(self, buildId, suffix, audit, content):
+    def _uploadPackage(self, buildId, suffix, audit, content, filter):
         # Set default signal handler so that KeyboardInterrupt is raised.
         # Needed to gracefully handle ctrl+c.
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
             with self._openUploadFile(buildId, suffix, False) as (name, fileobj):
-                self._pack(name, fileobj, audit, content)
+                self._pack(name, fileobj, audit, content, filter)
         except (ArtifactExistsError, HttpAlreadyExistsError):
             return (self._namedErrorString("skipped ({} exists in archive)".format(content)), SKIPPED)
         except (ArtifactUploadError, HttpUploadError, tarfile.TarError, OSError) as e:
@@ -698,6 +741,8 @@ class BaseArchive(TarHelper):
     def getArchiveName(self):
        return self.__name
 
+    def finish(self, success):
+        return True
 
 class Tee:
     def __init__(self, fileName, fileObj, buildId, caches, workspace):
@@ -903,6 +948,88 @@ class LocalArchiveUploader:
             os.unlink(self.tmp.name)
         return False
 
+class BundleArchiveDownloader:
+    def __init__(self, bundle, name):
+        self.__bundle = bundle
+        self.__name = name
+
+    def __enter__(self):
+        try:
+            self._zip = zipfile.ZipFile(self.__bundle, mode='r')
+            self.fd = self._zip.open(self.__name)
+        except KeyError as e:
+            raise ArtifactDownloadError(f"{self.__name} not found in {self.__bundle}.")
+        except OSError as e:
+            raise ArtifactDownloadError(str(e))
+        return (None, self.fd)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.fd.close()
+        return False
+
+class BundleArchive(LocalArchive):
+    def __init__(self, spec):
+        self.__file = spec.get("path")
+        self.__mode = spec.get("mode")
+        self.__bundle = self.__mode == "bundle"
+        self.__exclude = spec.get("exclude")
+        spec["flags"] = ["src-upload" if self.__bundle else "src-download"]
+        if self.__bundle:
+            self.__tempdir = spec.get("tempdir")
+            spec["path"] = spec.get("tempdir")
+        super().__init__(spec)
+
+    def canDownload(self):
+        return False
+
+    def canUpload(self):
+        return False
+
+    def canDownloadSrc(self):
+        return not self.__bundle
+
+    def _canUploadSrc(self, step):
+        if self.__exclude is not None:
+            for p in self.__exclude:
+                if re.match(p, step.getPackage().getName()):
+                    return False
+        return self.__bundle
+
+    def canUploadSrc(self, step, freshCheckout=None):
+        return self._canUploadSrc(step)
+
+    def _getZipPath(self, buildId, suffix):
+        packageResultId = buildIdToName(buildId)
+        return "/".join([packageResultId[0:2],
+                         packageResultId[2:4],
+                         packageResultId[4:]]) + suffix
+
+    def _openDownloadFile(self, buildId, suffix):
+        packageResultFile = self._getZipPath(buildId, suffix)
+        return BundleArchiveDownloader(self.__file,
+                                       self._getZipPath(buildId, suffix))
+    def finish(self, success):
+        if not self.__bundle:
+            return True
+        try:
+            if success:
+                print(f"Finalizing bundle: {self.__file}")
+                bundleDir = pathlib.Path(self.__tempdir)
+                with zipfile.ZipFile(self.__file, mode="a") as bundleZip:
+                    names = bundleZip.namelist()
+                    for file_path in bundleDir.rglob("*"):
+                        rpath = str(file_path.relative_to(bundleDir))
+                        if os.path.isdir(file_path):
+                            rpath += os.sep
+                        if rpath in names:
+                            if not os.path.isdir(file_path):
+                               print(f"Not adding {rpath}. Exists in bundle!")
+                            continue
+                        else:
+                            bundleZip.write(file_path,
+                                arcname=rpath)
+        except OSError as e:
+            raise BuildError("Unable to create bundle zip file" + str(e))
 
 class HttpArchive(BaseArchive):
     def __init__(self, spec):
@@ -1273,17 +1400,23 @@ class MultiArchive:
     def canDownload(self):
         return any(i.canDownload() for i in self.__archives)
 
+    def canDownloadSrc(self):
+        return any(i.canDownloadSrc() for i in self.__archives)
+
     def canUpload(self):
         return any(i.canUpload() for i in self.__archives)
 
+    def canUploadSrc(self, step, freshCheckout=None):
+        return any(i.canUploadSrc(step, freshCheckout) for i in self.__archives)
+
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
         for i in self.__archives:
-            if not i.canUpload(): continue
+            if not (i.canUpload() or i.canUploadSrc(step)): continue
             await i.uploadPackage(step, buildId, audit, content, executor=executor)
 
     async def downloadPackage(self, step, buildId, audit, content, executor=None):
         for i in self.__archives:
-            if not i.canDownload(): continue
+            if not (i.canDownload() or i.canDownloadSrc()): continue
             caches = [ a for a in self.__archives if (a is not i) and a.canCache() ]
             if await i.downloadPackage(step, buildId, audit, content, caches, executor):
                 return True
@@ -1315,6 +1448,9 @@ class MultiArchive:
             if ret is not None: break
         return ret
 
+    def finish(self, success):
+        for i in self.__archives:
+            i.finish(success)
 
 def getSingleArchiver(recipes, archiveSpec):
     archiveBackend = archiveSpec.get("backend", "none")
@@ -1330,10 +1466,12 @@ def getSingleArchiver(recipes, archiveSpec):
         return DummyArchive()
     elif archiveBackend == "__jenkins":
         return JenkinsArchive(archiveSpec)
+    elif archiveBackend == "__bundle":
+        return BundleArchive(archiveSpec)
     else:
         raise BuildError("Invalid archive backend: "+archiveBackend)
 
-def getArchiver(recipes, jenkins=None):
+def getArchiver(recipes, jenkins=None, bundle=None):
     archiveSpec = recipes.archiveSpec()
     if jenkins is not None:
         jenkins = jenkins.copy()
@@ -1342,6 +1480,14 @@ def getArchiver(recipes, jenkins=None):
             archiveSpec = [jenkins] + archiveSpec
         else:
             archiveSpec = [jenkins, archiveSpec]
+
+    if bundle is not None and bundle.get("path") is not None:
+        bundle = bundle.copy()
+        bundle["backend"] = "__bundle"
+        if isinstance(archiveSpec, list):
+            archiveSpec = [bundle] + archiveSpec
+        else:
+            archiveSpec = [bundle, archiveSpec]
 
     if isinstance(archiveSpec, list):
         if len(archiveSpec) == 0:

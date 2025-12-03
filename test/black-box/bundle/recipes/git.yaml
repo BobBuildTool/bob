@@ -1,0 +1,9 @@
+checkoutSCM:
+  scm: git
+  url: ${GIT_URL}
+  commit: ${GIT_COMMIT}
+
+buildScript: |
+  cp -r $1/* .
+packageScript: |
+  cp -r $1/* .

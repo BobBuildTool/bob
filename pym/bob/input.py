@@ -3098,7 +3098,8 @@ class ArchiveValidator:
             'backend' : str,
             schema.Optional('name') : str,
             schema.Optional('flags') : schema.Schema(["download", "upload", "managed",
-                "nofail", "nolocal", "nojenkins", "cache", "strictdownload"])
+                "nofail", "nolocal", "nojenkins", "cache", "strictdownload",
+                "src-upload", "src-download"]),
         }
         fileArchive = baseArchive.copy()
         fileArchive["path"] = str

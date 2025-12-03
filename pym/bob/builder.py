@@ -68,9 +68,11 @@ class HashOnce:
 
 CHECKOUT_STATE_VARIANT_ID = None    # Key in checkout directory state for step variant-id
 CHECKOUT_STATE_BUILD_ONLY = 1       # Key for checkout state of build-only builds
+CHECKOUT_STATE_BUNDLE = 2           # Store whether the checkout origin was a bundle or not
 
 # Keys in checkout getDirectoryState that are not directories
-CHECKOUT_NON_DIR_KEYS = {CHECKOUT_STATE_VARIANT_ID, CHECKOUT_STATE_BUILD_ONLY}
+CHECKOUT_NON_DIR_KEYS = {CHECKOUT_STATE_VARIANT_ID, CHECKOUT_STATE_BUILD_ONLY,
+                         CHECKOUT_STATE_BUNDLE}
 
 def compareDirectoryState(left, right):
     """Compare two directory states while ignoring the SCM specs.
@@ -87,6 +89,10 @@ def compareDirectoryState(left, right):
     left  = { d : v[0] for d, v in left.items()  if d != CHECKOUT_STATE_BUILD_ONLY }
     right = { d : v[0] for d, v in right.items() if d != CHECKOUT_STATE_BUILD_ONLY }
     return left == right
+
+def compareBundleState(left, right):
+    _r = right[CHECKOUT_STATE_BUNDLE] if CHECKOUT_STATE_BUNDLE in right else False
+    return left[CHECKOUT_STATE_BUNDLE] == _r
 
 def checkoutsFromState(state):
     """Return only the tuples related to SCMs from the checkout state.
@@ -356,7 +362,7 @@ cd {ROOT}
         return fmt
 
     def __init__(self, verbose, force, skipDeps, buildOnly, preserveEnv,
-                 envWhiteList, bobRoot, cleanBuild, noLogFile):
+                 envWhiteList, bobRoot, cleanBuild, noLogFile, unbundle):
         self.__wasRun= {}
         self.__wasSkipped = {}
         self.__wasDownloadTried = {}
@@ -397,6 +403,7 @@ cd {ROOT}
         self.__executor = None
         self.__attic = True
         self.__slimSandbox = False
+        self.__unbundle = unbundle
 
     def setExecutor(self, executor):
         self.__executor = executor
@@ -1102,6 +1109,7 @@ cd {ROOT}
         checkoutState = checkoutStep.getScmDirectories().copy()
         checkoutState[CHECKOUT_STATE_VARIANT_ID] = (checkoutDigest, None)
         checkoutState[CHECKOUT_STATE_BUILD_ONLY] = checkoutBuildOnlyState(checkoutStep, checkoutInputHashes)
+        checkoutState[CHECKOUT_STATE_BUNDLE] = (self.__unbundle, None)
         currentResultHash = HashOnce(checkoutStep)
         if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
             inputChanged = checkoutBuildOnlyStateChanged(checkoutState, oldCheckoutState)
@@ -1147,7 +1155,10 @@ cd {ROOT}
             elif not checkoutStep.isDeterministic():
                 checkoutReason = "indeterministic"
             elif not compareDirectoryState(checkoutState, oldCheckoutState):
-                checkoutReason = "recipe changed"
+                if not compareBundleState(checkoutState, oldCheckoutState):
+                    checkoutReason = "bundle mode changed"
+                else:
+                    checkoutReason = "recipe changed"
             elif (checkoutInputHashes != BobState().getInputHashes(prettySrcPath)):
                 checkoutReason = "dependency changed"
             elif (checkoutStep.getMainScript() or checkoutStep.getPostRunCmds()) \
@@ -1171,8 +1182,10 @@ cd {ROOT}
                             BobState().setAtticDirectoryState(atticPath, scmSpec)
                         del oldCheckoutState[scmDir]
                         BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
-                    elif scmDigest != checkoutState.get(scmDir, (None, None))[0]:
+                    elif (scmDigest != checkoutState.get(scmDir, (None, None))[0]) or \
+                            not compareBundleState(checkoutState, oldCheckoutState):
                         canSwitch = (scmDir in scmMap) and scmDigest and \
+                                     compareBundleState(checkoutState, oldCheckoutState) and \
                                      scmSpec is not None and \
                                      scmMap[scmDir].canSwitch(getScm(scmSpec)) and \
                                      os.path.exists(scmPath)
@@ -1233,11 +1246,26 @@ cd {ROOT}
                     oldCheckoutHash = datetime.datetime.now()
                     BobState().setResultHash(prettySrcPath, oldCheckoutHash)
 
-                with stepExec(checkoutStep, "CHECKOUT",
-                              "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
-                    await self._runShell(checkoutStep, "checkout", a, created)
-                self.__statistic.checkouts += 1
-                checkoutExecuted = True
+                wasDownloaded = False
+                if self.__archive.canDownloadSrc() and created:
+                    audit= os.path.join(os.path.dirname(checkoutStep.getWorkspacePath()),
+                                             "audit.json.gz")
+                    wasDownloaded = await self.__archive.downloadPackage(checkoutStep,
+                        checkoutDigest, audit, prettySrcPath, executor=self.__executor)
+
+                    if wasDownloaded:
+                        if not os.path.exists(audit):
+                            raise BuildError("Downloaded artifact misses its audit trail!")
+                        checkoutHash = hashWorkspace(checkoutStep)
+                        if Audit.fromFile(audit).getArtifact().getResultHash() != checkoutHash:
+                            raise BuildError("Corrupt downloaded artifact! Extracted content hash does not match audit trail.")
+
+                if not wasDownloaded:
+                    with stepExec(checkoutStep, "CHECKOUT",
+                                  "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
+                        await self._runShell(checkoutStep, "checkout", a, created)
+                    self.__statistic.checkouts += 1
+                    checkoutExecuted = True
                 currentResultHash.invalidate() # force recalculation
                 # reflect new checkout state
                 BobState().setDirectoryState(prettySrcPath, checkoutState)
@@ -1279,6 +1307,13 @@ cd {ROOT}
         if buildId != checkoutHash:
             assert predicted, "Non-predicted incorrect Build-Id found!"
             self.__handleChangedBuildId(checkoutStep, checkoutHash)
+
+        if self.__archive.canUploadSrc(checkoutStep, isFreshCheckout):
+            auditPath = os.path.join(os.path.dirname(checkoutStep.getWorkspacePath()),
+                                     "audit.json.gz")
+            await self.__archive.uploadPackage(checkoutStep, checkoutDigest,
+                    auditPath,
+                    checkoutStep.getStoragePath(), executor=self.__executor)
 
     async def _cookBuildStep(self, buildStep, depth, buildBuildId):
         # Add the execution path of the build step to the buildDigest to
