@@ -111,6 +111,12 @@ run_bob()
 	fi
 }
 
+export_run_bob()
+{
+	export -f run_bob is_win32
+	export BOB_ROOT TEST_ENVIRONMENT PYTHONPATH
+}
+
 # Run bob on pty. This only works on Linux, though.
 run_bob_tty()
 {
