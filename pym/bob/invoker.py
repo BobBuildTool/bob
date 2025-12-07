@@ -79,6 +79,13 @@ class JobserverConfig:
         self.__wr = wr
         return self
 
+    @classmethod
+    def fromFifo(cls, jobs, path):
+        self = JobserverConfig(jobs)
+        self.__type = 'fifo'
+        self.__path = path
+        return self
+
     def __bool__(self):
         return self.__type is not None
 

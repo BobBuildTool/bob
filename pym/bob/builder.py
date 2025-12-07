@@ -209,9 +209,16 @@ class ExternalJobServer:
     def getMakeFd(self):
         return self.__makeFds
 
-    def getSubMakeJobserverCfg(self):
-        return JobserverConfig.fromPipe(self.__extJobserverCfg.jobs(),
-                                        self.__makeFds[0], self.__makeFds[1])
+    def getSubMakeJobserverCfg(self, style):
+        assert style in ("fifo", "pipe", "fifo-or-pipe")
+        if self.__extJobserverCfg.isFifo() and style in ("fifo", "fifo-or-pipe"):
+            return self.__extJobserverCfg
+        elif style == "fifo":
+            raise BuildError("Fifo jobserver required but Bob was started under a pipe based jobserver!",
+                             help="Bob was probably started with GNU make version 4.3 or below. Upgrade to make 4.4 and make sure --jobserver-style=pipe is *not* used.")
+        else:
+            return JobserverConfig.fromPipe(self.__extJobserverCfg.jobs(),
+                                            self.__makeFds[0], self.__makeFds[1])
 
     def shutdown(self):
         if self.__extJobserverCfg.isFifo():
@@ -220,19 +227,31 @@ class ExternalJobServer:
 
 class InternalJobServer:
     def __init__(self, jobs):
-        self.__rfd, self.__wfd = os.pipe()
-        os.write(self.__wfd, bytes(jobs))
         self.__jobs = jobs
+        self.__tmp = tempfile.TemporaryDirectory()
+        self.__path = os.path.join(self.__tmp.name, "bob-jobserver")
+        try:
+            os.mkfifo(self.__path)
+            self.__rfd = os.open(self.__path, os.O_RDONLY | os.O_NONBLOCK)
+            self.__wfd = os.open(self.__path, os.O_WRONLY)
+            os.write(self.__wfd, bytes(jobs))
+        except OSError as e:
+            raise BuildError("Could not create job server FIFO: " + str(e))
 
     def getMakeFd(self):
         return (self.__rfd, self.__wfd)
 
-    def getSubMakeJobserverCfg(self):
-        return JobserverConfig.fromPipe(self.__jobs, self.__rfd, self.__wfd)
+    def getSubMakeJobserverCfg(self, style):
+        assert style in ("fifo", "pipe", "fifo-or-pipe")
+        if style == "pipe":
+            return JobserverConfig.fromPipe(self.__jobs, self.__rfd, self.__wfd)
+        else:
+            return JobserverConfig.fromFifo(self.__jobs, self.__path)
 
     def shutdown(self):
         os.close(self.__wfd)
         os.close(self.__rfd)
+        self.__tmp.cleanup()
 
 class JobServerSemaphore:
     def __init__(self, fds, recursive):
@@ -825,7 +844,7 @@ cd {ROOT}
             self.__verbose >= DEBUG, self.__bufferedStdIO,
             executor=self.__executor)
         if step.jobServer() and self.__jobServer:
-            invoker.setMakeJobserver(self.__jobServer.getSubMakeJobserverCfg())
+            invoker.setMakeJobserver(self.__jobServer.getSubMakeJobserverCfg(step.jobServer()))
         ret = await invoker.executeStep(mode, workspaceCreated, cleanWorkspace)
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):
