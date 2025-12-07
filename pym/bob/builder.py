@@ -185,8 +185,20 @@ class CancelBuildException(Exception):
 class ExternalJobServer:
     def __init__(self, jobserverCfg):
         self.__extJobserverCfg = jobserverCfg
-        self.__makeFds = jobserverCfg.pipeFds()
-
+        if jobserverCfg.isFifo():
+            try:
+                path = jobserverCfg.fifoPath()
+                self.__makeFds = (os.open(path, os.O_RDONLY | os.O_NONBLOCK),
+                                  os.open(path, os.O_WRONLY))
+            except OSError as e:
+                raise BuildError(f"Failed to open job server '{path}': " + str(e))
+        else:
+            assert jobserverCfg.isPipe()
+            self.__makeFds = jobserverCfg.pipeFds()
+            try:
+                os.set_blocking(self.__makeFds[0], False);
+            except OSError as e:
+                raise BuildError(f"Failed to set non-blocking mode: " + str(e))
         try:
             if not stat.S_ISFIFO(os.stat(self.__makeFds[0]).st_mode) or \
                not stat.S_ISFIFO(os.stat(self.__makeFds[1]).st_mode):
@@ -202,7 +214,9 @@ class ExternalJobServer:
                                         self.__makeFds[0], self.__makeFds[1])
 
     def shutdown(self):
-        pass
+        if self.__extJobserverCfg.isFifo():
+            os.close(self.__makeFds[1])
+            os.close(self.__makeFds[0])
 
 class InternalJobServer:
     def __init__(self, jobs):
@@ -225,7 +239,6 @@ class JobServerSemaphore:
         self.__sem = asyncio.Semaphore(0)
         self.__waitersCnt = 0
         self.__fds = fds
-        os.set_blocking (self.__fds[0], False);
         self.__tokens = []
         self.__recursive = recursive
         self.__acquired = 0
