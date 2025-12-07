@@ -111,7 +111,10 @@ class JobserverConfig:
         if self.__type == 'pipe':
             makeFlags += [f"--jobserver-auth={self.__rd},{self.__wr}"]
         elif self.__type == 'fifo':
-            makeFlags += [f"--jobserver-auth=fifo:{self.__path}"]
+            if spec.fatSandbox:
+                makeFlags += [f"--jobserver-auth=fifo:/tmp/bob-jobserver"]
+            else:
+                makeFlags += [f"--jobserver-auth=fifo:{self.__path}"]
 
         spec.env["MAKEFLAGS"] = " ".join(makeFlags)
 
@@ -510,6 +513,12 @@ class Invoker:
                 for argWorkspacePath, argExecPath in self.__spec.depMounts:
                     cmdArgs.extend(["-M", os.path.abspath(argWorkspacePath),
                                     "-m", os.path.abspath(argExecPath)])
+
+                # Mount jobserver FIFO into sandbox
+                if self.__makeJobServer.isFifo():
+                    fifo = os.path.abspath(self.__makeJobServer.fifoPath())
+                    cmdArgs.extend(["-M", fifo,
+                                    "-w", "/tmp/bob-jobserver" if self.__spec.fatSandbox else fifo])
 
                 # Command follows. Stop parsing options.
                 cmdArgs.append("--")
