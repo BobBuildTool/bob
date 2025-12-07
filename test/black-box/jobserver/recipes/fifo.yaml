@@ -1,0 +1,22 @@
+root: True
+inherit: ["parse-makeflags"]
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+jobServer: "fifo"
+packageScript: |
+    # On parallel execution, we must have a fifo
+    if [[ $JOBS -gt 1 ]] ; then
+        test "${#PIPE_AUTH[@]}" -eq 0
+        test -p "$FIFO_AUTH"
+    fi
+
+    # Copy in our make. Otherwise, the sandbox would obviously prevent access
+    # to it.
+    cp $<<../make-4.4.1/make>> make
+    chmod 755 make
+
+    cp $<<Makefile>> Makefile
+    ./make

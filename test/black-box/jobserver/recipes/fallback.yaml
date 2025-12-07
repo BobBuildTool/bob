@@ -1,0 +1,6 @@
+root: True
+
+jobServer: "fifo-or-pipe"
+packageScript: |
+    cp $<<Makefile>> Makefile
+    make
