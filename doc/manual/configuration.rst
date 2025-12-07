@@ -1683,17 +1683,43 @@ current recipe.
 jobServer
 ~~~~~~~~~
 
-Type: Boolean
+Type: Boolean | "pipe" | "fifo" | "fifo-or-pipe"
 
-Pass MAKEFLAGS Environment variable to the executed script with ``-j`` and
-``--jobserver-auth`` set. This enables submakes or other tools to use Bobs
-internal jobserver or even the jobserver of make calling bob. Bob also participating
-and not starting any new step as long as no ticket is available.
+Provide a jobserver to children if Bob is working in parallel mode. This allows
+the executed scripts to participate in the jobserver protocol. Technically, Bob
+will pass the ``MAKEFLAGS`` environment variable to the executed script with
+``-j`` and ``--jobserver-auth`` set. This enables GNU make or other tools to
+use Bobs internal jobserver or even the jobserver of make calling Bob.
+
+Traditionally, an anonymous pipe is used as jobserver. Since GNU make 4.4, an
+additional jobserver flavour is used: a named pipe (sometimes called
+FIFO). Bob can participate in both types of jobservers. The setting of the
+``jobServer`` property defines what kind of jobserver is passed to executed
+scripts by Bob:
+
+``False``
+    No jobserver is available.
+
+``True`` / ``"pipe"``
+    An anonymous pipe is passed as jobserver to the executed
+    :ref:`configuration-recipes-scripts`. This is the traditional type of
+    jobserver. All versions of GNU make support this protocol.
+
+``"fifo"``
+    Use a named pipe as jobserver. This is the default since GNU make 4.4.
+    Note that the build will fail if Bob was started under an anonymous pipe
+    based jobserver. This caused by the fact that an anonymous pipe cannot
+    be converted to a named pipe.
+
+``"fifo-or-pipe"``
+    Use a named pipe by default as jobserver. If Bob was started under a
+    jobserver using an anonymous pipe, then this is used instead. Can be safely
+    used with GNU make 4.4 and later.
 
 Not available on Windows.
 
 .. attention::
-   The jobserver protocol does not specify if the pipe is blocking or
+   The pipe jobserver protocol does not specify if the pipe is blocking or
    non-blocking.  Bob uses non-blocking pipes like GNU make starting with
    version 4.3. Earlier versions of GNU make will fail with the following error
    message: ``*** read jobs pipe: Resource temporarily unavailable.  Stop.``.
