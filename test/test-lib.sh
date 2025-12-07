@@ -151,8 +151,17 @@ exec_blackbox_test()
 
 expect_fail()
 {
-	"$@" 2>&1 || if [[ $? -ne 1 ]] ; then
-		echo "Unexpected return code: $*" >&2
+	local expected=1
+	local result=0
+
+	if [[ $1 == --code=* ]] ; then
+		expected="${1#--code=}"
+		shift
+	fi
+
+	"$@" 2>&1 || result=$?
+	if [[ $result -ne $expected ]] ; then
+		echo "Unexpected return code: $result (expected $expected), Command: $*" >&2
 		return 1
 	else
 		return 0
