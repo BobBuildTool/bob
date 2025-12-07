@@ -2424,7 +2424,10 @@ class Recipe(object):
 
         :meta private:
         """
-        return self.__jobServer
+        if self.__jobServer == True:
+            return "pipe"
+        else:
+            return self.__jobServer
 
     def getPluginProperties(self):
         """Get all plugin defined properties of recipe.
@@ -4174,7 +4177,7 @@ class RecipeSet:
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
             schema.Optional('scriptLanguage') : schema.And(schema.Or("bash", "PowerShell"),
                                                            schema.Use(ScriptLanguage)),
-            schema.Optional('jobServer') : bool,
+            schema.Optional('jobServer') : schema.Or(bool, "pipe", "fifo", "fifo-or-pipe"),
             schema.Optional('packageDepends') : bool,
         }
         for (name, prop) in self.__properties.items():
