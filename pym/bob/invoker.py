@@ -29,7 +29,7 @@ invalidMakeflags = WarnOnce("Unable to parse MAKEFLAGS environment variable!")
 
 class JobserverConfig:
     def __init__(self, jobs=1):
-        self.__server = False
+        self.__type = None
         self.__jobs = jobs
 
     @classmethod
@@ -52,47 +52,66 @@ class JobserverConfig:
         if not jobs or not server:
             return self
 
-        try:
-            r, w = server.split(",")
-            r, w, = int(r), int(w)
-            if r >= 0 and w >= 0:
-                self.__jobs = jobs
-                self.__server = True
-                self.__rd = r
-                self.__wr = w
-        except ValueError:
-            invalidMakeflags.show(makeflags)
+        if server.startswith("fifo:"):
+            self.__type = 'fifo'
+            self.__path = server[5:]
+        else:
+            try:
+                r, w = server.split(",")
+                r, w, = int(r), int(w)
+                if r >= 0 and w >= 0:
+                    self.__type = 'pipe'
+                    self.__rd = r
+                    self.__wr = w
+            except ValueError:
+                invalidMakeflags.show(makeflags)
+
+        if self.__type is not None:
+            self.__jobs = jobs
 
         return self
 
     @classmethod
     def fromPipe(cls, jobs, rd, wr):
         self = JobserverConfig(jobs)
-        self.__server = True
+        self.__type = 'pipe'
         self.__rd = rd
         self.__wr = wr
         return self
 
     def __bool__(self):
-        return self.__server
+        return self.__type is not None
 
     def jobs(self):
         return self.__jobs
 
+    def isPipe(self):
+        return self.__type == 'pipe'
+
+    def isFifo(self):
+        return self.__type == 'fifo'
+
+    def fifoPath(self):
+        return self.__path
+
     def pipeFds(self):
-        if self.__server:
+        if self.__type == 'pipe':
             return [self.__rd, self.__wr]
         else:
             return []
 
     def updateSpec(self, spec):
-        if not self.__server:
+        if self.__type is None:
             return
 
         makeFlags = [ f for f in spec.env.get("MAKEFLAGS", "").split(" ")
                       if not f.startswith("-j") and not f.startswith("--jobserver-auth=") ]
 
-        makeFlags += [f"-j{self.__jobs}", f"--jobserver-auth={self.__rd},{self.__wr}"]
+        makeFlags += [f"-j{self.__jobs}"]
+        if self.__type == 'pipe':
+            makeFlags += [f"--jobserver-auth={self.__rd},{self.__wr}"]
+        elif self.__type == 'fifo':
+            makeFlags += [f"--jobserver-auth=fifo:{self.__path}"]
 
         spec.env["MAKEFLAGS"] = " ".join(makeFlags)
 
