@@ -8,6 +8,8 @@ if [[ "$(type -t run_bob)" == function ]] ; then
 	return
 fi
 
+PS4='+${BASH_SOURCE##*/}:${LINENO} '
+
 BOB_ROOT="$PWD/$1"
 if [[ ! -d "$BOB_ROOT/pym/bob" ]] ; then
 	echo "From where are you calling me?" >&2
