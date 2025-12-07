@@ -7,7 +7,7 @@ from .errors import BuildError
 from .input import CheckoutAssert
 from .scm import getScm
 from .stringparser import Env
-from .tty import Unbuffered
+from .tty import Unbuffered, WarnOnce
 from .utils import removePath, emptyDirectory, isWindows
 from enum import Enum
 from shlex import quote
@@ -23,7 +23,78 @@ import subprocess
 import sys
 import tempfile
 
-__all__ = ['InvocationMode', 'Invoker']
+__all__ = ['InvocationMode', 'Invoker', 'JobserverConfig']
+
+invalidMakeflags = WarnOnce("Unable to parse MAKEFLAGS environment variable!")
+
+class JobserverConfig:
+    def __init__(self, jobs=1):
+        self.__server = False
+        self.__jobs = jobs
+
+    @classmethod
+    def fromMakeflags(cls, makeflags):
+        self = JobserverConfig()
+        if not makeflags:
+            return self
+
+        jobs = None
+        server = None
+        for i in makeflags.split(" "):
+            if i.startswith("-j"):
+                try:
+                    jobs = int(i[2:])
+                except ValueError:
+                    invalidMakeflags.show(makeflags)
+            elif i.startswith("--jobserver-auth="):
+                server = i[17:]
+
+        if not jobs or not server:
+            return self
+
+        try:
+            r, w = server.split(",")
+            r, w, = int(r), int(w)
+            if r >= 0 and w >= 0:
+                self.__jobs = jobs
+                self.__server = True
+                self.__rd = r
+                self.__wr = w
+        except ValueError:
+            invalidMakeflags.show(makeflags)
+
+        return self
+
+    @classmethod
+    def fromPipe(cls, jobs, rd, wr):
+        self = JobserverConfig(jobs)
+        self.__server = True
+        self.__rd = rd
+        self.__wr = wr
+        return self
+
+    def __bool__(self):
+        return self.__server
+
+    def jobs(self):
+        return self.__jobs
+
+    def pipeFds(self):
+        if self.__server:
+            return [self.__rd, self.__wr]
+        else:
+            return []
+
+    def updateSpec(self, spec):
+        if not self.__server:
+            return
+
+        makeFlags = [ f for f in spec.env.get("MAKEFLAGS", "").split(" ")
+                      if not f.startswith("-j") and not f.startswith("--jobserver-auth=") ]
+
+        makeFlags += [f"-j{self.__jobs}", f"--jobserver-auth={self.__rd},{self.__wr}"]
+
+        spec.env["MAKEFLAGS"] = " ".join(makeFlags)
 
 
 class InvocationError(Exception):
@@ -116,8 +187,7 @@ class Invoker:
                                          if k in spec.envWhiteList }
         self.__logFileName = None if noLogFiles else spec.logFile
         self.__logFile = DEVNULL
-        self.__makeFds = []
-        self.__makeJobs = None
+        self.__makeJobServer = JobserverConfig()
         self.__trace = trace
         self.__sandboxHelperPath = None
         self.__stdioBuffer = io.BytesIO() if redirect else None
@@ -246,7 +316,7 @@ class Invoker:
                 *args,
                 stdin=self.__stdin, stdout=stdoutRedir, stderr=stderrRedir,
                 env=env, cwd=cwd,
-                **kwargs, pass_fds=self.__makeFds)
+                **kwargs, pass_fds=self.__makeJobServer.pipeFds())
         except OSError as e:
             self.fail(str(e), returncode=127)
 
@@ -381,16 +451,6 @@ class Invoker:
             elif clean and mode != InvocationMode.SHELL:
                 emptyDirectory(self.__spec.workspaceWorkspacePath)
                 workspaceCreated = True
-
-            if len(self.__makeFds) == 2:
-                makeFlags = self.__spec.env.get("MAKEFLAGS")
-                if makeFlags is not None:
-                    makeFlags = re.sub(r'-j\s*[0-9]*', '', makeFlags)
-                    makeFlags = re.sub(r'--jobserver-auth=[0-9]*,[0-9]*', '', makeFlags)
-                else:
-                    makeFlags = ""
-                self.__spec.env["MAKEFLAGS"] = (makeFlags + " -j" + str(self.__makeJobs)
-                    + " --jobserver-auth=" + ",".join([str(fd) for fd in self.__makeFds]))
 
             # setup script and arguments
             if mode == InvocationMode.SHELL:
@@ -644,9 +704,9 @@ class Invoker:
         return self.__stdioBuffer.getvalue().decode(
             locale.getpreferredencoding(), 'replace')
 
-    def setMakeParameters(self, fds, jobs):
-        self.__makeFds = fds
-        self.__makeJobs = jobs
+    def setMakeJobserver(self, jobserverCfg):
+        jobserverCfg.updateSpec(self.__spec)
+        self.__makeJobServer = jobserverCfg
 
     async def runInExecutor(self, func, *args):
         loop = asyncio.get_event_loop()

@@ -9,7 +9,7 @@ from ...errors import BuildError
 from ...input import RecipeSet
 from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
     RecipeSetIR
-from ...invoker import Invoker
+from ...invoker import Invoker, JobserverConfig
 from ...layers import updateLayers
 from ...share import getShare
 from ...tty import setVerbosity, setTui, Warn
@@ -249,7 +249,6 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         else:
             cfg = recipes.getCommandConfig().get('build', {})
 
-        noJobs = args.jobs == None
         defaults = {
                 'destination' : '',
                 'force' : False,
@@ -262,7 +261,6 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 'clean_checkout' : False,
                 'no_logfiles' : False,
                 'link_deps' : True,
-                'jobs' : 1,
                 'keep_going' : False,
                 'audit' : True,
                 'shared' : True,
@@ -278,26 +276,17 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
 
         if args.jobs is ...:
             args.jobs = os.cpu_count()
-        elif args.jobs <= 0:
+        elif args.jobs is not None and args.jobs <= 0:
             parser.error("--jobs argument must be greater than zero!")
 
         # parse MAKEFLAGS environment variable to setup number of jobs
         # when called from make
-        makeFlags = os.environ.get('MAKEFLAGS')
-        makeFds = None
-        if makeFlags is not None:
-            jobs = re.search(r'-j([0-9]*)', makeFlags)
-            fds = re.search(r'--jobserver-auth=([0-9]*),([0-9]*)', makeFlags)
-            if jobs and fds and jobs.group(1) and fds.group(1) and fds.group(2):
-                if noJobs:
-                    args.jobs = int(jobs.group(1))
-                    makeFds = [int(fds.group(1)), int(fds.group(2))]
-                    try:
-                        if not all(stat.S_ISFIFO(os.stat(f).st_mode) for f in makeFds): makeFds = None
-                    except OSError:
-                        makeFds = None
-                else:
-                    print("warning: -j" + str(args.jobs) + " forced: resetting jobserver mode.");
+        jobserverCfg = JobserverConfig.fromMakeflags(os.environ.get('MAKEFLAGS'))
+        if not jobserverCfg:
+            jobserverCfg = JobserverConfig(args.jobs or 1)
+        elif args.jobs is not None:
+            jobserverCfg = JobserverConfig(args.jobs)
+            Warn(f"-j{args.jobs} forced: resetting jobserver mode.").warn()
 
         envWhiteList = recipes.envWhiteList()
         envWhiteList |= set(args.white_list)
@@ -331,8 +320,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         builder.setCleanCheckout(args.clean_checkout)
         builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
         builder.setLinkDependencies(args.link_deps)
-        builder.setJobs(args.jobs)
-        builder.setMakeFds(makeFds)
+        builder.setJobserverConfig(jobserverCfg)
         builder.setKeepGoing(args.keep_going)
         builder.setAudit(args.audit)
         builder.setAuditMeta(meta)
@@ -362,8 +350,8 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             raise BuildError("preBuildHook failed!",
                 help="A preBuildHook is set but it returned with a non-zero status.")
         success = False
-        if args.jobs > 1:
-            setTui(args.jobs)
+        if jobserverCfg.jobs() > 1:
+            setTui(jobserverCfg.jobs())
             builder.enableBufferedIO()
         try:
             builder.cook([ExecutableStep.fromStep(b, LazyIR) for b in backlog],
@@ -382,7 +370,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                     results.append(resultPath)
             success = True
         finally:
-            if args.jobs > 1: setTui(1)
+            if jobserverCfg.jobs() > 1: setTui(1)
             builder.saveBuildState()
             runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
 

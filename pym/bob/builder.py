@@ -8,7 +8,7 @@ from .archive import DummyArchive
 from .audit import Audit
 from .errors import BobError, BuildError, MultiBobError
 from .input import RecipeSet
-from .invoker import Invoker, InvocationMode
+from .invoker import Invoker, InvocationMode, JobserverConfig
 from .languages import StepSpec
 from .scm import getScm
 from .state import BobState
@@ -183,19 +183,42 @@ class CancelBuildException(Exception):
     pass
 
 class ExternalJobServer:
-    def __init__(self, makeFds):
-        self.__makeFds = makeFds
+    def __init__(self, jobserverCfg):
+        self.__extJobserverCfg = jobserverCfg
+        self.__makeFds = jobserverCfg.pipeFds()
+
+        try:
+            if not stat.S_ISFIFO(os.stat(self.__makeFds[0]).st_mode) or \
+               not stat.S_ISFIFO(os.stat(self.__makeFds[1]).st_mode):
+                raise BuildError(f"Invalid job server file descriptors!")
+        except OSError as e:
+            raise BuildError(f"Failed to check job server pipes: " + str(e))
 
     def getMakeFd(self):
         return self.__makeFds
+
+    def getSubMakeJobserverCfg(self):
+        return JobserverConfig.fromPipe(self.__extJobserverCfg.jobs(),
+                                        self.__makeFds[0], self.__makeFds[1])
+
+    def shutdown(self):
+        pass
 
 class InternalJobServer:
     def __init__(self, jobs):
         self.__rfd, self.__wfd = os.pipe()
         os.write(self.__wfd, bytes(jobs))
+        self.__jobs = jobs
 
     def getMakeFd(self):
-        return [ self.__rfd, self.__wfd ]
+        return (self.__rfd, self.__wfd)
+
+    def getSubMakeJobserverCfg(self):
+        return JobserverConfig.fromPipe(self.__jobs, self.__rfd, self.__wfd)
+
+    def shutdown(self):
+        os.close(self.__wfd)
+        os.close(self.__rfd)
 
 class JobServerSemaphore:
     def __init__(self, fds, recursive):
@@ -254,6 +277,29 @@ class JobServerSemaphore:
 
     async def __aexit__(self, exc_type, exc, tb):
         self.release()
+
+class JobServer:
+    def __init__(self, jobserverCfg):
+        self.__jobserverCfg = jobserverCfg
+
+    def __enter__(self):
+        if sys.platform == "win32" or self.__jobserverCfg.jobs() == 1:
+            jobServer = None
+            runnersSemaphore = asyncio.BoundedSemaphore(self.__jobserverCfg.jobs())
+        elif self.__jobserverCfg:
+            jobServer = ExternalJobServer(self.__jobserverCfg)
+            runnersSemaphore = JobServerSemaphore(jobServer.getMakeFd(), True)
+        else:
+            jobServer = InternalJobServer(self.__jobserverCfg.jobs())
+            runnersSemaphore = JobServerSemaphore(jobServer.getMakeFd(), False)
+
+        self.__jobServer = jobServer
+        return (jobServer, runnersSemaphore)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.__jobServer:
+            self.__jobServer.shutdown()
+        return False
 
 class LocalBuilderStatistic:
     def __init__(self):
@@ -383,8 +429,7 @@ cd {ROOT}
         self.__statistic = LocalBuilderStatistic()
         self.__alwaysCheckout = []
         self.__linkDeps = True
-        self.__jobs = 1
-        self.__makeFds = None
+        self.__jobserverCfg = JobserverConfig()
         self.__bufferedStdIO = False
         self.__keepGoing = False
         self.__audit = True
@@ -469,11 +514,8 @@ cd {ROOT}
     def setLinkDependencies(self, linkDeps):
         self.__linkDeps = linkDeps
 
-    def setJobs(self, jobs):
-        self.__jobs = max(jobs, 1)
-
-    def setMakeFds(self, makeFds):
-        self.__makeFds = makeFds
+    def setJobserverConfig(self, jobserverCfg):
+        self.__jobserverCfg = jobserverCfg
 
     def enableBufferedIO(self):
         self.__bufferedStdIO = True
@@ -770,7 +812,7 @@ cd {ROOT}
             self.__verbose >= DEBUG, self.__bufferedStdIO,
             executor=self.__executor)
         if step.jobServer() and self.__jobServer:
-            invoker.setMakeParameters(self.__jobServer.getMakeFd(), self.__jobs)
+            invoker.setMakeJobserver(self.__jobServer.getSubMakeJobserverCfg())
         ret = await invoker.executeStep(mode, workspaceCreated, cleanWorkspace)
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):
@@ -880,14 +922,14 @@ cd {ROOT}
 
     def cook(self, steps, checkoutOnly, loop, depth=0):
         def cancelJobs():
-            if self.__jobs > 1:
+            if self.__jobserverCfg.jobs() > 1:
                 log("Cancel all running jobs...", WARNING)
             self.__running = False
             self.__restart = False
             for i in asyncio.all_tasks(): i.cancel()
 
         async def dispatcher():
-            if self.__jobs > 1:
+            if self.__jobserverCfg.jobs() > 1:
                 packageJobs = [
                     self.__createGenericTask(loop, lambda s=step: self._cookTask(s, checkoutOnly, depth))
                     for step in steps ]
@@ -910,48 +952,43 @@ cd {ROOT}
             self.__fingerprintTasks = {}
             self.__allTasks = set()
             self.__buildErrors = []
-            if sys.platform == "win32" or self.__jobs == 1:
-                self.__runners = asyncio.BoundedSemaphore(self.__jobs)
-            else:
-                if self.__makeFds:
-                    self.__jobServer = ExternalJobServer(self.__makeFds)
-                    self.__runners = JobServerSemaphore(self.__jobServer.getMakeFd(), True)
-                else:
-                    self.__jobServer = InternalJobServer(self.__jobs)
-                    self.__runners = JobServerSemaphore(self.__jobServer.getMakeFd(), False)
             self.__tasksDone = 0
             self.__tasksNum = 0
 
-            j = self.__createGenericTask(loop, dispatcher)
-            try:
-                loop.add_signal_handler(signal.SIGINT, cancelJobs)
-            except NotImplementedError:
-                pass # not implemented on windows
-            try:
-                loop.run_until_complete(j)
-            except CancelBuildException:
-                pass
-            except asyncio.CancelledError:
-                pass
-            finally:
+            with JobServer(self.__jobserverCfg) as (jobServer, runnersSemaphore):
+                self.__runners = runnersSemaphore
+                self.__jobServer = jobServer
+
+                j = self.__createGenericTask(loop, dispatcher)
                 try:
-                    loop.remove_signal_handler(signal.SIGINT)
+                    loop.add_signal_handler(signal.SIGINT, cancelJobs)
                 except NotImplementedError:
                     pass # not implemented on windows
+                try:
+                    loop.run_until_complete(j)
+                except CancelBuildException:
+                    pass
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    try:
+                        loop.remove_signal_handler(signal.SIGINT)
+                    except NotImplementedError:
+                        pass # not implemented on windows
 
-            # Reap all remaining tasks to prevent Python warnings about ignored
-            # exceptions or that tasks are still pending. We don't care about
-            # their result. This is already handled via __buildErrors.
-            for i in self.__allTasks: i.cancel()
-            if self.__allTasks:
-                loop.run_until_complete(asyncio.gather(*self.__allTasks,
-                                                       return_exceptions=True))
-            self.__allTasks.clear()
+                # Reap all remaining tasks to prevent Python warnings about ignored
+                # exceptions or that tasks are still pending. We don't care about
+                # their result. This is already handled via __buildErrors.
+                for i in self.__allTasks: i.cancel()
+                if self.__allTasks:
+                    loop.run_until_complete(asyncio.gather(*self.__allTasks,
+                                                           return_exceptions=True))
+                self.__allTasks.clear()
 
-            if len(self.__buildErrors) > 1:
-                raise MultiBobError(self.__buildErrors)
-            elif self.__buildErrors:
-                raise self.__buildErrors[0]
+                if len(self.__buildErrors) > 1:
+                    raise MultiBobError(self.__buildErrors)
+                elif self.__buildErrors:
+                    raise self.__buildErrors[0]
 
         if not self.__running:
             raise BuildError("Canceled by user!",
@@ -972,7 +1009,7 @@ cd {ROOT}
                   if s.isValid() and not self._wasAlreadyRun(s, checkoutOnly) ]
         if not steps: return
 
-        if self.__jobs > 1:
+        if self.__jobserverCfg.jobs() > 1:
             # spawn the child tasks
             tasks = [
                 self.__createCookTask(lambda s=step: self._cookStep(s, checkoutOnly, depth),
@@ -1752,7 +1789,7 @@ cd {ROOT}
         return ret
 
     async def __getBuildIdList(self, steps, depth):
-        if self.__jobs > 1:
+        if self.__jobserverCfg.jobs() > 1:
             tasks = [
                 self.__createCookTask(lambda s=step: self.__getBuildIdTask(s, depth),
                                       step, False, self.__buildIdTasks, False)
