@@ -8,6 +8,8 @@ if [[ "$(type -t run_bob)" == function ]] ; then
 	return
 fi
 
+PS4='+${BASH_SOURCE##*/}:${LINENO} '
+
 BOB_ROOT="$PWD/$1"
 if [[ ! -d "$BOB_ROOT/pym/bob" ]] ; then
 	echo "From where are you calling me?" >&2
@@ -109,6 +111,12 @@ run_bob()
 	fi
 }
 
+export_run_bob()
+{
+	export -f run_bob is_win32
+	export BOB_ROOT TEST_ENVIRONMENT PYTHONPATH
+}
+
 # Run bob on pty. This only works on Linux, though.
 run_bob_tty()
 {
@@ -143,8 +151,17 @@ exec_blackbox_test()
 
 expect_fail()
 {
-	"$@" 2>&1 || if [[ $? -ne 1 ]] ; then
-		echo "Unexpected return code: $*" >&2
+	local expected=1
+	local result=0
+
+	if [[ $1 == --code=* ]] ; then
+		expected="${1#--code=}"
+		shift
+	fi
+
+	"$@" 2>&1 || result=$?
+	if [[ $result -ne $expected ]] ; then
+		echo "Unexpected return code: $result (expected $expected), Command: $*" >&2
 		return 1
 	else
 		return 0

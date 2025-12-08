@@ -1,0 +1,22 @@
+packageSetup: |
+    # If MAKEFLAGS is set, it must be a regular pipe.
+    JOBS=1
+    PIPE_AUTH=()
+    FIFO_AUTH=
+    if [[ ${MAKEFLAGS:+set} ]] ; then
+        for i in $MAKEFLAGS ; do
+            case $i in
+                -j*)
+                    JOBS="${i#-j}"
+                    ;;
+                --jobserver-auth=fifo:*)
+                    FIFO_AUTH="${i#--jobserver-auth=fifo:}"
+                    ;;
+                --jobserver-auth=*,*)
+                    i="${i#--jobserver-auth=}"
+                    PIPE_AUTH=( "${i%%,*}" "${i##*,}" )
+                    ;;
+            esac
+        done
+    fi
+

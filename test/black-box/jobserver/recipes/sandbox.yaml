@@ -1,0 +1,12 @@
+provideSandbox:
+    paths: ["/usr/local/bin", "/usr/bin", "/bin"]
+    mount:
+        - /bin
+        - /etc
+        - /lib
+        - /run
+        - /usr
+        - /var
+       
+        - ["/lib32", "/lib32", [nofail]]
+        - ["/lib64", "/lib64", [nofail]]

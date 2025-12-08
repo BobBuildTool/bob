@@ -1,0 +1,18 @@
+root: True
+inherit: ["parse-makeflags"]
+
+jobServer: True
+packageScript: |
+    # On parallel execution, we must have pipes
+    if [[ $JOBS -gt 1 ]] ; then
+        test -z "$FIFO_AUTH"
+        test "${#PIPE_AUTH[@]}" -eq 2
+        if [[ $(uname -s) == Linux ]] ; then
+            for p in "${PIPE_AUTH}" ; do
+                test -p /proc/self/fd/"$p"
+            done
+        fi
+    fi
+
+    cp $<<Makefile>> Makefile
+    make
