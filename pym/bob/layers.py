@@ -88,8 +88,8 @@ class Layer:
         invoker = Invoker(spec=LayerStepSpec(self.__layerDir, self.__upperConfig.envWhiteList()),
                           preserveEnv= False,
                           noLogFiles = True,
-                          showStdOut = verbose > INFO,
-                          showStdErr = verbose > INFO,
+                          showStdOut = verbose >= INFO,
+                          showStdErr = verbose >= NORMAL,
                           trace = verbose >= DEBUG,
                           redirect=False, executor=None)
         newState = {}
