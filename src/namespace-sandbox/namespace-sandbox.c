@@ -538,7 +538,7 @@ static void SetupDirectories(struct Options *opt, uid_t uid) {
     CHECK_CALL(CreateTarget(opt->create_dirs[i] + 1, true));
   }
 
-  // Mount all mounts.
+  // Mount all mounts, read-write for now.
   for (int i = 0; i < opt->num_mounts; i++) {
     struct stat sb;
     stat(opt->mount_sources[i], &sb);
@@ -572,7 +572,19 @@ static void SetupDirectories(struct Options *opt, uid_t uid) {
                          MS_REC | MS_BIND, NULL),
                    "cannot mount '%s' on '%s'", opt->mount_sources[i],
                    full_sandbox_path);
+    free(full_sandbox_path);
+  }
+
+  // Re-mount ro mounts after everything is setup.
+  // This allows to mount files in e.g. /etc even when this directory is
+  // read-only at the end.
+  for (int i = 0; i < opt->num_mounts; i++) {
+    char *full_sandbox_path =
+        malloc(strlen(opt->sandbox_root) + strlen(opt->mount_targets[i]) + 1);
+    strcpy(full_sandbox_path, opt->sandbox_root);
+    strcat(full_sandbox_path, opt->mount_targets[i]);
     if (!opt->mount_rw[i]) {
+      PRINT_DEBUG("read only re-mount for: %s\n", opt->mount_sources[i]);
       unsigned long mnt_flags = GetMountFlags(full_sandbox_path);
       int ret = mount(opt->mount_sources[i], full_sandbox_path, NULL,
                       mnt_flags | MS_REC | MS_BIND | MS_REMOUNT | MS_RDONLY,
@@ -582,6 +594,7 @@ static void SetupDirectories(struct Options *opt, uid_t uid) {
                 full_sandbox_path, strerror(errno));
       }
     }
+    free(full_sandbox_path);
   }
 
   // Make sure the home directory exists, too. First try to get path from passwd
