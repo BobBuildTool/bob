@@ -17,6 +17,7 @@ import tempfile
 warnRepoSize = WarnOnce("The shared repository is over its quota. Run 'bob clean --shared' to free disk space!")
 warnGcDidNotHelp = WarnOnce("The automatic garbage collection of the shared repository was unable to free enough space. Run 'bob clean --shared' manually.")
 warnNoShareConfigured = Warn("No shared directory configured! Nothing cleaned.")
+warnEscapedHardLink = Warn("The file has hard links outside the workspace! Review the packageScript to fix the problem.")
 
 if sys.platform == 'win32':
     import msvcrt
@@ -62,6 +63,8 @@ if isWindows():
     class CopyMachine:
         def __call__(self, src, dst):
             return shutil.copy2(src, dst)
+        def postCopyCheck(self):
+            pass
 else:
     class CopyMachine:
         def __init__(self):
@@ -96,6 +99,10 @@ else:
                 # remaining hard links.
                 self.hard_links[key] = [dst, st.st_nlink - 1]
                 return False
+
+        def postCopyCheck(self):
+            for _, (name, _links) in self.hard_links.items():
+                warnEscapedHardLink.show(name)
 
 
 def sameWorkspace(link, sharePath):
@@ -268,6 +275,7 @@ class LocalShare:
                 else:
                     shutil.copytree(workspace, os.path.join(tmpSharedPath, "workspace"),
                         symlinks=True, copy_function=copyFun)
+                copyFun.postCopyCheck()
 
                 # Cerify the result hash and count file system size. The user
                 # could have an incompatible file system at the destination.
