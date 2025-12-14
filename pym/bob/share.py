@@ -10,12 +10,14 @@ import errno
 import os, os.path
 import json
 import shutil
+import stat
 import sys
 import tempfile
 
 warnRepoSize = WarnOnce("The shared repository is over its quota. Run 'bob clean --shared' to free disk space!")
 warnGcDidNotHelp = WarnOnce("The automatic garbage collection of the shared repository was unable to free enough space. Run 'bob clean --shared' manually.")
 warnNoShareConfigured = Warn("No shared directory configured! Nothing cleaned.")
+warnEscapedHardLink = Warn("The file has hard links outside the workspace! Review the packageScript to fix the problem.")
 
 if sys.platform == 'win32':
     import msvcrt
@@ -55,6 +57,52 @@ class OpenLocked:
             unlockFile(self.fd)
         finally:
             self.fd.close()
+
+
+if isWindows():
+    class CopyMachine:
+        def __call__(self, src, dst):
+            return shutil.copy2(src, dst)
+        def postCopyCheck(self):
+            pass
+else:
+    class CopyMachine:
+        def __init__(self):
+            self.hard_links = {}
+
+        def __call__(self, src, dst):
+            if os.path.isdir(dst):
+                dst = os.path.join(dst, os.path.basename(src))
+
+            st = os.stat(src)
+            if st.st_nlink <= 1 or not self.__handle_hard_link(src, dst, st):
+                shutil.copyfile(src, dst)
+                shutil.copystat(src, dst)
+
+            return dst
+
+        def __handle_hard_link(self, src, dst, st):
+            key = (st.st_ino, st.st_dev)
+            file_rec = self.hard_links.get(key)
+            if file_rec is not None:
+                # We've seen this one... We assume that we don't cross mount
+                # points at destination!
+                existing, remaining = file_rec
+                os.link(existing, dst)
+                if remaining <= 1:
+                    del self.hard_links[key]
+                else:
+                    file_rec[1] -= 1
+                return True
+            else:
+                # First time we visited this hard-linked file. Remember with
+                # remaining hard links.
+                self.hard_links[key] = [dst, st.st_nlink - 1]
+                return False
+
+        def postCopyCheck(self):
+            for _, (name, _links) in self.hard_links.items():
+                warnEscapedHardLink.show(name)
 
 
 def sameWorkspace(link, sharePath):
@@ -220,11 +268,14 @@ class LocalShare:
                 # Might not exist if workspace was emtpy
                 if os.path.exists(cacheBinSrc):
                     shutil.copyfile(cacheBinSrc, cacheBinDst)
+
+                copyFun = CopyMachine()
                 if mayMove:
-                    shutil.move(workspace, tmpSharedPath)
+                    shutil.move(workspace, tmpSharedPath, copy_function=copyFun)
                 else:
                     shutil.copytree(workspace, os.path.join(tmpSharedPath, "workspace"),
-                        symlinks=True)
+                        symlinks=True, copy_function=copyFun)
+                copyFun.postCopyCheck()
 
                 # Cerify the result hash and count file system size. The user
                 # could have an incompatible file system at the destination.
