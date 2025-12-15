@@ -48,13 +48,14 @@ class TestWebdav(TestCase):
                 with open(os.path.join(self.dir, TEST_FILE)) as f:
                     content = f.readline()
                     self.assertEqual(TEST_OUTPUT + TEST_OUTPUT, content)
-        # cleanup server directory
-        self.__repodir.cleanup()
-        # with 1 retry, the upload will fail initially
+
+    def testUploadRetry(self):
+        """A upload error is handled gracefully and can be retried"""
         with HttpServerMock(repoPath=self.dir, retries=1) as srv:
             webdav = GetWebdav(srv.port)
             with NamedTemporaryFile() as file:
                 file.write(TEST_OUTPUT.encode('utf-8'))
+                # first try will result in an "internal server error"
                 with self.assertRaises(HttpUploadError) as cm:
                     webdav.upload(TEST_FILE, file, False)
                 self.assertFalse(os.path.exists(os.path.join(self.dir, TEST_FILE)))
