@@ -63,6 +63,15 @@ class TestWebdav(TestCase):
                 webdav.upload(TEST_FILE, file, False)
                 self.assertTrue(os.path.exists(os.path.join(self.dir, TEST_FILE)))
 
+    def testUploadInterrupted(self):
+        """An upload to an unresponsive server is handled gracefully"""
+        with HttpServerMock(repoPath=self.dir, noResponse=True) as srv:
+            webdav = GetWebdav(srv.port)
+            with NamedTemporaryFile() as file:
+                file.write(TEST_OUTPUT.encode('utf-8'))
+                with self.assertRaises(HttpUploadError):
+                    webdav.upload(TEST_FILE, file, False)
+
     def testDownload(self):
         with HttpServerMock(self.dir) as srv:
             # create file for server
@@ -96,6 +105,13 @@ class TestWebdav(TestCase):
         with HttpServerMock(self.dir, retries=1) as srv:
             webdav = GetWebdav(srv.port)
             with self.assertRaises(HttpDownloadError) as cm:
+                webdav.download(TEST_FILE)
+
+    def testDownloadInterrupted(self):
+        """An interrupted download is handled gracefully"""
+        with HttpServerMock(repoPath=self.dir, noResponse=True) as srv:
+            webdav = GetWebdav(srv.port)
+            with self.assertRaises(HttpDownloadError):
                 webdav.download(TEST_FILE)
 
     def testExists(self):
