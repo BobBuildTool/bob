@@ -12,14 +12,6 @@ import http.client
 class WebdavError(Exception):
     pass
 
-class WebdavDownloadError(WebdavError):
-    def __init__(self, reason):
-        self.reason = reason
-
-class WebdavUploadError(WebdavError):
-    def __init__(self, reason):
-        self.reason = reason
-
 class WebdavNotFoundError(WebdavError):
     pass
 
@@ -81,9 +73,9 @@ class WebDav:
         except urllib.error.HTTPError as e:
             e.fp.read()
             if e.status != 404:
-                raise WebdavUploadError("HEAD {} {}".format(e.status, e.reason))
+                raise WebdavError("HEAD {} {}".format(e.status, e.reason))
         except (http.client.HTTPException, OSError) as e:
-            raise WebdavUploadError(str(e))
+            raise WebdavError(str(e))
 
         return False
 
@@ -101,9 +93,9 @@ class WebDav:
             if e.status == 404:
                 raise WebdavNotFoundError()
             else:
-                raise WebdavDownloadError("{} {}".format(e.status, e.reason))
+                raise WebdavError("{} {}".format(e.status, e.reason))
         except (http.client.HTTPException, OSError) as e:
-            raise WebdavDownloadError(str(e))
+            raise WebdavError(str(e))
 
     def upload(self, path, buf, overwrite):
         # Determine file length ourselves and add a "Content-Length" header. This
@@ -121,15 +113,15 @@ class WebDav:
         try:
             with urllib.request.urlopen (req, context=self.__context) as resp:
                 if resp.status not in [200, 201, 204]:
-                    raise WebdavUploadError("PUT {} {}".format(resp.status, resp.reason))
+                    raise WebdavError("PUT {} {}".format(resp.status, resp.reason))
         except urllib.error.HTTPError as e:
             e.fp.read()
             if e.status == 412:
                 # precondition failed -> lost race with other upload
                 raise WebdavAlreadyExistsError()
-            raise WebdavUploadError("PUT {} {}".format(e.status, e.reason))
+            raise WebdavError("PUT {} {}".format(e.status, e.reason))
         except (http.client.HTTPException, OSError) as e:
-            raise WebdavUploadError(str(e))
+            raise WebdavError(str(e))
 
     def _mkdir(self, path):
         # MKCOL resources must have a trailing slash because they are
@@ -147,7 +139,7 @@ class WebDav:
             e.fp.read()
             return (e.status, e.reason)
         except (http.client.HTTPException, OSError) as e:
-            raise WebdavUploadError(str(e))
+            raise WebdavError(str(e))
 
     def mkdir(self, path, depth=1):
         if depth > 0:
@@ -160,7 +152,7 @@ class WebDav:
             # If the server does not support MKCOL we'd expect a 405 too and hope
             # for the best...
             if status not in [201, 405]:
-                raise WebdavUploadError("MKCOL {} {}".format(status, reason))
+                raise WebdavError("MKCOL {} {}".format(status, reason))
 
     def listdir(self, path):
         base_path = self.__url.path
@@ -177,13 +169,13 @@ class WebDav:
             try:
                 with urllib.request.urlopen (req, context=self.__context) as response:
                     if response.status not in [207]:
-                        raise WebdavDownloadError("PROPFIND {} {}".format(response.status, response.reason))
+                        raise WebdavError("PROPFIND {} {}".format(response.status, response.reason))
                     content = response.read()
             except urllib.error.HTTPError as e:
                 e.fp.read()
-                raise WebdavDownloadError("PROPFIND {} {}".format(e.status, e.reason))
+                raise WebdavError("PROPFIND {} {}".format(e.status, e.reason))
             except (http.client.HTTPException, OSError) as e:
-                raise WebdavDownloadError(str(e))
+                raise WebdavError(str(e))
             # get all dav responses from multistatusresponse
             tree = fromstring(content)
             for resp in tree.findall(".//{DAV:}response"):
@@ -216,9 +208,9 @@ class WebDav:
             status = e.status
             reason = e.reason
         except (http.client.HTTPException, OSError) as e:
-            raise WebdavDownloadError(str(e))
+            raise WebdavError(str(e))
         if status not in [200, 204, 404]:
-            raise WebdavDownloadError("DELETE {} {}".format(status, reason))
+            raise WebdavError("DELETE {} {}".format(status, reason))
 
     def stat(self, file):
         base_path = self.__url.path
@@ -235,14 +227,14 @@ class WebDav:
             try:
                 with urllib.request.urlopen (req) as response:
                     if response.status not in [207]:
-                        raise WebdavDownloadError("PROPFIND {} {}".format(response.status, response.reason))
+                        raise WebdavError("PROPFIND {} {}".format(response.status, response.reason))
                     # get response
                     content = response.read()
             except urllib.error.HTTPError as e:
                 e.fp.read()
-                raise WebdavDownloadError("PROPFIND {} {}".format(e.status, e.reason))
+                raise WebdavError("PROPFIND {} {}".format(e.status, e.reason))
             except (http.client.HTTPException, OSError) as e:
-                raise WebdavDownloadError(str(e))
+                raise WebdavError(str(e))
 
             # parse tree from content
             tree = fromstring(content)
