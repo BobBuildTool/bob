@@ -477,12 +477,8 @@ class BaseArchive(TarHelper):
             return (True, None, None)
         except (ArtifactNotFoundError, WebdavNotFoundError):
             return (False, self._namedErrorString("not found"), WARNING)
-        except (ArtifactError, WebdavError) as e:
+        except (ArtifactError, WebdavError, socket.herror, socket.gaierror) as e:
             return (False, self._namedErrorString(str(e)), WARNING)
-        except (socket.herror, socket.gaierror) as e:
-            return (False, self._namedErrorString(str(e)), WARNING)
-        except BuildError as e:
-            raise
         except (OSError, urllib.error.URLError) as e:
             return self._handleDownloadException(e, "Cannot download artifact", False)
         except tarfile.TarError as e:
@@ -517,12 +513,8 @@ class BaseArchive(TarHelper):
             return (ret, None, None)
         except (ArtifactNotFoundError, WebdavNotFoundError):
             return (None, self._namedErrorString("not found"), WARNING)
-        except (ArtifactError, WebdavError) as e:
+        except (ArtifactError, WebdavError, socket.herror, socket.gaierror) as e:
             return (None, self._namedErrorString(str(e)), WARNING)
-        except (socket.herror, socket.gaierror) as e:
-            return (None, self._namedErrorString(str(e)), WARNING)
-        except BuildError as e:
-            raise
         except (OSError, urllib.error.URLError) as e:
             return self._handleDownloadException(e, "Cannot download file", None)
         finally:
