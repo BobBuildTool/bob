@@ -523,7 +523,7 @@ class BaseArchive(TarHelper):
             signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     def _openUploadFile(self, buildId, suffix, overwrite):
-        raise ArtifactError("not implemented")
+        raise BuildError("upload not implemented")
 
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
         if not self.canUpload():
@@ -631,7 +631,7 @@ class BaseArchive(TarHelper):
             raise BobError(self._namedErrorString("Could not delete file: " + str(e)))
 
     def _delete(self, filepath):
-        raise ArtifactError("not implemented")
+        raise BobError("deleteFile() not implemented")
 
     def listDir(self, path):
         try:
@@ -640,7 +640,7 @@ class BaseArchive(TarHelper):
             raise BobError(self._namedErrorString("Could not list dir: " + str(e)))
 
     def _listDir(self, path):
-        raise ArtifactError("not implemented")
+        raise BobError("listDir() not implemented")
 
     def stat(self, filepath):
         try:
@@ -649,7 +649,7 @@ class BaseArchive(TarHelper):
             raise BobError(self._namedErrorString("Could not stat file: " + str(e)))
 
     def _stat(self, filepath):
-        raise ArtifactError("not implemented")
+        raise BobError("stat() not implemented")
 
     def getAudit(self, filepath):
         try:
@@ -658,16 +658,10 @@ class BaseArchive(TarHelper):
             raise BobError(self._namedErrorString("Could not get audit from file: " + str(e)))
 
     def _getAudit(self, filepath):
-        raise ArtifactError("not implemented")
+        raise BobError("getAudit() not implemented")
 
     def getArchiveUri(self):
-        try:
-            return self._getArchiveUri()
-        except (ArtifactError, OSError) as e:
-            raise BobError(self._namedErrorString("Could not get archive hash: " + str(e)))
-
-    def _getArchiveUri(self):
-        raise ArtifactError("not implemented")
+        raise BobError("getArchiveUri() not implemented")
 
     def getArchiveName(self):
        return self.__name
@@ -825,7 +819,7 @@ class LocalArchive(BaseArchive):
     def _getAudit(self, filename):
         return self._extractAudit(filename=os.path.join(self.__basePath, filename))
 
-    def _getArchiveUri(self):
+    def getArchiveUri(self):
         return self.__basePath
 
 
@@ -979,7 +973,7 @@ class HttpArchive(BaseArchive):
                 self.__retry(lambda: downloader.more())
                 pass
 
-    def _getArchiveUri(self):
+    def getArchiveUri(self):
         return self.__url.netloc + self.__url.path
 
 
