@@ -24,7 +24,7 @@ from .errors import BuildError, BobError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
 from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat, removePrefix
-from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
+from .webdav import WebDav, WebdavError, WebdavDownloadError, WebdavUploadError, WebdavNotFoundError, WebdavAlreadyExistsError
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import asyncio
 import concurrent.futures
@@ -442,7 +442,7 @@ class BaseArchive(TarHelper):
             return self._openUploadFile(buildId, ARTIFACT_SUFFIX, False)
         except ArtifactExistsError:
             return None
-        except (ArtifactUploadError, HttpUploadError, OSError) as e:
+        except (ArtifactUploadError, WebdavUploadError, OSError) as e:
             if self.__ignoreUploadErrors:
                 return None
             else:
@@ -478,9 +478,9 @@ class BaseArchive(TarHelper):
                 with Tee(name, fileobj, buildId, caches, workspace) as fo:
                     self._extract(fo, audit, content)
             return (True, None, None)
-        except (ArtifactNotFoundError, HttpNotFoundError):
+        except (ArtifactNotFoundError, WebdavNotFoundError):
             return (False, self._namedErrorString("not found"), WARNING)
-        except (ArtifactDownloadError, HttpDownloadError) as e:
+        except (ArtifactDownloadError, WebdavDownloadError) as e:
             return (False, self._namedErrorString(e.reason), WARNING)
         except (socket.herror, socket.gaierror) as e:
             return (False, self._namedErrorString(str(e)), WARNING)
@@ -518,9 +518,9 @@ class BaseArchive(TarHelper):
             with self._openDownloadFile(key, suffix) as (name, fileobj):
                 ret = readFileOrHandle(name, fileobj)
             return (ret, None, None)
-        except (ArtifactNotFoundError, HttpNotFoundError):
+        except (ArtifactNotFoundError, WebdavNotFoundError):
             return (None, self._namedErrorString("not found"), WARNING)
-        except (ArtifactDownloadError, HttpDownloadError) as e:
+        except (ArtifactDownloadError, WebdavDownloadError) as e:
             return (None, self._namedErrorString(e.reason), WARNING)
         except (socket.herror, socket.gaierror) as e:
             return (None, self._namedErrorString(str(e)), WARNING)
@@ -563,9 +563,9 @@ class BaseArchive(TarHelper):
         try:
             with self._openUploadFile(buildId, suffix, False) as (name, fileobj):
                 self._pack(name, fileobj, audit, content)
-        except (ArtifactExistsError, HttpAlreadyExistsError):
+        except (ArtifactExistsError, WebdavAlreadyExistsError):
             return (self._namedErrorString("skipped ({} exists in archive)".format(content)), SKIPPED)
-        except (ArtifactUploadError, HttpUploadError, tarfile.TarError, OSError) as e:
+        except (ArtifactUploadError, WebdavUploadError, tarfile.TarError, OSError) as e:
             if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
@@ -598,7 +598,7 @@ class BaseArchive(TarHelper):
             # never see an ArtifactExistsError.
             with self._openUploadFile(key, suffix, True) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, content)
-        except (ArtifactUploadError, HttpUploadError, OSError) as e:
+        except (ArtifactUploadError, WebdavUploadError, OSError) as e:
             if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
@@ -647,7 +647,7 @@ class BaseArchive(TarHelper):
     def listDir(self, path):
         try:
             return self._listDir(path)
-        except (ArtifactDownloadError, HTTPException, OSError) as e:
+        except (ArtifactDownloadError, WebdavError, OSError) as e:
             raise BobError(self._namedErrorString("Could not list dir: " + str(e)))
 
     def _listDir(self, path):
@@ -656,7 +656,7 @@ class BaseArchive(TarHelper):
     def stat(self, filepath):
         try:
             return self._stat(filepath)
-        except (ArtifactDownloadError, HTTPException, OSError) as e:
+        except (ArtifactDownloadError, WebdavError, OSError) as e:
             raise BobError(self._namedErrorString("Could not stat file: " + str(e)))
 
     def _stat(self, filepath):
@@ -909,7 +909,7 @@ class HttpArchive(BaseArchive):
         while True:
             try:
                 return request()
-            except (HTTPException, OSError, urllib.error.URLError) as e:
+            except (WebdavError, OSError, urllib.error.URLError) as e:
                 if retries == 0: raise e
                 retries -= 1
 
