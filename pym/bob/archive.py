@@ -639,10 +639,7 @@ class BaseArchive(TarHelper):
         try:
             self._delete(filepath)
         except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error ("+str(e)+")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not delete file: " + str(e)))
+            raise BuildError(self._namedErrorString("Could not delete file: " + str(e)))
 
     def _delete(self, filepath):
         raise ArtifactDownloadError("not implemented")
@@ -651,10 +648,7 @@ class BaseArchive(TarHelper):
         try:
             return self._listDir(path)
         except (ArtifactDownloadError, HTTPException, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not list dir: " + str(e)))
+            raise BuildError(self._namedErrorString("Could not list dir: " + str(e)))
 
     def _listDir(self, path):
         raise ArtifactDownloadError("not implemented")
@@ -663,10 +657,7 @@ class BaseArchive(TarHelper):
         try:
             return self._stat(filepath)
         except (ArtifactDownloadError, HTTPException, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not stat file: " + str(e)))
+            raise BuildError(self._namedErrorString("Could not stat file: " + str(e)))
 
     def _stat(self, filepath):
         raise ArtifactDownloadError("not implemented")
@@ -675,10 +666,7 @@ class BaseArchive(TarHelper):
         try:
             return self._getAudit(filepath)
         except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not get audit from file: " + str(e)))
+            raise BuildError(self._namedErrorString("Could not get audit from file: " + str(e)))
 
     def _getAudit(self, filepath):
         raise ArtifactDownloadError("not implemented")
@@ -687,10 +675,7 @@ class BaseArchive(TarHelper):
         try:
             return self._getArchiveUri()
         except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not get archive hash: " + str(e)))
+            raise BuildError(self._namedErrorString("Could not get archive hash: " + str(e)))
 
     def _getArchiveUri(self):
         raise ArtifactDownloadError("not implemented")
