@@ -627,7 +627,7 @@ class BaseArchive(TarHelper):
     def deleteFile(self, filepath):
         try:
             self._delete(filepath)
-        except (ArtifactError, OSError) as e:
+        except (ArtifactError, WebdavError, OSError) as e:
             raise BobError(self._namedErrorString("Could not delete file: " + str(e)))
 
     def _delete(self, filepath):
@@ -654,7 +654,7 @@ class BaseArchive(TarHelper):
     def getAudit(self, filepath):
         try:
             return self._getAudit(filepath)
-        except (ArtifactError, OSError) as e:
+        except (ArtifactError, WebdavError, OSError) as e:
             raise BobError(self._namedErrorString("Could not get audit from file: " + str(e)))
 
     def _getAudit(self, filepath):
@@ -699,7 +699,7 @@ class Tee:
                         c.commit()
                     except ArtifactExistsError:
                         pass
-                    except (ArtifactError, OSError) as e:
+                    except (ArtifactError, WebdavError, OSError) as e:
                         if not c.ignoreUploadErrors:
                             raise BuildError("Cannot cache artifact: " + str(e))
         finally:
@@ -741,7 +741,7 @@ class MirrorLeecher:
                 try:
                     c.write(ret)
                     i += 1
-                except (ArtifactError, OSError) as e:
+                except (ArtifactError, WebdavError, OSError) as e:
                     del self.__caches[i]
                     c.abort()
                     if not c.ignoreUploadErrors:
