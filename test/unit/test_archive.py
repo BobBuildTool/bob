@@ -25,7 +25,7 @@ from mocks.http_server import HttpServerMock
 from bob.archive import DummyArchive, HttpArchive, getArchiver
 from bob.errors import BuildError
 from bob.utils import runInEventLoop, getProcessPoolExecutor
-from bob.webdav import HTTPException
+from bob.webdav import WebdavError
 
 DOWNLOAD_ARITFACT = b'\x00'*20
 NOT_EXISTS_ARTIFACT = b'\x01'*20
@@ -749,7 +749,7 @@ class TestHttpArchiveRetries(Base, TestCase):
             self.assertIsNotNone(archive._listDir('/'))
         with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
-            with self.assertRaises(HTTPException):
+            with self.assertRaises(WebdavError):
                 archive._listDir('/')
 
     def testRetriesStat(self):
@@ -761,7 +761,7 @@ class TestHttpArchiveRetries(Base, TestCase):
             self.assertIsNotNone(archive._stat(filepath))
         with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
-            with self.assertRaises(HTTPException):
+            with self.assertRaises(WebdavError):
                 archive._stat(filepath)
 
     def testRetriesDelete(self):
@@ -777,7 +777,7 @@ class TestHttpArchiveRetries(Base, TestCase):
             f.write('test')
         with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
-            with self.assertRaises(HTTPException):
+            with self.assertRaises(WebdavError):
                 archive._delete(filename)
 
     def testRetriesAudit(self):
@@ -789,5 +789,5 @@ class TestHttpArchiveRetries(Base, TestCase):
             self.assertIsNotNone(archive._getAudit(filepath))
         with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
-            with self.assertRaises(HTTPException):
+            with self.assertRaises(WebdavError):
                 archive._getAudit(filepath)

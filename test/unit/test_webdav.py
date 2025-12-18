@@ -1,4 +1,4 @@
-from bob.webdav import WebDav, HttpAlreadyExistsError, HttpDownloadError, HttpNotFoundError, HttpUploadError
+from bob.webdav import WebDav, WebdavError, WebdavAlreadyExistsError, WebdavNotFoundError
 from mocks.http_server import HttpServerMock
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from unittest import TestCase
@@ -38,8 +38,8 @@ class TestWebdav(TestCase):
                 with open(os.path.join(self.dir, TEST_FILE)) as f:
                     content = f.readline()
                     self.assertEqual(TEST_OUTPUT, content)
-                # try to upload again should fail with HttpAlreadyExistsError
-                with self.assertRaises(HttpAlreadyExistsError) as cm:
+                # try to upload again should fail with WebdavAlreadyExistsError
+                with self.assertRaises(WebdavAlreadyExistsError) as cm:
                     webdav.upload(TEST_FILE, file, False)
                 # append same content to temp file
                 file.write(TEST_OUTPUT.encode('utf-8'))
@@ -48,19 +48,29 @@ class TestWebdav(TestCase):
                 with open(os.path.join(self.dir, TEST_FILE)) as f:
                     content = f.readline()
                     self.assertEqual(TEST_OUTPUT + TEST_OUTPUT, content)
-        # cleanup server directory
-        self.__repodir.cleanup()
-        # with 1 retry, the upload will fail initially
+
+    def testUploadRetry(self):
+        """A upload error is handled gracefully and can be retried"""
         with HttpServerMock(repoPath=self.dir, retries=1) as srv:
             webdav = GetWebdav(srv.port)
             with NamedTemporaryFile() as file:
                 file.write(TEST_OUTPUT.encode('utf-8'))
-                with self.assertRaises(HttpUploadError) as cm:
+                # first try will result in an "internal server error"
+                with self.assertRaises(WebdavError) as cm:
                     webdav.upload(TEST_FILE, file, False)
                 self.assertFalse(os.path.exists(os.path.join(self.dir, TEST_FILE)))
                 # second upload will succeed
                 webdav.upload(TEST_FILE, file, False)
                 self.assertTrue(os.path.exists(os.path.join(self.dir, TEST_FILE)))
+
+    def testUploadInterrupted(self):
+        """An upload to an unresponsive server is handled gracefully"""
+        with HttpServerMock(repoPath=self.dir, noResponse=True) as srv:
+            webdav = GetWebdav(srv.port)
+            with NamedTemporaryFile() as file:
+                file.write(TEST_OUTPUT.encode('utf-8'))
+                with self.assertRaises(WebdavError):
+                    webdav.upload(TEST_FILE, file, False)
 
     def testDownload(self):
         with HttpServerMock(self.dir) as srv:
@@ -88,13 +98,20 @@ class TestWebdav(TestCase):
             self.assertEqual(res.decode('utf-8'), 'outputtest')
             # remove the file
             os.unlink(os.path.join(self.dir, TEST_FILE))
-            # missing file will raise HttpNotFoundError
-            with self.assertRaises(HttpNotFoundError) as cm:
+            # missing file will raise WebdavNotFoundError
+            with self.assertRaises(WebdavNotFoundError) as cm:
                 webdav.download(TEST_FILE)
         # with 1 retry, the download will fail initially
         with HttpServerMock(self.dir, retries=1) as srv:
             webdav = GetWebdav(srv.port)
-            with self.assertRaises(HttpDownloadError) as cm:
+            with self.assertRaises(WebdavError) as cm:
+                webdav.download(TEST_FILE)
+
+    def testDownloadInterrupted(self):
+        """An interrupted download is handled gracefully"""
+        with HttpServerMock(repoPath=self.dir, noResponse=True) as srv:
+            webdav = GetWebdav(srv.port)
+            with self.assertRaises(WebdavError):
                 webdav.download(TEST_FILE)
 
     def testExists(self):
@@ -112,7 +129,7 @@ class TestWebdav(TestCase):
         with HttpServerMock(self.dir, retries=1, retryHead=True) as srv:
             webdav = GetWebdav(srv.port)
             # file exists
-            with self.assertRaises(HttpUploadError) as cm:
+            with self.assertRaises(WebdavError) as cm:
                 webdav.exists(TEST_FILE)
             self.assertFalse(webdav.exists(TEST_FILE))
 
@@ -136,8 +153,8 @@ class TestWebdav(TestCase):
                 f.write(TEST_OUTPUT)
             self.assertTrue(os.path.exists(path))
             webdav = GetWebdav(srv.port)
-            # first attempt fails, so HttpDownloadError is rasied
-            with self.assertRaises(HttpDownloadError) as cm:
+            # first attempt fails, so WebdavError is rasied
+            with self.assertRaises(WebdavError) as cm:
                 webdav.delete(TEST_FILE)
             self.assertTrue(os.path.exists(path))
             # second attempt will succeed
@@ -161,7 +178,7 @@ class TestWebdav(TestCase):
             path = os.path.join(self.dir, TEST_PATH1, TEST_PATH2)
             webdav = GetWebdav(srv.port)
             # should raise exception with error code 409, because we have a depth of 2, but only request 1
-            with self.assertRaises(HttpUploadError) as cm:
+            with self.assertRaises(WebdavError) as cm:
                 webdav.mkdir(remote_path)
             self.assertEqual("MKCOL 409 Conflict", str(cm.exception))
             self.assertFalse(os.path.exists(path))

@@ -20,11 +20,11 @@ concurrent uploads the artifact must appear atomically for unrelated readers.
 """
 
 from .audit import Audit
-from .errors import BuildError
+from .errors import BuildError, BobError
 from .tty import stepAction, stepMessage, \
     SKIPPED, EXECUTED, WARNING, INFO, TRACE, ERROR, IMPORTANT
 from .utils import asHexStr, removePath, isWindows, getBashPath, tarfileOpen, binStat, removePrefix
-from .webdav import WebDav, HTTPException, HttpDownloadError, HttpUploadError, HttpNotFoundError, HttpAlreadyExistsError
+from .webdav import WebDav, WebdavError, WebdavNotFoundError, WebdavAlreadyExistsError
 from tempfile import mkstemp, NamedTemporaryFile, TemporaryFile, gettempdir
 import asyncio
 import concurrent.futures
@@ -36,27 +36,15 @@ import os
 import os.path
 import shutil
 import signal
-import socket
 import struct
 import subprocess
 import tarfile
 import urllib.parse
-import hashlib
 
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
 FINGERPRINT_SUFFIX = ".fprnt"
-
-SOFT_DOWNLOAD_ERRORS = {
-    errno.ECONNREFUSED, # Connection refused
-    errno.EHOSTDOWN,    # Host is down
-    errno.EHOSTUNREACH, # No route to host
-    errno.ENETDOWN,     # Network is down
-    errno.ENETUNREACH,  # Network is unreachable
-    errno.ETIMEDOUT,    # Connection timed out
-    socket.EAI_AGAIN,   # Temp. failure in name resolution
-}
 
 
 def buildIdToName(bid):
@@ -124,19 +112,16 @@ class DummyArchive:
     def getArchiveName(self):
        return "Dummy"
 
-class ArtifactNotFoundError(Exception):
+
+class ArtifactError(Exception):
     pass
 
-class ArtifactExistsError(Exception):
+class ArtifactNotFoundError(ArtifactError):
     pass
 
-class ArtifactDownloadError(Exception):
-    def __init__(self, reason):
-        self.reason = reason
+class ArtifactExistsError(ArtifactError):
+    pass
 
-class ArtifactUploadError(Exception):
-    def __init__(self, reason):
-        self.reason = reason
 
 class TarHelper:
 
@@ -442,31 +427,11 @@ class BaseArchive(TarHelper):
             return self._openUploadFile(buildId, ARTIFACT_SUFFIX, False)
         except ArtifactExistsError:
             return None
-        except (ArtifactUploadError, HttpUploadError, OSError) as e:
+        except (ArtifactError, WebdavError, OSError) as e:
             if self.__ignoreUploadErrors:
                 return None
             else:
                 raise BuildError(self._namedErrorString("Cannot cache artifact: " + str(e)))
-
-    def _handleDownloadException(self, err, message, softerror_return):
-        # https://github.com/python/cpython/blob/4c0d7bc52afcd6b34b1085a52bb33ae695f656e5/Lib/test/support/socket_helper.py#L251
-        # urllib can wrap original socket errors multiple times (!), we must
-        # unwrap to get at the original error.
-        while True:
-            a = err.args
-            if len(a) >= 1 and isinstance(a[0], OSError):
-                err = a[0]
-            # The error can also be wrapped as args[1]:
-            #    except socket.error as msg:
-            #        raise OSError('socket error', msg) from msg
-            elif len(a) >= 2 and isinstance(a[1], OSError):
-                err = a[1]
-            else:
-                break
-
-        if self.__ignoreDownloadErrors and err.errno in SOFT_DOWNLOAD_ERRORS:
-            return (softerror_return, self._namedErrorString(str(err)), WARNING)
-        raise BuildError(self._namedErrorString(message + ": " + str(err)))
 
     def _downloadPackage(self, buildId, suffix, audit, content, caches, workspace):
         # Set default signal handler so that KeyboardInterrupt is raised.
@@ -474,26 +439,34 @@ class BaseArchive(TarHelper):
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
-            with self._openDownloadFile(buildId, suffix) as (name, fileobj):
-                with Tee(name, fileobj, buildId, caches, workspace) as fo:
-                    self._extract(fo, audit, content)
-            return (True, None, None)
-        except (ArtifactNotFoundError, HttpNotFoundError):
-            return (False, self._namedErrorString("not found"), WARNING)
-        except (ArtifactDownloadError, HttpDownloadError) as e:
-            return (False, self._namedErrorString(e.reason), WARNING)
-        except (socket.herror, socket.gaierror) as e:
-            return (False, self._namedErrorString(str(e)), WARNING)
-        except BuildError as e:
-            raise
-        except (OSError, urllib.error.URLError) as e:
-            return self._handleDownloadException(e, "Cannot download artifact", False)
-        except tarfile.TarError as e:
-            raise BuildError(self._namedErrorString("Error extracting binary artifact: " + str(e)))
+            # If the artifact is not found, we're done here. Usually, any error
+            # up to and including opening the download file is ignored too.
+            try:
+                downloader = self._openDownloadFile(buildId, suffix)
+            except (ArtifactNotFoundError, WebdavNotFoundError):
+                return (False, self._namedErrorString("artifact not found"), WARNING)
+            except (ArtifactError, WebdavError, OSError) as e:
+                if self.__ignoreDownloadErrors:
+                    return (False, self._namedErrorString(str(e)), WARNING)
+                else:
+                    raise BuildError(self._namedErrorString(f"Cannot download artifact: {e}"))
+
+            # After we have gained hold of the artifact, try to download and
+            # extract it. Any error here is fatal as we're in a half baked state.
+            try:
+                with downloader as (name, fileobj):
+                    with Tee(name, fileobj, buildId, caches, workspace) as fo:
+                        self._extract(fo, audit, content)
+            except (ArtifactError, WebdavError, OSError) as e:
+                raise BuildError(self._namedErrorString(f"Cannot download artifact: {e}"))
+            except tarfile.TarError as e:
+                raise BuildError(self._namedErrorString("Error extracting binary artifact: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+        return (True, None, None)
 
     async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
         if not self.canDownload():
@@ -515,26 +488,32 @@ class BaseArchive(TarHelper):
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
-            with self._openDownloadFile(key, suffix) as (name, fileobj):
-                ret = readFileOrHandle(name, fileobj)
-            return (ret, None, None)
-        except (ArtifactNotFoundError, HttpNotFoundError):
-            return (None, self._namedErrorString("not found"), WARNING)
-        except (ArtifactDownloadError, HttpDownloadError) as e:
-            return (None, self._namedErrorString(e.reason), WARNING)
-        except (socket.herror, socket.gaierror) as e:
-            return (None, self._namedErrorString(str(e)), WARNING)
-        except BuildError as e:
-            raise
-        except (OSError, urllib.error.URLError) as e:
-            return self._handleDownloadException(e, "Cannot download file", None)
+            # Try opening the file. Errors at this stage are usually ignored.
+            try:
+                downloader = self._openDownloadFile(key, suffix)
+            except (ArtifactNotFoundError, WebdavNotFoundError):
+                return (None, self._namedErrorString("file not found"), WARNING)
+            except (ArtifactError, WebdavError, OSError) as e:
+                if self.__ignoreDownloadErrors:
+                    return (None, self._namedErrorString(str(e)), WARNING)
+                else:
+                    raise BuildError(self._namedErrorString(f"Cannot download file: {e}"))
+
+            # Read the file. Errors at this stage are fatal.
+            try:
+                with downloader as (name, fileobj):
+                    ret = readFileOrHandle(name, fileobj)
+            except (ArtifactError, WebdavError, OSError) as e:
+                raise BuildError(self._namedErrorString(f"Cannot download file: {e}"))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
 
+        return (ret, None, None)
+
     def _openUploadFile(self, buildId, suffix, overwrite):
-        raise ArtifactUploadError("not implemented")
+        raise BuildError("upload not implemented")
 
     async def uploadPackage(self, step, buildId, audit, content, executor=None):
         if not self.canUpload():
@@ -563,9 +542,9 @@ class BaseArchive(TarHelper):
         try:
             with self._openUploadFile(buildId, suffix, False) as (name, fileobj):
                 self._pack(name, fileobj, audit, content)
-        except (ArtifactExistsError, HttpAlreadyExistsError):
+        except (ArtifactExistsError, WebdavAlreadyExistsError):
             return (self._namedErrorString("skipped ({} exists in archive)".format(content)), SKIPPED)
-        except (ArtifactUploadError, HttpUploadError, tarfile.TarError, OSError) as e:
+        except (ArtifactError, WebdavError, tarfile.TarError, OSError) as e:
             if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
@@ -598,7 +577,7 @@ class BaseArchive(TarHelper):
             # never see an ArtifactExistsError.
             with self._openUploadFile(key, suffix, True) as (name, fileobj):
                 writeFileOrHandle(name, fileobj, content)
-        except (ArtifactUploadError, HttpUploadError, OSError) as e:
+        except (ArtifactError, WebdavError, OSError) as e:
             if self.__ignoreUploadErrors:
                 return (self._namedErrorString("error ("+str(e)+")"), ERROR)
             else:
@@ -638,62 +617,41 @@ class BaseArchive(TarHelper):
     def deleteFile(self, filepath):
         try:
             self._delete(filepath)
-        except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error ("+str(e)+")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not delete file: " + str(e)))
+        except (ArtifactError, WebdavError, OSError) as e:
+            raise BobError(self._namedErrorString("Could not delete file: " + str(e)))
 
     def _delete(self, filepath):
-        raise ArtifactDownloadError("not implemented")
+        raise BobError("deleteFile() not implemented")
 
     def listDir(self, path):
         try:
             return self._listDir(path)
-        except (ArtifactDownloadError, HTTPException, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not list dir: " + str(e)))
+        except (ArtifactError, WebdavError, OSError) as e:
+            raise BobError(self._namedErrorString("Could not list dir: " + str(e)))
 
     def _listDir(self, path):
-        raise ArtifactDownloadError("not implemented")
+        raise BobError("listDir() not implemented")
 
     def stat(self, filepath):
         try:
             return self._stat(filepath)
-        except (ArtifactDownloadError, HTTPException, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not stat file: " + str(e)))
+        except (ArtifactError, WebdavError, OSError) as e:
+            raise BobError(self._namedErrorString("Could not stat file: " + str(e)))
 
     def _stat(self, filepath):
-        raise ArtifactDownloadError("not implemented")
+        raise BobError("stat() not implemented")
 
     def getAudit(self, filepath):
         try:
             return self._getAudit(filepath)
-        except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not get audit from file: " + str(e)))
+        except (ArtifactError, WebdavError, OSError) as e:
+            raise BobError(self._namedErrorString("Could not get audit from file: " + str(e)))
 
     def _getAudit(self, filepath):
-        raise ArtifactDownloadError("not implemented")
+        raise BobError("getAudit() not implemented")
 
     def getArchiveUri(self):
-        try:
-            return self._getArchiveUri()
-        except (ArtifactDownloadError, OSError) as e:
-            if self.__ignoreUploadErrors:
-                return (self._namedErrorString("error (" + str(e) + ")"), ERROR)
-            else:
-                raise BuildError(self._namedErrorString("Could not get archive hash: " + str(e)))
-
-    def _getArchiveUri(self):
-        raise ArtifactDownloadError("not implemented")
+        raise BobError("getArchiveUri() not implemented")
 
     def getArchiveName(self):
        return self.__name
@@ -731,7 +689,7 @@ class Tee:
                         c.commit()
                     except ArtifactExistsError:
                         pass
-                    except (ArtifactUploadError, OSError) as e:
+                    except (ArtifactError, WebdavError, OSError) as e:
                         if not c.ignoreUploadErrors:
                             raise BuildError("Cannot cache artifact: " + str(e))
         finally:
@@ -773,7 +731,7 @@ class MirrorLeecher:
                 try:
                     c.write(ret)
                     i += 1
-                except (ArtifactUploadError, OSError) as e:
+                except (ArtifactError, WebdavError, OSError) as e:
                     del self.__caches[i]
                     c.abort()
                     if not c.ignoreUploadErrors:
@@ -811,10 +769,7 @@ class LocalArchive(BaseArchive):
 
     def _openDownloadFile(self, buildId, suffix):
         (packageResultPath, packageResultFile) = self._getPath(buildId, suffix)
-        if os.path.isfile(packageResultFile):
-            return LocalArchiveDownloader(packageResultFile)
-        else:
-            raise ArtifactNotFoundError()
+        return LocalArchiveDownloader(packageResultFile)
 
     def _openUploadFile(self, buildId, suffix, overwrite):
         (packageResultPath, packageResultFile) = self._getPath(buildId, suffix)
@@ -851,7 +806,7 @@ class LocalArchive(BaseArchive):
     def _getAudit(self, filename):
         return self._extractAudit(filename=os.path.join(self.__basePath, filename))
 
-    def _getArchiveUri(self):
+    def getArchiveUri(self):
         return self.__basePath
 
 
@@ -859,8 +814,10 @@ class LocalArchiveDownloader:
     def __init__(self, name):
         try:
             self.fd = open(name, "rb")
+        except FileNotFoundError:
+            raise ArtifactNotFoundError()
         except OSError as e:
-            raise ArtifactDownloadError(str(e))
+            raise ArtifactError(str(e))
     def __enter__(self):
         return (None, self.fd)
     def __exit__(self, exc_type, exc_value, traceback):
@@ -924,8 +881,8 @@ class HttpArchive(BaseArchive):
         while True:
             try:
                 return request()
-            except (HTTPException, OSError, urllib.error.URLError) as e:
-                if retries == 0: raise e
+            except (WebdavError, OSError) as e:
+                if retries == 0: raise
                 retries -= 1
 
     def _canManage(self):
@@ -990,7 +947,7 @@ class HttpArchive(BaseArchive):
         if stats['etag'] is not None and not stats['etag'].startswith('W/'):
             return stats['etag']
         if not stats['mdate'] or not stats['len']:
-            raise ArtifactDownloadError("Missing stats for file " + filename)
+            raise ArtifactError("Missing stats for file " + filename)
         from email.utils import parsedate_to_datetime
         return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
 
@@ -1005,7 +962,7 @@ class HttpArchive(BaseArchive):
                 self.__retry(lambda: downloader.more())
                 pass
 
-    def _getArchiveUri(self):
+    def getArchiveUri(self):
         return self.__url.netloc + self.__url.path
 
 
@@ -1077,7 +1034,7 @@ class CustomArchive(BaseArchive):
                 tmpName = None
                 return CustomDownloader(ret)
             else:
-                raise ArtifactDownloadError("failed (exit {})".format(ret))
+                raise ArtifactError("failed (exit {})".format(ret))
         finally:
             if tmpName is not None: os.unlink(tmpName)
 
@@ -1119,7 +1076,7 @@ class CustomUploader:
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                     cwd=gettempdir(), env=env)
                 if ret != 0:
-                    raise ArtifactUploadError("command return with status {}".format(ret))
+                    raise ArtifactError("command return with status {}".format(ret))
         finally:
             os.unlink(self.name)
         return False
@@ -1189,7 +1146,7 @@ class AzureArchive(BaseArchive):
         except ResourceNotFoundError:
             raise ArtifactNotFoundError()
         except AzureError as e:
-            raise ArtifactDownloadError(str(e))
+            raise ArtifactError(str(e))
         finally:
             if client is not None: client.close()
 
@@ -1206,7 +1163,7 @@ class AzureArchive(BaseArchive):
             containerClient = blobClient = None
             return ret
         except AzureError as e:
-            raise ArtifactUploadError(str(e))
+            raise ArtifactError(str(e))
         finally:
             if blobClient is not None: blobClient.close()
             if containerClient is not None: containerClient.close()
@@ -1251,7 +1208,7 @@ class AzureUploader:
         except ResourceExistsError:
             raise ArtifactExistsError()
         except AzureError as e:
-            raise ArtifactUploadError(str(e))
+            raise ArtifactError(str(e))
 
 
 class MultiArchive:
