@@ -36,27 +36,15 @@ import os
 import os.path
 import shutil
 import signal
-import socket
 import struct
 import subprocess
 import tarfile
 import urllib.parse
-import hashlib
 
 ARCHIVE_GENERATION = '-1'
 ARTIFACT_SUFFIX = ".tgz"
 BUILDID_SUFFIX = ".buildid"
 FINGERPRINT_SUFFIX = ".fprnt"
-
-SOFT_DOWNLOAD_ERRORS = {
-    errno.ECONNREFUSED, # Connection refused
-    errno.EHOSTDOWN,    # Host is down
-    errno.EHOSTUNREACH, # No route to host
-    errno.ENETDOWN,     # Network is down
-    errno.ENETUNREACH,  # Network is unreachable
-    errno.ETIMEDOUT,    # Connection timed out
-    socket.EAI_AGAIN,   # Temp. failure in name resolution
-}
 
 
 def buildIdToName(bid):
@@ -445,48 +433,40 @@ class BaseArchive(TarHelper):
             else:
                 raise BuildError(self._namedErrorString("Cannot cache artifact: " + str(e)))
 
-    def _handleDownloadException(self, err, message, softerror_return):
-        # https://github.com/python/cpython/blob/4c0d7bc52afcd6b34b1085a52bb33ae695f656e5/Lib/test/support/socket_helper.py#L251
-        # urllib can wrap original socket errors multiple times (!), we must
-        # unwrap to get at the original error.
-        while True:
-            a = err.args
-            if len(a) >= 1 and isinstance(a[0], OSError):
-                err = a[0]
-            # The error can also be wrapped as args[1]:
-            #    except socket.error as msg:
-            #        raise OSError('socket error', msg) from msg
-            elif len(a) >= 2 and isinstance(a[1], OSError):
-                err = a[1]
-            else:
-                break
-
-        if self.__ignoreDownloadErrors and err.errno in SOFT_DOWNLOAD_ERRORS:
-            return (softerror_return, self._namedErrorString(str(err)), WARNING)
-        raise BuildError(self._namedErrorString(message + ": " + str(err)))
-
     def _downloadPackage(self, buildId, suffix, audit, content, caches, workspace):
         # Set default signal handler so that KeyboardInterrupt is raised.
         # Needed to gracefully handle ctrl+c.
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
-            with self._openDownloadFile(buildId, suffix) as (name, fileobj):
-                with Tee(name, fileobj, buildId, caches, workspace) as fo:
-                    self._extract(fo, audit, content)
-            return (True, None, None)
-        except (ArtifactNotFoundError, WebdavNotFoundError):
-            return (False, self._namedErrorString("not found"), WARNING)
-        except (ArtifactError, WebdavError, socket.herror, socket.gaierror) as e:
-            return (False, self._namedErrorString(str(e)), WARNING)
-        except (OSError, urllib.error.URLError) as e:
-            return self._handleDownloadException(e, "Cannot download artifact", False)
-        except tarfile.TarError as e:
-            raise BuildError(self._namedErrorString("Error extracting binary artifact: " + str(e)))
+            # If the artifact is not found, we're done here. Usually, any error
+            # up to and including opening the download file is ignored too.
+            try:
+                downloader = self._openDownloadFile(buildId, suffix)
+            except (ArtifactNotFoundError, WebdavNotFoundError):
+                return (False, self._namedErrorString("artifact not found"), WARNING)
+            except (ArtifactError, WebdavError, OSError) as e:
+                if self.__ignoreDownloadErrors:
+                    return (False, self._namedErrorString(str(e)), WARNING)
+                else:
+                    raise BuildError(self._namedErrorString(f"Cannot download artifact: {e}"))
+
+            # After we have gained hold of the artifact, try to download and
+            # extract it. Any error here is fatal as we're in a half baked state.
+            try:
+                with downloader as (name, fileobj):
+                    with Tee(name, fileobj, buildId, caches, workspace) as fo:
+                        self._extract(fo, audit, content)
+            except (ArtifactError, WebdavError, OSError) as e:
+                raise BuildError(self._namedErrorString(f"Cannot download artifact: {e}"))
+            except tarfile.TarError as e:
+                raise BuildError(self._namedErrorString("Error extracting binary artifact: " + str(e)))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+        return (True, None, None)
 
     async def downloadLocalLiveBuildId(self, step, liveBuildId, executor=None):
         if not self.canDownload():
@@ -508,19 +488,29 @@ class BaseArchive(TarHelper):
         signal.signal(signal.SIGINT, signal.default_int_handler)
 
         try:
-            with self._openDownloadFile(key, suffix) as (name, fileobj):
-                ret = readFileOrHandle(name, fileobj)
-            return (ret, None, None)
-        except (ArtifactNotFoundError, WebdavNotFoundError):
-            return (None, self._namedErrorString("not found"), WARNING)
-        except (ArtifactError, WebdavError, socket.herror, socket.gaierror) as e:
-            return (None, self._namedErrorString(str(e)), WARNING)
-        except (OSError, urllib.error.URLError) as e:
-            return self._handleDownloadException(e, "Cannot download file", None)
+            # Try opening the file. Errors at this stage are usually ignored.
+            try:
+                downloader = self._openDownloadFile(key, suffix)
+            except (ArtifactNotFoundError, WebdavNotFoundError):
+                return (None, self._namedErrorString("file not found"), WARNING)
+            except (ArtifactError, WebdavError, OSError) as e:
+                if self.__ignoreDownloadErrors:
+                    return (None, self._namedErrorString(str(e)), WARNING)
+                else:
+                    raise BuildError(self._namedErrorString(f"Cannot download file: {e}"))
+
+            # Read the file. Errors at this stage are fatal.
+            try:
+                with downloader as (name, fileobj):
+                    ret = readFileOrHandle(name, fileobj)
+            except (ArtifactError, WebdavError, OSError) as e:
+                raise BuildError(self._namedErrorString(f"Cannot download file: {e}"))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+        return (ret, None, None)
 
     def _openUploadFile(self, buildId, suffix, overwrite):
         raise BuildError("upload not implemented")
@@ -891,8 +881,8 @@ class HttpArchive(BaseArchive):
         while True:
             try:
                 return request()
-            except (WebdavError, OSError, urllib.error.URLError) as e:
-                if retries == 0: raise e
+            except (WebdavError, OSError) as e:
+                if retries == 0: raise
                 retries -= 1
 
     def _canManage(self):
