@@ -779,10 +779,7 @@ class LocalArchive(BaseArchive):
 
     def _openDownloadFile(self, buildId, suffix):
         (packageResultPath, packageResultFile) = self._getPath(buildId, suffix)
-        if os.path.isfile(packageResultFile):
-            return LocalArchiveDownloader(packageResultFile)
-        else:
-            raise ArtifactNotFoundError()
+        return LocalArchiveDownloader(packageResultFile)
 
     def _openUploadFile(self, buildId, suffix, overwrite):
         (packageResultPath, packageResultFile) = self._getPath(buildId, suffix)
@@ -827,6 +824,8 @@ class LocalArchiveDownloader:
     def __init__(self, name):
         try:
             self.fd = open(name, "rb")
+        except FileNotFoundError:
+            raise ArtifactNotFoundError()
         except OSError as e:
             raise ArtifactError(str(e))
     def __enter__(self):
