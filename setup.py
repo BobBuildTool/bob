@@ -136,7 +136,7 @@ setup(
         'PyYAML',
         'schema',
         'python-magic',
-        'pyparsing',
+        'pyparsing>=3',
     ],
 
     # Optional dependencies that are not needed by default

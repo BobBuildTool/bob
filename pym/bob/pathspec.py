@@ -15,7 +15,7 @@ import pyparsing
 import sqlite3
 
 # need to enable this for nested expression parsing performance
-pyparsing.ParserElement.enablePackrat()
+pyparsing.ParserElement.enable_packrat()
 
 # See "Efficient algorithms for processing XPath queries" [1] for the core
 # algorithms that are applied here.
@@ -766,12 +766,12 @@ class PackageSet:
         abbreviatedStep = pyparsing.Keyword('.')
 
         sQStringLiteral = pyparsing.QuotedString("'")
-        sQStringLiteral.setParseAction(
+        sQStringLiteral.set_parse_action(
             lambda s, loc, toks: StringLiteral(s, loc, toks, False,
                                                self.__stringFunctions,
                                                self.__getGraphIter))
         dQStringLiteral = pyparsing.QuotedString('"', '\\')
-        dQStringLiteral.setParseAction(
+        dQStringLiteral.set_parse_action(
             lambda s, loc, toks: StringLiteral(s, loc, toks, True,
                                                self.__stringFunctions,
                                                self.__getGraphIter))
@@ -784,11 +784,11 @@ class PackageSet:
             pyparsing.Optional(functionArg +
                 pyparsing.ZeroOrMore(pyparsing.Suppress(',') + functionArg)) + \
             pyparsing.Suppress(')')
-        functionCall.setParseAction(
+        functionCall.set_parse_action(
             lambda s, loc, toks: FunctionCall(s, loc, toks, self.__stringFunctions,
                                               self.__getGraphIter))
 
-        predExpr = pyparsing.infixNotation(
+        predExpr = pyparsing.infix_notation(
             locationPath ^ stringLiteral ^ functionCall,
             [
                 ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks, self.__getGraphRoot, 9)),
@@ -804,7 +804,7 @@ class PackageSet:
         predicate = '[' + predExpr + ']'
         step = abbreviatedStep | (pyparsing.Optional(axisSpecifier) +
                                   nodeTest + pyparsing.Optional(predicate))
-        step.setParseAction(lambda s, loc, toks: LocationStep(s, loc, toks))
+        step.set_parse_action(lambda s, loc, toks: LocationStep(s, loc, toks))
         abbreviatedRelativeLocationPath = step + '//' + relativeLocationPath
         relativeLocationPath << (
             abbreviatedRelativeLocationPath |
@@ -814,7 +814,7 @@ class PackageSet:
         absoluteLocationPath = abbreviatedAbsoluteLocationPath | \
                                ('/' + relativeLocationPath)
         locationPath << (absoluteLocationPath | relativeLocationPath)
-        locationPath.setParseAction(
+        locationPath.set_parse_action(
             lambda s, loc, toks: LocationPath(s, loc, toks, self.__getGraphRoot))
 
         self.__pathGrammer = locationPath
@@ -876,7 +876,7 @@ class PackageSet:
         while path.endswith('/'): path = path[:-1]
         if path:
             try:
-                path = self.__pathGrammer.parseString(path, True)
+                path = self.__pathGrammer.parse_string(path, True)
             except pyparsing.ParseBaseException as e:
                 raise BobError("Invalid syntax: " + str(e),
                                help=markLocation(e.line, e.col))

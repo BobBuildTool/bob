@@ -17,7 +17,7 @@ import sys
 import tarfile
 
 # need to enable this for nested expression parsing performance
-pyparsing.ParserElement.enablePackrat()
+pyparsing.ParserElement.enable_packrat()
 
 class ArchiveScanner:
     CUR_VERSION = 3
@@ -344,12 +344,12 @@ class RetainExpression(Base):
 # meta.package == "root" && build.date > "2017-06-19" LIMIT 5 ORDER BY build.date ASC
 def query(scanner, expressions):
     varReference = pyparsing.Word(pyparsing.alphanums+'._-')
-    varReference.setParseAction(lambda s, loc, toks: VarReference(s, loc, toks))
+    varReference.set_parse_action(lambda s, loc, toks: VarReference(s, loc, toks))
 
     stringLiteral = pyparsing.QuotedString('"', '\\')
-    stringLiteral.setParseAction(lambda s, loc, toks: StringLiteral(s, loc, toks))
+    stringLiteral.set_parse_action(lambda s, loc, toks: StringLiteral(s, loc, toks))
 
-    selectExpr = pyparsing.infixNotation(
+    selectExpr = pyparsing.infix_notation(
         stringLiteral | varReference,
         [
             ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotPredicate(s, loc, toks)),
@@ -371,10 +371,10 @@ def query(scanner, expressions):
                            varReference +
         pyparsing.Optional(pyparsing.CaselessKeyword("ASC") |
                            pyparsing.CaselessKeyword("DESC"))))
-    expr.setParseAction(lambda s, loc, toks: RetainExpression(s, loc, toks))
+    expr.set_parse_action(lambda s, loc, toks: RetainExpression(s, loc, toks))
 
     try:
-        retainExpressions = [ expr.parseString(e, True)[0] for e in expressions ]
+        retainExpressions = [ expr.parse_string(e, True)[0] for e in expressions ]
     except pyparsing.ParseBaseException as e:
         raise BobError("Invalid retention expression: " + str(e))
 
