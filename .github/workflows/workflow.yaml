@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
     build-linux:
-        runs-on: ubuntu-22.04
+        runs-on: ubuntu-24.04
         timeout-minutes: 15
         strategy:
             matrix:
@@ -39,12 +39,13 @@ jobs:
                 python -m pip install --upgrade setuptools
                 pip install PyYAML coverage schema python-magic pyparsing sphinx wheel
                 sudo apt-get update
-                sudo apt-get install cvs
+                sudo apt-get install cvs subversion
 
             - name: Run unit tests
               run: |
                 git config --global init.defaultBranch master # keep the old name
                 git config --global protocol.file.allow always # roll back CVE-2022-39253
+                sudo sh -c "echo 0 > /proc/sys/kernel/apparmor_restrict_unprivileged_userns"
                 eatmydata ./test/run-tests.sh -c xml -v
 
             - name: Build Python package
