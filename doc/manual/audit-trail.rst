@@ -74,6 +74,9 @@ Example of a single audit record::
             "c5b2a8231156f43728af34f3a2dcb731ade2f76a"
          ]
       },
+      "files" : {
+         "hashes" : "0dd432edfab90223f22e49c02e2124f87d6f0a56  ./COPYING"
+      },
       "meta" : {
          "language" : "bash",
          "recipe" : "root",
@@ -308,4 +311,17 @@ found under the ``build`` key and contains the following fields:
    e.g. when running in a docker container. Be careful when relying on this
    information. The ``os-release`` field, if present, is more reliable in this
    case.
+
+Audit files
+~~~~~~~~~~~
+
+Additional files can be included in the audit trail by using
+:ref:`configuration-recipes-auditfiles`.  Essentially, they are included as is
+as strings into a key/value mapping under the ``files`` key. Example::
+
+    {
+       "files" : {
+           "hashes" : "0dd432edfab90223f22e49c02e2124f87d6f0a56  ./COPYING"
+       },
+    }
 

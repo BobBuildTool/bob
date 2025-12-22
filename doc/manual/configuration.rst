@@ -489,6 +489,60 @@ can be configured.
 Recipe and class keywords
 -------------------------
 
+.. _configuration-recipes-auditfiles:
+
+{checkout,build,package}AuditFiles
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: Dictionary (String -> String | AuditFileDefinition)
+
+The :ref:`audit-trail` records where and when a package was built, the state of
+the recipes and the checked out sources. Additionally, selected files of a step
+can be included into the audit trail too. Example::
+
+    # Create a checksum of all files except the ".bob" folder.
+    checkoutDeterministic: True
+    checkoutScript: |
+        ...
+        mkdir .bob
+        find . -path ./.bob -prune -o \( -type f -print \) | xargs sha1sum > .bob/file-hashes
+
+    checkoutAuditFiles:
+        FILE_HASHES: .bob/file-hashes
+
+This will include the content of ``.bob/file-hashes`` into the audit trail::
+
+    {
+        "files" : {
+            "FILE_HASHES" : "0dd432edfab90223f22e49c02e2124f87d6f0a56  ./COPYING"
+        },
+    }
+
+By default, the named file(s) must be present and are read with UTF-8 encoding.
+Both properties can be changed with the long format::
+
+    packageAuditFiles:
+        COPYING:
+            filename: COPYING
+            encoding: latin1
+            if: "$INCLUDE_COPYING"
+
+The file is only added to the audit trail when the ``if`` :ref:`condition
+<configuration-principle-booleans>` is true. The file name must always be a
+relative path. File names and encodings can use
+:ref:`configuration-principle-subst`. There is a special encoding ``"base64"``
+which can read binary file and includes them base64 encoded into the audit
+trail. See the `Python standard encodings
+<https://docs.python.org/3/library/codecs.html#standard-encodings>`_ for a list
+of possible encodings.
+
+Note that changing any of the audit files properties does not lead to a rebuild
+of affected packages. These settings do not influence the build result and
+therefore also do not contribute to variant management. If two identical
+packages use different audit file settings it is unspecified which setting is
+applied.  Therefore, keep the audit file settings static or ensure that they
+are configured consistent between package variants.
+
 .. _configuration-recipes-scripts:
 
 {checkout,build,package}Script[{Bash,Pwsh}]
