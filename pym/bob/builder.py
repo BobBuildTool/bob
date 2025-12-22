@@ -17,8 +17,9 @@ from .tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit,
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from .utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
-    isWindows, INVALID_CHAR_TRANS, quoteCmdExe, getPlatformTag, canSymlink
+    isWindows, INVALID_CHAR_TRANS, quoteCmdExe, getPlatformTag, canSymlink, isAbsPath
 from .share import NullShare
+from base64 import b64encode
 from shlex import quote
 from textwrap import dedent
 import argparse
@@ -710,6 +711,21 @@ cd {ROOT}
             for var, val in step.getPackage().getMetaEnv().items():
                 audit.addMetaEnv(var, val)
             audit.setRecipesAudit(await step.getPackage().getRecipe().getRecipeSet().getScmAudit())
+            for var, (fn, encoding) in step.getAuditFileNames().items():
+                if isAbsPath(fn):
+                    raise BuildError(f"Audit: {var}: Path is not relative: {fn}")
+                fn = os.path.join(step.getWorkspacePath(), fn)
+                try:
+                    if encoding == "base64":
+                        with open(fn, "rb") as f:
+                            audit.addAuditFile(var, b64encode(f.read()).decode("ascii"))
+                    else:
+                        with open(fn, encoding=encoding) as f:
+                            audit.addAuditFile(var, f.read())
+                except (OSError, ValueError) as e:
+                    raise BuildError(f"Audit: cannot read '{fn}': {e}")
+                except LookupError:
+                    raise BuildError(f"Audit: error reading '{fn}': encoding '{encoding}' not supported")
 
             # The following things make only sense if we just executed the step
             if executed:

@@ -843,10 +843,11 @@ class Sandbox:
 class CoreStep(CoreItem):
     __slots__ = ( "corePackage", "digestEnv", "env", "args",
         "providedEnv", "providedTools", "providedDeps", "providedSandbox",
-        "variantId", "deterministic", "isValid", "toolDep", "toolDepWeak" )
+        "variantId", "deterministic", "isValid", "toolDep", "toolDepWeak",
+        "auditFileNames" )
 
     def __init__(self, corePackage, isValid, deterministic, digestEnv, env, args,
-                 toolDep, toolDepWeak):
+                 toolDep, toolDepWeak, auditFileNames):
         self.corePackage = corePackage
         self.isValid = isValid
         self.digestEnv = digestEnv.detach()
@@ -861,6 +862,7 @@ class CoreStep(CoreItem):
         self.providedTools = {}
         self.providedDeps = []
         self.providedSandbox = None
+        self.auditFileNames = auditFileNames
 
     def getPreRunCmds(self):
         return []
@@ -1305,6 +1307,9 @@ class Step:
     def toolDepWeak(self):
         return self._coreStep.toolDepWeak
 
+    def getAuditFileNames(self):
+        return self._coreStep.auditFileNames
+
 
 class CoreCheckoutStep(CoreStep):
     __slots__ = ( "scmList", "__checkoutUpdateIf", "__checkoutUpdateDeterministic", "__checkoutAsserts" )
@@ -1312,7 +1317,7 @@ class CoreCheckoutStep(CoreStep):
     def __init__(self, corePackage, checkout=None, checkoutSCMs=[],
                  fullEnv=Env(), digestEnv=Env(), env=Env(), args=[],
                  checkoutUpdateIf=[], checkoutUpdateDeterministic=True,
-                 toolDep=set(), toolDepWeak=set()):
+                 toolDep=set(), toolDepWeak=set(), auditFileNames={}):
         if checkout:
             recipeSet = corePackage.recipe.getRecipeSet()
             overrides = recipeSet.scmOverrides()
@@ -1353,7 +1358,8 @@ class CoreCheckoutStep(CoreStep):
         self.__checkoutUpdateIf = checkoutUpdateIf
         self.__checkoutUpdateDeterministic = checkoutUpdateDeterministic
         deterministic = corePackage.recipe.checkoutDeterministic
-        super().__init__(corePackage, isValid, deterministic, digestEnv, env, args, toolDep, toolDepWeak)
+        super().__init__(corePackage, isValid, deterministic, digestEnv, env, args, toolDep,
+                         toolDepWeak, auditFileNames)
 
     def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
@@ -1438,10 +1444,12 @@ class CoreBuildStep(CoreStep):
     __slots__ = ["fingerprintMask"]
 
     def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(),
-                 env=Env(), args=[], fingerprintMask=0, toolDep=set(), toolDepWeak=set()):
+                 env=Env(), args=[], fingerprintMask=0, toolDep=set(), toolDepWeak=set(),
+                 auditFileNames={}):
         isValid = script[1] is not None
         self.fingerprintMask = fingerprintMask
-        super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak)
+        super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak,
+                         auditFileNames)
 
     def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
@@ -1475,10 +1483,11 @@ class CorePackageStep(CoreStep):
     __slots__ = ["fingerprintMask"]
 
     def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[],
-                 fingerprintMask=0, toolDep=set(), toolDepWeak=set()):
+                 fingerprintMask=0, toolDep=set(), toolDepWeak=set(), auditFileNames={}):
         isValid = script[1] is not None
         self.fingerprintMask = fingerprintMask
-        super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak)
+        super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak,
+                         auditFileNames)
 
     def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
         package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
@@ -1553,27 +1562,27 @@ class CorePackage:
 
     def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv,
                                env, args, checkoutUpdateIf, checkoutUpdateDeterministic,
-                               toolDep, toolDepWeak):
+                               toolDep, toolDepWeak, auditFileNames):
         ret = self.checkoutStep = CoreCheckoutStep(self, checkout, checkoutSCMs,
             fullEnv, digestEnv, env, args, checkoutUpdateIf, checkoutUpdateDeterministic,
-            toolDep, toolDepWeak)
+            toolDep, toolDepWeak, auditFileNames)
         return ret
 
     def createInvalidCoreCheckoutStep(self):
         ret = self.checkoutStep = CoreCheckoutStep(self)
         return ret
 
-    def createCoreBuildStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak):
+    def createCoreBuildStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak, auditFileNames):
         ret = self.buildStep = CoreBuildStep(self, script, digestEnv, env, args,
-                                             fingerprintMask, toolDep, toolDepWeak)
+                                             fingerprintMask, toolDep, toolDepWeak, auditFileNames)
         return ret
 
     def createInvalidCoreBuildStep(self, args):
         ret = self.buildStep = CoreBuildStep(self, args=args)
         return ret
 
-    def createCorePackageStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak):
-        ret = self.packageStep = CorePackageStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak)
+    def createCorePackageStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak, auditFileNames):
+        ret = self.packageStep = CorePackageStep(self, script, digestEnv, env, args, fingerprintMask, toolDep, toolDepWeak, auditFileNames)
         return ret
 
     def getCorePackageStep(self):
@@ -1855,12 +1864,8 @@ class LayerValidator:
 
         return LayerSpec(name, RecipeSet.LAYERS_SCM_SCHEMA.validate(_data)[0])
 
-class VarDefineValidator:
+class KeyValDefineValidator:
     VAR_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
-    VAR_DEF = schema.Schema({
-            'value' : str,
-            schema.Optional("if"): schema.Or(str, IfExpression),
-        })
 
     def __init__(self, keyword, conditional=True):
         self.__keyword = keyword
@@ -1875,30 +1880,72 @@ class VarDefineValidator:
         for key,value in sorted(data.items()):
             if not isinstance(key, str):
                 raise schema.SchemaUnexpectedTypeError(
-                    "{}: bad variable '{}'. Environment variable names must be strings!"
-                        .format(self.__keyword, key),
+                    f"{self.__keyword}: bad variable '{key}'. Variable names must be strings!",
                     None)
             if key.startswith("BOB_"):
                 raise schema.SchemaWrongKeyError(
-                    "{}: bad variable '{}'. Environment variables starting with 'BOB_' are reserved!"
-                        .format(self.__keyword, key),
+                    f"{self.__keyword}: bad variable '{key}'. Variables starting with 'BOB_' are reserved!",
                     None)
             if self.VAR_NAME.match(key) is None:
                 raise schema.SchemaWrongKeyError(
-                    "{}: bad variable name '{}'.".format(self.__keyword, key),
+                    f"{self.__keyword}: bad variable name '{key}'.",
                     None)
             if isinstance(value, dict) and self.__conditional:
                 self.VAR_DEF.validate(value, error=f"{self.__keyword}: {key}: invalid definition!")
-                data[key] = (value['value'], value.get('if'))
+                data[key] = self._convertItemDict(value)
             elif isinstance(value, str):
                 if self.__conditional:
-                    data[key] = (value, None)
+                    data[key] = self._convertItemStr(value)
             else:
                 raise schema.SchemaUnexpectedTypeError(
-                    "{}: {}: bad variable definition type."
-                        .format(self.__keyword, key),
+                    f"{self.__keyword}: {key}: bad variable definition type.",
                     None)
         return data
+
+class VarDefineValidator(KeyValDefineValidator):
+    VAR_DEF = schema.Schema({
+            'value' : str,
+            schema.Optional("if"): schema.Or(str, IfExpression),
+        })
+
+    def _convertItemDict(self, value):
+        return (value['value'], value.get('if'))
+
+    def _convertItemStr(self, value):
+        return (value, None)
+
+class AuditFile:
+    __slots__ = ('filename', 'condition', 'encoding')
+
+    def __init__(self, filename, condition=None, encoding="utf-8"):
+        self.filename = filename
+        self.condition = condition
+        self.encoding = encoding
+
+    def substitute(self, env):
+        return (env.substitute(self.filename, "filename"),
+                env.substitute(self.encoding, "encoding"))
+
+class AuditFilesValidator(KeyValDefineValidator):
+    VAR_DEF = schema.Schema({
+            'filename' : str,
+            schema.Optional("if"): schema.Or(str, IfExpression),
+            schema.Optional("encoding") : str,
+        })
+
+    def _convertItemDict(self, value):
+        return AuditFile(value['filename'], value.get('if'), value.get('encoding', "utf-8"))
+
+    def _convertItemStr(self, value):
+        return AuditFile(value)
+
+def substituteAuditFiles(key, auditFiles, env):
+    try:
+        return { key : val.substitute(env)
+                 for key, val in auditFiles.items()
+                 if env.evaluate(val.condition, key) }
+    except ParseError as e:
+        raise ParseError(f"{key}: {e.slogan}") from e
 
 
 RECIPE_NAME_SCHEMA = schema.Regex(r'^[0-9A-Za-z_.+-]+$')
@@ -2170,14 +2217,17 @@ class Recipe(object):
         self.__varSelf = recipe.get("environment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
         self.__metaEnv = recipe.get("metaEnvironment", {})
+        self.__checkoutAuditFiles = recipe.get("checkoutAuditFiles", {})
         self.__checkoutDeterministic = recipe.get("checkoutDeterministic")
         self.__checkoutVars = set(recipe.get("checkoutVars", []))
         self.__checkoutVarsWeak = set(recipe.get("checkoutVarsWeak", []))
+        self.__buildAuditFiles = recipe.get("buildAuditFiles", {})
         self.__buildVars = set(recipe.get("buildVars", []))
         self.__buildVars |= self.__checkoutVars
         self.__buildVarsWeak = set(recipe.get("buildVarsWeak", []))
         self.__buildVarsWeak |= self.__checkoutVarsWeak
         self.__packageDepends = recipe.get("packageDepends")
+        self.__packageAuditFiles = recipe.get("packageAuditFiles", {})
         self.__packageVars = set(recipe.get("packageVars", []))
         self.__packageVars |= self.__buildVars
         self.__packageVarsWeak = set(recipe.get("packageVarsWeak", []))
@@ -2360,6 +2410,15 @@ class Recipe(object):
             if self.__packageNetAccess is None: self.__packageNetAccess = cls.__packageNetAccess
             for (n, p) in self.__properties.items():
                 p.inherit(cls.__properties[n])
+            tmp = cls.__checkoutAuditFiles.copy()
+            tmp.update(self.__checkoutAuditFiles)
+            self.__checkoutAuditFiles = tmp
+            tmp = cls.__buildAuditFiles.copy()
+            tmp.update(self.__buildAuditFiles)
+            self.__buildAuditFiles = tmp
+            tmp = cls.__packageAuditFiles.copy()
+            tmp.update(self.__packageAuditFiles)
+            self.__packageAuditFiles = tmp
 
         # the package step must always be valid
         if self.__package[1] is None:
@@ -2798,7 +2857,8 @@ class Recipe(object):
             srcCoreStep = p.createCoreCheckoutStep(self.__checkout,
                 self.__checkoutSCMs, env, checkoutDigestEnv, checkoutEnv,
                 checkoutDeps, checkoutUpdateIf, checkoutUpdateDeterministic,
-                toolDepCheckout, toolDepCheckoutWeak)
+                toolDepCheckout, toolDepCheckoutWeak,
+                substituteAuditFiles("checkoutAuditFiles", self.__checkoutAuditFiles, env))
         else:
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
@@ -2808,7 +2868,8 @@ class Recipe(object):
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
             buildCoreStep = p.createCoreBuildStep(self.__build, buildDigestEnv, buildEnv,
-                [CoreRef(srcCoreStep)] + results, doFingerprintBuild, toolDepBuild, toolDepBuildWeak)
+                [CoreRef(srcCoreStep)] + results, doFingerprintBuild, toolDepBuild, toolDepBuildWeak,
+                substituteAuditFiles("buildAuditFiles", self.__buildAuditFiles, env))
         else:
             buildCoreStep = p.createInvalidCoreBuildStep([CoreRef(srcCoreStep)] + results)
 
@@ -2820,7 +2881,8 @@ class Recipe(object):
         if self.__packageDepends:
             packageDeps.extend(results)
         packageCoreStep = p.createCorePackageStep(self.__package, packageDigestEnv, packageEnv,
-            packageDeps, doFingerprint, toolDepPackage, toolDepPackageWeak)
+            packageDeps, doFingerprint, toolDepPackage, toolDepPackageWeak,
+            substituteAuditFiles("packageAuditFiles", self.__packageAuditFiles, env))
 
         # provide environment
         packageCoreStep.providedEnv = env.substituteCondDict(self.__provideVars, "provideVars")
@@ -4179,6 +4241,9 @@ class RecipeSet:
                                                            schema.Use(ScriptLanguage)),
             schema.Optional('jobServer') : schema.Or(bool, "pipe", "fifo", "fifo-or-pipe"),
             schema.Optional('packageDepends') : bool,
+            schema.Optional('checkoutAuditFiles') : AuditFilesValidator("checkoutAuditFiles"),
+            schema.Optional('buildAuditFiles') : AuditFilesValidator("buildAuditFiles"),
+            schema.Optional('packageAuditFiles') : AuditFilesValidator("packageAuditFiles"),
         }
         for (name, prop) in self.__properties.items():
             classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,

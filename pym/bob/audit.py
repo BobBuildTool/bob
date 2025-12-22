@@ -81,6 +81,7 @@ class Artifact:
         },
         "env" : str,
         schema.Optional('metaEnv') : { schema.Optional(str) : str },
+        schema.Optional('files') : { schema.Optional(str) : str },
         "scms" : [ dict ],
         schema.Optional("recipes") : dict,
         schema.Optional("layers") : dict,
@@ -203,6 +204,10 @@ class Artifact:
 
     def addMetaEnv(self, var, value):
         self.__data.setdefault("metaEnv", {})[var] = value
+        self.__invalidateId()
+
+    def addAuditFile(self, var, value):
+        self.__data.setdefault("files", {})[var] = value
         self.__invalidateId()
 
     def setSandbox(self, sandboxId):
@@ -382,6 +387,9 @@ class Audit:
 
     def addMetaEnv(self, var, value):
         self.__artifact.addMetaEnv(var, value)
+
+    def addAuditFile(self, var, value):
+        self.__artifact.addAuditFile(var, value)
 
     def setSandbox(self, sandbox):
         audit = Audit.fromFile(sandbox)
