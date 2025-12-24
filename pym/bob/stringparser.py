@@ -13,7 +13,7 @@ import pyparsing
 import re
 
 # need to enable this for nested expression parsing performance
-pyparsing.ParserElement.enablePackrat()
+pyparsing.ParserElement.enable_packrat()
 
 NAME_START = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz'
 NAME_CHARS = NAME_START + '0123456789'
@@ -378,11 +378,11 @@ class IfExpressionParser:
     def __init__(self):
         # create parsing grammer
         sQStringLiteral = pyparsing.QuotedString("'")
-        sQStringLiteral.setParseAction(
+        sQStringLiteral.set_parse_action(
             lambda s, loc, toks: StringLiteral(s, loc, toks, False))
 
         dQStringLiteral = pyparsing.QuotedString('"', '\\')
-        dQStringLiteral.setParseAction(
+        dQStringLiteral.set_parse_action(
             lambda s, loc, toks: StringLiteral(s, loc, toks, True))
 
         stringLiteral = sQStringLiteral | dQStringLiteral
@@ -394,10 +394,10 @@ class IfExpressionParser:
             pyparsing.Optional(functionArg +
                 pyparsing.ZeroOrMore(pyparsing.Suppress(',') + functionArg)) + \
             pyparsing.Suppress(')')
-        functionCall.setParseAction(
+        functionCall.set_parse_action(
             lambda s, loc, toks: FunctionCall(s, loc, toks))
 
-        predExpr = pyparsing.infixNotation(
+        predExpr = pyparsing.infix_notation(
             stringLiteral ^ functionCall ,
             [
                 ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks)),
@@ -415,7 +415,7 @@ class IfExpressionParser:
 
     def parseExpression(self, expression):
         try:
-            ret = self.__ifgrammer.parseString(expression, True)
+            ret = self.__ifgrammer.parse_string(expression, True)
         except pyparsing.ParseBaseException as e:
             raise ParseError("Invalid syntax: " + str(e))
         return ret[0]
