@@ -7,6 +7,9 @@ from shlex import quote
 from unittest import TestCase, skipIf
 from unittest.mock import MagicMock, patch
 import asyncio
+import contextlib
+import errno
+import concurrent.futures
 import os, stat
 import subprocess
 import shutil
@@ -54,8 +57,9 @@ class TemporaryWorkspace:
 
 class UrlScmExecutor:
 
-    def invokeScm(self, workspace, scm, switch=False, oldScm=None, workspaceCreated=False):
-        executor = getProcessPoolExecutor()
+    def invokeScm(self, workspace, scm, switch=False, oldScm=None, workspaceCreated=False, executor=None):
+        if executor is None:
+            executor = getProcessPoolExecutor()
         try:
             spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
             invoker = Invoker(spec, False, True, True, True, True, False,
@@ -340,6 +344,27 @@ class TestDownloads(UrlScmTest, TestCase):
             with TemporaryWorkspace() as workspace:
                 with self.assertRaises(InvocationError):
                     self.invokeScm(workspace, scm)
+
+    @patch('signal.signal')
+    def testDownloadDiskFull(self, signalMock):
+        """Full disk directly terminates downloads"""
+        tmp = MagicMock()
+        tmp.name = None
+        tmp.write.side_effect = OSError(errno.ENOSPC, "Disk full")
+        ntf = MagicMock(return_value=contextlib.nullcontext(enter_result=tmp))
+
+        with (HttpServerMock(self.dir)  as srv,
+              TemporaryWorkspace()      as workspace,
+              patch('tempfile.NamedTemporaryFile', ntf)):
+            scm = self.createUrlScm({
+                "url" : "http://localhost:{}/test.txt".format(srv.port),
+                "retries" : 3
+            })
+
+            with self.assertRaises(InvocationError):
+                self.invokeScm(workspace, scm, executor=concurrent.futures.ThreadPoolExecutor())
+
+            self.assertEqual(srv.getRequests, 1, "URL SCM does not retry on disk full errors")
 
 class TestExtraction(TestCase):
 
