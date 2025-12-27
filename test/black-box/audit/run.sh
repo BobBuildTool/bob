@@ -31,3 +31,13 @@ test -z "$(/usr/bin/find "$archiveDir" -type f -name '*.tgz')"
 # Rebuild forced and upload again. Now it must create artifcats in the archive.
 run_bob dev -v --upload -f root
 test -n "$(/usr/bin/find "$archiveDir" -type f -name '*.tgz')"
+
+# Verify additional files in audit trail
+expect_equal "$(./extract.py dev/dist/root/1/audit.json.gz ROOT)" foo
+expect_equal "$(./extract.py dev/dist/root/1/audit.json.gz FOO)" "$(echo foo | base64)"
+
+# Provoke audit errors
+expect_fail run_bob dev audit-absolute
+expect_fail run_bob dev audit-missing
+expect_fail run_bob dev audit-encoding-error
+expect_fail run_bob dev audit-invalid-encoding

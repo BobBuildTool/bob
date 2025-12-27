@@ -10,5 +10,10 @@ buildScript: |
   cp $1/root.txt .
   cp $2/foo.txt .
 
+packageAuditFiles:
+    ROOT: root.txt
+    FOO:
+        filename: foo.txt
+        encoding: base64
 packageScript: |
   cp $1/* .

@@ -2615,3 +2615,139 @@ class TestLayersConfig(RecipesTmp, TestCase):
                            ScmOverride({ "set" : { "url" : "include_l1" }}),
                            ScmOverride({ "set" : { "url" : "include_l2" }}) ],
                          cfg.scmOverrides())
+
+class TestAuditFiles(RecipesTmp, TestCase):
+    """Test packageAuditFiles """
+
+    def testSimple(self):
+        """Simple packageAuditFiles"""
+        self.writeRecipe("root", """\
+            root: True
+            checkoutScript: "true"
+            checkoutAuditFiles:
+                CHECKOUT: some
+            buildScript: "true"
+            buildAuditFiles:
+                BUILD: files
+            packageAuditFiles:
+                FOO: foo
+                BAR: bar
+            """)
+
+        p = self.generate().walkPackagePath("root")
+
+        af = p.getCheckoutStep().getAuditFileNames()
+        self.assertEqual(set(af.keys()), {"CHECKOUT"})
+        self.assertEqual(af["CHECKOUT"], ("some", "utf-8"))
+
+        af = p.getBuildStep().getAuditFileNames()
+        self.assertEqual(set(af.keys()), {"BUILD"})
+        self.assertEqual(af["BUILD"], ("files", "utf-8"))
+
+        for name, (filename, encoding) in p.getPackageStep().getAuditFileNames().items():
+            self.assertIn(name, {"FOO", "BAR"})
+            self.assertEqual(name.lower(), filename)
+            self.assertEqual(encoding, "utf-8")
+
+    def testInherit(self):
+        """Inherited classes are merged on a key-by-key basis"""
+        self.writeRecipe("root", """\
+            root: True
+            inherit: [cls]
+            checkoutScript: "true"
+            buildScript: "true"
+            buildAuditFiles:
+                BUILD: files
+            packageAuditFiles:
+                BAR: bar
+            """)
+        self.writeClass("cls", """\
+            checkoutAuditFiles:
+                CHECKOUT: some
+            buildAuditFiles:
+                BUILD: xxxxx
+            packageAuditFiles:
+                FOO: "$FOO"
+                BAR: baz
+            """)
+
+        p = self.generate(env={"FOO" : "foo"}).walkPackagePath("root")
+
+        af = p.getCheckoutStep().getAuditFileNames()
+        self.assertEqual(set(af.keys()), {"CHECKOUT"})
+        self.assertEqual(af["CHECKOUT"], ("some", "utf-8"))
+
+        af = p.getBuildStep().getAuditFileNames()
+        self.assertEqual(set(af.keys()), {"BUILD"})
+        self.assertEqual(af["BUILD"], ("files", "utf-8"))
+
+        for name, (filename, encoding) in p.getPackageStep().getAuditFileNames().items():
+            self.assertIn(name, {"FOO", "BAR"})
+            self.assertEqual(name.lower(), filename)
+            self.assertEqual(encoding, "utf-8")
+
+    def testCustomEncoding(self):
+        """A custom encoding can be set per audit file"""
+        self.writeRecipe("root", """\
+            root: True
+            packageAuditFiles:
+                FOO:
+                    filename: foo
+                    encoding: custom
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        filename, encoding = p.getPackageStep().getAuditFileNames()["FOO"]
+        self.assertEqual(filename, "foo")
+        self.assertEqual(encoding, "custom")
+
+    def testSubstitution(self):
+        """Audit filename and encoding are string substituted"""
+        self.writeRecipe("root", """\
+            root: True
+            packageAuditFiles:
+                FOO:
+                    filename: "${FN:-foo}"
+                    encoding: "${ENC:-utf8}"
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        filename, encoding = p.getPackageStep().getAuditFileNames()["FOO"]
+        self.assertEqual(filename, "foo")
+        self.assertEqual(encoding, "utf8")
+
+        p = self.generate(env={"FN" : "bar", "ENC" : "binary"}).walkPackagePath("root")
+        filename, encoding = p.getPackageStep().getAuditFileNames()["FOO"]
+        self.assertEqual(filename, "bar")
+        self.assertEqual(encoding, "binary")
+
+    def testConditional(self):
+        self.writeRecipe("root", """\
+            root: True
+            packageAuditFiles:
+                FOO:
+                    filename: foo
+                    if: "${FOO}"
+                BAR:
+                    filename: bar
+                    if: !expr >-
+                        "$BAR" == "enabled"
+            """)
+
+        with self.assertRaises(ParseError):
+            self.generate().walkPackagePath("root")
+
+        p = self.generate(env={"FOO" : "0"}).walkPackagePath("root")
+        self.assertEqual(set(p.getPackageStep().getAuditFileNames().keys()), set())
+
+        p = self.generate(env={"FOO" : "1"}).walkPackagePath("root")
+        self.assertEqual(set(p.getPackageStep().getAuditFileNames().keys()), {'FOO'})
+        filename, encoding = p.getPackageStep().getAuditFileNames()["FOO"]
+        self.assertEqual(filename, "foo")
+        self.assertEqual(encoding, "utf-8")
+
+        p = self.generate(env={"FOO" : "true", "BAR" : "enabled"}).walkPackagePath("root")
+        self.assertEqual(set(p.getPackageStep().getAuditFileNames().keys()), {'FOO', 'BAR'})
+        filename, encoding = p.getPackageStep().getAuditFileNames()["BAR"]
+        self.assertEqual(filename, "bar")
+        self.assertEqual(encoding, "utf-8")

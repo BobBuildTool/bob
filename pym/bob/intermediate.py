@@ -96,6 +96,7 @@ class StepIR(AbstractIR):
                 self.__data['scmDirectories'] = { d : (h.hex(), p) for (d, (h, p)) in step.getScmDirectories().items() }
             self.__data['toolKeysWeak'] = sorted(step._coreStep.toolDepWeak)
             self.__data['digestEnv'] = step._coreStep.digestEnv
+            self.__data['auditFileNames'] = step.getAuditFileNames()
 
         return self
 
@@ -392,6 +393,9 @@ class StepIR(AbstractIR):
             h.update(struct.pack("<II", len(key), len(val)))
             h.update((key+val).encode('utf8'))
         return h.digest()
+
+    def getAuditFileNames(self):
+        return self.__data['auditFileNames']
 
 
 class PackageIR(AbstractIR):
