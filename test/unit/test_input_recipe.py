@@ -1,6 +1,7 @@
 
 from unittest import TestCase
 from unittest.mock import MagicMock
+import itertools
 import os
 
 from bob.errors import ParseError
@@ -796,3 +797,42 @@ class TestShared(RecipeCommon, TestCase):
         self.assertTrue(p.isShared())
         p = self.parseAndPrepare(recipe, env={"ENABLE" : "no"}).getPackageStep()
         self.assertFalse(p.isShared())
+
+
+class TestFinalizeScripts(RecipeCommon, TestCase):
+
+    def testOrder(self):
+        """Finalize scripts are evaluated in reverse order"""
+        recipe = {
+            "inherit" : ["a", "b"],
+            "packageScript" : "RECIPE-SCRIPT",
+            "packageFinalize" : "RECIPE-FINALIZE",
+        }
+        classes = {
+            "a" : {
+                "packageScript" : "CLASS-A-SCRIPT",
+                "packageFinalize" : "CLASS-A-FINALIZE",
+            },
+            "b" : {
+                "packageScript" : "CLASS-B-SCRIPT",
+                "packageFinalize" : "CLASS-B-FINALIZE",
+            }
+        }
+
+        mainScript = self.parseAndPrepare(recipe, classes).getPackageStep().getMainScript()
+
+        snippets = (
+            "CLASS-A-SCRIPT",
+            "CLASS-B-SCRIPT",
+            "RECIPE-SCRIPT",
+            "RECIPE-FINALIZE",
+            "CLASS-B-FINALIZE",
+            "CLASS-A-FINALIZE",
+        )
+
+        for s in snippets:
+            self.assertIn(s, mainScript)
+
+        indexes = [ mainScript.index(s) for s in snippets ]
+        diffs = [ b-a for a, b in itertools.pairwise(indexes) ]
+        self.assertTrue(all(d > 0 for d in diffs))

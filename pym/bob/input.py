@@ -131,26 +131,37 @@ def fetchScripts(recipe, prefix, resolveBash, resolvePwsh):
                         prefix + "Setup[Bash]"),
             resolveBash(recipe.get(prefix + "ScriptBash", recipe.get(prefix + "Script")),
                         prefix + "Script[Bash]"),
+            resolveBash(recipe.get(prefix + "FinalizeBash", recipe.get(prefix + "Finalize")),
+                        prefix + "Finalize[Bash]"),
         ),
         ScriptLanguage.PWSH : (
             resolvePwsh(recipe.get(prefix + "SetupPwsh", recipe.get(prefix + "Setup")),
                         prefix + "Setup[Pwsh]"),
             resolvePwsh(recipe.get(prefix + "ScriptPwsh", recipe.get(prefix + "Script")),
                         prefix + "Script[Pwsh]"),
+            resolvePwsh(recipe.get(prefix + "FinalizePwsh", recipe.get(prefix + "Finalize")),
+                        prefix + "Finalize[Pwsh]"),
         )
     }
 
 def mergeScripts(fragments, glue):
     """Join all scripts of the recipe and its classes.
 
-    The result is a tuple with (setupScript, mainScript, digestScript)
+    The result is a tuple with (setupScript, mainScript, digestScript). Note
+    that the mainScript contains all "normal" scripts and all "Finalize"
+    scripts in reverse order.
     """
     return (
+        # The "Setup" scripts
         joinScripts((f[0][0] for f in fragments), glue),
-        joinScripts((f[1][0] for f in fragments), glue),
+        # The "normal" scripts and the "Finalize" scripts
+        joinScripts(chain((f[1][0] for f in fragments),
+                          (f[2][0] for f in reversed(fragments))), glue),
+        # All the digest scripts
         joinScripts(
             ( joinScripts((f[0][1] for f in fragments), "\n"),
               joinScripts((f[1][1] for f in fragments), "\n"),
+              joinScripts((f[2][1] for f in fragments), "\n"),
             ), "\n")
     )
 
@@ -2340,13 +2351,14 @@ class Recipe(object):
             self.__scriptLanguage = scriptLanguage
         glue = getLanguage(self.__scriptLanguage).glue
 
-        # Consider checkout deterministic by default if no checkoutScript is
-        # involved. A potential checkoutSetup is ignored.
+        # Consider checkout deterministic by default if neither checkoutScript
+        # nor checkoutFinalize is involved. A potential checkoutSetup is
+        # ignored.
         def coDet(r):
             ret = r.__checkoutDeterministic
             if ret is not None:
                 return ret
-            return r.__checkout[self.__scriptLanguage][1][0] is None
+            return all(s[0] is None for s in r.__checkout[self.__scriptLanguage][1:])
 
         checkoutDeterministic = [ coDet(i) for i in inheritAll ]
         self.__checkoutDeterministic = all(checkoutDeterministic)
@@ -4161,6 +4173,9 @@ class RecipeSet:
         dependsInnerClause[schema.Optional('depends')] = dependsClause
 
         classSchemaSpec = {
+            schema.Optional('checkoutFinalize') : str,
+            schema.Optional('checkoutFinalizeBash') : str,
+            schema.Optional('checkoutFinalizePwsh') : str,
             schema.Optional('checkoutScript') : str,
             schema.Optional('checkoutScriptBash') : str,
             schema.Optional('checkoutScriptPwsh') : str,
@@ -4168,12 +4183,18 @@ class RecipeSet:
             schema.Optional('checkoutSetupBash') : str,
             schema.Optional('checkoutSetupPwsh') : str,
             schema.Optional('checkoutUpdateIf', default=False) : schema.Or(None, str, bool, IfExpression),
+            schema.Optional('buildFinalize') : str,
+            schema.Optional('buildFinalizeBash') : str,
+            schema.Optional('buildFinalizePwsh') : str,
             schema.Optional('buildScript') : str,
             schema.Optional('buildScriptBash') : str,
             schema.Optional('buildScriptPwsh') : str,
             schema.Optional('buildSetup') : str,
             schema.Optional('buildSetupBash') : str,
             schema.Optional('buildSetupPwsh') : str,
+            schema.Optional('packageFinalize') : str,
+            schema.Optional('packageFinalizeBash') : str,
+            schema.Optional('packageFinalizePwsh') : str,
             schema.Optional('packageScript') : str,
             schema.Optional('packageScriptBash') : str,
             schema.Optional('packageScriptPwsh') : str,
