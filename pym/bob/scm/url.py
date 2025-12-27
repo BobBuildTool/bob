@@ -12,6 +12,7 @@ from .scm import Scm, ScmAudit
 from http.client import HTTPException
 from abc import abstractmethod
 import asyncio
+import errno
 import concurrent.futures.process
 import contextlib
 import hashlib
@@ -512,7 +513,7 @@ class UrlScm(Scm):
                 if "content-length" in rsp.info():
                     expected = int(rsp.info()["Content-Length"])
                     if expected > read:
-                        return False, "Response too short: {} < {} (bytes)".format(read, expected)
+                        return False, "Response too short: {} < {} (bytes)".format(read, expected), False
 
                 # Atomically move file to destination. Set mode to 0600 to
                 # retain Bob 0.15 behaviour if no explicit mode was configured.
@@ -522,12 +523,14 @@ class UrlScm(Scm):
 
         except urllib.error.HTTPError as e:
             if e.code != 304:
-                return False, "HTTP error {}: {}".format(e.code, e.reason)
+                return False, "HTTP error {}: {}".format(e.code, e.reason), False
             else:
                 # HTTP 304 Not modifed -> local file up-to-date
-                return False, None
+                return False, None, False
         except HTTPException as e:
-            return False, "HTTP error: " + str(e)
+            return False, "HTTP error: " + str(e), False
+        except OSError as e:
+            return False, "Failed to download: " + str(e), e.errno == errno.ENOSPC
         finally:
             if tmpFileName is not None:
                 os.remove(tmpFileName)
@@ -535,7 +538,7 @@ class UrlScm(Scm):
             # to prevent ugly backtraces when user presses ctrl+c.
             signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-        return True, None
+        return True, None, False
 
     async def _fetch(self, invoker, url, destination, mode):
         if url.scheme in ['', 'file']:
@@ -565,9 +568,11 @@ class UrlScm(Scm):
             while True:
                 invoker.trace("<wget>", url.geturl(), ">", destination, "retires:", retries)
                 try:
-                    updated, err = await invoker.runInExecutor(UrlScm._download, self, url, destination, mode)
+                    updated, err, fatal = await invoker.runInExecutor(UrlScm._download, self, url, destination, mode)
                     if err:
-                        if retries == 0:
+                        if fatal:
+                            invoker.fail(err)
+                        elif retries == 0:
                             return False, err
                         else:
                             invoker.warn(err)
