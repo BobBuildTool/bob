@@ -2128,7 +2128,8 @@ class Recipe(object):
                 name = dep.get("name")
                 if name:
                     if "depends" in dep:
-                        raise ParseError("A dependency must not use 'name' and 'depends' at the same time!")
+                        raise ParseError("A dependency must not use 'name' and 'depends' at the same time!",
+                                         help=f"The offending entries 'name' attribute is '{name}'")
                     return [ Recipe.Dependency(origin, name, env, fwd, use, cond, tools,
                                                checkoutDep, inherit, dep.get("alias")) ]
                 dependencies = dep.get("depends")
