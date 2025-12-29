@@ -184,6 +184,27 @@ class TestDependencies(TestCase):
         self.cmpEntry(res[4], "e")
         self.cmpEntry(res[5], "f", checkoutDep=True)
 
+    def testNameAndDepends(self):
+        """A dependency must not use 'name' and 'depends' at the same time"""
+        deps = [
+            {
+                "name" : "a",
+                "depends" : [],
+            }
+        ]
+        with self.assertRaises(ParseError):
+            list(Recipe.Dependency.parseEntries(MagicMock(), deps))
+
+    def testNeitherNameNorDepends(self):
+        """A dependency must use 'name' or 'depends'"""
+        deps = [
+            {
+                "if" : "a",
+            }
+        ]
+        with self.assertRaises(ParseError):
+            list(Recipe.Dependency.parseEntries(MagicMock(), deps))
+
 
 class RecipeCommon:
 
