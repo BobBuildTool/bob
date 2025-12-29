@@ -2636,8 +2636,10 @@ class Recipe(object):
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
                 self.__raiseIncompatibleLocal(depCoreStep)
             else:
+                sources = " and ".join(set([dep.origin.getPrimarySource(), depTrack.depEntry.origin.getPrimarySource()]))
                 raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
-                                    .format(p.getName()))
+                                    .format(p.getName()),
+                                 help=f"The dependencies were declared in {sources}.")
 
             # Remember dependency diffs before changing them
             origDepDiffTools = thisDepDiffTools
