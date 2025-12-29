@@ -1977,10 +1977,11 @@ class UniquePackageList:
 
 class DepTracker:
 
-    __slots__ = ('item', 'isNew', 'usedResult')
+    __slots__ = ('item', 'isNew', 'usedResult', 'depEntry')
 
-    def __init__(self, item):
+    def __init__(self, item, depEntry):
         self.item = item
+        self.depEntry = depEntry
         self.isNew = True
         self.usedResult = False
 
@@ -2084,9 +2085,10 @@ class Recipe(object):
         __slots__ = ('recipe', 'envOverride', 'provideGlobal', 'inherit',
                      'use', 'useEnv', 'useTools', 'useBuildResult', 'useDeps',
                      'useSandbox', 'condition', 'toolOverride', 'checkoutDep',
-                     'alias')
+                     'alias', 'origin')
 
-        def __init__(self, recipe, env, fwd, use, cond, tools, checkoutDep, inherit, alias):
+        def __init__(self, origin, recipe, env, fwd, use, cond, tools, checkoutDep, inherit, alias):
+            self.origin = origin
             self.recipe = recipe
             self.envOverride = env
             self.provideGlobal = fwd
@@ -2103,9 +2105,9 @@ class Recipe(object):
             self.alias = alias
 
         @staticmethod
-        def __parseEntry(dep, env, fwd, use, cond, tools, checkoutDep, inherit):
+        def __parseEntry(origin, dep, env, fwd, use, cond, tools, checkoutDep, inherit):
             if isinstance(dep, str):
-                return [ Recipe.Dependency(dep, env, fwd, use, cond, tools, checkoutDep,
+                return [ Recipe.Dependency(origin, dep, env, fwd, use, cond, tools, checkoutDep,
                                            inherit, None) ]
             else:
                 envOverride = dep.get("environment")
@@ -2126,23 +2128,24 @@ class Recipe(object):
                 name = dep.get("name")
                 if name:
                     if "depends" in dep:
-                        raise ParseError("A dependency must not use 'name' and 'depends' at the same time!")
-                    return [ Recipe.Dependency(name, env, fwd, use, cond, tools,
+                        raise ParseError("A dependency must not use 'name' and 'depends' at the same time!",
+                                         help=f"The offending entries 'name' attribute is '{name}'")
+                    return [ Recipe.Dependency(origin, name, env, fwd, use, cond, tools,
                                                checkoutDep, inherit, dep.get("alias")) ]
                 dependencies = dep.get("depends")
                 if dependencies is None:
                     raise ParseError("Either 'name' or 'depends' required for dependencies!")
-                return Recipe.Dependency.parseEntries(dependencies, env, fwd,
+                return Recipe.Dependency.parseEntries(origin, dependencies, env, fwd,
                                                       use, cond, tools,
                                                       checkoutDep, inherit)
 
         @staticmethod
-        def parseEntries(deps, env={}, fwd=False, use=["result", "deps"],
+        def parseEntries(origin, deps, env={}, fwd=False, use=["result", "deps"],
                          cond=None, tools={}, checkoutDep=False, inherit=True):
             """Returns an iterator yielding all dependencies as flat list"""
             # return flattened list of dependencies
             return chain.from_iterable(
-                Recipe.Dependency.__parseEntry(dep, env, fwd, use, cond, tools,
+                Recipe.Dependency.__parseEntry(origin, dep, env, fwd, use, cond, tools,
                                                checkoutDep, inherit)
                 for dep in deps )
 
@@ -2205,7 +2208,7 @@ class Recipe(object):
         self.__inherit = recipe.get("inherit", [])
         self.__anonBaseClass = anonBaseClass
         self.__defaultScriptLanguage = scriptLanguage
-        self.__deps = list(Recipe.Dependency.parseEntries(recipe.get("depends", [])))
+        self.__deps = list(Recipe.Dependency.parseEntries(self, recipe.get("depends", [])))
         self.__packageName = packageName
         self.__baseName = baseName
         self.__root = recipe.get("root")
@@ -2628,14 +2631,16 @@ class Recipe(object):
             # A dependency should be named only once. Hence we can
             # optimistically create the DepTracker object. If the dependency is
             # named more than one we make sure that it is the same variant.
-            depTrack = thisDeps.setdefault(p.getName(), DepTracker(depRef))
+            depTrack = thisDeps.setdefault(p.getName(), DepTracker(depRef, dep))
             if depTrack.prime():
                 directPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
                 self.__raiseIncompatibleLocal(depCoreStep)
             else:
+                sources = " and ".join(set([dep.origin.getPrimarySource(), depTrack.depEntry.origin.getPrimarySource()]))
                 raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
-                                    .format(p.getName()))
+                                    .format(p.getName()),
+                                 help=f"The dependencies were declared in {sources}.")
 
             # Remember dependency diffs before changing them
             origDepDiffTools = thisDepDiffTools
@@ -2704,7 +2709,7 @@ class Recipe(object):
             name = depCoreStep.corePackage.getName()
             depTrack = thisDeps.get(name)
             if depTrack is None:
-                thisDeps[name] = depTrack = DepTracker(depRef)
+                thisDeps[name] = depTrack = DepTracker(depRef, None)
 
             if depTrack.prime():
                 indirectPackages.append(depRef)

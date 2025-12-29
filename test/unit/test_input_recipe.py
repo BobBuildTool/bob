@@ -25,7 +25,7 @@ class TestDependencies(TestCase):
 
     def testSimpleList(self):
         deps = [ "a", "b" ]
-        res = list(Recipe.Dependency.parseEntries(deps))
+        res = list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
         self.assertEqual(len(res), 2)
         self.cmpEntry(res[0], "a")
@@ -33,7 +33,7 @@ class TestDependencies(TestCase):
 
     def testMixedList(self):
         deps = [ "a", { "name" : "b", "environment" : { "foo" : ("bar", None) }} ]
-        res = list(Recipe.Dependency.parseEntries(deps))
+        res = list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
         self.assertEqual(len(res), 2)
         self.cmpEntry(res[0], "a")
@@ -47,7 +47,7 @@ class TestDependencies(TestCase):
                 { "depends" : [ "c" ] }
             ]}
         ]
-        res = list(Recipe.Dependency.parseEntries(deps))
+        res = list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
         self.assertEqual(len(res), 3)
         self.cmpEntry(res[0], "a")
@@ -70,7 +70,7 @@ class TestDependencies(TestCase):
             },
             "e"
         ]
-        res = list(Recipe.Dependency.parseEntries(deps))
+        res = list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
         self.assertEqual(len(res), 5)
         self.cmpEntry(res[0], "a")
@@ -95,7 +95,7 @@ class TestDependencies(TestCase):
             },
             "e"
         ]
-        res = list(Recipe.Dependency.parseEntries(deps))
+        res = list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
         self.assertEqual(len(res), 5)
         self.cmpEntry(res[0], "a")
@@ -120,7 +120,7 @@ class TestDependencies(TestCase):
             },
             "e"
         ]
-        res = list(Recipe.Dependency.parseEntries(deps))
+        res = list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
         self.assertEqual(len(res), 5)
         self.cmpEntry(res[0], "a")
@@ -145,7 +145,7 @@ class TestDependencies(TestCase):
             },
             "e"
         ]
-        res = list(Recipe.Dependency.parseEntries(deps))
+        res = list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
         self.assertEqual(len(res), 5)
         self.cmpEntry(res[0], "a")
@@ -174,7 +174,7 @@ class TestDependencies(TestCase):
                 "checkoutDep" : True,
             }
         ]
-        res = list(Recipe.Dependency.parseEntries(deps))
+        res = list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
         self.assertEqual(len(res), 6)
         self.cmpEntry(res[0], "a")
@@ -183,6 +183,27 @@ class TestDependencies(TestCase):
         self.cmpEntry(res[3], "d", checkoutDep=True)
         self.cmpEntry(res[4], "e")
         self.cmpEntry(res[5], "f", checkoutDep=True)
+
+    def testNameAndDepends(self):
+        """A dependency must not use 'name' and 'depends' at the same time"""
+        deps = [
+            {
+                "name" : "a",
+                "depends" : [],
+            }
+        ]
+        with self.assertRaises(ParseError):
+            list(Recipe.Dependency.parseEntries(MagicMock(), deps))
+
+    def testNeitherNameNorDepends(self):
+        """A dependency must use 'name' or 'depends'"""
+        deps = [
+            {
+                "if" : "a",
+            }
+        ]
+        with self.assertRaises(ParseError):
+            list(Recipe.Dependency.parseEntries(MagicMock(), deps))
 
 
 class RecipeCommon:

@@ -877,6 +877,32 @@ class TestDependencies(RecipesTmp, TestCase):
         self.assertEqual(p.getPackageStep().getArguments()[2].getPackage().getName(),
                          "lib2")
 
+    def testDuplicateDep(self):
+        """Dependencies must only be named once"""
+        self.writeRecipe("root", """\
+            root: True
+            depends: [a, a]
+            """)
+        self.writeRecipe("a", "")
+
+        packages = self.generate()
+        self.assertRaises(ParseError, packages.getRootPackage)
+
+    def testDuplicateDepWithClass(self):
+        """Dependencies must only be named once"""
+        self.writeRecipe("root", """\
+            root: True
+            inherit: [cls]
+            depends: [a]
+            """)
+        self.writeClass("cls", """\
+            depends: [a]
+            """)
+        self.writeRecipe("a", "")
+
+        packages = self.generate()
+        self.assertRaises(ParseError, packages.getRootPackage)
+
 class TestDependencyEnv(RecipesTmp, TestCase):
     """Tests related to "environment" block in dependencies"""
 
