@@ -22,16 +22,13 @@ class BobError(Exception):
             ret = ret + "\n" + self.help
         return ret
 
-    def pushFrame(self, frame):
-        if not self.stack or (self.stack[0] != frame):
-            self.stack.insert(0, frame)
-
-    def setStack(self, stack):
-        if not self.stack: self.stack = stack[:]
-
 class ParseError(BobError):
     def __init__(self, slogan, *args, **kwargs):
         BobError.__init__(self, slogan, "Parse", "Processing stack", *args, **kwargs)
+
+    def pushFrame(self, frame):
+        if not self.stack or (self.stack[0] != frame):
+            self.stack.insert(0, frame)
 
     def setPath(self, path):
         self.stackSlogan = "Offending file"
@@ -40,6 +37,9 @@ class ParseError(BobError):
 class BuildError(BobError):
     def __init__(self, slogan, *args, **kwargs):
         BobError.__init__(self, slogan, "Build", "Failed package", *args, **kwargs)
+
+    def setStack(self, stack):
+        if not self.stack: self.stack = stack[:]
 
 
 class MultiBobError(BobError):
