@@ -227,6 +227,11 @@ if [[ -n $RUN_COVERAGE ]] ; then
     fi
 fi
 
+# Make sure sandbox helper is updated
+$RUN_PYTHON3 -c "from bob.develop.make import makeSandboxHelper
+makeSandboxHelper()
+"
+
 # execute everything if nothing was specified
 if [[ -z ${RUN_UNITTEST_PAT+isset} && -z ${RUN_BLACKBOX_PAT+isset} &&
       -z ${RUN_INTEGRATION_PAT+isset} ]] ; then
