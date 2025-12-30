@@ -190,6 +190,11 @@ not permitted" error when building. Add the line ::
 
 to your ``/etc/sysctl.conf`` (or wherever your distro stores that).
 
+Ubuntu is further restricting user namespaces through AppArmor. Either set
+``/proc/sys/kernel/apparmor_restrict_unprivileged_userns`` to ``0`` or create
+an AppArmor profile for the ``bob-namespace-sandbox`` binary that allows user
+namespaces for Bob.
+
 If you are using Docker, you must relax the security settings as they block
 nested containers by default. Adding ``--security-opt seccomp=unconfined
 --security-opt apparmor=unconfined`` to the ``docker run`` command should
