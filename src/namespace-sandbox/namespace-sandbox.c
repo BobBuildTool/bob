@@ -74,7 +74,12 @@ struct Options {
 static int CreateTarget(const char *path, bool is_directory);
 
 // Child function used by CheckNamespacesSupported() in call to clone().
-static int CheckNamespacesSupportedChild(void *arg) { return 0; }
+static int CheckNamespacesSupportedChild(void *arg) {
+  // Check that we can make our mount namespace private. This fails on Ubuntu if
+  // /proc/sys/kernel/apparmor_restrict_unprivileged_userns_complain is enabled.
+  return mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL) == 0
+         ? EXIT_SUCCESS : EXIT_FAILURE;
+}
 
 // Check whether the required namespaces are supported.
 static int CheckNamespacesSupported() {
@@ -100,9 +105,13 @@ static int CheckNamespacesSupported() {
                          CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWUTS |
                              CLONE_NEWIPC | CLONE_NEWNET | SIGCHLD,
                          NULL));
-  CHECK_CALL(waitpid(pid, NULL, 0));
+  int status = 0;
+  CHECK_CALL(waitpid(pid, &status, 0));
 
-  return EXIT_SUCCESS;
+  if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+    return EXIT_SUCCESS;
+  else
+    return EXIT_FAILURE;
 }
 
 // Print out a usage error. argc and argv are the argument counter and vector,

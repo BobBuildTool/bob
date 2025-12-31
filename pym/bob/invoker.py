@@ -450,9 +450,23 @@ class Invoker:
             ret = subprocess.run([getSandboxHelperPath(), "-C"], stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL).returncode
             if ret != 0:
+                knobs = [("/proc/sys/kernel/unprivileged_userns_clone", "1"),
+                         ("/proc/sys/kernel/apparmor_restrict_unprivileged_userns", "0")]
+                for knob, expected_val in knobs:
+                    try:
+                        with open(knob) as f:
+                            if f.read().strip() != expected_val:
+                                msg = f"Make sure {knob} is {expected_val}."
+                                break
+                    except FileNotFoundError:
+                        pass
+                    except OSError:
+                        msg = f"Make sure {knob} is {expected_val}."
+                        break
+                else:
+                    msg = f"Not sure why that is exactly. Please consider opening a bug report at https://github.com/BobBuildTool/bob."
                 raise BuildError("Your system does not support unprivileged containers! You need to build without sandbox (--no-sandbox).",
-                                 help="Make sure /proc/sys/kernel/unprivileged_userns_clone is 1."
-                                      " In case you use Docker, consider using the 'unconfined' seccomp profile."
+                                 help=f"{msg} In case you use Docker, consider using the 'unconfined' seccomp profile."
                                       " See https://bob-build-tool.readthedocs.io/en/latest/installation.html#sandbox-capabilities for more details.",
                                  returncode=3)
         except OSError as e:
