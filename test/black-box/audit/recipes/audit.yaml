@@ -1,0 +1,28 @@
+root: True
+
+multiPackage:
+    absolute:
+        packageAuditFiles:
+            ROOT: /etc/passwd
+        packageScript: |
+            echo absolute
+
+    missing:
+        packageAuditFiles:
+            ROOT: audit.txt
+        packageScript: |
+            echo missing
+
+    encoding-error:
+        packageAuditFiles:
+            ROOT: audit.txt
+        packageScript: |
+            printf '\xee\xee' > audit.txt
+
+    invalid-encoding:
+        packageAuditFiles:
+            ROOT:
+                filename: audit.txt
+                encoding: whatever
+        packageScript: |
+            echo invalid-encoding > audit.txt
