@@ -2342,6 +2342,8 @@ layer checkouts are controlled by ``layersWhitelist`` and
 ``layersScmOverrides``. These settings can be optionally overridden from the
 command line by passing a layers configuration file with the ``-lc`` option.
 
+.. _configuration-config-layersIncludeRequire:
+
 layers{Include,Require}
 ~~~~~~~~~~~~~~~~~~~~~~~
 

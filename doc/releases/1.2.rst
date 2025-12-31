@@ -1,0 +1,190 @@
+Bob 1.2 Release Notes
+=====================
+
+Changes made since Bob 1.1 include the following.
+
+New features
+------------
+
+config.yaml
+~~~~~~~~~~~
+
+* Added support for layer configuration include files.
+
+  Like the :ref:`user configuration files (default.yaml)
+  <configuration-config-usr>`, allow to include other files from
+  :ref:`config.yaml <configuration-config>`. This is only allowed for layer
+  configuration files, though. Consequently, the keys to include are named
+  :ref:`layersInclude <configuration-config-layersIncludeRequire>` and
+  :ref:`layersRequire <configuration-config-layersIncludeRequire>`.
+
+  See :issue:`665` and :pull:`669`.
+
+* An out-of-tree build can optionally have a layer configuration.
+
+  When doing an out-of-tree build, parse an optional ``config.yaml`` that
+  might be present there as layer configuration. This simplifies applying
+  layer configuration overrides on such builds and will match the existing
+  behaviour of the ``default.yaml`` handling as well.
+
+  See :issue:`665` and :pull:`669`.
+
+Recipes
+~~~~~~~
+
+* Added support for custom request headers in URL SCM.
+
+  Some servers need additional information provided by custom headers, .e.g.,
+  authentication tokens. The ``headers`` attribute can be used to add those::
+
+      checkoutSCM:
+          scm: url
+          headers:
+              X-Auth-Token: "..."
+
+  See :pull:`655`.
+
+* Bob gained the ``strictdownload`` flag for :ref:`configuration-config-archive`
+  servers.
+
+  By default, downloads from archives ignore most errors. Usually, this is
+  desired because this is just a different reason why no artifact is
+  found. But in CI environments, unreachable servers or similar problems
+  should never happen. For that, the ``strictdownload`` flag indicates that
+  the server must be reachable and respond properly. In any case, it is
+  never an error if a download does not find the requested archive, even
+  with the ``strictdownload`` flag.
+
+  See :issue:`660` and :pull:`662`.
+
+* Added support for additional :ref:`configuration-recipes-jobserver` modes.
+
+  So far, only anonymous pipes were supported as jobserver. To support named
+  pipes as well (GNU make 4.4, ninja 1.13.0), Bob gained new values for the
+  'jobServer' key:
+
+  ``pipe``
+    A synonym for ``True``. Pass open pipe file descriptors to children.
+  ``fifo``
+    Always pass a named pipe path to children. If an external jobserver with an
+    anonymous pipe is present, fail the build.
+  ``fifo-or-pipe``
+    If possible, pass a named pipe path to the children. If an external
+    jobserver with an anonymous pipe is present, use that instead.
+
+  See :issue:`668` and :pull:`677`.
+
+* Bob gained support for :ref:`configuration-recipes-auditfiles`.
+
+  Using these keys, selected files can be included into the audit trail.
+  This can be used to store any supplementary information in the audit
+  trail as necessary. Examples are hash sums of individual source files,
+  custom license texts or other build time meta data.
+
+  See :pull:`683`.
+
+Bob build/dev
+~~~~~~~~~~~~~
+
+* Bob gained support for FIFO job servers.
+
+  Starting with GNU make 4.4, a new type of jobserver was introduced.
+  Instead of passing pipe file descriptors, a named pipe is created my
+  make. This allegedly solves a number of problems with old anonymous
+  pipe approach.
+
+  Bob will now integrate into an existing FIFO job server (e.g. when being
+  started from make). Bob also supports providing a FIFO job server (see
+  :ref:`configuration-recipes-jobserver`).
+
+  See :issue:`668` and :pull:`677`.
+
+Bob jenkins
+~~~~~~~~~~~
+
+* :ref:`manpage-bob-jenkins` gained an option to clean the workspace after
+  build.
+
+  The workspaces of Jenkins jobs can use quite a lot of disk space. Especially
+  if the ``--clean`` option is active, this is most probably not needed because
+  the workspace is clean at jobs start anyway. Added an extended option to
+  control the post-build clean behaviour (``jobs.clean.post-build``,
+  :pull:`664`).
+
+Plugins
+~~~~~~~
+
+* Bob now provides an ``onSkip`` method to state trackers.
+
+  It might be of interest for a plugin that provides custom properties if the
+  associated "use" keyword is missing. Bob now supports an
+  :meth:`bob.input.PluginState.onSkip` method that the plugin can override.
+  (:pull:`671`)
+
+* :ref:`extending-hooks-string` provided by plugins now have access to state
+  trackers through the ``states`` parameter. (:pull:`671`)
+
+Improvements
+------------
+
+* Improved error messages of layer version conflicts. (:pull:`652`)
+* Improved command syntax descriptions in manpages (:pull:`653`)
+* Support HTTP redirects and proxy settings for binary archives. (:pull:`663`,
+  :issue:`462`)
+* Bob now shows the step type in the massive parallel TUI.
+* Bob will better detect the availability of unprivileged user namespaces that
+  are used for sandbox builds. In case this Linux feature is not usable, the
+  build will immediately fail with an appropriate error message. (:issue:`667`,
+  :pull:`670`, :pull:`689`)
+* The :ref:`recommended mirror configuration <installation-recommended-config>`
+  was improved in the documentation. (See :issue:`673`)
+* Show stderr by default when updating layers. Previously the error messages
+  of, e.g., git were not visible.
+* The handling of read-only mounts in the sandbox has been improved. This
+  allows to e.g. mount `/etc/resolv.conf` without the need to touch it first.
+  Also it allows to specify other mounts in sandbox `/etc` directory via the
+  `sandbox:` keyword `mount` list. (:pull:`680`)
+* Added Python 3.14 to CI builds. (:pull:`684`)
+* The "duplicate dependency" error message has been improved.
+
+  If multiple classes or :ref:`configuration-recipes-multipackage` is involved,
+  it can be hard to see where a colliding dependency was declared. Bob now
+  tracks the origin of a dependency and outputs the involved files.
+
+  See :pull:`688`.
+
+Backwards incompatible changes
+------------------------------
+
+* Support for Python 3.8 has been dropped. (:pull:`684`)
+
+Bug fixes
+---------
+
+* Bob treats more socket errors as warnings when downloading artifacts.
+
+  When downloading from an archive, the build should not fail because of
+  network errors. After all, the binary archive is just a cache that might
+  not provide an archive. Bob now treats any errors up to and including the
+  connection establishment as warnings. Previously, only refused connections
+  were already treated that way.
+
+  For uploads, the behaviour does not change. Any network errors are
+  treated as errors for uploads.
+
+  See :issue:`660`, :pull:`662`, :pull:`674` and :pull:`681`.
+
+* Fixed a crash of :ref:`manpage-archive` when scanning an empty archive. (:pull:`663`)
+* Fixed some typos in help/error messages. (:pull:`666`)
+* Some packages (like gcc and binutils) use hard links. When installed as a
+  :ref:`configuration-recipes-shared` package, Bob now retains these hard
+  links. (:issue:`679`, :pull:`680`)
+* Errors during URL SCM downloads are now properly handled.
+
+  Reading from the socket might cause an ``OSError`` (e.g.
+  ``"ConnectionResetError: [Errno 104] Connection reset by peer"``). Bob now
+  catches such errors and gracefully handles them in the retry loop.  The only
+  exception are "disk full" errors, which directly fail the build instead of
+  retrying.
+
+  See :issue:`685` and :pull:`686`.
