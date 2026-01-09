@@ -389,14 +389,56 @@ def query(scanner, expressions):
 
     return retained
 
+def getArchivers(args):
+    # get archiver
+    archivers = []
+    if args.local:
+        # provide local directory as backend
+        archivespec = [{"name" : "local", "backend": "file", "path": "{}".format(os.getcwd()), "flags" : "[download, upload, managed]"}]
+        archiver = getSingleArchiver(None, archivespec[0])
+        archivers.append(archiver)
+    else:
+        # use the configuration to find suitable archives
+        recipes = RecipeSet()
+        recipes.parse()
+        archivespec = recipes.archiveSpec()
+        if isinstance(archivespec, list):
+            if len(archivespec) == 0:
+                raise BobError("No archiver defined")
+            elif len(archivespec) == 1:
+                archiver = getSingleArchiver(recipes, archivespec[0])
+                if archiver.canManage():
+                    archivers.append(archiver)
+                else:
+                    raise BobError("Archiver does not support the archive command")
+            else:
+                backends = []
+                if args.backend is not None:
+                    backends = args.backend
+                for i in archivespec:
+                    archiver = getSingleArchiver(recipes, i)
+                    if (args.all or archiver.getArchiveName() in backends) and archiver.canManage():
+                        archivers.append(archiver)
+                if len(archivers) == 0:
+                    raise BobError("None of the archivers supports the archive command. Maybe you did not select any (-b/--backend)?")
 
-def doArchiveScan(archivers, argv):
+        else:
+            archiver = getSingleArchiver(recipes, archivespec)
+            if archiver.canManage():
+                archivers.append(archiver)
+            else:
+                raise BobError("Archiver does not support the archive command")
+    return archivers
+
+def doArchiveScan(parents_args, argv):
     parser = argparse.ArgumentParser(prog="bob archive scan")
     parser.add_argument("-v", "--verbose", action='store_true',
         help="Verbose operation")
     parser.add_argument("-f", "--fail", action='store_true',
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
+
+    archivers = getArchivers(parents_args)
     for archiver in archivers:
         if args.verbose:
             print("archive '{}':".format(archiver.getArchiveName() or "<unnamed>"))
@@ -407,7 +449,7 @@ def doArchiveScan(archivers, argv):
 
 
 # meta.package == "root" && build.date > "2017-06-19" LIMIT 5 ORDER BY build.date ASC
-def doArchiveClean(archivers, argv):
+def doArchiveClean(parents_args, argv):
     parser = argparse.ArgumentParser(prog="bob archive clean")
     parser.add_argument('expression', nargs='+',
         help="Expression of artifacts that shall be kept")
@@ -421,6 +463,7 @@ def doArchiveClean(archivers, argv):
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
+    archivers = getArchivers(parents_args)
     for archiver in archivers:
         if args.verbose:
             print("archive '{}':".format(archiver.getArchiveName() or "<unnamed>"))
@@ -456,7 +499,7 @@ def doArchiveClean(archivers, argv):
                     scanner.deleteFile(victim)
                     scanner.remove(bid)
 
-def doArchiveFind(archivers, argv):
+def doArchiveFind(parents_args, argv):
     parser = argparse.ArgumentParser(prog="bob archive find")
     parser.add_argument('expression', nargs='+',
         help="Expression that artifacts need to match")
@@ -468,6 +511,7 @@ def doArchiveFind(archivers, argv):
         help="Return a non-zero error code in case of errors")
     args = parser.parse_args(argv)
 
+    archivers = getArchivers(parents_args)
     for archiver in archivers:
         print("archive '{}':".format(archiver.getArchiveName() or "<unnamed>"))
         scanner = ArchiveScanner(archiver)
@@ -513,47 +557,8 @@ def doArchive(argv, bobRoot):
 
     args = parser.parse_args(argv)
 
-    # get archiver
-    archivers = []
-    if args.local:
-        # provide local directory as backend
-        archivespec = [{"name" : "local", "backend": "file", "path": "{}".format(os.getcwd()), "flags" : "[download, upload, managed]"}]
-        archiver = getSingleArchiver(None, archivespec[0])
-        archivers.append(archiver)
-    else:
-        # use the configuration to find suitable archives
-        recipes = RecipeSet()
-        recipes.parse()
-        archivespec = recipes.archiveSpec()
-        if isinstance(archivespec, list):
-            if len(archivespec) == 0:
-                raise BobError("No archiver defined")
-            elif len(archivespec) == 1:
-                archiver = getSingleArchiver(recipes, archivespec[0])
-                if archiver.canManage():
-                    archivers.append(archiver)
-                else:
-                    raise BobError("Archiver does not support the archive command")
-            else:
-                backends = []
-                if args.backend is not None:
-                    backends = args.backend
-                for i in archivespec:
-                    archiver = getSingleArchiver(recipes, i)
-                    if (args.all or archiver.getArchiveName() in backends) and archiver.canManage():
-                        archivers.append(archiver)
-                if len(archivers) == 0:
-                    raise BobError("None of the archivers supports the archive command. Maybe you did not select any (-b/--backend)?")
-
-        else:
-            archiver = getSingleArchiver(recipes, archivespec)
-            if archiver.canManage():
-                archivers.append(archiver)
-            else:
-                raise BobError("Archiver does not support the archive command")
-
     if args.subcommand in availableArchiveCmds:
-        availableArchiveCmds[args.subcommand][0](archivers, args.args)
+        availableArchiveCmds[args.subcommand][0](args, args.args)
     else:
         parser.error("Unknown subcommand '{}'".format(args.subcommand))
 
