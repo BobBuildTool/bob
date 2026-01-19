@@ -126,6 +126,14 @@ class BaseTUI:
     def cleanup(self):
         pass
 
+    def suspend(self):
+        """Restore tty settings upon SIGTSTP (terminal stop)"""
+        self.cleanup()
+
+    def resume(self):
+        """Resume tty after SIGTSTP"""
+        pass
+
     def setProgress(self, done, num):
         pass
 
@@ -250,6 +258,9 @@ class ParallelTtyUI(BaseTUI):
         self.__tasksDone = 0
         self.__tasksNum = 1
 
+        self.__ttyInit()
+
+    def __ttyInit(self):
         # disable cursor
         print("\x1b[?25l")
 
@@ -353,6 +364,10 @@ class ParallelTtyUI(BaseTUI):
         except ImportError:
             pass
 
+    def resume(self):
+        self.__ttyInit()
+        self.__putFooter()
+
     def setProgress(self, done, num):
         self.__tasksDone = done
         self.__tasksNum = num
@@ -451,6 +466,9 @@ class MassiveParallelTtyUI(BaseTUI):
         self.__tasksDone = 0
         self.__tasksNum = 1
 
+        self.__ttyInit()
+
+    def __ttyInit(self):
         # disable cursor
         print("\x1b[?25l")
 
@@ -541,6 +559,10 @@ class MassiveParallelTtyUI(BaseTUI):
         except ImportError:
             pass
 
+    def resume(self):
+        self.__ttyInit()
+        self.__putFooter()
+
     def setProgress(self, done, num):
         self.__tasksDone = done
         self.__tasksNum = num
@@ -592,6 +614,11 @@ def ttyReinit():
     if __onTTY and sys.platform == "win32":
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value | 4)
 
+def handleTerminalStop(signum, frame):
+    __tui.suspend()
+    signal.raise_signal(signal.SIGSTOP)
+    __tui.resume()
+
 # module initialization
 
 __onTTY = (sys.stdout.isatty() and sys.stderr.isatty())
@@ -599,17 +626,23 @@ __useColor = False
 __tui = SingleTUI(NORMAL)
 __parallelTUIThreshold = 16
 
-if __onTTY and sys.platform == "win32":
-    # Try to set ENABLE_VIRTUAL_TERMINAL_PROCESSING flag. Enables vt100 color
-    # codes on Windows 10 console. If this fails we inhibit color code usage
-    # because it will clutter the output.
-    import ctypes
-    import ctypes.wintypes
-    __origMode = ctypes.wintypes.DWORD()
-    kernel32 = ctypes.windll.kernel32
-    kernel32.GetConsoleMode(kernel32.GetStdHandle(-11), ctypes.byref(__origMode))
-    if not kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value | 4):
-        __onTTY = False
+if __onTTY:
+    if sys.platform == "win32":
+        # Try to set ENABLE_VIRTUAL_TERMINAL_PROCESSING flag. Enables vt100 color
+        # codes on Windows 10 console. If this fails we inhibit color code usage
+        # because it will clutter the output.
+        import ctypes
+        import ctypes.wintypes
+        __origMode = ctypes.wintypes.DWORD()
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetConsoleMode(kernel32.GetStdHandle(-11), ctypes.byref(__origMode))
+        if not kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), __origMode.value | 4):
+            __onTTY = False
+    else:
+        # Intercept SIGTSTP to leave TTY in a sane state if user presses Ctrl+Z.
+        import signal
+        signal.signal(signal.SIGTSTP, handleTerminalStop)
+
 
 def setColorMode(mode):
     global __useColor
