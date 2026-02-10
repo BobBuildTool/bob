@@ -376,11 +376,8 @@ class BuiltinSetting(PluginSetting):
         self.__updater(self.__schema.validate(other) if self.__mangle else other)
 
     def validate(self, data):
-        try:
-            self.__schema.validate(data)
-            return True
-        except schema.SchemaError:
-            return False
+        self.__schema.validate(data)
+        return True
 
 def Scm(spec, env, overrides, recipeSet):
     def _substitute(k, v):
@@ -3252,6 +3249,14 @@ class PositiveValidator:
             raise schema.SchemaError(None, "Int value must not be negative")
         return data
 
+def wrapValidator(validator, message):
+    def wrapper(data):
+        if validator(data):
+            return True
+        else:
+            raise schema.SchemaError(message)
+    return wrapper
+
 
 class LayersConfig:
     def __init__(self):
@@ -4251,8 +4256,9 @@ class RecipeSet:
             schema.Optional('packageAuditFiles') : AuditFilesValidator("packageAuditFiles"),
         }
         for (name, prop) in self.__properties.items():
-            classSchemaSpec[schema.Optional(name)] = schema.Schema(prop.validate,
-                error="property '"+name+"' has an invalid type")
+            classSchemaSpec[schema.Optional(name)] = schema.Schema(
+                wrapValidator(prop.validate,
+                              "property '"+name+"' has an invalid type"))
 
         self.__classSchema = (schema.Schema(classSchemaSpec), self.__pluginPropDeps)
 
@@ -4267,8 +4273,9 @@ class RecipeSet:
             schema.Optional('require') : schema.Schema([str]),
         }
         for (name, setting) in self.__settings.items():
-            userConfigSchemaSpec[schema.Optional(name)] = schema.Schema(setting.validate,
-                error="setting '"+name+"' has an invalid type")
+            userConfigSchemaSpec[schema.Optional(name)] = schema.Schema(
+                wrapValidator(setting.validate,
+                              "setting '"+name+"' has an invalid type"))
         self.__userConfigSchema = (schema.Schema(userConfigSchemaSpec), self.__pluginSettingsDeps)
 
 
