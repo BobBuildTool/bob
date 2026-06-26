@@ -147,11 +147,6 @@ setup(
         'azure' : [ 'azure-storage-blob' ],
     },
 
-    # Installation time dependencies only needed by setup.py
-    setup_requires = [
-        'setuptools_scm',   # automatically get package version
-    ],
-
     # Provide executables
     entry_points = {
         'console_scripts' : [

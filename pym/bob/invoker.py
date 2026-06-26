@@ -291,7 +291,11 @@ class Invoker:
             # If stdout should be captured we use a dedicated buffer. This
             # buffer is then returned to the caller at child exit.
             stdoutRedir = subprocess.PIPE
-            stdoutStreams = [io.BytesIO(), self.__stdoutStream]
+            stdoutStreams = [io.BytesIO()]
+            if self.__trace:
+                # Only show stdout to the user if the command is traced.
+                # Otherwise it is unclear where it came from.
+                stdoutStreams.append(self.__stdoutStream)
         elif stdout == False:
             stdoutRedir = subprocess.DEVNULL
             stdoutStreams = []
@@ -306,7 +310,11 @@ class Invoker:
             # If stderr should be captured we use a dedicated buffer. This
             # buffer is then returned to the caller at child exit.
             stderrRedir = subprocess.PIPE
-            stderrStreams = [io.BytesIO(), self.__stderrStream]
+            stderrStreams = [io.BytesIO()]
+            if self.__trace:
+                # Only show stderr to the user if the command is traced.
+                # Otherwise it is unclear where it came from.
+                stderrStreams.append(self.__stderrStream)
         elif stderr == False:
             stderrRedir = subprocess.DEVNULL
             stderrStreams = []
