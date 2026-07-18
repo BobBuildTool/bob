@@ -401,6 +401,10 @@ class BashLanguage:
         return BashLanguage.__setupExec(spec, spec.updateScript, tmpDir, keepEnv, trace)
 
     @staticmethod
+    def setupExec(spec, tmpDir, keepEnv, trace, command):
+        return BashLanguage.__setupExec(spec, command, tmpDir, keepEnv, trace)
+
+    @staticmethod
     def mangleFingerprints(scriptFragments, env):
         # join the script fragments first
         script = joinScripts(scriptFragments, BashLanguage.glue)
@@ -617,6 +621,10 @@ class PwshLanguage:
         return PwshLanguage.__setupExec(spec, spec.updateScript, tmpDir, keepEnv, trace)
 
     @staticmethod
+    def setupExec(spec, tmpDir, keepEnv, trace, command):
+        return PwshLanguage.__setupExec(spec, command, tmpDir, keepEnv, trace)
+
+    @staticmethod
     def mangleFingerprints(scriptFragments, env):
         # join the script fragments first
         script = joinScripts(scriptFragments, PwshLanguage.glue)
@@ -772,6 +780,10 @@ class PythonLanguage:
     @staticmethod
     def setupUpdate(spec, tmpDir, keepEnv, trace):
         return PythonLanguage.__setupExec(spec, spec.updateScript, tmpDir, keepEnv, trace)
+
+    @staticmethod
+    def setupExec(spec, tmpDir, keepEnv, trace, command):
+        return PythonLanguage.__setupExec(spec, command, tmpDir, keepEnv, trace)
 
     @staticmethod
     def mangleFingerprints(scriptFragments, env):

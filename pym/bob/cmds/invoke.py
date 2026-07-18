@@ -15,8 +15,14 @@ def doInvoke(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob _invoke",
         description="Invoke a single step.")
     parser.add_argument('spec', help="The step spec file")
-    parser.add_argument('mode', default='run', choices=['run', 'update', 'shell', 'fingerprint'],
+    parser.add_argument('mode', default='run',
+        choices=['run', 'update', 'shell', 'fingerprint', 'exec'],
         nargs='?', help="Invocation mode")
+    parser.add_argument('command', nargs='*',
+        help="Command to execute in 'exec' mode. Each argument is one "
+             "command including its parameters. If more than one command is "
+             "given they are executed one after another. Execution stops at "
+             "the first command that fails.")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--clean', '-c', action='store_true', default=False,
@@ -38,6 +44,12 @@ def doInvoke(argv, bobRoot):
     args = parser.parse_args(argv)
     verbosity = min(3, max(0, 1 + args.verbose - args.quiet)) # [0..4], default: 1
 
+    if args.mode == 'exec':
+        if not args.command:
+            parser.error("exec mode requires at least one command")
+    elif args.command:
+        parser.error("unrecognized arguments: " + " ".join(args.command))
+
     try:
         with open(args.spec) as f:
             spec = StepSpec.fromFile(f)
@@ -54,6 +66,11 @@ def doInvoke(argv, bobRoot):
                               False, executor=executor)
             ret = loop.run_until_complete(invoker.executeStep(InvocationMode.SHELL,
                 False, args.clean, args.keep_sandbox))
+        elif args.mode == 'exec':
+            invoker = Invoker(spec, args.preserve_env, True, True, True,
+                              verbosity >= 3, False, executor=executor)
+            ret = loop.run_until_complete(invoker.executeStep(InvocationMode.EXEC,
+                False, args.clean, args.keep_sandbox, commands=args.command))
         elif args.mode in ('run', 'update'):
             invoker = Invoker(spec, args.preserve_env, args.no_logfiles,
                 verbosity >= 2, verbosity >= 1, verbosity >= 3, False,

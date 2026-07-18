@@ -203,6 +203,7 @@ class InvocationMode(Enum):
     CALL = 'call'
     SHELL = 'shell'
     UPDATE = 'update'
+    EXEC = 'exec'
 
 class Invoker:
     def __init__(self, spec, preserveEnv, noLogFiles, showStdOut, showStdErr,
@@ -385,13 +386,13 @@ class Invoker:
 
         return FinishedProcess(ret, stdoutBuf, stderrBuf)
 
-    def __getFatSandboxCmds(self, tmpDir):
+    def __getFatSandboxCmds(self, sandboxDir):
         if sys.platform != "linux":
             self.fail("Sandbox builds are only supported on Linux!")
 
         cmdArgs = [ getSandboxHelperPath() ]
         #FIXME: if verbosity >= 4: cmdArgs.append('-D')
-        cmdArgs.extend(["-S", tmpDir])
+        cmdArgs.extend(["-S", sandboxDir])
         cmdArgs.extend(["-H", "bob"])
         sandboxRootFs = os.path.abspath(self.__spec.sandboxRootWorkspace)
         for f in os.listdir(sandboxRootFs):
@@ -420,13 +421,13 @@ class Invoker:
 
         return cmdArgs
 
-    def __getSlimSandboxCmds(self, tmpDir):
+    def __getSlimSandboxCmds(self, sandboxDir, includeDir):
         if sys.platform != "linux":
             self.fail("Sandbox builds are only supported on Linux!")
 
-        sandboxTmpDir = os.path.join(tmpDir, "sandbox")
+        sandboxTmpDir = os.path.join(sandboxDir, "sandbox")
         os.mkdir(sandboxTmpDir)
-        whiteoutTmpDir = os.path.join(tmpDir, "whiteout")
+        whiteoutTmpDir = os.path.join(sandboxDir, "whiteout")
         os.mkdir(whiteoutTmpDir)
 
         cmdArgs = [ getSandboxHelperPath() ]
@@ -434,8 +435,8 @@ class Invoker:
         cmdArgs.append("-i")
 
         # Mount everything read-only except tmp. The caller has already created
-        # a "tmp" directory in tmpDir.  Mount it writable at the right path.
-        cmdArgs.extend(["-M", os.path.join(tmpDir, "tmp"), "-w", "/tmp"])
+        # a "tmp" directory in includeDir. Mount it writable at the right path.
+        cmdArgs.extend(["-M", os.path.join(includeDir, "tmp"), "-w", "/tmp"])
         for f in os.listdir("/"):
             if f == "tmp": continue
             cmdArgs.extend(["-M", "/"+f, "-m", "/"+f])
@@ -481,7 +482,72 @@ class Invoker:
         except OSError as e:
             raise BuildError("Error executing sandbox helper: " + str(e))
 
-    async def executeStep(self, mode, workspaceCreated, clean=False, keepSandbox=False):
+    def __wrapSandbox(self, realScriptFile, execScriptFile, callArgs, tmpDir):
+        # Wrap call into sandbox if requested
+        if self.__spec.hasSandbox:
+            # Every invocation gets its own, freshly created sandbox root.
+            # This is required because a single Invoker may run more than one
+            # sandboxed command (e.g. in 'exec' mode) and the sandbox helper
+            # does not tolerate a pre-populated root.
+            sandboxDir = tempfile.mkdtemp(dir=tmpDir)
+            if self.__spec.fatSandbox:
+                # The fat sandbox uses the sandbox root as its new root file
+                # system, i.e. "tmp" must exist as a real (writable)
+                # directory therein. Re-create the include files there by
+                # hard linking them instead of relying on a bind mount so
+                # that the jobserver FIFO can still be mounted underneath it.
+                includeTmpDir = os.path.join(tmpDir, "tmp")
+                sandboxTmpDir = os.path.join(sandboxDir, "tmp")
+                os.mkdir(sandboxTmpDir)
+                for name in os.listdir(includeTmpDir):
+                    os.link(os.path.join(includeTmpDir, name),
+                             os.path.join(sandboxTmpDir, name))
+                cmdArgs = self.__getFatSandboxCmds(sandboxDir)
+            else:
+                assert self.__spec.slimSandbox
+                cmdArgs = self.__getSlimSandboxCmds(sandboxDir, tmpDir)
+
+            cmdArgs.extend(["-M", os.path.abspath(realScriptFile), "-m"
+                , execScriptFile])
+
+            # Prevent network access
+            if not self.__spec.netAccess: cmdArgs.append('-n')
+
+            # Create empty env file. Otheriwse bind mount fails.
+            if self.__spec.envFile:
+                with open(self.__spec.envFile, "wb"): pass
+                cmdArgs.extend(["-M", os.path.abspath(self.__spec.envFile), "-w", "/bob/env"])
+
+            # Mount workspace writable and all dependencies read-only
+            cmdArgs.extend(["-M", os.path.abspath(self.__spec.workspaceWorkspacePath),
+                            "-w", os.path.abspath(self.__spec.workspaceExecPath)])
+            cmdArgs.extend(["-W", os.path.abspath(self.__spec.workspaceExecPath) ])
+            for argWorkspacePath, argExecPath in self.__spec.depMounts:
+                cmdArgs.extend(["-M", os.path.abspath(argWorkspacePath),
+                                "-m", os.path.abspath(argExecPath)])
+
+            # Mount jobserver FIFO into sandbox
+            if self.__makeJobServer.isFifo():
+                fifo = os.path.abspath(self.__makeJobServer.fifoPath())
+                cmdArgs.extend(["-M", fifo,
+                                "-w", "/tmp/bob-jobserver" if self.__spec.fatSandbox else fifo])
+
+            # Command follows. Stop parsing options.
+            cmdArgs.append("--")
+
+            # Hard override of PATH. The sandbox helper is found by an absolute path!
+            if self.__spec.fatSandbox:
+                env = { "PATH" : ":".join(self.__spec.sandboxPaths) }
+            else:
+                env = None
+        else:
+            cmdArgs = []
+            env = None
+        cmdArgs.extend(callArgs)
+        return cmdArgs, env
+
+    async def executeStep(self, mode, workspaceCreated, clean=False, keepSandbox=False,
+                           commands=None):
         # make permissions predictable
         os.umask(0o022)
 
@@ -510,95 +576,61 @@ class Invoker:
             if not os.path.isdir(self.__spec.workspaceWorkspacePath):
                 os.makedirs(self.__spec.workspaceWorkspacePath, exist_ok=True)
                 workspaceCreated = True
-            elif clean and mode != InvocationMode.SHELL:
+            elif clean and mode not in (InvocationMode.SHELL, InvocationMode.EXEC):
                 emptyDirectory(self.__spec.workspaceWorkspacePath)
                 workspaceCreated = True
 
-            # setup script and arguments
-            if mode == InvocationMode.SHELL:
-                realScriptFile, execScriptFile, callArgs = self.__spec.language.setupShell(
-                    self.__spec, tmpDir, self.__preserveEnv)
-            elif mode == InvocationMode.CALL:
-                realScriptFile, execScriptFile, callArgs = self.__spec.language.setupCall(
-                    self.__spec, tmpDir, self.__preserveEnv, self.__trace)
-            elif mode == InvocationMode.UPDATE:
-                realScriptFile, execScriptFile, callArgs = self.__spec.language.setupUpdate(
-                    self.__spec, tmpDir, self.__preserveEnv, self.__trace)
+            if mode == InvocationMode.EXEC:
+                # Every command is set up, sandboxed and executed on its own.
+                # Execution stops at the first command that fails.
+                for command in commands:
+                    realScriptFile, execScriptFile, callArgs = self.__spec.language.setupExec(
+                        self.__spec, tmpDir, self.__preserveEnv, self.__trace, command)
+                    cmdArgs, env = self.__wrapSandbox(realScriptFile, execScriptFile,
+                                                       callArgs, tmpDir)
+                    await self.checkCommand(cmdArgs, env=env, specEnv=False)
             else:
-                assert False, "not reached"
-
-            # Wrap call into sandbox if requested
-            if self.__spec.hasSandbox:
-                if self.__spec.fatSandbox:
-                    cmdArgs = self.__getFatSandboxCmds(tmpDir)
+                # setup script and arguments
+                if mode == InvocationMode.SHELL:
+                    realScriptFile, execScriptFile, callArgs = self.__spec.language.setupShell(
+                        self.__spec, tmpDir, self.__preserveEnv)
+                elif mode == InvocationMode.CALL:
+                    realScriptFile, execScriptFile, callArgs = self.__spec.language.setupCall(
+                        self.__spec, tmpDir, self.__preserveEnv, self.__trace)
+                elif mode == InvocationMode.UPDATE:
+                    realScriptFile, execScriptFile, callArgs = self.__spec.language.setupUpdate(
+                        self.__spec, tmpDir, self.__preserveEnv, self.__trace)
                 else:
-                    assert self.__spec.slimSandbox
-                    cmdArgs = self.__getSlimSandboxCmds(tmpDir)
+                    assert False, "not reached"
 
-                cmdArgs.extend(["-M", os.path.abspath(realScriptFile), "-m"
-                    , execScriptFile])
+                cmdArgs, env = self.__wrapSandbox(realScriptFile, execScriptFile, callArgs, tmpDir)
 
-                # Prevent network access
-                if not self.__spec.netAccess: cmdArgs.append('-n')
-
-                # Create empty env file. Otheriwse bind mount fails.
-                if self.__spec.envFile:
-                    with open(self.__spec.envFile, "wb"): pass
-                    cmdArgs.extend(["-M", os.path.abspath(self.__spec.envFile), "-w", "/bob/env"])
-
-                # Mount workspace writable and all dependencies read-only
-                cmdArgs.extend(["-M", os.path.abspath(self.__spec.workspaceWorkspacePath),
-                                "-w", os.path.abspath(self.__spec.workspaceExecPath)])
-                cmdArgs.extend(["-W", os.path.abspath(self.__spec.workspaceExecPath) ])
-                for argWorkspacePath, argExecPath in self.__spec.depMounts:
-                    cmdArgs.extend(["-M", os.path.abspath(argWorkspacePath),
-                                    "-m", os.path.abspath(argExecPath)])
-
-                # Mount jobserver FIFO into sandbox
-                if self.__makeJobServer.isFifo():
-                    fifo = os.path.abspath(self.__makeJobServer.fifoPath())
-                    cmdArgs.extend(["-M", fifo,
-                                    "-w", "/tmp/bob-jobserver" if self.__spec.fatSandbox else fifo])
-
-                # Command follows. Stop parsing options.
-                cmdArgs.append("--")
-
-                # Hard override of PATH. The sandbox helper is found by an absolute path!
-                if self.__spec.fatSandbox:
-                    env = { "PATH" : ":".join(self.__spec.sandboxPaths) }
+                if mode == InvocationMode.SHELL:
+                    ret = await self.callCommand(cmdArgs, env=env, specEnv=False)
+                elif mode in (InvocationMode.CALL, InvocationMode.UPDATE):
+                    for scm in self.__spec.preRunCmds:
+                        scm = getScm(scm)
+                        if mode == InvocationMode.UPDATE and not scm.isLocal():
+                            continue # Skip non-local SCMs on update-only
+                        try:
+                            await scm.invoke(self, workspaceCreated)
+                        except CmdFailedError as e:
+                            self.error(scm.getSource(), "failed")
+                            self.error(e.what)
+                            raise
+                        except Exception:
+                            self.error(scm.getSource(), "failed")
+                            raise
+                    await self.checkCommand(cmdArgs, env=env, specEnv=False)
+                    for a in self.__spec.postRunCmds:
+                        a = CheckoutAssert(a)
+                        try:
+                            await a.invoke(self)
+                        except Exception:
+                            self.error(a.getSource(), "failed")
+                            raise
                 else:
-                    env = None
-            else:
-                cmdArgs = []
-                env = None
-            cmdArgs.extend(callArgs)
-
-            if mode == InvocationMode.SHELL:
-                ret = await self.callCommand(cmdArgs, env=env, specEnv=False)
-            elif mode in (InvocationMode.CALL, InvocationMode.UPDATE):
-                for scm in self.__spec.preRunCmds:
-                    scm = getScm(scm)
-                    if mode == InvocationMode.UPDATE and not scm.isLocal():
-                        continue # Skip non-local SCMs on update-only
-                    try:
-                        await scm.invoke(self, workspaceCreated)
-                    except CmdFailedError as e:
-                        self.error(scm.getSource(), "failed")
-                        self.error(e.what)
-                        raise
-                    except Exception:
-                        self.error(scm.getSource(), "failed")
-                        raise
-                await self.checkCommand(cmdArgs, env=env, specEnv=False)
-                for a in self.__spec.postRunCmds:
-                    a = CheckoutAssert(a)
-                    try:
-                        await a.invoke(self)
-                    except Exception:
-                        self.error(a.getSource(), "failed")
-                        raise
-            else:
-                assert False, "not reached"
+                    assert False, "not reached"
 
             # everything went well
             ret = 0
