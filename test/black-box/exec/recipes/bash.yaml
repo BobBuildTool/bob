@@ -1,0 +1,10 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+buildScript: |
+    echo "build ok"
+packageScript: |
+    echo "package ok"
