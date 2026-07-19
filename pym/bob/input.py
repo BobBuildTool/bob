@@ -4093,6 +4093,24 @@ class RecipeSet:
         return self.__cache.loadYaml(path, schema, default, preValidate)
 
     def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="", command=None):
+        self.__cache.open()
+        try:
+            self.__parseConfigs(platform, recipesRoot, command)
+            self.__parseRecipes(envOverrides)
+        finally:
+            self.__cache.close()
+
+    def __parseConfigs(self, platform, recipesRoot, command):
+        if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
+            raise ParseError("Invalid platform: " + platform)
+        self.__platform = platform
+        self.__layers = {}
+        self.__whiteList = getPlatformEnvWhiteList(platform)
+        self.__pluginPropDeps = b''
+        self.__pluginSettingsDeps = b''
+        self.__createSchemas()
+
+        # Find actual project root
         if not recipesRoot and os.path.isfile(".bob-project"):
             try:
                 with open(".bob-project") as f:
@@ -4103,21 +4121,6 @@ class RecipeSet:
         if not os.path.isdir(recipesDir):
             raise ParseError("No recipes directory found in " + recipesDir)
         self.__projectRoot = recipesRoot or os.getcwd()
-        self.__cache.open()
-        try:
-            self.__parse(envOverrides, platform, recipesRoot, command)
-        finally:
-            self.__cache.close()
-
-    def __parse(self, envOverrides, platform, recipesRoot, command):
-        if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
-            raise ParseError("Invalid platform: " + platform)
-        self.__platform = platform
-        self.__layers = {}
-        self.__whiteList = getPlatformEnvWhiteList(platform)
-        self.__pluginPropDeps = b''
-        self.__pluginSettingsDeps = b''
-        self.__createSchemas()
 
         # global user config(s)
         if not DEBUG['ngd']:
@@ -4127,7 +4130,7 @@ class RecipeSet:
 
         # Begin with root layer
         allLayerSpecs = { "" : LayerSpec("") }
-        allLayers = self.__parseLayer("", allLayerSpecs, "9999", recipesRoot, None)
+        self.__allLayers = self.__parseLayer("", allLayerSpecs, "9999", recipesRoot, None)
 
         # If a specific command is requested, verify that it's available.
         if command is not None and command not in self.__commands:
@@ -4146,9 +4149,21 @@ class RecipeSet:
         else:
             self.__stringFunctions.update(EXTRA_STRING_FUNS)
 
+        # Out-of-tree builds may have a dedicated default.yaml
+        if recipesRoot:
+            self.__parseUserConfig("default.yaml")
+
+        # config files overrule everything else
+        for c in self.__configFiles:
+            c = str(c) + ".yaml"
+            if not os.path.isfile(c):
+                raise ParseError("Config file {} does not exist!".format(c))
+            self.__parseUserConfig(c)
+
+    def __parseRecipes(self, envOverrides):
         # Parse all recipes and classes of all layers. Need to be done last
         # because only by now we have loaded all plugins.
-        for layer, rootDir, scriptLanguage in allLayers:
+        for layer, rootDir, scriptLanguage in self.__allLayers:
             classesDir = os.path.join(rootDir, 'classes')
             for root, dirnames, filenames in os.walk(classesDir):
                 for path in fnmatch.filter(filenames, "[!.]*.yaml"):
@@ -4186,17 +4201,6 @@ class RecipeSet:
                         e.setPath(os.path.join(root, path))
                         raise
 
-        # Out-of-tree builds may have a dedicated default.yaml
-        if recipesRoot:
-            self.__parseUserConfig("default.yaml")
-
-        # config files overrule everything else
-        for c in self.__configFiles:
-            c = str(c) + ".yaml"
-            if not os.path.isfile(c):
-                raise ParseError("Config file {} does not exist!".format(c))
-            self.__parseUserConfig(c)
-
         # calculate start environment
         osEnv = Env(os.environ)
         osEnv.setFuns(self.__stringFunctions)
@@ -4204,7 +4208,7 @@ class RecipeSet:
             self.__defaultEnv.items() })
         env.setFuns(self.__stringFunctions)
         env.update(envOverrides)
-        env["BOB_HOST_PLATFORM"] = platform
+        env["BOB_HOST_PLATFORM"] = self.__platform
         self.__rootEnv = env
 
         # resolve recipes and their classes
