@@ -3484,6 +3484,7 @@ class RecipeSet:
         self.__scmOverrides = []
         self.__hooks = {}
         self.__projectGenerators = {}
+        self.__commands = {}
         self.__configFiles = []
         self.__properties = {}
         self.__states = {}
@@ -3710,6 +3711,21 @@ class RecipeSet:
             }
             self.__projectGenerators.update(projectGenerators)
 
+        commands = manifest.get('commands', {})
+        if not isinstance(commands, dict):
+            raise ParseError("Plugin '"+fileName+"': 'commands' has wrong type!")
+        if commands and compareVersion(apiVersion, "1.2.1.dev1") < 0:
+            raise ParseError("Plugin '"+fileName+"': 'commands' requires at least apiVersion 1.2.1.dev1!")
+        for (i, j) in commands.items():
+            if not isinstance(i, str):
+                raise ParseError("Plugin '"+fileName+"': command name must be a string!")
+            entry = j if isinstance(j, dict) else {'func' : j}
+            if not callable(entry.get('func')):
+                raise ParseError("Plugin '"+fileName+"': command '"+i+"' must provide a callable 'func'!")
+            if i in self.__commands:
+                raise ParseError("Plugin '"+fileName+"': command '"+i+"' already defined by other plugin!")
+            self.__commands[i] = entry
+
         properties = manifest.get('properties', {})
         if not isinstance(properties, dict):
             raise ParseError("Plugin '"+fileName+"': 'properties' has wrong type!")
@@ -3792,6 +3808,9 @@ class RecipeSet:
     def getProjectGenerators(self):
         return self.__projectGenerators
 
+    def getCommands(self):
+        return self.__commands
+
     def envWhiteList(self):
         """The set of all white listed environment variables
 
@@ -3872,7 +3891,7 @@ class RecipeSet:
     def loadYaml(self, path, schema, default={}, preValidate=lambda x: None):
         return self.__cache.loadYaml(path, schema, default, preValidate)
 
-    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot=""):
+    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="", command=None):
         if not recipesRoot and os.path.isfile(".bob-project"):
             try:
                 with open(".bob-project") as f:
@@ -3885,11 +3904,11 @@ class RecipeSet:
         self.__projectRoot = recipesRoot or os.getcwd()
         self.__cache.open()
         try:
-            self.__parse(envOverrides, platform, recipesRoot)
+            self.__parse(envOverrides, platform, recipesRoot, command)
         finally:
             self.__cache.close()
 
-    def __parse(self, envOverrides, platform, recipesRoot=""):
+    def __parse(self, envOverrides, platform, recipesRoot, command):
         if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
             raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
@@ -3907,6 +3926,11 @@ class RecipeSet:
 
         # Begin with root layer
         allLayers = self.__parseLayer(LayerSpec(""), "9999", recipesRoot, None)
+
+        # If a specific command is requested, verify that it's available.
+        if command is not None and command not in self.__commands:
+            raise BobError(f"{command}: unknown command! Use 'bob -h' for help.",
+                             returncode=2)
 
         # Add string functions added after 1.0. We did not reserve a namespace
         # and we better not break existing recipes.
