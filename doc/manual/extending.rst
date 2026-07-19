@@ -63,6 +63,15 @@ internal and might change without notice.
 .. autoclass:: bob.pathspec.PackageSet()
    :members: getRootPackage, queryPackagePath, getAliases
 
+.. autoclass:: bob.errors.BobError
+   :members:
+
+.. autoclass:: bob.errors.ParseError
+   :members:
+
+.. autoclass:: bob.errors.BuildError
+   :members:
+
 Hooks
 -----
 
