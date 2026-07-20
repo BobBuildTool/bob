@@ -60,6 +60,18 @@ internal and might change without notice.
 .. autoclass:: bob.input.Tool()
    :members:
 
+.. autoclass:: bob.pathspec.PackageSet()
+   :members: getRootPackage, queryPackagePath, getAliases
+
+.. autoclass:: bob.errors.BobError
+   :members:
+
+.. autoclass:: bob.errors.ParseError
+   :members:
+
+.. autoclass:: bob.errors.BuildError
+   :members:
+
 Hooks
 -----
 
@@ -299,6 +311,59 @@ generator are the package objects returned by
         }
     }
 
+
+.. _extending-commands:
+
+Commands
+--------
+
+A plugin may register additional top level commands, e.g. to run ``bob
+mycmd ...`` like any built-in command such as ``bob ls``. Bob takes care of
+parsing the arguments that are common to (almost) all commands -- ``-D``,
+``-c`` and the sandbox mode switches (``--sandbox``, ``--slim-sandbox``,
+``--dev-sandbox``, ``--strict-sandbox``, ``--no-sandbox``) -- and of parsing
+the recipes and generating the package graph. The plugin must not (and
+cannot) parse recipes or generate packages itself.
+
+A command function is called with 3 arguments:
+
+* ``packages``: the :class:`bob.pathspec.PackageSet` holding the generated
+  package graph. Use e.g. :func:`bob.pathspec.PackageSet.queryPackagePath` or
+  :func:`bob.pathspec.PackageSet.getRootPackage` to inspect it.
+* ``argv``: the list of arguments that were not consumed by Bob's standard
+  argument handling. The plugin is free to parse these with its own
+  ``argparse.ArgumentParser`` (and should handle ``-h``/``--help`` itself, as
+  Bob does not intercept it).
+* ``bobRoot``: the fully qualified path name to the Bob executable, as passed
+  to generators.
+
+The function may return an integer that is used as the process exit code. Any
+other return value (e.g. ``None``) is treated as success.
+
+A simple command may look like this::
+
+    def doHello(packages, argv, bobRoot):
+        import argparse
+        parser = argparse.ArgumentParser(prog="bob hello")
+        parser.add_argument('package', nargs='?', default="")
+        args = parser.parse_args(argv)
+        for (stack, node) in packages.queryTreePath(args.package):
+            print("/".join(stack) if stack else "/")
+
+    manifest = {
+        'apiVersion' : "1.2.1.dev1",
+        'commands' : {
+            'hello' : {
+                'func' : doHello,
+                'help' : "Print all package paths",
+            },
+        },
+    }
+
+Command names of Bob's built-in commands (e.g. ``build``, ``dev``, ``ls``,
+...) are reserved and always take precedence over a plugin provided command
+of the same name. It is not possible to re-define an already existing command
+name defined by another plugin.
 
 .. _extending-settings:
 

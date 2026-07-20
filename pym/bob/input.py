@@ -3269,6 +3269,15 @@ def wrapValidator(validator, message):
             raise schema.SchemaError(message)
     return wrapper
 
+def isPluginPropertyClass(cls):
+    return isinstance(cls, type) and issubclass(cls, PluginProperty)
+
+def isPluginStateClass(cls):
+    return isinstance(cls, type) and issubclass(cls, PluginState)
+
+def isUpperCaseName(name):
+    return isinstance(name, str) and not name[:1].islower()
+
 
 class LayersConfig:
     def __init__(self):
@@ -3332,6 +3341,47 @@ class RecipeSet:
             schema.Optional('type') : schema.Or("d3", "dot"),
             schema.Optional('max_depth') : int,
         })
+
+    PLUGIN_MANIFEST_SCHEMA = schema.Schema({
+        'apiVersion' : str,
+        schema.Optional('hooks') : schema.Schema({
+            str : schema.Schema(wrapValidator(callable, "hook must be callable!"))
+        }),
+        schema.Optional('projectGenerators') : schema.Schema({
+            str : schema.Or(
+                schema.Schema(wrapValidator(callable, "generator must be callable!")),
+                {
+                    'func' : schema.Schema(wrapValidator(callable, "generator 'func' must be callable!")),
+                    schema.Optional('query') : bool,
+                })
+        }),
+        schema.Optional('commands') : schema.Schema({
+            str : schema.Or(
+                schema.Schema(wrapValidator(callable, "command must be callable!")),
+                {
+                    'func' : schema.Schema(wrapValidator(callable, "command 'func' must be callable!")),
+                    schema.Optional('help') : str,
+                })
+        }),
+        schema.Optional('properties') : schema.Schema({
+            schema.Schema(wrapValidator(isUpperCaseName,
+                "property name must be a string and must not start lower case!")) :
+                schema.Schema(wrapValidator(isPluginPropertyClass, "property has wrong type!"))
+        }),
+        schema.Optional('state') : schema.Schema({
+            schema.Schema(wrapValidator(isUpperCaseName,
+                "state tracker name must be a string and must not start lower case!")) :
+                schema.Schema(wrapValidator(isPluginStateClass, "state tracker has wrong type!"))
+        }),
+        schema.Optional('stringFunctions') : schema.Schema({
+            str : schema.Schema(wrapValidator(callable, "string function must be callable!"))
+        }),
+        schema.Optional('settings') : schema.Schema({
+            schema.Schema(wrapValidator(isUpperCaseName,
+                "settings name must be a string and must not start lower case!")) :
+                PluginSetting
+        }),
+    })
 
     # We do not support the "import" SCM for layers. It just makes no sense.
     # Also, all SCMs lack the "dir" and "if" attributes.
@@ -3484,6 +3534,7 @@ class RecipeSet:
         self.__scmOverrides = []
         self.__hooks = {}
         self.__projectGenerators = {}
+        self.__commands = {}
         self.__configFiles = []
         self.__properties = {}
         self.__states = {}
@@ -3677,26 +3728,27 @@ class RecipeSet:
             manifest = mod.manifest
         except AttributeError:
             raise ParseError("Plugin '"+fileName+"' did not define 'manifest'!")
-        apiVersion = manifest.get('apiVersion')
+
+        # Check the API version first so that a plugin requiring a newer Bob
+        # gets the proper "too old" error instead of a confusing schema
+        # error about manifest keys that this Bob version does not know yet.
+        apiVersion = manifest.get('apiVersion') if isinstance(manifest, dict) else None
         if apiVersion is None:
             raise ParseError("Plugin '"+fileName+"' did not define 'apiVersion'!")
         if compareVersion(BOB_VERSION, apiVersion) < 0:
             raise ParseError("Your Bob is too old. Plugin '"+fileName+"' requires at least version "+apiVersion+"!")
         toolsAbiBreak = compareVersion(apiVersion, "0.15") < 0
 
+        try:
+            manifest = self.PLUGIN_MANIFEST_SCHEMA.validate(manifest)
+        except schema.SchemaError as e:
+            raise ParseError("Plugin '"+fileName+"': "+str(e))
+
         hooks = manifest.get('hooks', {})
-        if not isinstance(hooks, dict):
-            raise ParseError("Plugin '"+fileName+"': 'hooks' has wrong type!")
         for (hook, fun) in hooks.items():
-            if not isinstance(hook, str):
-                raise ParseError("Plugin '"+fileName+"': hook name must be a string!")
-            if not callable(fun):
-                raise ParseError("Plugin '"+fileName+"': "+hook+": hook must be callable!")
             self.__hooks.setdefault(hook, []).append((fun, apiVersion))
 
         projectGenerators = manifest.get('projectGenerators', {})
-        if not isinstance(projectGenerators, dict):
-            raise ParseError("Plugin '"+fileName+"': 'projectGenerators' has wrong type!")
         if projectGenerators:
             if compareVersion(apiVersion, "0.16.1.dev33") < 0:
                 # cut off extra argument for old generators
@@ -3710,32 +3762,25 @@ class RecipeSet:
             }
             self.__projectGenerators.update(projectGenerators)
 
+        commands = manifest.get('commands', {})
+        if commands and compareVersion(apiVersion, "1.2.1.dev1") < 0:
+            raise ParseError("Plugin '"+fileName+"': 'commands' requires at least apiVersion 1.2.1.dev1!")
+        for (i, j) in commands.items():
+            entry = j if isinstance(j, dict) else {'func' : j}
+            if i in self.__commands:
+                raise ParseError("Plugin '"+fileName+"': command '"+i+"' already defined by other plugin!")
+            self.__commands[i] = entry
+
         properties = manifest.get('properties', {})
-        if not isinstance(properties, dict):
-            raise ParseError("Plugin '"+fileName+"': 'properties' has wrong type!")
         if properties:
             self.__pluginPropDeps += pluginStat
-        for (i,j) in properties.items():
-            if not isinstance(i, str):
-                raise ParseError("Plugin '"+fileName+"': property name must be a string!")
-            if i[:1].islower():
-                raise ParseError(f"Plugin '{fileName}': property '{i}' must not start lower case!")
-            if not issubclass(j, PluginProperty):
-                raise ParseError("Plugin '"+fileName+"': property '" +i+"' has wrong type!")
+        for i in properties:
             if i in self.__properties:
                 raise ParseError("Plugin '"+fileName+"': property '" +i+"' already defined by other plugin!")
         self.__properties.update(properties)
 
         states = manifest.get('state', {})
-        if not isinstance(states, dict):
-            raise ParseError("Plugin '"+fileName+"': 'states' has wrong type!")
-        for (i,j) in states.items():
-            if not isinstance(i, str):
-                raise ParseError("Plugin '"+fileName+"': state tracker name must be a string!")
-            if i[:1].islower():
-                raise ParseError(f"Plugin '{fileName}': state tracker '{i}' must not start lower case!")
-            if not issubclass(j, PluginState):
-                raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' has wrong type!")
+        for i in states:
             if i in self.__states:
                 raise ParseError("Plugin '"+fileName+"': state tracker '" +i+"' already defined by other plugin!")
         if states and toolsAbiBreak:
@@ -3743,11 +3788,7 @@ class RecipeSet:
         self.__states.update(states)
 
         funs = manifest.get('stringFunctions', {})
-        if not isinstance(funs, dict):
-            raise ParseError("Plugin '"+fileName+"': 'stringFunctions' has wrong type!")
-        for (i,j) in funs.items():
-            if not isinstance(i, str):
-                raise ParseError("Plugin '"+fileName+"': string function name must be a string!")
+        for i in funs:
             if i in self.__stringFunctions:
                 raise ParseError("Plugin '"+fileName+"': string function '" +i+"' already defined by other plugin!")
         if funs and toolsAbiBreak:
@@ -3755,17 +3796,9 @@ class RecipeSet:
         self.__stringFunctions.update(funs)
 
         settings = manifest.get('settings', {})
-        if not isinstance(settings, dict):
-            raise ParseError("Plugin '"+fileName+"': 'settings' has wrong type!")
         if settings:
             self.__pluginSettingsDeps += pluginStat
-        for (i,j) in settings.items():
-            if not isinstance(i, str):
-                raise ParseError("Plugin '"+fileName+"': settings name must be a string!")
-            if i[:1].islower():
-                raise ParseError("Plugin '"+fileName+"': settings name must not start lower case!")
-            if not isinstance(j, PluginSetting):
-                raise ParseError("Plugin '"+fileName+"': setting '"+i+"' has wrong type!")
+        for i in settings:
             if i in self.__settings:
                 raise ParseError("Plugin '"+fileName+"': setting '"+i+"' already defined by other plugin!")
         self.__settings.update(settings)
@@ -3791,6 +3824,9 @@ class RecipeSet:
 
     def getProjectGenerators(self):
         return self.__projectGenerators
+
+    def getCommands(self):
+        return self.__commands
 
     def envWhiteList(self):
         """The set of all white listed environment variables
@@ -3872,7 +3908,32 @@ class RecipeSet:
     def loadYaml(self, path, schema, default={}, preValidate=lambda x: None):
         return self.__cache.loadYaml(path, schema, default, preValidate)
 
-    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot=""):
+    def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="", command=None):
+        self.__cache.open()
+        try:
+            self.__parseConfigs(platform, recipesRoot, command)
+            self.__parseRecipes(envOverrides)
+        finally:
+            self.__cache.close()
+
+    def parseConfigs(self, platform=getPlatformString(), recipesRoot="", command=None):
+        self.__cache.open()
+        try:
+            self.__parseConfigs(platform, recipesRoot, command)
+        finally:
+            self.__cache.close()
+
+    def __parseConfigs(self, platform, recipesRoot, command):
+        if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
+            raise ParseError("Invalid platform: " + platform)
+        self.__platform = platform
+        self.__layers = {}
+        self.__whiteList = getPlatformEnvWhiteList(platform)
+        self.__pluginPropDeps = b''
+        self.__pluginSettingsDeps = b''
+        self.__createSchemas()
+
+        # Find actual project root
         if not recipesRoot and os.path.isfile(".bob-project"):
             try:
                 with open(".bob-project") as f:
@@ -3883,21 +3944,6 @@ class RecipeSet:
         if not os.path.isdir(recipesDir):
             raise ParseError("No recipes directory found in " + recipesDir)
         self.__projectRoot = recipesRoot or os.getcwd()
-        self.__cache.open()
-        try:
-            self.__parse(envOverrides, platform, recipesRoot)
-        finally:
-            self.__cache.close()
-
-    def __parse(self, envOverrides, platform, recipesRoot=""):
-        if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
-            raise ParseError("Invalid platform: " + platform)
-        self.__platform = platform
-        self.__layers = {}
-        self.__whiteList = getPlatformEnvWhiteList(platform)
-        self.__pluginPropDeps = b''
-        self.__pluginSettingsDeps = b''
-        self.__createSchemas()
 
         # global user config(s)
         if not DEBUG['ngd']:
@@ -3906,7 +3952,12 @@ class RecipeSet:
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
-        allLayers = self.__parseLayer(LayerSpec(""), "9999", recipesRoot, None)
+        self.__allLayers = self.__parseLayer(LayerSpec(""), "9999", recipesRoot, None)
+
+        # If a specific command is requested, verify that it's available.
+        if command is not None and command not in self.__commands:
+            raise BobError(f"{command}: unknown command! Use 'bob -h' for help.",
+                             returncode=2)
 
         # Add string functions added after 1.0. We did not reserve a namespace
         # and we better not break existing recipes.
@@ -3920,9 +3971,21 @@ class RecipeSet:
         else:
             self.__stringFunctions.update(EXTRA_STRING_FUNS)
 
+        # Out-of-tree builds may have a dedicated default.yaml
+        if recipesRoot:
+            self.__parseUserConfig("default.yaml")
+
+        # config files overrule everything else
+        for c in self.__configFiles:
+            c = str(c) + ".yaml"
+            if not os.path.isfile(c):
+                raise ParseError("Config file {} does not exist!".format(c))
+            self.__parseUserConfig(c)
+
+    def __parseRecipes(self, envOverrides):
         # Parse all recipes and classes of all layers. Need to be done last
         # because only by now we have loaded all plugins.
-        for layer, rootDir, scriptLanguage in allLayers:
+        for layer, rootDir, scriptLanguage in self.__allLayers:
             classesDir = os.path.join(rootDir, 'classes')
             for root, dirnames, filenames in os.walk(classesDir):
                 for path in fnmatch.filter(filenames, "[!.]*.yaml"):
@@ -3960,17 +4023,6 @@ class RecipeSet:
                         e.setPath(os.path.join(root, path))
                         raise
 
-        # Out-of-tree builds may have a dedicated default.yaml
-        if recipesRoot:
-            self.__parseUserConfig("default.yaml")
-
-        # config files overrule everything else
-        for c in self.__configFiles:
-            c = str(c) + ".yaml"
-            if not os.path.isfile(c):
-                raise ParseError("Config file {} does not exist!".format(c))
-            self.__parseUserConfig(c)
-
         # calculate start environment
         osEnv = Env(os.environ)
         osEnv.setFuns(self.__stringFunctions)
@@ -3978,7 +4030,7 @@ class RecipeSet:
             self.__defaultEnv.items() })
         env.setFuns(self.__stringFunctions)
         env.update(envOverrides)
-        env["BOB_HOST_PLATFORM"] = platform
+        env["BOB_HOST_PLATFORM"] = self.__platform
         self.__rootEnv = env
 
         # resolve recipes and their classes

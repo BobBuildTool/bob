@@ -6,7 +6,7 @@
 from ...builder import LocalBuilder
 from ...errors import ParseError
 from ...input import RecipeSet
-from ..helpers import processDefines
+from ..helpers import processDefines, addStandardArgs
 from string import Formatter
 import argparse
 import os
@@ -35,26 +35,12 @@ been executed or does not exist), the line is omitted.
     parser.add_argument('packages', metavar='PACKAGE', type=str, nargs='+',
         help="(Sub-)package to query")
     parser.add_argument('-f', help='Output format string', default='{name}\t{dist}', metavar='FORMAT')
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
     parser.add_argument('-q', dest="quiet", action="store_true",
         help="Be quiet in case of errors")
     parser.add_argument('--fail', action="store_true",
         help="Return a non-zero error code in case of errors")
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=False,
-        help="Enable sandboxing")
-    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
-        help="Enable slim sandboxing")
-    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
-        help="Enable development sandboxing")
-    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
-        help="Enable strict sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
-        help="Disable sandboxing")
+    addStandardArgs(parser)
     parser.set_defaults(sandbox=None)
 
     group = parser.add_mutually_exclusive_group()
