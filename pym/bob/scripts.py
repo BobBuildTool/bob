@@ -40,7 +40,7 @@ def __graph(*args, **kwargs):
 
 def __help(*args, **kwargs):
     from .cmds.help import doHelp
-    doHelp(availableCommands.keys(), *args, **kwargs)
+    doHelp(availableCommands, *args, **kwargs)
     return 0
 
 def __init(*args, **kwargs):
