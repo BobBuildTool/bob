@@ -682,6 +682,32 @@ the ``checkoutScript``.
 Other than the above differences setup scripts are identical to
 :ref:`configuration-recipes-scripts`.
 
+.. _configuration-recipes-finalize:
+
+{checkout,build,package}Finalize[{Bash,Pwsh}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: String
+
+Finalize scripts are appended after the regular scripts defined by
+:ref:`configuration-recipes-scripts`. They are intended for classes that need
+to run some cleanup or post-processing after the recipe (and any other
+inherited classes) already did their work, e.g. stripping binaries or fixing up
+permissions regardless of what the actual recipe script did.
+
+The scripts of all inherited classes and the recipe are joined into a single
+script per step. While the regular scripts are joined in inheritance order
+(classes first, recipe last -- see :ref:`configuration-recipes-scripts`), the
+finalize scripts are appended afterwards in *reverse* order, that is the
+recipe's finalize script runs first, followed by the finalize scripts of the
+inherited classes, innermost class last. This mirrors the usual "wrapping"
+pattern where the outermost class is expected to run its finalization last.
+
+Other than the above differences finalize scripts are identical to
+:ref:`configuration-recipes-scripts`. In particular a ``checkoutFinalize``
+script also renders the checkout indeterministic by default -- see
+:ref:`configuration-recipes-checkoutdeterministic`.
+
 .. _configuration-recipes-tools:
 
 {checkout,build,package}Tools
@@ -908,14 +934,14 @@ that extra care must be taken for a script to fetch always the same sources. If
 you are sure that the result of the checkout script is always the same you may
 set this to ``True``.
 
-The ``checkoutDeterministic`` keyword only relates to the ``checkoutScript`` at
-the same level. Each recipe or class must declare the determinism of its
-``checkoutScript``. If there is no ``checkoutScript`` then
-``checkoutDeterministic`` implicitly defaults to ``True``. Everything in
-``checkoutSCM`` is *not* affected by ``checkoutDeterministic``. All SCMs
-included in Bob will determine their determinism based on the configuration
-automatically, e.g. using a commit or tag is considered deterministic while
-using a branch is indeterministic.
+The ``checkoutDeterministic`` keyword only relates to the ``checkoutScript``
+and ``checkoutFinalize`` scripts at the same level. Each recipe or class must
+declare the determinism of its scripts. If neither a ``checkoutScript`` nor a
+``checkoutFinalize`` script is defined then ``checkoutDeterministic``
+implicitly defaults to ``True``. Everything in ``checkoutSCM`` is *not*
+affected by ``checkoutDeterministic``. All SCMs included in Bob will determine
+their determinism based on the configuration automatically, e.g. using a commit
+or tag is considered deterministic while using a branch is indeterministic.
 
 If the checkout is deemed deterministic it enables Bob to apply various
 optimizations. Deterministic checkouts do not need to be executed every time
