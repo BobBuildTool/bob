@@ -1,0 +1,4 @@
+ROOT: ['root']
+ALIASES: ['foo']
+PACKAGE: root FOO=<unset> sandbox=False
+ARGV: ['root', '--additional', 'options']
