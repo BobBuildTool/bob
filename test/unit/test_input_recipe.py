@@ -817,3 +817,110 @@ class TestShared(RecipeCommon, TestCase):
         self.assertTrue(p.isShared())
         p = self.parseAndPrepare(recipe, env={"ENABLE" : "no"}).getPackageStep()
         self.assertFalse(p.isShared())
+
+
+# Added in Python 3.10: itertools.pairwise
+def pairwise(seq):
+    prev = seq[0]
+    for i in seq[1:]:
+        yield (prev, i)
+        prev = i
+
+class TestFinalizeScripts(RecipeCommon, TestCase):
+
+    def testOrder(self):
+        """Finalize scripts are evaluated in reverse order"""
+        recipe = {
+            "inherit" : ["a", "b"],
+            "packageScript" : "RECIPE-SCRIPT",
+            "packageFinalize" : "RECIPE-FINALIZE",
+        }
+        classes = {
+            "a" : {
+                "packageScript" : "CLASS-A-SCRIPT",
+                "packageFinalize" : "CLASS-A-FINALIZE",
+            },
+            "b" : {
+                "packageScript" : "CLASS-B-SCRIPT",
+                "packageFinalize" : "CLASS-B-FINALIZE",
+            }
+        }
+
+        mainScript = self.parseAndPrepare(recipe, classes).getPackageStep().getMainScript()
+
+        snippets = (
+            "CLASS-A-SCRIPT",
+            "CLASS-B-SCRIPT",
+            "RECIPE-SCRIPT",
+            "RECIPE-FINALIZE",
+            "CLASS-B-FINALIZE",
+            "CLASS-A-FINALIZE",
+        )
+
+        for s in snippets:
+            self.assertIn(s, mainScript)
+
+        indexes = [ mainScript.index(s) for s in snippets ]
+        diffs = [ b-a for a, b in pairwise(indexes) ]
+        self.assertEqual(len(indexes), len(diffs)+1)
+        self.assertTrue(all(d > 0 for d in diffs))
+
+    def testCheckoutDeterministic(self):
+        """checkoutDeterministic applies equally to checkoutScript and checkoutFinalize"""
+
+        # checkoutFinalize alone -> indeterministic
+        recipe = {
+            "checkoutFinalize" : "asdf",
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
+        self.assertFalse(c.isDeterministic())
+
+        # checkoutScript and checkoutFinalize -> indeterministic
+        recipe = {
+            "checkoutScript" : "asdf",
+            "checkoutFinalize" : "asdf",
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
+        self.assertFalse(c.isDeterministic())
+
+        # checkoutFinalize can be overridden by checkoutDeterministic just
+        # like checkoutScript
+
+        recipe = {
+            "checkoutFinalize" : "asdf",
+            "checkoutDeterministic" : True,
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
+        self.assertTrue(c.isDeterministic())
+
+        recipe = {
+            "checkoutScript" : "asdf",
+            "checkoutFinalize" : "asdf",
+            "checkoutDeterministic" : True,
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        c = self.parseAndPrepare(recipe).getCheckoutStep()
+        self.assertTrue(c.isDeterministic())
+
+    def testCheckoutDeterministicInherit(self):
+        """checkoutFinalize of inherited classes also affects determinism"""
+
+        recipe = {
+            "inherit" : [ "bar" ],
+            "buildScript" : "asdf",
+            "packageScript" : "asdf",
+        }
+        classes = {
+            "bar" : {
+                "checkoutFinalize" : "asdf",
+            },
+        }
+        c = self.parseAndPrepare(recipe, classes).getCheckoutStep()
+        self.assertFalse(c.isDeterministic())
