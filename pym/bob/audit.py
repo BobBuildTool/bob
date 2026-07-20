@@ -245,6 +245,15 @@ class Artifact:
     def getMetaEnv(self):
         return self.__data.get("metaEnv", {})
 
+    def getSCMs(self):
+        return self.__data.get("scms", [])
+
+    def getFiles(self):
+        return self.__data.get("files", {})
+
+    def getVariantId(self):
+        return self.__data.get("variant-id")
+
 class Audit:
     SCHEMA = schema.Schema({
         'artifact' : Artifact.SCHEMA,
