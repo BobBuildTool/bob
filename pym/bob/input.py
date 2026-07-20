@@ -3899,6 +3899,13 @@ class RecipeSet:
         finally:
             self.__cache.close()
 
+    def parseConfigs(self, platform=getPlatformString(), recipesRoot="", command=None):
+        self.__cache.open()
+        try:
+            self.__parseConfigs(platform, recipesRoot, command)
+        finally:
+            self.__cache.close()
+
     def __parseConfigs(self, platform, recipesRoot, command):
         if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
             raise ParseError("Invalid platform: " + platform)
