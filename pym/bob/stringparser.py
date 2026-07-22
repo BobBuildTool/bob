@@ -30,26 +30,122 @@ def isFalse(val):
 def isTrue(val):
     return not isFalse(val)
 
-class StringParser:
-    """Utility class for complex string parsing/manipulation"""
+class _Literal:
+    """Constant string chunk. Never needs substitution."""
+    __slots__ = ('text',)
 
-    __slots__ = ('env', 'funs', 'funArgs', 'nounset', 'text', 'index', 'end')
+    def __init__(self, text):
+        self.text = text
 
-    def __init__(self, env, funs, funArgs, nounset):
-        self.env = env
-        self.funs = funs
-        self.funArgs = funArgs
-        self.nounset = nounset
+    def eval(self, env, funs, funArgs, nounset, subst):
+        return self.text
 
-    def parse(self, text):
-        """Parse the text and make substitutions"""
-        if all((c not in text) for c in '\\\"\'$'):
-            return text
+class _Concat:
+    """Sequence of parts that are evaluated and joined."""
+    __slots__ = ('parts',)
+
+    def __init__(self, parts):
+        self.parts = parts
+
+    def eval(self, env, funs, funArgs, nounset, subst):
+        return "".join(p.eval(env, funs, funArgs, nounset, subst) for p in self.parts)
+
+class _VarBare:
+    """Bare '$name' variable reference."""
+    __slots__ = ('name',)
+
+    def __init__(self, name):
+        self.name = name
+
+    def eval(self, env, funs, funArgs, nounset, subst):
+        varValue = env.get(self.name)
+        if varValue is None:
+            if subst and nounset:
+                raise ParseError("Unset variable: " + self.name)
+            return ""
         else:
-            self.text = text
-            self.index = 0
-            self.end = len(text)
-            return self.getString()
+            return varValue
+
+class _VarBraced:
+    """'${name}', '${name:-x}', '${name-x}', '${name:+x}' or '${name+x}'."""
+    __slots__ = ('nameNode', 'hasColon', 'sign', 'argNode')
+
+    def __init__(self, nameNode, hasColon, sign, argNode):
+        self.nameNode = nameNode
+        self.hasColon = hasColon
+        self.sign = sign
+        self.argNode = argNode
+
+    def eval(self, env, funs, funArgs, nounset, subst):
+        varName = self.nameNode.eval(env, funs, funArgs, nounset, subst)
+        unset = varName not in env
+        if self.hasColon:
+            # or null...
+            if not unset: unset = env[varName] == ""
+
+        if self.sign == '-':
+            default = self.argNode.eval(env, funs, funArgs, nounset, subst and unset)
+            if unset:
+                return default
+            else:
+                return env[varName]
+        elif self.sign == '+':
+            alternate = self.argNode.eval(env, funs, funArgs, nounset, subst and not unset)
+            if unset:
+                return ""
+            else:
+                return alternate
+        else:
+            if varName not in env:
+                if subst and nounset:
+                    raise ParseError("Unset variable: " + varName)
+                else:
+                    return ""
+            return env[varName]
+
+class _Command:
+    """'$(func,arg1,arg2)' string function call."""
+    __slots__ = ('wordNodes',)
+
+    def __init__(self, wordNodes):
+        self.wordNodes = wordNodes
+
+    def eval(self, env, funs, funArgs, nounset, subst):
+        words = [ w.eval(env, funs, funArgs, nounset, subst) for w in self.wordNodes ]
+
+        if not subst:
+            return ""
+
+        if len(words) < 1:
+            raise ParseError("Expected function name")
+        cmd = words[0]
+        del words[0]
+
+        if cmd not in funs:
+            raise ParseError("Unknown function: "+cmd)
+
+        return funs[cmd](words, env=env, **funArgs)
+
+
+class _Tokenizer:
+    """Parses text into a tree of substitution nodes.
+
+    This only depends on the text itself, never on the environment, the
+    available string functions or the 'subst'/'nounset' evaluation mode.
+    That makes the resulting tree reusable (see '_parseTemplate' below) no
+    matter with which environment the text is eventually evaluated -- the
+    same recipe template is typically substituted many times with different
+    environments (once per package variant), so caching the (potentially
+    expensive) tokenization step and only repeating the (cheap) evaluation
+    gives a substantial speedup.
+    """
+
+    __slots__ = ('text', 'index', 'end')
+
+    def __init__(self, text):
+        self.text = text
+        self.index = 0
+        self.end = len(text)
 
     def nextChar(self):
         """Get next character"""
@@ -113,33 +209,31 @@ class StringParser:
         self.index = i+1
         return ret
 
-    def getString(self, delim=[None], keep=False, subst=True):
-        """Interpret as string from current parsing position.
+    def parseString(self, delim=[None], keep=False):
+        """Parse string from current parsing position into a node tree.
 
-        Do any necessary substitutions until either the string ends or hits one
-        of the additional delimiters.
+        Parses until either the string ends or hits one of the additional
+        delimiters.
 
         :param delim: Additional delimiter characters where parsing should stop
         :param keep: Keep the additional delimiter if hit. By default the
                      delimier is swallowed.
-        :param subst: Do variable or command substitution. If false, skip over
-                      such substitutions.
         """
         s = []
         tok = self.nextToken(delim)
         while tok not in delim:
             if tok == '"':
-                s.append(self.getString(['"'], False, subst))
+                s.append(self.parseString(['"'], False))
             elif tok == '\'':
-                s.append(self.getSingleQuoted())
+                s.append(_Literal(self.getSingleQuoted()))
             elif tok == '$':
                 tok = self.nextChar()
                 if tok == '{':
-                    s.append(self.getVariable(subst))
+                    s.append(self.parseVariable())
                 elif tok == '(':
-                    s.append(self.getCommand(subst))
+                    s.append(self.parseCommand())
                 elif tok in NAME_START:
-                    s.append(self.getBareVariable(tok, subst))
+                    s.append(self.parseBareVariable(tok))
                 else:
                     raise ParseError("Invalid $-subsitituion")
             elif tok == None:
@@ -147,90 +241,89 @@ class StringParser:
                     raise ParseError('Unexpected end of string')
                 break
             else:
-                s.append(tok)
+                s.append(_Literal(tok))
             tok = self.nextToken(delim)
         else:
             if keep: self.index -= 1
-        return "".join(s)
+        if len(s) == 1:
+            return s[0]
+        return _Concat(s)
 
-    def getVariable(self, subst):
-        """Substitute variable at current position.
-
-        :param subst: Bail out if substitution fails?
-        """
+    def parseVariable(self):
+        """Parse variable reference at current position."""
         # get variable name
-        varName = self.getString([':', '-', '+', '}'], True, subst)
+        nameNode = self.parseString([':', '-', '+', '}'], True)
 
         # process?
         op = self.nextChar()
-        unset = varName not in self.env
+        hasColon = False
         if op == ':':
-            # or null...
-            if not unset: unset = self.env[varName] == ""
+            hasColon = True
             op = self.nextChar()
 
         if op == '-':
-            default = self.getString(['}'], False, subst and unset)
-            if unset:
-                return default
-            else:
-                return self.env[varName]
+            argNode = self.parseString(['}'], False)
+            return _VarBraced(nameNode, hasColon, '-', argNode)
         elif op == '+':
-            alternate = self.getString(['}'], False, subst and not unset)
-            if unset:
-                return ""
-            else:
-                return alternate
+            argNode = self.parseString(['}'], False)
+            return _VarBraced(nameNode, hasColon, '+', argNode)
         elif op == '}':
-            if varName not in self.env:
-                if subst and self.nounset:
-                    raise ParseError("Unset variable: " + varName)
-                else:
-                    return ""
-            return self.env[varName]
+            return _VarBraced(nameNode, hasColon, None, None)
         else:
             raise ParseError("Unterminated variable: " + str(op))
 
-    def getBareVariable(self, varName, subst):
-        """Substitute base variable at current position.
+    def parseBareVariable(self, varName):
+        """Parse bare variable at current position.
 
         :param varName: Initial character of variable name
-        :param subst: Bail out if substitution fails?
         """
         varName += self.getRestOfName()
-        varValue = self.env.get(varName)
-        if varValue is None:
-            if subst and self.nounset:
-                raise ParseError("Unset variable: " + varName)
-            return ""
-        else:
-            return varValue
+        return _VarBare(varName)
 
-    def getCommand(self, subst):
-        """Substitute string function at current position.
-
-        :param subst: Actually call function or just skip?
-        """
-        words = []
+    def parseCommand(self):
+        """Parse string function call at current position."""
+        wordNodes = []
         delim = [",", ")"]
         while True:
-            word = self.getString(delim, True, subst)
-            words.append(word)
+            wordNodes.append(self.parseString(delim, True))
             end = self.nextChar()
             if end == ")": break
 
-        if not subst:
-            return ""
+        return _Command(wordNodes)
 
-        if len(words) < 1:
-            raise ParseError("Expected function name")
-        cmd = words[0]
-        del words[0]
 
-        if cmd not in self.funs:
-            raise ParseError("Unknown function: "+cmd)
+# Cache of parsed templates, keyed by the literal text. Parsing only depends
+# on the text (see '_Tokenizer'), so the same tree can be reused regardless
+# of the environment it is evaluated with. Only successfully parsed texts are
+# cached; a malformed text simply fails to parse again the same way on the
+# next attempt.
+_parseCache = {}
 
-        return self.funs[cmd](words, env=self.env, **self.funArgs)
+def _parseTemplate(text):
+    node = _parseCache.get(text)
+    if node is None:
+        node = _Tokenizer(text).parseString()
+        _parseCache[text] = node
+    return node
+
+class StringParser:
+    """Utility class for complex string parsing/manipulation"""
+
+    __slots__ = ('env', 'funs', 'funArgs', 'nounset')
+
+    def __init__(self, env, funs, funArgs, nounset):
+        self.env = env
+        self.funs = funs
+        self.funArgs = funArgs
+        self.nounset = nounset
+
+    def parse(self, text):
+        """Parse the text and make substitutions"""
+        if all((c not in text) for c in '\\\"\'$'):
+            return text
+        else:
+            node = _parseTemplate(text)
+            return node.eval(self.env, self.funs, self.funArgs, self.nounset, True)
 
 class IfExpression():
     __slots__ = ('__expr')
