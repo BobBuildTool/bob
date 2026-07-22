@@ -588,9 +588,13 @@ class PkgGraphNode:
             db.execute("SELECT value FROM meta WHERE key='vsn'")
             vsn = db.fetchone()
             if (vsn is None) or (vsn[0] != cacheKey):
-                # Database was changed or created
+                # Database was changed or created. Build the whole graph in
+                # memory first and persist every node exactly once afterwards.
                 db.execute("DELETE FROM graph")
-                root = PkgGraphNode.__convertPackageToGraph(db, rootGenerator())
+                nodes = {}
+                root = PkgGraphNode.__buildGraph(nodes, rootGenerator())
+                db.executemany("INSERT INTO graph VALUES (?, ?)",
+                    ((key, pickle.dumps(node, -1)) for key, node in nodes.items()))
                 db.execute("INSERT OR REPLACE INTO meta VALUES ('vsn', ?), ('root', ?)",
                     (cacheKey, root))
                 # Commit and start new read-only transaction
@@ -660,43 +664,38 @@ class PkgGraphNode:
     def getName(self):
         return self.__name
 
-    def __addParent(self, parent, direct):
-        # Direct dependencies are traversed first. We don't need to worry that
-        # a parent is flipping between direct and indirect.
-        if parent not in self.__parents:
-            self.__parents[parent] = direct
-            node = (self.__name, self.__parents, self.__childs)
-            self.__db.execute("INSERT OR REPLACE INTO graph VALUES (?, ?)",
-                (self.__key, pickle.dumps(node, -1)))
-
     @staticmethod
-    def __convertPackageToGraph(db, pkg, parent=None, directParent=True):
-        name = pkg.getName()
+    def __buildGraph(nodes, pkg, parent=None, directParent=True):
+        """Recursively build the package graph purely in memory.
+
+        The 'nodes' dict is used both to remember already visited packages (by
+        their id) and to accumulate their parents.
+        """
         key = pkg._getId()
-        db.execute("SELECT node FROM graph WHERE key=?", (key,))
-        node = db.fetchone()
-        if node is None:
+        entry = nodes.get(key)
+        if entry is None:
             # recurse
+            parents = { parent : directParent } if parent is not None else {}
             childs = OrderedDict()
+            nodes[key] = (pkg.getName(), parents, childs)
             for d in pkg.getDirectDepSteps():
                 subPkg = d.getPackage()
-                subPkgId = PkgGraphNode.__convertPackageToGraph(db, subPkg, key, True)
+                subPkgId = PkgGraphNode.__buildGraph(nodes, subPkg, key, True)
                 childs[subPkg.getName()] = (subPkgId, True, "")
             prefixLen = len("/".join(pkg.getStack()))
             for d in pkg.getIndirectDepSteps():
                 subPkg = d.getPackage()
                 subPkgName = subPkg.getName()
                 if subPkgName in childs: continue
-                subPkgId = PkgGraphNode.__convertPackageToGraph(db, subPkg, key, False)
+                subPkgId = PkgGraphNode.__buildGraph(nodes, subPkg, key, False)
                 childs[subPkgName] = ( subPkgId, False,
                     ".." + "/".join(subPkg.getStack())[prefixLen:] )
-            # create node
-            node = ( name, ({parent:directParent} if parent is not None else {}), childs )
-            db.execute("INSERT INTO graph VALUES (?, ?)",
-                (key, pickle.dumps(node, -1)))
         elif parent is not None:
-            # add as parent
-            PkgGraphNode(db, key, node[0]).__addParent(parent, directParent)
+            # Direct dependencies are traversed first. Thus we don't need to
+            # worry that a parent is flipping between direct and indirect.
+            parents = entry[1]
+            if parent not in parents:
+                parents[parent] = directParent
 
         return key
 
