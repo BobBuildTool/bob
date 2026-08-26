@@ -40,7 +40,7 @@ def __graph(*args, **kwargs):
 
 def __help(*args, **kwargs):
     from .cmds.help import doHelp
-    doHelp(availableCommands.keys(), *args, **kwargs)
+    doHelp(availableCommands, *args, **kwargs)
     return 0
 
 def __init(*args, **kwargs):
@@ -110,6 +110,31 @@ def __lsrecipes(*args, **kwargs):
      from .cmds.misc import doLsRecipes
      doLsRecipes(*args, **kwargs)
      return 0
+
+def __runPluginCommand(command, argv, bobRoot):
+    """Try to dispatch to a plugin provided command.
+
+    Parses the standard -D/-c/sandbox arguments and generates the package
+    graph before invoking the plugin. Returns None if no plugin registered
+    'command'.
+    """
+    from .input import RecipeSet
+    from .cmds.helpers import processDefines, addStandardArgs
+
+    parser = argparse.ArgumentParser(add_help=False)
+    addStandardArgs(parser)
+    args, remainder = parser.parse_known_args(argv)
+
+    defines = processDefines(args.defines)
+    recipes = RecipeSet()
+    recipes.setConfigFiles(args.configFile)
+    recipes.parse(defines, command=command)
+
+    entry = recipes.getCommands().get(command)
+
+    packages = recipes.generatePackages(lambda s, m: "unused", args.sandbox)
+    ret = entry['func'](packages, remainder, bobRoot)
+    return ret if ret is not None else 0
 
 availableCommands = {
     "archive"       : ('hl', __archive, "Manage binary artifact archives"),
@@ -244,14 +269,15 @@ def bob(bobRoot = None):
             parser.print_help()
             return 0
 
+        if args.directory is not None:
+            for i in args.directory:
+                try:
+                    os.chdir(i)
+                except OSError as e:
+                    print("bob -C: unable to change directory:", str(e), file=sys.stderr)
+                    return 1
+
         if args.command in availableCommands:
-            if args.directory is not None:
-                for i in args.directory:
-                    try:
-                        os.chdir(i)
-                    except OSError as e:
-                        print("bob -C: unable to change directory:", str(e), file=sys.stderr)
-                        return 1
             cmd = availableCommands[args.command][1]
             if DEBUG['prof']:
                 import cProfile, pstats
@@ -267,8 +293,7 @@ def bob(bobRoot = None):
                 ret = cmd(args.args, bobRoot)
             return ret
         else:
-            print("Don't know what to do for '{}'. Use 'bob -h' for help".format(args.command), file=sys.stderr)
-            return 2
+            return __runPluginCommand(args.command, args.args, bobRoot)
 
     try:
         ret = catchErrors(cmd)

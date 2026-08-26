@@ -7,7 +7,7 @@ from ..errors import ParseError
 from ..input import RecipeSet
 from ..tty import colorize, ADDED, DELETED, DEFAULT, ADDED_HIGHLIGHT, DELETED_HIGHLIGHT
 from ..utils import asHexStr
-from .helpers import processDefines, dumpYaml, dumpJson, dumpFlat
+from .helpers import processDefines, addStandardArgs, dumpYaml, dumpJson, dumpFlat
 import argparse
 import difflib
 import json
@@ -225,21 +225,7 @@ def doShow(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob show",
         description="Show properties of one or more packages.")
     parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=False,
-        help="Enable sandboxing")
-    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
-        help="Enable slim sandboxing")
-    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
-        help="Enable development sandboxing")
-    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
-        help="Enable strict sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
-        help="Disable sandboxing")
+    addStandardArgs(parser)
 
     group = parser.add_argument_group('output', "Appearance and content of output")
     group.add_argument('--show-empty', action='store_true', default=False,

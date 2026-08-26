@@ -1,0 +1,9 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+packageVars: [FOO]
+packageScript: |
+    echo "ok" > result.txt
