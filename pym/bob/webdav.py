@@ -41,7 +41,7 @@ class WebDav:
         def __init__(self, webdav, path, length=512*1024):
             self.__webdav = webdav
             self.__path = path
-            self.__data = bytearray(self.__webdav.download(self.__path, 0, length).read())
+            self.__data = bytearray(self.__webdav.download(self.__path, 0, length))
             self.__offset = length
 
         def get(self):
@@ -50,13 +50,24 @@ class WebDav:
         def more(self, length=512*1024):
             new_data = self.__webdav.download(self.__path, self.__offset, length)
             self.__offset += length
-            self.__data.extend(new_data.read())
+            self.__data.extend(new_data)
             return self.__data
 
-    def __init__(self, url, sslVerify=True):
+    def __init__(self, url, sslVerify=True, retries=0):
         self.__url = url
         self.__connection = None
         self.__sslVerify = sslVerify
+        self.__retries = retries
+
+    def __retry(self, request):
+        """Run a request, retrying transient transport errors."""
+        retries = self.__retries
+        while True:
+            try:
+                return request()
+            except (WebdavError, OSError) as e:
+                if retries <= 0: raise
+                retries -= 1
 
     @property
     def __context(self):
@@ -85,6 +96,9 @@ class WebDav:
                            query, self.__url.fragment))
 
     def exists(self, path):
+        return self.__retry(lambda: self.__exists(path))
+
+    def __exists(self, path):
         req = urllib.request.Request (self._getURL(path),
                                       headers=self._getHeaders(), method="HEAD")
         try:
@@ -100,7 +114,10 @@ class WebDav:
 
         return False
 
-    def download(self, path, offset=None, length=None, query=None):
+    def openDownload(self, path, offset=None, length=None, query=None):
+        return self.__retry(lambda: self.__openDownload(path, offset, length, query))
+
+    def __openDownload(self, path, offset, length, query):
         headers = self._getHeaders()
         if offset is not None and length is not None:
             headers.update({'Range': 'bytes={}-{}'.format(offset, offset + length - 1)})
@@ -118,7 +135,17 @@ class WebDav:
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
+    def download(self, path, offset=None, length=None, query=None):
+        return self.__retry(lambda: self.__download(path, offset, length, query))
+
+    def __download(self, path, offset, length, query):
+        with self.__openDownload(path, offset, length, query) as resp:
+            return resp.read()
+
     def upload(self, path, buf, overwrite):
+        return self.__retry(lambda: self.__upload(path, buf, overwrite))
+
+    def __upload(self, path, buf, overwrite):
         # Determine file length ourselves and add a "Content-Length" header. This
         # used to work in Python 3.5 automatically but was removed later.
         buf.seek(0, os.SEEK_END)
@@ -169,11 +196,11 @@ class WebDav:
 
     def mkdir(self, path, depth=1):
         if depth > 0:
-            status, reason = self._mkdir(path)
+            status, reason = self.__retry(lambda: self._mkdir(path))
             if status == 409:
                 (_path, _, _) = path.rpartition("/")
                 self.mkdir(_path, depth - 1)
-                status,reason = self._mkdir(path)
+                status, reason = self.__retry(lambda: self._mkdir(path))
             # We expect to create the directory (201) or it already existed (405).
             # If the server does not support MKCOL we'd expect a 405 too and hope
             # for the best...
@@ -181,6 +208,9 @@ class WebDav:
                 raise WebdavError("MKCOL {} {}".format(status, reason))
 
     def listdir(self, path):
+        return self.__retry(lambda: self.__listdir(path))
+
+    def __listdir(self, path):
         base_path = self.__url.path
         # create a full path ending with trailing / (should prevent http 301 - moved permanently)
         path = '/'.join([base_path, path.strip('/'), ''])
@@ -223,6 +253,9 @@ class WebDav:
         self.deletePath('/'.join([self.__url.path, filename.strip('/')]))
 
     def deletePath(self, path):
+        return self.__retry(lambda: self.__deletePath(path))
+
+    def __deletePath(self, path):
         headers = self._getHeaders()
         req = urllib.request.Request (self._getURL(path),
                                       headers=headers, method="DELETE")
@@ -240,6 +273,9 @@ class WebDav:
             raise WebdavError("DELETE {} {}".format(status, reason))
 
     def stat(self, file):
+        return self.__retry(lambda: self.__stat(file))
+
+    def __stat(self, file):
         base_path = self.__url.path
         # create a full path
         filepath = '/'.join([base_path, file.strip('/')])

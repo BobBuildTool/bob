@@ -79,22 +79,19 @@ class TestWebdav(TestCase):
             with open(fpath, 'w') as f:
                 f.write(TEST_OUTPUT)
             webdav = GetWebdav(srv.port)
-            file = webdav.download(TEST_FILE)
-            res = file.read()
+            res = webdav.download(TEST_FILE)
             self.assertEqual(res.decode('utf-8'), TEST_OUTPUT)
             # add more data to file
             with open(fpath, 'a') as f:
                 f.write(TEST_OUTPUT)
-            file = webdav.download(TEST_FILE)
-            res = file.read()
+            with webdav.openDownload(TEST_FILE) as file:
+                res = file.read()
             self.assertEqual(res.decode('utf-8'), TEST_OUTPUT+TEST_OUTPUT)
             # test offset and length
-            file = webdav.download(TEST_FILE, offset=0, length=TEST_OUTPUT_SIZE)
-            res = file.read()
+            res = webdav.download(TEST_FILE, offset=0, length=TEST_OUTPUT_SIZE)
             self.assertEqual(res.decode('utf-8'), TEST_OUTPUT)
             # data is testoutputtestoutput, with offset 4 and length 10 we should get outputtest
-            file = webdav.download(TEST_FILE, offset=4, length=TEST_OUTPUT_SIZE)
-            res = file.read()
+            res = webdav.download(TEST_FILE, offset=4, length=TEST_OUTPUT_SIZE)
             self.assertEqual(res.decode('utf-8'), 'outputtest')
             # remove the file
             os.unlink(os.path.join(self.dir, TEST_FILE))
