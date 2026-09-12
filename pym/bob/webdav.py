@@ -42,14 +42,14 @@ class WebDav:
             self.__webdav = webdav
             self.__path = path
             self.__data = bytearray(self.__webdav.download(self.__path, 0, length))
-            self.__offset = length
+            self.__offset = len(self.__data)
 
         def get(self):
             return self.__data
 
         def more(self, length=512*1024):
             new_data = self.__webdav.download(self.__path, self.__offset, length)
-            self.__offset += length
+            self.__offset += len(new_data)
             self.__data.extend(new_data)
             return self.__data
 
