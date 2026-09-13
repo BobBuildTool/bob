@@ -88,7 +88,7 @@ class WebDav:
                 userPass.encode("utf-8")).decode("ascii")
         return headers
 
-    def _getURL(self, path, query=None):
+    def __getRequestURL(self, path, query=None):
         if query is None:
             query = self.__url.query
         return urlunsplit((self.__url.scheme, getNetLoc(self.__url), path,
@@ -98,8 +98,8 @@ class WebDav:
         return self.__retry(lambda: self.__exists(path))
 
     def __exists(self, path):
-        req = urllib.request.Request (self._getURL(path),
-                                      headers=self._getHeaders(), method="HEAD")
+        req = urllib.request.Request(self.__getRequestURL(path),
+                                     headers=self._getHeaders(), method="HEAD")
         try:
             with urllib.request.urlopen (req, context=self.__createContext()):
                 pass
@@ -121,8 +121,8 @@ class WebDav:
         if offset is not None and length is not None:
             headers.update({'Range': 'bytes={}-{}'.format(offset, offset + length - 1)})
 
-        req = urllib.request.Request (self._getURL(path, query),
-                                      headers=headers, method="GET")
+        req = urllib.request.Request(self.__getRequestURL(path, query),
+                                     headers=headers, method="GET")
         try:
             return urllib.request.urlopen (req, context=self.__createContext())
         except urllib.error.HTTPError as e:
@@ -155,8 +155,8 @@ class WebDav:
         if not overwrite:
             headers.update({'If-None-Match': '*'})
 
-        req = urllib.request.Request (self._getURL(path),
-                                      data=buf, headers=headers, method="PUT")
+        req = urllib.request.Request(self.__getRequestURL(path),
+                                     data=buf, headers=headers, method="PUT")
         try:
             with urllib.request.urlopen (req, context=self.__createContext()) as resp:
                 if resp.status not in [200, 201, 204]:
@@ -182,8 +182,8 @@ class WebDav:
         if not path.endswith("/"):
             path += "/"
 
-        req = urllib.request.Request (self._getURL(path),
-                                      headers=self._getHeaders(), method="MKCOL")
+        req = urllib.request.Request(self.__getRequestURL(path),
+                                     headers=self._getHeaders(), method="MKCOL")
         try:
             with urllib.request.urlopen (req, context=self.__createContext()) as resp:
                 return (resp.status, None)
@@ -218,8 +218,8 @@ class WebDav:
             headers = self._getHeaders()
             # Depth: 1 - applies to the resource and the immediate children (infinity usually prohibited by server)
             headers.update({'Depth': '1'})
-            req = urllib.request.Request (self._getURL(path),
-                                          headers=headers, method="PROPFIND")
+            req = urllib.request.Request(self.__getRequestURL(path),
+                                         headers=headers, method="PROPFIND")
             content = None
             try:
                 with urllib.request.urlopen (req, context=self.__createContext()) as response:
@@ -256,8 +256,8 @@ class WebDav:
 
     def __deletePath(self, path):
         headers = self._getHeaders()
-        req = urllib.request.Request (self._getURL(path),
-                                      headers=headers, method="DELETE")
+        req = urllib.request.Request(self.__getRequestURL(path),
+                                     headers=headers, method="DELETE")
         status = reason = None
         try:
             with urllib.request.urlopen (req, context=self.__createContext()) as response:
@@ -283,8 +283,8 @@ class WebDav:
             # Depth: 0 - applies to the resource itself
             headers.update({'Depth': '0'})
 
-            req = urllib.request.Request (self._getURL(filepath),
-                                          headers=headers, method="PROPFIND")
+            req = urllib.request.Request(self.__getRequestURL(filepath),
+                                         headers=headers, method="PROPFIND")
             content = None
             try:
                 with urllib.request.urlopen (req) as response:
