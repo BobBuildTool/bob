@@ -127,7 +127,8 @@ class ArtifactExistsError(ArtifactError):
 
 class TarHelper:
 
-    def __extractPackage(self, tar, audit, content):
+    @staticmethod
+    def __extractPackage(tar, audit, content):
         if tar.pax_headers.get('bob-archive-vsn', "0") != "1":
             raise BuildError("Unsupported binary artifact")
 
@@ -155,14 +156,16 @@ class TarHelper:
                 raise BuildError("Binary artifact contained unknown file: " + f.name)
             f = tar.next()
 
-    def _extract(self, fileobj, audit, content):
+    @staticmethod
+    def _extract(fileobj, audit, content):
         with tarfileOpen(None, "r|*", fileobj=fileobj, errorlevel=1) as tar:
             removePath(audit)
             removePath(content)
             os.makedirs(content)
-            self.__extractPackage(tar, audit, content)
+            TarHelper.__extractPackage(tar, audit, content)
 
-    def _extractAudit(self, filename=None, fileobj=None):
+    @staticmethod
+    def _extractAudit(filename=None, fileobj=None):
         with tarfileOpen(name=filename, mode="r|*", fileobj=fileobj, errorlevel=1) as tar:
             # validate
             if tar.pax_headers.get('bob-archive-vsn') != "1":
@@ -182,7 +185,8 @@ class TarHelper:
 
             return Audit.fromByteStream(auditJson, filename)
 
-    def _pack(self, name, fileobj, audit, content):
+    @staticmethod
+    def _pack(name, fileobj, audit, content):
         pax = { 'bob-archive-vsn' : "1" }
         with gzip.open(name or fileobj, 'wb', 6) as gzf:
             with tarfileOpen(name, "w", fileobj=gzf,
@@ -863,7 +867,7 @@ class LocalArchiveUploader:
         return False
 
 
-def getWebdavAudit(webdav, path, extract):
+def getWebdavAudit(webdav, path):
     """Read the audit trail of a remote artifact.
 
     Only the beginning of the artifact is fetched. If the audit trail is not
@@ -872,7 +876,7 @@ def getWebdavAudit(webdav, path, extract):
     downloader = webdav.getPartialDownloader(path)
     while True:
         try:
-            return extract(io.BytesIO(downloader.get()))
+            return TarHelper._extractAudit(fileobj=io.BytesIO(downloader.get()))
         except (EOFError, tarfile.ReadError):
             # partial downloader reached EOF or could not extract the audit
             # from the tarfile, so we get more data
@@ -961,8 +965,7 @@ class HttpArchive(BaseArchive):
         return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
 
     def _getAudit(self, filename):
-        return getWebdavAudit(self._webdav, "/".join([self.__url.path, filename]),
-            lambda f: self._extractAudit(fileobj=f))
+        return getWebdavAudit(self._webdav, "/".join([self.__url.path, filename]))
 
     def getArchiveUri(self):
         return getNetLoc(self.__url) + self.__url.path
@@ -1402,8 +1405,7 @@ class GiteaArchive(BaseArchive):
 
     def _getAudit(self, filename):
         version, name = self.__splitPath(filename)
-        return getWebdavAudit(self._webdav, self.__packagePath(version, name),
-            lambda f: self._extractAudit(fileobj=f))
+        return getWebdavAudit(self._webdav, self.__packagePath(version, name))
 
     def _delete(self, filename):
         version, name = self.__splitPath(filename)
