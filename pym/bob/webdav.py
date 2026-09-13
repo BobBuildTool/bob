@@ -69,8 +69,7 @@ class WebDav:
                 if retries <= 0: raise
                 retries -= 1
 
-    @property
-    def __context(self):
+    def __createContext(self):
         # Create the SSL context on demand. Holding it as an attribute would
         # render the object unpicklable, but the archive backends are sent to
         # the up-/download executor processes.
@@ -102,7 +101,7 @@ class WebDav:
         req = urllib.request.Request (self._getURL(path),
                                       headers=self._getHeaders(), method="HEAD")
         try:
-            with urllib.request.urlopen (req, context=self.__context):
+            with urllib.request.urlopen (req, context=self.__createContext()):
                 pass
             return True
         except urllib.error.HTTPError as e:
@@ -125,7 +124,7 @@ class WebDav:
         req = urllib.request.Request (self._getURL(path, query),
                                       headers=headers, method="GET")
         try:
-            return urllib.request.urlopen (req, context=self.__context)
+            return urllib.request.urlopen (req, context=self.__createContext())
         except urllib.error.HTTPError as e:
             e.fp.read()
             if e.status == 404:
@@ -159,7 +158,7 @@ class WebDav:
         req = urllib.request.Request (self._getURL(path),
                                       data=buf, headers=headers, method="PUT")
         try:
-            with urllib.request.urlopen (req, context=self.__context) as resp:
+            with urllib.request.urlopen (req, context=self.__createContext()) as resp:
                 if resp.status not in [200, 201, 204]:
                     raise WebdavError("PUT {} {}".format(resp.status, resp.reason))
         except urllib.error.HTTPError as e:
@@ -186,7 +185,7 @@ class WebDav:
         req = urllib.request.Request (self._getURL(path),
                                       headers=self._getHeaders(), method="MKCOL")
         try:
-            with urllib.request.urlopen (req, context=self.__context) as resp:
+            with urllib.request.urlopen (req, context=self.__createContext()) as resp:
                 return (resp.status, None)
         except urllib.error.HTTPError as e:
             e.fp.read()
@@ -223,7 +222,7 @@ class WebDav:
                                           headers=headers, method="PROPFIND")
             content = None
             try:
-                with urllib.request.urlopen (req, context=self.__context) as response:
+                with urllib.request.urlopen (req, context=self.__createContext()) as response:
                     if response.status not in [207]:
                         raise WebdavError("PROPFIND {} {}".format(response.status, response.reason))
                     content = response.read()
@@ -261,7 +260,7 @@ class WebDav:
                                       headers=headers, method="DELETE")
         status = reason = None
         try:
-            with urllib.request.urlopen (req, context=self.__context) as response:
+            with urllib.request.urlopen (req, context=self.__createContext()) as response:
                 status = response.status
         except urllib.error.HTTPError as e:
             e.fp.read()
