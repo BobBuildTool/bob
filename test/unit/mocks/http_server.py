@@ -163,9 +163,9 @@ def createHttpHandler(repoPath, args):
                 self.send_response(405)
                 self.end_headers()
                 return
-            # check if parent exists, return 409 if not
+            # check if parent exists, return 409 if not or if it's not a directory
             h, t = os.path.split(path)
-            if not os.path.exists(h):
+            if not os.path.exists(h) or not os.path.isdir(h):
                 self.send_response(409)
                 self.end_headers()
                 return
