@@ -3052,7 +3052,7 @@ like the following. It mirrors all remote URLs to a local directory::
 
     preMirrorPrepend:
         scm: url
-        url: "https?://.*/(.*)"
+        url: "https?://(.*)"
         mirror: "~/.cache/bob/mirror/\\1"
         upload: True
 
