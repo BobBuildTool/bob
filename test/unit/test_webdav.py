@@ -14,13 +14,15 @@ TEST_PATH1="dir1"
 TEST_PATH2="dir2"
 
 def GetWebdav(port):
-    return WebDav(url=urlparse("http://localhost:{}/".format(port)), sslVerify=False)
+    return WebDav(url=urlparse("http://localhost:{}/repo/".format(port)), sslVerify=False)
 
 class TestWebdav(TestCase):
 
     def setUp(self):
         self.__repodir = TemporaryDirectory()
-        self.dir = self.__repodir.name
+        self.srvdir = self.__repodir.name
+        self.clntdir = os.path.join(self.srvdir, "repo")
+        os.mkdir(self.clntdir)
         super().setUp()
 
     def tearDown(self):
@@ -28,14 +30,14 @@ class TestWebdav(TestCase):
         super().tearDown()
 
     def testUpload(self):
-        with HttpServerMock(repoPath=self.dir) as srv:
+        with HttpServerMock(repoPath=self.srvdir) as srv:
             webdav = GetWebdav(srv.port)
             with NamedTemporaryFile() as file:
                 file.write(TEST_OUTPUT.encode('utf-8'))
                 webdav.upload(TEST_FILE, file, False)
                 # check if file got uploaded and check the content
-                self.assertTrue(os.path.exists(os.path.join(self.dir, TEST_FILE)))
-                with open(os.path.join(self.dir, TEST_FILE)) as f:
+                self.assertTrue(os.path.exists(os.path.join(self.clntdir, TEST_FILE)))
+                with open(os.path.join(self.clntdir, TEST_FILE)) as f:
                     content = f.readline()
                     self.assertEqual(TEST_OUTPUT, content)
                 # try to upload again should fail with WebdavAlreadyExistsError
@@ -45,27 +47,27 @@ class TestWebdav(TestCase):
                 file.write(TEST_OUTPUT.encode('utf-8'))
                 webdav.upload(TEST_FILE, file, True)
                 # content should be doubled in file now
-                with open(os.path.join(self.dir, TEST_FILE)) as f:
+                with open(os.path.join(self.clntdir, TEST_FILE)) as f:
                     content = f.readline()
                     self.assertEqual(TEST_OUTPUT + TEST_OUTPUT, content)
 
     def testUploadRetry(self):
         """A upload error is handled gracefully and can be retried"""
-        with HttpServerMock(repoPath=self.dir, retries=1) as srv:
+        with HttpServerMock(repoPath=self.srvdir, retries=1) as srv:
             webdav = GetWebdav(srv.port)
             with NamedTemporaryFile() as file:
                 file.write(TEST_OUTPUT.encode('utf-8'))
                 # first try will result in an "internal server error"
                 with self.assertRaises(WebdavError) as cm:
                     webdav.upload(TEST_FILE, file, False)
-                self.assertFalse(os.path.exists(os.path.join(self.dir, TEST_FILE)))
+                self.assertFalse(os.path.exists(os.path.join(self.clntdir, TEST_FILE)))
                 # second upload will succeed
                 webdav.upload(TEST_FILE, file, False)
-                self.assertTrue(os.path.exists(os.path.join(self.dir, TEST_FILE)))
+                self.assertTrue(os.path.exists(os.path.join(self.clntdir, TEST_FILE)))
 
     def testUploadInterrupted(self):
         """An upload to an unresponsive server is handled gracefully"""
-        with HttpServerMock(repoPath=self.dir, noResponse=True) as srv:
+        with HttpServerMock(repoPath=self.srvdir, noResponse=True) as srv:
             webdav = GetWebdav(srv.port)
             with NamedTemporaryFile() as file:
                 file.write(TEST_OUTPUT.encode('utf-8'))
@@ -73,9 +75,9 @@ class TestWebdav(TestCase):
                     webdav.upload(TEST_FILE, file, False)
 
     def testDownload(self):
-        with HttpServerMock(self.dir) as srv:
+        with HttpServerMock(self.srvdir) as srv:
             # create file for server
-            fpath = os.path.join(self.dir, TEST_FILE)
+            fpath = os.path.join(self.clntdir, TEST_FILE)
             with open(fpath, 'w') as f:
                 f.write(TEST_OUTPUT)
             webdav = GetWebdav(srv.port)
@@ -94,36 +96,36 @@ class TestWebdav(TestCase):
             res = webdav.download(TEST_FILE, offset=4, length=TEST_OUTPUT_SIZE)
             self.assertEqual(res.decode('utf-8'), 'outputtest')
             # remove the file
-            os.unlink(os.path.join(self.dir, TEST_FILE))
+            os.unlink(os.path.join(self.clntdir, TEST_FILE))
             # missing file will raise WebdavNotFoundError
             with self.assertRaises(WebdavNotFoundError) as cm:
                 webdav.download(TEST_FILE)
         # with 1 retry, the download will fail initially
-        with HttpServerMock(self.dir, retries=1) as srv:
+        with HttpServerMock(self.srvdir, retries=1) as srv:
             webdav = GetWebdav(srv.port)
             with self.assertRaises(WebdavError) as cm:
                 webdav.download(TEST_FILE)
 
     def testDownloadInterrupted(self):
         """An interrupted download is handled gracefully"""
-        with HttpServerMock(repoPath=self.dir, noResponse=True) as srv:
+        with HttpServerMock(repoPath=self.srvdir, noResponse=True) as srv:
             webdav = GetWebdav(srv.port)
             with self.assertRaises(WebdavError):
                 webdav.download(TEST_FILE)
 
     def testExists(self):
-        with HttpServerMock(self.dir) as srv:
+        with HttpServerMock(self.srvdir) as srv:
             # create file for server
-            with open(os.path.join(self.dir, TEST_FILE), 'w') as f:
+            with open(os.path.join(self.clntdir, TEST_FILE), 'w') as f:
                 f.write(TEST_OUTPUT)
             webdav = GetWebdav(srv.port)
             # file exists
             self.assertTrue(webdav.exists(TEST_FILE))
             # delete the file and exists shall return false
-            os.unlink(os.path.join(self.dir, TEST_FILE))
+            os.unlink(os.path.join(self.clntdir, TEST_FILE))
             self.assertFalse(webdav.exists(TEST_FILE))
         # with 1 retry, exists will fail initially
-        with HttpServerMock(self.dir, retries=1, retryHead=True) as srv:
+        with HttpServerMock(self.srvdir, retries=1, retryHead=True) as srv:
             webdav = GetWebdav(srv.port)
             # file exists
             with self.assertRaises(WebdavError) as cm:
@@ -131,9 +133,9 @@ class TestWebdav(TestCase):
             self.assertFalse(webdav.exists(TEST_FILE))
 
     def testDelete(self):
-        with HttpServerMock(self.dir) as srv:
+        with HttpServerMock(self.srvdir) as srv:
             # create file for server
-            path = os.path.join(self.dir, TEST_FILE)
+            path = os.path.join(self.clntdir, TEST_FILE)
             with open(path, 'w') as f:
                 f.write(TEST_OUTPUT)
             self.assertTrue(os.path.exists(path))
@@ -144,8 +146,8 @@ class TestWebdav(TestCase):
             # deleting again should not cause any problems
             webdav.delete(TEST_FILE)
             self.assertFalse(os.path.exists(path))
-        with HttpServerMock(self.dir, retries=1) as srv:
-            path = os.path.join(self.dir, TEST_FILE)
+        with HttpServerMock(self.srvdir, retries=1) as srv:
+            path = os.path.join(self.clntdir, TEST_FILE)
             with open(path, 'w') as f:
                 f.write(TEST_OUTPUT)
             self.assertTrue(os.path.exists(path))
@@ -159,30 +161,42 @@ class TestWebdav(TestCase):
             # file should be deleted
             self.assertFalse(os.path.exists(path))
 
-    def testMkdir(self):
-        with HttpServerMock(self.dir) as srv:
+    def testMkdirDepth1(self):
+        """Create non-existing directory"""
+        with HttpServerMock(self.srvdir) as srv:
             ## depth 1
-            path = os.path.join(self.dir, TEST_PATH1)
+            path = os.path.join(self.clntdir, TEST_PATH1)
             webdav = GetWebdav(srv.port)
             webdav.mkdir(TEST_PATH1)
             self.assertTrue(os.path.exists(path))
             ## path already exists, no error occurs
             webdav.mkdir(TEST_PATH1)
             self.assertTrue(os.path.exists(path))
-            os.rmdir(path)
-            ## depth 2
+
+    def testMkdirObstructed(self):
+        """Creating a directory obstructed by a file fails"""
+        with HttpServerMock(self.srvdir) as srv:
+            # Create a file
+            with open(os.path.join(self.clntdir, TEST_PATH1), "w") as f:
+                pass
+
             remote_path = TEST_PATH1 + '/' + TEST_PATH2
-            path = os.path.join(self.dir, TEST_PATH1, TEST_PATH2)
+            local_path = os.path.join(self.clntdir, TEST_PATH1, TEST_PATH2)
             webdav = GetWebdav(srv.port)
-            # should raise exception with error code 409, because we have a depth of 2, but only request 1
+
             with self.assertRaises(WebdavError) as cm:
                 webdav.mkdir(remote_path)
             self.assertEqual("MKCOL 409 Conflict", str(cm.exception))
-            self.assertFalse(os.path.exists(path))
-            # depth 2, so it will create the parent dir here, too
-            webdav.mkdir(remote_path, 2)
-            self.assertTrue(os.path.exists(path))
-            os.rmdir(path)
+            self.assertFalse(os.path.exists(local_path))
+
+    def testMkdirDepth2(self):
+        """Create non-exiting two level directory hierarchy"""
+        with HttpServerMock(self.srvdir) as srv:
+            remote_path = TEST_PATH1 + '/' + TEST_PATH2
+            local_path = os.path.join(self.clntdir, TEST_PATH1, TEST_PATH2)
+            webdav = GetWebdav(srv.port)
+            webdav.mkdir(remote_path)
+            self.assertTrue(os.path.exists(local_path))
 
     def testListdir(self):
         def checkEntries(entries, is_dir, paths):
@@ -195,10 +209,10 @@ class TestWebdav(TestCase):
             with open(path,'a') as f:
                 pass
 
-        with HttpServerMock(self.dir) as srv:
+        with HttpServerMock(self.srvdir) as srv:
             # create some simple directory structure
-            path1 = os.path.join(self.dir, TEST_PATH1, TEST_PATH2)
-            path2 = os.path.join(self.dir, TEST_PATH2, TEST_PATH1)
+            path1 = os.path.join(self.clntdir, TEST_PATH1, TEST_PATH2)
+            path2 = os.path.join(self.clntdir, TEST_PATH2, TEST_PATH1)
             os.makedirs(path1)
             os.makedirs(path2)
             touch(os.path.join(path1, TEST_FILE))
@@ -221,9 +235,9 @@ class TestWebdav(TestCase):
             self.assertTrue(len(webdav.listdir('/')) == 0)
 
     def testStat(self):
-        with HttpServerMock(self.dir) as srv:
+        with HttpServerMock(self.srvdir) as srv:
             webdav = GetWebdav(srv.port)
-            path = os.path.join(self.dir, TEST_FILE)
+            path = os.path.join(self.clntdir, TEST_FILE)
             # create file
             with open(os.path.join(path), 'a') as f:
                 f.write(TEST_OUTPUT)
@@ -247,10 +261,10 @@ class TestWebdav(TestCase):
             self.assertIsNone(webdav.stat(TEST_FILE))
 
     def testPartialDownloader(self):
-        with HttpServerMock(self.dir) as srv:
+        with HttpServerMock(self.srvdir) as srv:
             webdav = GetWebdav(srv.port)
             # create file for server
-            fpath = os.path.join(self.dir, TEST_FILE)
+            fpath = os.path.join(self.clntdir, TEST_FILE)
             with open(fpath, 'w') as f:
                 f.write(TEST_OUTPUT + TEST_OUTPUT)
             pd = webdav.getPartialDownloader(TEST_FILE, 4)

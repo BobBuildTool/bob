@@ -88,17 +88,24 @@ class WebDav:
                 userPass.encode("utf-8")).decode("ascii")
         return headers
 
-    def __getRequestURL(self, path, query=None):
+    def __getRequestPath(self, path):
+        path = path.lstrip("/")
+        if path:
+            return "/".join([self.__url.path.rstrip("/"), path])
+        else:
+            return self.__url.path
+
+    def getRequestURL(self, path, query=None):
         if query is None:
             query = self.__url.query
-        return urlunsplit((self.__url.scheme, getNetLoc(self.__url), path,
-                           query, self.__url.fragment))
+        return urlunsplit((self.__url.scheme, getNetLoc(self.__url),
+                           self.__getRequestPath(path), query, ""))
 
     def exists(self, path):
         return self.__retry(lambda: self.__exists(path))
 
     def __exists(self, path):
-        req = urllib.request.Request(self.__getRequestURL(path),
+        req = urllib.request.Request(self.getRequestURL(path),
                                      headers=self._getHeaders(), method="HEAD")
         try:
             with urllib.request.urlopen (req, context=self.__createContext()):
@@ -121,7 +128,7 @@ class WebDav:
         if offset is not None and length is not None:
             headers.update({'Range': 'bytes={}-{}'.format(offset, offset + length - 1)})
 
-        req = urllib.request.Request(self.__getRequestURL(path, query),
+        req = urllib.request.Request(self.getRequestURL(path, query),
                                      headers=headers, method="GET")
         try:
             return urllib.request.urlopen (req, context=self.__createContext())
@@ -155,7 +162,7 @@ class WebDav:
         if not overwrite:
             headers.update({'If-None-Match': '*'})
 
-        req = urllib.request.Request(self.__getRequestURL(path),
+        req = urllib.request.Request(self.getRequestURL(path),
                                      data=buf, headers=headers, method="PUT")
         try:
             with urllib.request.urlopen (req, context=self.__createContext()) as resp:
@@ -182,7 +189,7 @@ class WebDav:
         if not path.endswith("/"):
             path += "/"
 
-        req = urllib.request.Request(self.__getRequestURL(path),
+        req = urllib.request.Request(self.getRequestURL(path),
                                      headers=self._getHeaders(), method="MKCOL")
         try:
             with urllib.request.urlopen (req, context=self.__createContext()) as resp:
@@ -193,32 +200,32 @@ class WebDav:
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
-    def mkdir(self, path, depth=1):
-        if depth > 0:
-            status, reason = self.__retry(lambda: self._mkdir(path))
-            if status == 409:
-                (_path, _, _) = path.rpartition("/")
-                self.mkdir(_path, depth - 1)
+    def mkdir(self, path):
+        status, reason = self.__retry(lambda: self._mkdir(path))
+        if status == 409:
+            (parent_path, _, _) = path.rpartition("/")
+            if parent_path:
+                self.mkdir(parent_path)
                 status, reason = self.__retry(lambda: self._mkdir(path))
-            # We expect to create the directory (201) or it already existed (405).
-            # If the server does not support MKCOL we'd expect a 405 too and hope
-            # for the best...
-            if status not in [201, 405]:
-                raise WebdavError("MKCOL {} {}".format(status, reason))
+        # We expect to create the directory (201) or it already existed (405).
+        # If the server does not support MKCOL we'd expect a 405 too and hope
+        # for the best...
+        if status not in [201, 405]:
+            raise WebdavError("MKCOL {} {}".format(status, reason))
 
     def listdir(self, path):
         return self.__retry(lambda: self.__listdir(path))
 
     def __listdir(self, path):
-        base_path = self.__url.path
         # create a full path ending with trailing / (should prevent http 301 - moved permanently)
-        path = '/'.join([base_path, path.strip('/'), ''])
+        if not path.endswith("/"):
+            path += "/"
         dir_infos = []
         if self.exists(path):
             headers = self._getHeaders()
             # Depth: 1 - applies to the resource and the immediate children (infinity usually prohibited by server)
             headers.update({'Depth': '1'})
-            req = urllib.request.Request(self.__getRequestURL(path),
+            req = urllib.request.Request(self.getRequestURL(path),
                                          headers=headers, method="PROPFIND")
             content = None
             try:
@@ -233,11 +240,13 @@ class WebDav:
                 raise WebdavError(str(e))
             # get all dav responses from multistatusresponse
             tree = fromstring(content)
+            base_path = self.__url.path
+            request_path = self.__getRequestPath(path)
             for resp in tree.findall(".//{DAV:}response"):
                 # only need the path in case the full URL is included
                 href = unquote(urlsplit(resp.findtext(".//{DAV:}href")).path)
                 # exclude base path
-                if href.strip('/') == path.strip('/'):
+                if href.strip('/') == request_path.strip('/'):
                     continue
                 dir_info = dict()
                 # collect if it is a dir, the href and self defined path (href without base path)
@@ -247,16 +256,12 @@ class WebDav:
                 dir_infos.append(dir_info)
         return dir_infos
 
-    def delete(self, filename):
-        # create a full path
-        self.deletePath('/'.join([self.__url.path, filename.strip('/')]))
+    def delete(self, path):
+        return self.__retry(lambda: self.__delete(path))
 
-    def deletePath(self, path):
-        return self.__retry(lambda: self.__deletePath(path))
-
-    def __deletePath(self, path):
+    def __delete(self, path):
         headers = self._getHeaders()
-        req = urllib.request.Request(self.__getRequestURL(path),
+        req = urllib.request.Request(self.getRequestURL(path),
                                      headers=headers, method="DELETE")
         status = reason = None
         try:
@@ -274,16 +279,13 @@ class WebDav:
     def stat(self, file):
         return self.__retry(lambda: self.__stat(file))
 
-    def __stat(self, file):
-        base_path = self.__url.path
-        # create a full path
-        filepath = '/'.join([base_path, file.strip('/')])
+    def __stat(self, filepath):
         if self.exists(filepath):
             headers = self._getHeaders()
             # Depth: 0 - applies to the resource itself
             headers.update({'Depth': '0'})
 
-            req = urllib.request.Request(self.__getRequestURL(filepath),
+            req = urllib.request.Request(self.getRequestURL(filepath),
                                          headers=headers, method="PROPFIND")
             content = None
             try:

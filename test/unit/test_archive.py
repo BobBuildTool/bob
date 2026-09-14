@@ -1057,7 +1057,7 @@ class TestGiteaArchive(BaseTester, TestCase):
         spec = {"backend":"gitea", "url":"https://gitea.example/git",
                 "owner":"o", "package":"p"}
         self.assertEqual(GiteaArchive(spec).getArchiveName(),
-            "https://gitea.example/git/api/packages/o/generic/p")
+            "https://gitea.example/git")
         self.assertEqual(GiteaArchive(dict(spec, name="my-archive")).getArchiveName(),
             "my-archive")
 

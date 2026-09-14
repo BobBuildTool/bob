@@ -895,24 +895,23 @@ class HttpArchive(BaseArchive):
         if name:
             return name
 
-        url = self.__url
-        return urllib.parse.urlunparse((url.scheme, getNetLoc(url), url.path, '', '', ''))
+        return self._webdav.getRequestURL("")
 
     def _canManage(self):
         return True
 
     def _makePath(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
-        return "/".join([self.__url.path, packageResultId[0:2], packageResultId[2:4],
+        return "/".join([packageResultId[0:2], packageResultId[2:4],
             packageResultId[4:] + suffix])
 
     def _makeParentDirs(self, path):
-        (dirs, _, _) = path.rpartition("/")
-        return self._webdav.mkdir(dirs, dirs.count("/"))
+        (dirs, _, _) = path.strip("/").rpartition("/")
+        if dirs:
+            self._webdav.mkdir(dirs)
 
     def _remoteName(self, buildId, suffix):
-        url = self.__url
-        return urllib.parse.urlunparse((url.scheme, getNetLoc(url), self._makePath(buildId, suffix), '', '', ''))
+        return self._webdav.getRequestURL(self._makePath(buildId, suffix))
 
     def _exists(self, path):
         return self._webdav.exists(path)
@@ -965,7 +964,7 @@ class HttpArchive(BaseArchive):
         return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
 
     def _getAudit(self, filename):
-        return getWebdavAudit(self._webdav, "/".join([self.__url.path, filename]))
+        return getWebdavAudit(self._webdav, filename)
 
     def getArchiveUri(self):
         return getNetLoc(self.__url) + self.__url.path
@@ -1253,15 +1252,14 @@ class GiteaArchive(BaseArchive):
         self.__files = {}
 
     def __basePath(self):
-        return "/".join([self.__url.path.rstrip("/"), "api", "packages",
-            self.__owner, "generic", self.__package])
+        return "/".join(["api", "packages", self.__owner, "generic", self.__package])
 
     def getArchiveName(self):
         name = super().getArchiveName()
         if name:
             return name
-        return urllib.parse.urlunparse((self.__url.scheme, getNetLoc(self.__url),
-            self.__basePath(), '', '', ''))
+
+        return self._webdav.getRequestURL("")
 
     def _canManage(self):
         return True
@@ -1276,8 +1274,7 @@ class GiteaArchive(BaseArchive):
         return self.__packagePath(packageResultId, packageResultId + suffix)
 
     def _remoteName(self, buildId, suffix):
-        return urllib.parse.urlunparse((self.__url.scheme, getNetLoc(self.__url),
-            self._makePath(buildId, suffix), '', '', ''))
+        return self._webdav.getRequestURL(self._makePath(buildId, suffix))
 
     def _exists(self, path):
         return self._webdav.exists(path)
@@ -1294,7 +1291,7 @@ class GiteaArchive(BaseArchive):
             # Delete a possibly existing file first. This is inherently racy:
             # a concurrent upload may still squeeze in between the delete and
             # the PUT below and let the latter fail with a conflict.
-            self._webdav.deletePath(path)
+            self._webdav.delete(path)
         elif self._exists(path):
             raise ArtifactExistsError()
         return HttpUploader(self, path, overwrite)
@@ -1309,8 +1306,8 @@ class GiteaArchive(BaseArchive):
     #
 
     def __apiPath(self, *parts):
-        return "/".join([self.__url.path.rstrip("/"), "api", "v1", "packages",
-            self.__owner, "generic", self.__package, *parts])
+        return "/".join(["api", "v1", "packages", self.__owner, "generic",
+                         self.__package, *parts])
 
     def __apiGet(self, path, query=None):
         try:
@@ -1409,7 +1406,7 @@ class GiteaArchive(BaseArchive):
 
     def _delete(self, filename):
         version, name = self.__splitPath(filename)
-        self._webdav.deletePath(self.__packagePath(version, name))
+        self._webdav.delete(self.__packagePath(version, name))
         # The server drops the version together with its last file.
         self.__files.pop(version, None)
 
