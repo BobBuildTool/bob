@@ -115,8 +115,11 @@ Basic information
 ``env``
     Dump of the bash environment as created by ``declare -p``. See
     `bash declare`_. For PowerShell recipes it is a JSON string that contains
-    all internal variables and environment variables as dictionaries. Use
-    the ``meta.language`` key to determine the used scripting language.
+    all internal variables and environment variables as dictionaries. For
+    Python recipes it is the ``repr()`` of a dictionary with the ``env`` and
+    ``globals`` keys holding the environment variables and global variables
+    respectively. Use the ``meta.language`` key to determine the used scripting
+    language.
 
 ``metaEnv``
     This is a dictionary of all :ref:`configuration-recipes-metaenv` variables
@@ -234,9 +237,9 @@ under the ``meta`` key and typically hold at least the following information:
     Bob version string.
 
 ``language``
-   The scripting language that was used to create the artifact. Can be ``bash``
-   or ``PowerShell``. If missing it must be interpreted as ``bash``. Use this to
-   correctly parse the ``env`` string.
+   The scripting language that was used to create the artifact. Can be ``bash``,
+   ``PowerShell`` or ``python``. If missing it must be interpreted as ``bash``.
+   Use this to correctly parse the ``env`` string.
 
 ``package``
     Package path of the artifact that was built. Note that there might be

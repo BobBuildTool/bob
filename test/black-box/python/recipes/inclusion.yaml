@@ -1,0 +1,13 @@
+root: True
+packageScript: |
+    # Eplicitly read and write as binary data. Otherwise the test fails on
+    # Windows.
+    with open("concat.txt", "wb") as f:
+        for i in $<@*.txt@>:
+            with open(i, "rb") as g:
+                f.write(g.read())
+
+    # Write with unix line endings because the input is forced to that as well
+    # in the adjacent .gitattributes.
+    with open("file.txt", "w", newline="\n") as f:
+        f.write($<'file.txt'>)

@@ -1,0 +1,20 @@
+packageVars: [BOB_HOST_PLATFORM]
+packageScript: |
+    if [[ $BOB_HOST_PLATFORM == win32 ]] ; then
+        cat >python3.cmd <<EOF
+    @ECHO OFF
+    SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
+    set CANARY=interposer
+    "$(cygpath -w "$(which python3)")" %*
+    EOF
+    else
+        cat >python3.cmd <<EOF
+    #!/bin/bash
+    export CANARY=interposer
+    "$(which python3)" "\$@"
+    EOF
+        chmod a+x python3.cmd
+    fi
+
+provideInterpreters:
+    python: python3.cmd

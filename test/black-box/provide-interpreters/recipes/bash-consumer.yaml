@@ -1,0 +1,8 @@
+root: True
+
+depends:
+    - name: bash-provider
+      use: [interpreters]
+
+packageScript: |
+    echo "$CANARY" > result.txt

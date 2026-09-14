@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ...archive import JenkinsArchive
-from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, RecipeSetIR
+from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, InterpreterIR, RecipeSetIR
 from ...scm import auditFromData
 from ...utils import runInEventLoop
 
@@ -23,6 +23,9 @@ def getJenkinsVariantId(step):
     sandbox = step.getSandbox()
     if sandbox:
         vid += sandbox.getStep().getVariantId()
+    interp = step.getInterpreter()
+    if interp:
+        vid += interp.getStep().getVariantId()
     return vid
 
 class PartialIRBase:
@@ -56,6 +59,14 @@ class PartialIRBase:
         ret.graph = self.graph
         return ret
 
+    def mungeInterpreter(self, interpreter):
+        if interpreter is None:
+            ret = None
+        else:
+            ret = PartialInterpreter.fromData(interpreter)
+            ret.graph = self.graph
+        return ret
+
     def mungeRecipeSet(self, recipeSet):
         ret = PartialRecipeSet.fromData(self.graph.recipeSet, self.graph.scmAudit)
         ret.graph = self.graph
@@ -85,6 +96,9 @@ class PartialTool(PartialIRBase, ToolIR):
     pass
 
 class PartialSandbox(PartialIRBase, SandboxIR):
+    pass
+
+class PartialInterpreter(PartialIRBase, InterpreterIR):
     pass
 
 class PartialIR:
@@ -151,6 +165,9 @@ class PartialIR:
 
     def addTool(self, tool):
         return PartialTool.fromTool(tool, self).toData()
+
+    def addInterpreter(self, interpreter):
+        return interpreter and PartialInterpreter.fromInterpreter(interpreter, self).toData()
 
     def addPackage(self, package, partial):
         # Attention: this will typically recurse like addStep().

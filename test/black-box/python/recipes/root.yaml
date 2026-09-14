@@ -1,0 +1,27 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+environment:
+    FOO: bar
+
+fingerprintIf: True
+fingerprintVars: [FOO]
+fingerprintScript: |
+    print(os.environ["FOO"])
+    if os.environ["FOO"] != "bar":
+        sys.exit(1)
+
+checkoutDeterministic: True
+checkoutScript: |
+    import shutil
+    shutil.copyfile($<<file.txt>>, "file.txt")
+buildVars: [FOO]
+buildScript: |
+    import shutil
+    shutil.copyfile(os.path.join(sys.argv[1], "file.txt"), "file.txt")
+packageScript: |
+    import shutil
+    shutil.copyfile(os.path.join(sys.argv[1], "file.txt"), "file.txt")

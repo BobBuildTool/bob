@@ -8,7 +8,7 @@ from ...builder import LocalBuilder
 from ...errors import BuildError
 from ...input import RecipeSet
 from ...intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
-    RecipeSetIR
+    InterpreterIR, RecipeSetIR
 from ...invoker import Invoker, JobserverConfig
 from ...layers import updateLayers
 from ...share import getShare
@@ -40,6 +40,10 @@ class LazyIR:
         return tool
 
     @staticmethod
+    def addInterpreter(interpreter):
+        return interpreter
+
+    @staticmethod
     def addPackage(package, partial):
         return package
 
@@ -69,6 +73,9 @@ class LazyIRs:
     def mungeTool(self, tool):
         return ExecutableTool.fromTool(tool, LazyIR)
 
+    def mungeInterpreter(self, interpreter):
+        return interpreter and ExecutableInterpreter.fromInterpreter(interpreter, LazyIR)
+
     def mungeRecipeSet(self, recipeSet):
         return ExecutableRecipeSet.fromRecipeSet(recipeSet)
 
@@ -95,6 +102,9 @@ class ExecutableTool(LazyIRs, ToolIR):
     pass
 
 class ExecutableSandbox(LazyIRs, SandboxIR):
+    pass
+
+class ExecutableInterpreter(LazyIRs, InterpreterIR):
     pass
 
 

@@ -1,0 +1,10 @@
+root: True
+
+scriptLanguage: PowerShell
+
+depends:
+    - name: pwsh-provider
+      use: [interpreters]
+
+packageScriptPwsh: |
+    Set-Content -Path "result.txt" -Value $env:CANARY

@@ -705,9 +705,10 @@ def _genJenkinsJobs(step, jobs, nameCalculator, upload, download, seenPackages, 
         if d.isValid(): _genJenkinsJobs(d, jobs, nameCalculator, upload, download,
                                             seenPackages, allVariantIds, shortdescription)
 
-    # Recurse on tools and sandbox only for package steps. Also do an early
-    # reject if the particular package stack was already seen. This is safe as
-    # the same package stack cannot have different variant-ids.
+    # Recurse on tools, sandbox and interpreter only for package steps. Also
+    # do an early reject if the particular package stack was already seen.
+    # This is safe as the same package stack cannot have different
+    # variant-ids.
     if step.isPackageStep():
         for (name, tool) in sorted(step.getTools().items()):
             toolStep = tool.getStep()
@@ -724,6 +725,15 @@ def _genJenkinsJobs(step, jobs, nameCalculator, upload, download, seenPackages, 
             if stack not in seenPackages:
                 seenPackages.add(stack)
                 _genJenkinsJobs(sandboxStep, jobs, nameCalculator, upload, download,
+                                seenPackages, allVariantIds, shortdescription)
+
+        interpreter = step.getInterpreter()
+        if interpreter is not None:
+            interpreterStep = interpreter.getStep()
+            stack = "/".join(interpreterStep.getPackage().getStack())
+            if stack not in seenPackages:
+                seenPackages.add(stack)
+                _genJenkinsJobs(interpreterStep, jobs, nameCalculator, upload, download,
                                 seenPackages, allVariantIds, shortdescription)
 
     return jj

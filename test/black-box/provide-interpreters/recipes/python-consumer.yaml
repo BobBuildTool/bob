@@ -1,0 +1,11 @@
+root: True
+
+scriptLanguage: python
+
+depends:
+    - name: python-provider
+      use: [interpreters]
+
+packageScriptPython: |
+    with open("result.txt", "w") as f:
+        f.write(os.environ["CANARY"])

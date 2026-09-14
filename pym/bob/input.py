@@ -5,7 +5,7 @@
 
 from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError, BobError
-from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage
+from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage, PythonLanguage
 from .pathspec import PackageSet
 from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
     auditFromDir, auditFromProperties, getScm, SYNTHETIC_SCM_PROPS
@@ -122,9 +122,11 @@ def fetchFingerprintScripts(recipe):
             recipe.get("fingerprintScript")),
         ScriptLanguage.PWSH : recipe.get("fingerprintScriptPwsh",
             recipe.get("fingerprintScript")),
+        ScriptLanguage.PYTHON : recipe.get("fingerprintScriptPython",
+            recipe.get("fingerprintScript")),
     }
 
-def fetchScripts(recipe, prefix, resolveBash, resolvePwsh):
+def fetchScripts(recipe, prefix, resolveBash, resolvePwsh, resolvePython):
     return {
         ScriptLanguage.BASH : (
             resolveBash(recipe.get(prefix + "SetupBash", recipe.get(prefix + "Setup")),
@@ -141,16 +143,25 @@ def fetchScripts(recipe, prefix, resolveBash, resolvePwsh):
                         prefix + "Script[Pwsh]"),
             resolvePwsh(recipe.get(prefix + "FinalizePwsh", recipe.get(prefix + "Finalize")),
                         prefix + "Finalize[Pwsh]"),
-        )
+        ),
+        ScriptLanguage.PYTHON : (
+            resolvePython(recipe.get(prefix + "SetupPython", recipe.get(prefix + "Setup")),
+                          prefix + "Setup[Python]"),
+            resolvePython(recipe.get(prefix + "ScriptPython", recipe.get(prefix + "Script")),
+                          prefix + "Script[Python]"),
+            resolvePython(recipe.get(prefix + "FinalizePython", recipe.get(prefix + "Finalize")),
+                          prefix + "Finalize[Python]"),
+        ),
     }
 
 def mergeScripts(fragments, glue):
     """Join all scripts of the recipe and its classes.
 
-    The result is a tuple with (setupScript, mainScript, digestScript). Note
-    that the mainScript contains all "normal" scripts and all "Finalize"
-    scripts in reverse order.
+    The result is a tuple with (setupScript, mainScript, digestScript,
+    includedFiles). Note that the mainScript contains all "normal" scripts and
+    all "Finalize" scripts in reverse order.
     """
+
     return (
         # The "Setup" scripts
         joinScripts((f[0][0] for f in fragments), glue),
@@ -162,7 +173,10 @@ def mergeScripts(fragments, glue):
             ( joinScripts((f[0][1] for f in fragments), "\n"),
               joinScripts((f[1][1] for f in fragments), "\n"),
               joinScripts((f[2][1] for f in fragments), "\n"),
-            ), "\n")
+            ), "\n"),
+        { name : content for name, content in
+                         chain.from_iterable(chain(f[0][2].items(), f[1][2].items()) for f in fragments)
+        },
     )
 
 
@@ -497,25 +511,27 @@ class CoreRef:
     to reconstruct the real values on reference resolution.
 
     The real difficulty with these references is the handling of the ambient
-    tools and the sandbox. Each package has a set of tools and a sandbox
-    defined as their input. While iterating of the dependencies new tools or a
-    new sandbox can be picked up, creating a "diff" to the input tools/sandbox
-    of the package. When later re-creating the real Package/Step classes these
-    diffs must be applied on refDeref() so that the reference destination gets
-    the correct ambient tools/sandbox again.
+    tools, interpreters and the sandbox. Each package has a set of tools,
+    interpreters and a sandbox defined as their input. While iterating of the
+    dependencies new tools, interpreters or a new sandbox can be picked up,
+    creating a "diff" to the input tools/sandbox of the package. When later
+    re-creating the real Package/Step classes these diffs must be applied on
+    refDeref() so that the reference destination gets the correct ambient
+    tools/sandbox again.
 
     diffTools: A dict. If the value of a tool is "None" the tool is deleted. A
     string will copy the tool from an existing "inputTools". Otherwise the
     value is expected to the another CoreRef that needs to be dereferenced too.
     """
 
-    __slots__ = ('__destination', '__stackAdd', '__diffTools', '__diffSandbox')
+    __slots__ = ('__destination', '__stackAdd', '__diffTools', '__diffSandbox', '__diffInterpreters')
 
-    def __init__(self, destination, stackAdd=[], diffTools={}, diffSandbox=...):
+    def __init__(self, destination, stackAdd=[], diffTools={}, diffSandbox=..., diffInterpreters={}):
         self.__destination = destination
         self.__stackAdd = stackAdd
         self.__diffTools = diffTools
         self.__diffSandbox = diffSandbox
+        self.__diffInterpreters = diffInterpreters
 
     def refGetDestination(self):
         return self.__destination.refGetDestination()
@@ -523,7 +539,7 @@ class CoreRef:
     def refGetStack(self):
         return self.__stackAdd + self.__destination.refGetStack()
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
         if cache is None: cache = {}
         if self.__diffTools:
             tools = inputTools.copy()
@@ -535,7 +551,8 @@ class CoreRef:
                 else:
                     coreTool = cache.get(tool)
                     if coreTool is None:
-                        cache[tool] = coreTool = tool.refDeref(stack, inputTools, inputSandbox, pathsConfig, cache)
+                        cache[tool] = coreTool = tool.refDeref(stack, inputTools, inputSandbox,
+                                                               inputInterpreters, pathsConfig, cache)
                     tools[name] = coreTool
         else:
             tools = inputTools
@@ -548,10 +565,24 @@ class CoreRef:
             sandbox = cache[self.__diffSandbox]
         else:
             sandbox = self.__diffSandbox.refDeref(stack, inputTools, inputSandbox,
-                    pathsConfig, cache)
+                    inputInterpreters, pathsConfig, cache)
             cache[self.__diffSandbox] = sandbox
 
-        return self.__destination.refDeref(stack + self.__stackAdd, tools, sandbox, pathsConfig)
+        if self.__diffInterpreters:
+            interpreters = inputInterpreters.copy()
+            for name, interp in self.__diffInterpreters.items():
+                if interp is None:
+                    del interpreters[name]
+                else:
+                    coreInterp = cache.get(interp)
+                    if coreInterp is None:
+                        cache[interp] = coreInterp = interp.refDeref(stack, inputTools, inputSandbox,
+                                                                     inputInterpreters, pathsConfig, cache)
+                    interpreters[name] = coreInterp
+        else:
+            interpreters = inputInterpreters
+
+        return self.__destination.refDeref(stack + self.__stackAdd, tools, sandbox, interpreters, pathsConfig)
 
 class CoreItem:
     __slots__ = []
@@ -562,7 +593,7 @@ class CoreItem:
     def refGetStack(self):
         return []
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
         raise NotImplementedError
 
 
@@ -656,8 +687,8 @@ class CoreTool(CoreItem):
             h.update(key.encode('utf8'))
         self.resultId = h.digest()
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
-        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
+        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, inputInterpreters, pathsConfig)
         return Tool(step, self.path, self.libs, self.netAccess, self.environment,
                     self.fingerprintScript, self.fingerprintVars, self.dependTools,
                     self.dependToolsWeak)
@@ -794,8 +825,8 @@ class CoreSandbox(CoreItem):
             (self.environment == other.environment) and \
             (self.user == other.user)
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
-        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
+        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, inputInterpreters, pathsConfig)
         return Sandbox(step, self)
 
 class Sandbox:
@@ -848,9 +879,47 @@ class Sandbox:
         return self.coreSandbox.user
 
 
+class CoreInterpreter(CoreItem):
+    __slots__ = ("coreStep", "path", "resultId")
+
+    def __init__(self, coreStep, path):
+        self.coreStep = coreStep
+        self.path = path
+        h = hashlib.sha1()
+        h.update(coreStep.variantId)
+        h.update(struct.pack("<I", len(path)))
+        h.update(path.encode("utf8"))
+        self.resultId = h.digest()
+
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
+        step = self.coreStep.refDeref(stack, inputTools, inputSandbox, inputInterpreters, pathsConfig)
+        return Interpreter(step, self.path)
+
+class Interpreter:
+    """Representation of a script interpreter.
+
+    An interpreter is the executable used to run the scripts of a step. It is
+    made of the result of a package and a relative path into this result.
+    """
+
+    __slots__ = ("step", "path")
+
+    def __init__(self, step, path):
+        self.step = step
+        self.path = path
+
+    def getStep(self):
+        """Return package step that produces the result holding the interpreter."""
+        return self.step
+
+    def getPath(self):
+        """Get relative path into the result."""
+        return self.path
+
+
 class CoreStep(CoreItem):
     __slots__ = ( "corePackage", "digestEnv", "env", "args",
-        "providedEnv", "providedTools", "providedDeps", "providedSandbox",
+        "providedEnv", "providedTools", "providedDeps", "providedSandbox", "providedInterpreters",
         "variantId", "deterministic", "isValid", "toolDep", "toolDepWeak",
         "auditFileNames" )
 
@@ -870,6 +939,7 @@ class CoreStep(CoreItem):
         self.providedTools = {}
         self.providedDeps = []
         self.providedSandbox = None
+        self.providedInterpreters = {}
         self.auditFileNames = auditFileNames
 
     def getPreRunCmds(self):
@@ -892,6 +962,9 @@ class CoreStep(CoreItem):
 
     def getUpdateScript(self):
         return ""
+
+    def getIncludedFiles(self):
+        raise NotImplementedError
 
     def getLabel(self):
         raise NotImplementedError
@@ -926,11 +999,19 @@ class CoreStep(CoreItem):
         else:
             return None
 
+    def getInterpreter(self):
+        if self.isValid:
+            return self.corePackage.interpreters.get(self.corePackage.recipe.scriptLanguage.index)
+        else:
+            return None
+
     def getAllDepCoreSteps(self):
         sandbox = self.getSandbox()
+        interp = self.getInterpreter()
         return [ a.refGetDestination() for a in self.args ] + \
             [ d.coreStep for n,d in sorted(self.getTools().items()) ] + (
-            [ sandbox.coreStep] if sandbox else [])
+            [ sandbox.coreStep] if sandbox else []) + (
+            [ interp.coreStep ] if interp else [])
 
     def getDigest(self, calculate):
         h = DigestHasher()
@@ -1020,6 +1101,10 @@ class CoreStep(CoreItem):
             h.update(providedSandbox.resultId)
         else:
             h.update(b'\x00' * 20)
+        # providedInterpreters
+        providedInterpreters = self.providedInterpreters
+        for interp in (providedInterpreters.get(lang) for lang in ScriptLanguage):
+            h.update(interp.resultId if interp is not None else b'\x00' * 20)
         # Add package name if aliased
         pkgName = self.corePackage.packageName
         if pkgName is not None:
@@ -1127,6 +1212,9 @@ class Step:
     def isUpdateDeterministic(self):
         return self._coreStep.isUpdateDeterministic()
 
+    def getIncludedFiles(self):
+        return self._coreStep.getIncludedFiles()
+
     def isDeterministic(self):
         """Return whether the step is deterministic.
 
@@ -1224,18 +1312,23 @@ class Step:
         p = self.__package
         refCache = {}
         return [ a.refDeref(p.getStack(), p._getInputTools(), p._getInputSandboxRaw(),
-                            self.__pathsConfig, refCache)
+                            p._getInputInterpreters(), self.__pathsConfig, refCache)
                     for a in self._coreStep.args ]
 
     def getAllDepSteps(self):
         """Get all dependent steps of this Step.
 
         This includes the direct input to the Step as well as indirect inputs
-        such as the used tools or the sandbox.
+        such as the used tools, the sandbox and the interpreter.
         """
         sandbox = self.getSandbox()
+        interpreter = self.getInterpreter()
         return self.getArguments() + [ d.step for n,d in sorted(self.getTools().items()) ] + (
-            [sandbox.getStep()] if sandbox else [])
+            [sandbox.getStep()] if sandbox else []) + (
+            [interpreter.getStep()] if interpreter else [])
+
+    def getInterpreter(self):
+        return self.__package._getInterpreter()
 
     def getEnv(self):
         """Return dict of environment variables."""
@@ -1268,7 +1361,7 @@ class Step:
         p = self.__package
         refCache = {}
         return [ a.refDeref(p.getStack(), p._getInputTools(), p._getInputSandboxRaw(),
-                            self.__pathsConfig, refCache)
+                            p._getInputInterpreters(), self.__pathsConfig, refCache)
                     for a in self._coreStep.providedDeps ]
 
     def _isFingerprinted(self):
@@ -1369,8 +1462,8 @@ class CoreCheckoutStep(CoreStep):
         super().__init__(corePackage, isValid, deterministic, digestEnv, env, args, toolDep,
                          toolDepWeak, auditFileNames)
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
-        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, inputInterpreters, pathsConfig)
         ret = CheckoutStep(self, package, pathsConfig)
         package._setCheckoutStep(ret)
         return ret
@@ -1418,6 +1511,9 @@ class CoreCheckoutStep(CoreStep):
         glue = getLanguage(self.corePackage.recipe.scriptLanguage.index).glue
         return joinScripts(self.__checkoutUpdateIf, glue) or ""
 
+    def getIncludedFiles(self):
+        return self.corePackage.recipe.checkoutIncludedFiles
+
     @property
     def fingerprintMask(self):
         return 0
@@ -1451,7 +1547,7 @@ class CheckoutStep(Step):
 class CoreBuildStep(CoreStep):
     __slots__ = ["fingerprintMask"]
 
-    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(),
+    def __init__(self, corePackage, script=(None, None, None, {}), digestEnv=Env(),
                  env=Env(), args=[], fingerprintMask=0, toolDep=set(), toolDepWeak=set(),
                  auditFileNames={}):
         isValid = script[1] is not None
@@ -1459,8 +1555,8 @@ class CoreBuildStep(CoreStep):
         super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak,
                          auditFileNames)
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
-        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, inputInterpreters, pathsConfig)
         ret = BuildStep(self, package, pathsConfig)
         package._setBuildStep(ret)
         return ret
@@ -1480,6 +1576,9 @@ class CoreBuildStep(CoreStep):
     def getDigestScript(self):
         return self.corePackage.recipe.buildDigestScript
 
+    def getIncludedFiles(self):
+        return self.corePackage.recipe.buildIncludedFiles
+
 class BuildStep(Step):
 
     def hasNetAccess(self):
@@ -1490,15 +1589,15 @@ class BuildStep(Step):
 class CorePackageStep(CoreStep):
     __slots__ = ["fingerprintMask"]
 
-    def __init__(self, corePackage, script=(None, None, None), digestEnv=Env(), env=Env(), args=[],
+    def __init__(self, corePackage, script=(None, None, None, {}), digestEnv=Env(), env=Env(), args=[],
                  fingerprintMask=0, toolDep=set(), toolDepWeak=set(), auditFileNames={}):
         isValid = script[1] is not None
         self.fingerprintMask = fingerprintMask
         super().__init__(corePackage, isValid, True, digestEnv, env, args, toolDep, toolDepWeak,
                          auditFileNames)
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
-        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, pathsConfig)
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
+        package = self.corePackage.refDeref(stack, inputTools, inputSandbox, inputInterpreters, pathsConfig)
         ret = PackageStep(self, package, pathsConfig)
         package._setPackageStep(ret)
         return ret
@@ -1517,6 +1616,9 @@ class CorePackageStep(CoreStep):
 
     def getDigestScript(self):
         return self.corePackage.recipe.packageDigestScript
+
+    def getIncludedFiles(self):
+        return self.corePackage.recipe.packageIncludedFiles
 
 class PackageStep(Step):
 
@@ -1539,23 +1641,24 @@ class PackageStep(Step):
 
 class CorePackageInternal(CoreItem):
     __slots__ = []
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig, cache=None):
-        return (inputTools, inputSandbox)
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig, cache=None):
+        return (inputTools, inputSandbox, inputInterpreters)
 
 corePackageInternal = CorePackageInternal()
 
 class CorePackage:
     __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
-        "states", "tools", "sandbox", "checkoutStep", "buildStep", "packageStep",
+        "states", "tools", "sandbox", "interpreters", "checkoutStep", "buildStep", "packageStep",
         "pkgId", "metaEnv", "packageName", "isShared")
 
-    def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox,
+    def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox, interpreters, diffInterpreters,
                  directDepSteps, indirectDepSteps, states, pkgId, metaEnv,
                  packageName, isShared):
         self.recipe = recipe
         self.tools = tools
         self.sandbox = sandbox
-        self.internalRef = CoreRef(corePackageInternal, [], diffTools, diffSandbox)
+        self.interpreters = interpreters
+        self.internalRef = CoreRef(corePackageInternal, [], diffTools, diffSandbox, diffInterpreters)
         self.directDepSteps = directDepSteps
         self.indirectDepSteps = indirectDepSteps
         self.states = states
@@ -1564,9 +1667,11 @@ class CorePackage:
         self.packageName = packageName
         self.isShared = isShared
 
-    def refDeref(self, stack, inputTools, inputSandbox, pathsConfig):
-        tools, sandbox = self.internalRef.refDeref(stack, inputTools, inputSandbox, pathsConfig)
-        return Package(self, stack, pathsConfig, inputTools, tools, inputSandbox, sandbox)
+    def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig):
+        tools, sandbox, interpreters = self.internalRef.refDeref(stack, inputTools, inputSandbox,
+                                                                 inputInterpreters, pathsConfig)
+        return Package(self, stack, pathsConfig, inputTools, tools, inputSandbox, sandbox,
+                       inputInterpreters, interpreters)
 
     def createCoreCheckoutStep(self, checkout, checkoutSCMs, fullEnv, digestEnv,
                                env, args, checkoutUpdateIf, checkoutUpdateDeterministic,
@@ -1624,7 +1729,8 @@ class Package(object):
     package.
     """
 
-    def __init__(self, corePackage, stack, pathsConfig, inputTools, tools, inputSandbox, sandbox):
+    def __init__(self, corePackage, stack, pathsConfig, inputTools, tools, inputSandbox, sandbox,
+                 inputInterpreters, interpreters):
         self.__corePackage = corePackage
         self.__stack = stack
         self.__pathsConfig = pathsConfig
@@ -1632,6 +1738,8 @@ class Package(object):
         self.__tools = tools
         self.__inputSandbox = inputSandbox
         self.__sandbox = sandbox
+        self.__inputInterpreters = inputInterpreters
+        self.__interpreters = interpreters
 
     def __eq__(self, other):
         return isinstance(other, Package) and (self.__stack == other.__stack)
@@ -1658,6 +1766,12 @@ class Package(object):
 
     def _getSandboxRaw(self):
         return self.__sandbox
+
+    def _getInputInterpreters(self):
+        return self.__inputInterpreters
+
+    def _getInterpreter(self):
+        return self.__interpreters.get(self.__corePackage.recipe.scriptLanguage.index)
 
     def getName(self):
         """Name of the package"""
@@ -1687,7 +1801,7 @@ class Package(object):
         """
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
-                            self.__pathsConfig, refCache)
+                            self.__inputInterpreters, self.__pathsConfig, refCache)
                     for d in self.__corePackage.directDepSteps ]
 
     def getIndirectDepSteps(self):
@@ -1698,20 +1812,23 @@ class Package(object):
         """
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
-                            self.__pathsConfig, refCache)
+                            self.__inputInterpreters, self.__pathsConfig, refCache)
                     for d in self.__corePackage.indirectDepSteps ]
 
     def getAllDepSteps(self):
         """Return list of all dependencies of the package.
 
         This list includes all direct and indirect dependencies. Additionally
-        the used sandbox and tools are included too.
+        the used sandbox, tools and interpreter are included too.
         """
         allDeps = set(self.getDirectDepSteps())
         allDeps |= set(self.getIndirectDepSteps())
         if self.__sandbox and self.__sandbox.isEnabled():
             allDeps.add(self.__sandbox.getStep())
         for i in self.getPackageStep().getTools().values(): allDeps.add(i.getStep())
+        interp = self._getInterpreter()
+        if interp:
+            allDeps.add(interp.getStep())
         return sorted(allDeps)
 
     def _setCheckoutStep(self, checkoutStep):
@@ -1810,7 +1927,7 @@ class IncludeHelper:
                 raise ParseError("Bad substiturion in {}: {}".format(section, str(e)))
             return resolver.resolve(ret)
         else:
-            return (None, None)
+            return (None, None, {})
 
 class ScmValidator:
     def __init__(self, scmSpecs):
@@ -2092,7 +2209,7 @@ class Recipe(object):
     class Dependency(object):
         __slots__ = ('recipe', 'envOverride', 'provideGlobal', 'inherit',
                      'use', 'useEnv', 'useTools', 'useBuildResult', 'useDeps',
-                     'useSandbox', 'condition', 'toolOverride', 'checkoutDep',
+                     'useSandbox', 'useInterpreters', 'condition', 'toolOverride', 'checkoutDep',
                      'alias', 'origin')
 
         def __init__(self, origin, recipe, env, fwd, use, cond, tools, checkoutDep, inherit, alias):
@@ -2107,6 +2224,7 @@ class Recipe(object):
             self.useBuildResult = "result" in self.use
             self.useDeps = "deps" in self.use
             self.useSandbox = "sandbox" in self.use
+            self.useInterpreters = "interpreters" in self.use
             self.condition = cond
             self.toolOverride = tools
             self.checkoutDep = checkoutDep
@@ -2225,6 +2343,7 @@ class Recipe(object):
         self.__provideVars = recipe.get("provideVars", {})
         self.__provideDeps = set(recipe.get("provideDeps", []))
         self.__provideSandbox = recipe.get("provideSandbox")
+        self.__provideInterpreters = recipe.get("provideInterpreters", {})
         self.__varSelf = recipe.get("environment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
         self.__metaEnv = recipe.get("metaEnvironment", {})
@@ -2266,9 +2385,11 @@ class Recipe(object):
                                       baseDir, packageName, sourceName).resolve
         incHelperPwsh = IncludeHelper(PwshLanguage, recipeSet.loadBinary,
                                       baseDir, packageName, sourceName).resolve
+        incHelperPython = IncludeHelper(PythonLanguage, recipeSet.loadBinary,
+                                        baseDir, packageName, sourceName).resolve
 
         self.__scriptLanguage = recipe.get("scriptLanguage")
-        self.__checkout = fetchScripts(recipe, "checkout", incHelperBash, incHelperPwsh)
+        self.__checkout = fetchScripts(recipe, "checkout", incHelperBash, incHelperPwsh, incHelperPython)
         self.__checkoutSCMs = recipe.get("checkoutSCM", [])
         for scm in self.__checkoutSCMs:
             scm["__source"] = sourceName
@@ -2279,8 +2400,8 @@ class Recipe(object):
             a["__source"] = sourceName + ", checkoutAssert #{}".format(i)
             i += 1
         self.__checkoutUpdateIf = recipe["checkoutUpdateIf"]
-        self.__build = fetchScripts(recipe, "build", incHelperBash, incHelperPwsh)
-        self.__package = fetchScripts(recipe, "package", incHelperBash, incHelperPwsh)
+        self.__build = fetchScripts(recipe, "build", incHelperBash, incHelperPwsh, incHelperPython)
+        self.__package = fetchScripts(recipe, "package", incHelperBash, incHelperPwsh, incHelperPython)
         self.__fingerprintScriptList = fetchFingerprintScripts(recipe)
         self.__fingerprintIf = recipe.get("fingerprintIf")
         self.__fingerprintVarsList = set(recipe.get("fingerprintVars", []))
@@ -2295,9 +2416,17 @@ class Recipe(object):
             raise ParseError("Cyclic class inheritence: " + " -> ".join(stack + [clsName]))
 
         # depth first
-        ret = []
-        subInherit = [ self.__recipeSet.getClass(c) for c in cls.__inherit ]
+        subInherit = []
+        if isRecipe:
+            subInherit.extend([ self.__recipeSet.getClass(c)
+                                for c in self.__recipeSet.getInheritPrepend() ])
+        subInherit.extend([ self.__recipeSet.getClass(c) for c in cls.__inherit ])
         if cls.__anonBaseClass: subInherit.insert(0, cls.__anonBaseClass)
+        if isRecipe:
+            subInherit.extend([ self.__recipeSet.getClass(c)
+                                for c in self.__recipeSet.getInheritAppend() ])
+
+        ret = []
         for c in subInherit:
             ret.extend(self.__resolveClassesOrder(c, stack + [clsName], visited))
 
@@ -2401,6 +2530,9 @@ class Recipe(object):
             self.__provideVars = tmp
             self.__provideDeps |= cls.__provideDeps
             if self.__provideSandbox is None: self.__provideSandbox = cls.__provideSandbox
+            tmp = cls.__provideInterpreters.copy()
+            tmp.update(self.__provideInterpreters)
+            self.__provideInterpreters = tmp
             if cls.__varSelf: self.__varSelf.insert(0, cls.__varSelf)
             if cls.__varPrivate: self.__varPrivate.insert(0, cls.__varPrivate)
             self.__checkoutVars |= cls.__checkoutVars
@@ -2434,7 +2566,7 @@ class Recipe(object):
 
         # the package step must always be valid
         if self.__package[1] is None:
-            self.__package = (None, "", 'da39a3ee5e6b4b0d3255bfef95601890afd80709')
+            self.__package = (None, "", 'da39a3ee5e6b4b0d3255bfef95601890afd80709', {})
 
         if self.__relocatable is None:
             self.__relocatable = True
@@ -2512,7 +2644,7 @@ class Recipe(object):
         return self.__properties
 
     def prepare(self, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
-                inputTools=Env(), inputStack=PackageStack(), packageName=None):
+                inputTools=Env(), inputInterpreters={}, inputStack=PackageStack(), packageName=None):
         # Cycle detection is based on the recipe package name. Any alias names
         # are ignored.
         if self.__packageName in inputStack:
@@ -2521,7 +2653,8 @@ class Recipe(object):
                                 self.__packageName if packageName is None else packageName)
         # already calculated?
         for m in self.__corePackagesByMatch:
-            if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox, packageName):
+            if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox, packageName,
+                         inputInterpreters):
                 if stack.intersects(m.subTreePackages):
                     raise ParseError("Recipes are cyclic")
                 m.touch(inputEnv, inputTools)
@@ -2532,9 +2665,10 @@ class Recipe(object):
         else:
             reusedCorePackage = None
 
-        # Track tool and sandbox changes
+        # Track tool, sandbox and interpreter changes
         diffSandbox = ...
         diffTools = { }
+        diffInterpreters = {}
 
         # make copies because we will modify them
         states = { n : s.copy() for (n,s) in inputStates.items() }
@@ -2542,6 +2676,7 @@ class Recipe(object):
         inputTools = inputTools.copy()
         inputTools.touchReset()
         tools = inputTools.derive()
+        interpreters = inputInterpreters.copy()
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
         inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
@@ -2564,9 +2699,11 @@ class Recipe(object):
         depEnv = env.derive()
         depTools = tools.derive()
         depSandbox = sandbox
+        depInterpreters = interpreters.copy()
         depStates = { n : s.copy() for (n,s) in states.items() }
         depDiffSandbox = diffSandbox
         depDiffTools = diffTools.copy()
+        depDiffInterpreters = {}
         thisDeps = {}
         resolvedDeps = []
 
@@ -2599,6 +2736,8 @@ class Recipe(object):
             thisDepDiffTools = depDiffTools
             thisDepSandbox = depSandbox
             thisDepDiffSandbox = depDiffSandbox
+            thisDepInterpreters = depInterpreters
+            thisDepDiffInterpreters = depDiffInterpreters
             if not dep.inherit:
                 thisDepEnv = self.getRecipeSet().getRootEnv()
                 thisDepTools = Env()
@@ -2608,6 +2747,9 @@ class Recipe(object):
                 thisDepSandbox = None
                 # Clear sandbox, if any
                 thisDepDiffSandbox = None
+                thisDepInterpreters = {}
+                # Remove all tools that were passed to package.
+                thisDepDiffInterpreters = { n : None for n in inputInterpreters.keys() }
 
             if dep.toolOverride:
                 try:
@@ -2628,11 +2770,12 @@ class Recipe(object):
             r = self.__recipeSet.getRecipe(recipeName)
             try:
                 p, s = r.prepare(thisDepEnv, sandboxEnabled, depStates,
-                                 thisDepSandbox, thisDepTools, stack, aliasName)
+                                 thisDepSandbox, thisDepTools, thisDepInterpreters, stack, aliasName)
                 subTreePackages.add(recipeName)
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
-                depRef = CoreRef(depCoreStep, [p.getName()], thisDepDiffTools, thisDepDiffSandbox)
+                depRef = CoreRef(depCoreStep, [p.getName()], thisDepDiffTools, thisDepDiffSandbox,
+                                 thisDepDiffInterpreters)
             except ParseError as e:
                 e.pushFrame(r.getPackageName())
                 raise e
@@ -2654,6 +2797,7 @@ class Recipe(object):
             # Remember dependency diffs before changing them
             origDepDiffTools = thisDepDiffTools
             origDepDiffSandbox = thisDepDiffSandbox
+            origDepDiffInterpreters = thisDepDiffInterpreters
 
             # pick up various results of package
             for (n, s) in states.items():
@@ -2665,19 +2809,21 @@ class Recipe(object):
                     if dep.provideGlobal: depStates[n].onSkip(depCoreStep.corePackage.states[n])
             if dep.useDeps:
                 indirectPackages.extend(
-                    CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox)
+                    CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
                     for d in depCoreStep.providedDeps)
             if dep.useBuildResult and depTrack.useResultOnce():
                 results.append(depRef)
                 if dep.checkoutDep: checkoutDeps.append(depRef)
             if dep.useTools:
                 tools.update(depCoreStep.providedTools)
-                diffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox))
+                diffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox,
+                                              origDepDiffInterpreters))
                     for n, d in depCoreStep.providedTools.items() )
                 if dep.provideGlobal:
                     depTools.update(depCoreStep.providedTools)
                     depDiffTools = depDiffTools.copy()
-                    depDiffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox))
+                    depDiffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox,
+                                                     origDepDiffInterpreters))
                         for n, d in depCoreStep.providedTools.items() )
             if dep.useEnv:
                 env.update(depCoreStep.providedEnv)
@@ -2685,15 +2831,26 @@ class Recipe(object):
             if dep.useSandbox and (depCoreStep.providedSandbox is not None):
                 sandbox = depCoreStep.providedSandbox
                 diffSandbox = CoreRef(depCoreStep.providedSandbox, [p.getName()], origDepDiffTools,
-                    origDepDiffSandbox)
+                    origDepDiffSandbox, origDepDiffInterpreters)
                 if dep.provideGlobal:
                     depSandbox = sandbox
                     depDiffSandbox = diffSandbox
                 if sandboxEnabled:
                     env.update(sandbox.environment)
                     if dep.provideGlobal: depEnv.update(sandbox.environment)
+            if dep.useInterpreters:
+                interpreters.update(depCoreStep.providedInterpreters)
+                diffInterpreters.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox,
+                                                     origDepDiffInterpreters))
+                    for n, d in depCoreStep.providedInterpreters.items() )
+                if dep.provideGlobal:
+                    depInterpreters.update(depCoreStep.providedInterpreters)
+                    depDiffInterpreters = depDiffInterpreters.copy()
+                    depDiffInterpreters.update( (n, CoreRef(d, [p.getName()], origDepDiffTools,
+                                                            origDepDiffSandbox, origDepDiffInterpreters))
+                        for n, d in depCoreStep.providedInterpreters.items() )
 
-            maybeProvideDeps.append((p.getName(), depRef, origDepDiffTools, origDepDiffSandbox))
+            maybeProvideDeps.append((p.getName(), depRef, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters))
 
         # check provided dependencies
         providedDeps = set()
@@ -2703,10 +2860,10 @@ class Recipe(object):
                 raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern.pattern))
             providedDeps |= l
 
-        for (name, depRef, origDepDiffTools, origDepDiffSandbox) in maybeProvideDeps:
+        for (name, depRef, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters) in maybeProvideDeps:
             if name in providedDeps:
                 provideDeps.append(depRef)
-                provideDeps.extend([CoreRef(d, [name], origDepDiffTools, origDepDiffSandbox)
+                provideDeps.extend([CoreRef(d, [name], origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
                     for d in depRef.refGetDestination().providedDeps])
 
         # Filter indirect packages and add to result list if necessary. Most
@@ -2845,11 +3002,11 @@ class Recipe(object):
         # touchedTools = tools.touchedKeys()
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
         p = CorePackage(self, toolsDetached, diffTools, sandbox, diffSandbox,
-                directPackages, indirectPackages, states, uidGen(), metaEnv,
-                packageName, isShared)
+                interpreters, diffInterpreters, directPackages, indirectPackages,
+                states, uidGen(), metaEnv, packageName, isShared)
 
         # optional checkout step
-        if self.__checkout != (None, None, None) or self.__checkoutSCMs or self.__checkoutAsserts:
+        if self.__checkout != (None, None, None, {}) or self.__checkoutSCMs or self.__checkoutAsserts:
             checkoutDigestEnv = env.prune(self.__checkoutVars)
             checkoutEnv = ( env.prune(self.__checkoutVars | self.__checkoutVarsWeak)
                 if self.__checkoutVarsWeak else checkoutDigestEnv )
@@ -2877,7 +3034,7 @@ class Recipe(object):
             srcCoreStep = p.createInvalidCoreCheckoutStep()
 
         # optional build step
-        if self.__build != (None, None, None):
+        if self.__build != (None, None, None, {}):
             buildDigestEnv = env.prune(self.__buildVars)
             buildEnv = ( env.prune(self.__buildVars | self.__buildVarsWeak)
                 if self.__buildVarsWeak else buildDigestEnv )
@@ -2913,6 +3070,11 @@ class Recipe(object):
             packageCoreStep.providedSandbox = CoreSandbox(packageCoreStep,
                 env, sandboxEnabled, self.__provideSandbox)
 
+        # provide interpreters
+        packageCoreStep.providedInterpreters = {
+            lang: CoreInterpreter(packageCoreStep, path)
+            for lang, path in self.__provideInterpreters.items() }
+
         if self.__shared:
             if not packageCoreStep.isDeterministic():
                 raise ParseError("Shared packages must be deterministic!")
@@ -2925,7 +3087,7 @@ class Recipe(object):
                 p = reusableCorePackage
             self.__corePackagesByMatch.insert(0, PackageMatcher(
                 reusableCorePackage, inputEnv, inputTools, inputStates,
-                inputSandbox, subTreePackages, packageName))
+                inputSandbox, subTreePackages, packageName, interpreters))
         elif packageCoreStep.getResultId() != reusedCorePackage.getCorePackageStep().getResultId():
             raise AssertionError("Wrong reusage for " + "/".join(stack.getNameStack()))
         else:
@@ -2991,6 +3153,10 @@ Every dependency must only be given once."""
         return self.__checkout[2] or ""
 
     @property
+    def checkoutIncludedFiles(self):
+        return self.__checkout[3]
+
+    @property
     def checkoutDeterministic(self):
         return self.__checkoutDeterministic
 
@@ -3019,6 +3185,10 @@ Every dependency must only be given once."""
         return self.__build[2]
 
     @property
+    def buildIncludedFiles(self):
+        return self.__build[3]
+
+    @property
     def buildVars(self):
         return self.__buildVars
 
@@ -3037,6 +3207,10 @@ Every dependency must only be given once."""
     @property
     def packageDigestScript(self):
         return self.__package[2]
+
+    @property
+    def packageIncludedFiles(self):
+        return self.__package[3]
 
     @property
     def packageVars(self):
@@ -3093,13 +3267,12 @@ class AliasPackage:
         self.__packageName = packageName
         self.__source = fileName
 
-    def prepare(self, env, sandboxEnabled, states, sandbox, tools, stack, packageName=None):
+    def prepare(self, env, sandboxEnabled, states, sandbox, tools, interpreters, stack, packageName=None):
         target = env.substitute(self.__target, "alias package")
         if packageName is None:
             packageName = self.__packageName
         return self.__recipeSet.getRecipe(target).prepare(env, sandboxEnabled, states, sandbox,
-                                                          tools, stack,
-                                                          packageName=packageName)
+                                                          tools, interpreters, stack, packageName)
 
     def getPackageName(self):
         return self.__packageName
@@ -3119,9 +3292,10 @@ class AliasPackage:
 
 class PackageMatcher:
     __slots__ = ( 'corePackage', 'env', 'tools', 'states', 'sandbox',
-                  'subTreePackages', 'packageName')
+                  'interpreters', 'subTreePackages', 'packageName')
 
-    def __init__(self, corePackage, env, tools, states, sandbox, subTreePackages, packageName):
+    def __init__(self, corePackage, env, tools, states, sandbox, subTreePackages, packageName,
+                 interpreters):
         self.corePackage = corePackage
         envData = env.inspect()
         self.env = { name : envData.get(name) for name in env.touchedKeys() }
@@ -3130,10 +3304,13 @@ class PackageMatcher:
             for (name, tool) in ( (n, toolsData.get(n)) for n in tools.touchedKeys() ) }
         self.states = { n : s.copy() for (n,s) in states.items() }
         self.sandbox = sandbox.resultId if sandbox is not None else None
+        self.interpreters = { lang : (interp.resultId if interp is not None else None)
+            for (lang, interp) in ( (l, interpreters.get(l)) for l in ScriptLanguage ) }
         self.subTreePackages = subTreePackages
         self.packageName = packageName
 
-    def matches(self, inputEnv, inputTools, inputStates, inputSandbox, packageName):
+    def matches(self, inputEnv, inputTools, inputStates, inputSandbox, packageName,
+                inputInterpreters):
         for (name, env) in self.env.items():
             if env != inputEnv.get(name): return False
         for (name, tool) in self.tools.items():
@@ -3142,6 +3319,10 @@ class PackageMatcher:
             if tool != match: return False
         match = inputSandbox.resultId if inputSandbox is not None else None
         if self.sandbox != match: return False
+        for (lang, interp) in self.interpreters.items():
+            match = inputInterpreters.get(lang)
+            match = match.resultId if match is not None else None
+            if interp != match: return False
         if self.states != inputStates: return False
         if self.packageName != packageName: return False
         return True
@@ -3405,9 +3586,11 @@ class RecipeSet:
             },
             error="Invalid policy specified! Are you using an appropriate version of Bob?"
         ),
+        schema.Optional('inheritAppend') : [str],
+        schema.Optional('inheritPrepend') : [str],
         schema.Optional('layers') : [LayerValidator()],
         schema.Optional('scriptLanguage',
-                        default=ScriptLanguage.BASH) : schema.And(schema.Or("bash", "PowerShell"),
+                        default=ScriptLanguage.BASH) : schema.And(schema.Or("bash", "PowerShell", "python"),
                                                                   schema.Use(ScriptLanguage)),
     }
 
@@ -3508,6 +3691,8 @@ class RecipeSet:
         self.__scmDefaults = {}
         self.__preMirrors = []
         self.__fallbackMirrors = []
+        self.__inheritAppend = []
+        self.__inheritPrepend = []
 
         def appendArchive(x): self.__archive.extend(x)
         def prependArchive(x): self.__archive[0:0] = x
@@ -4139,6 +4324,12 @@ class RecipeSet:
         # project user config(s)
         self.__parseUserConfig(os.path.join(rootDir, "default.yaml"))
 
+        # For "inherit", classes are named from lowest to highest precedence.
+        # Thus, gather inheritPrepend/inheritAppend after parsing lower layers
+        # so that higher layers (higher precedence) come last.
+        self.__inheritPrepend.extend(config.get("inheritPrepend", []))
+        self.__inheritAppend.extend(config.get("inheritAppend", []))
+
         # color mode provided in cmd line takes precedence
         # (if no color mode provided by user, default one will be used)
         setColorMode(self._colorModeConfig or self.__uiConfig.get('color', 'auto'))
@@ -4168,7 +4359,7 @@ class RecipeSet:
         recipeFilterSchema = schema.Regex(r'^!?[][0-9A-Za-z_.+:*?-]+$')
         toolNameSchema = schema.Regex(r'^[0-9A-Za-z_.+:-]+$')
 
-        useClauses = ['deps', 'environment', 'result', 'tools', 'sandbox']
+        useClauses = ['deps', 'environment', 'result', 'tools', 'sandbox', 'interpreters']
         useClauses.extend(self.__states.keys())
 
         # construct recursive depends clause
@@ -4195,31 +4386,40 @@ class RecipeSet:
             schema.Optional('checkoutFinalize') : str,
             schema.Optional('checkoutFinalizeBash') : str,
             schema.Optional('checkoutFinalizePwsh') : str,
+            schema.Optional('checkoutFinalizePython') : str,
             schema.Optional('checkoutScript') : str,
             schema.Optional('checkoutScriptBash') : str,
             schema.Optional('checkoutScriptPwsh') : str,
+            schema.Optional('checkoutScriptPython') : str,
             schema.Optional('checkoutSetup') : str,
             schema.Optional('checkoutSetupBash') : str,
             schema.Optional('checkoutSetupPwsh') : str,
+            schema.Optional('checkoutSetupPython') : str,
             schema.Optional('checkoutUpdateIf', default=False) : schema.Or(None, str, bool, IfExpression),
             schema.Optional('buildFinalize') : str,
             schema.Optional('buildFinalizeBash') : str,
             schema.Optional('buildFinalizePwsh') : str,
+            schema.Optional('buildFinalizePython') : str,
             schema.Optional('buildScript') : str,
             schema.Optional('buildScriptBash') : str,
             schema.Optional('buildScriptPwsh') : str,
+            schema.Optional('buildScriptPython') : str,
             schema.Optional('buildSetup') : str,
             schema.Optional('buildSetupBash') : str,
             schema.Optional('buildSetupPwsh') : str,
+            schema.Optional('buildSetupPython') : str,
             schema.Optional('packageFinalize') : str,
             schema.Optional('packageFinalizeBash') : str,
             schema.Optional('packageFinalizePwsh') : str,
+            schema.Optional('packageFinalizePython') : str,
             schema.Optional('packageScript') : str,
             schema.Optional('packageScriptBash') : str,
             schema.Optional('packageScriptPwsh') : str,
+            schema.Optional('packageScriptPython') : str,
             schema.Optional('packageSetup') : str,
             schema.Optional('packageSetupBash') : str,
             schema.Optional('packageSetupPwsh') : str,
+            schema.Optional('packageSetupPython') : str,
             schema.Optional('checkoutTools') : [ ToolValidator(toolNameSchema) ],
             schema.Optional('buildTools') : [ ToolValidator(toolNameSchema) ],
             schema.Optional('packageTools') : [ ToolValidator(toolNameSchema) ],
@@ -4252,6 +4452,7 @@ class RecipeSet:
                         schema.Optional('fingerprintScript', default="") : str,
                         schema.Optional('fingerprintScriptBash') : str,
                         schema.Optional('fingerprintScriptPwsh') : str,
+                        schema.Optional('fingerprintScriptPython') : str,
                         schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
                         schema.Optional('fingerprintVars') : [ varNameUseSchema ],
                         schema.Optional('dependTools') : [ ToolValidator(varNameUseSchema) ],
@@ -4260,6 +4461,10 @@ class RecipeSet:
                 )
             }),
             schema.Optional('provideVars') : VarDefineValidator("provideVars"),
+            schema.Optional('provideInterpreters') : schema.And(
+                schema.Schema({ schema.Optional(l.value) : str for l in ScriptLanguage }),
+                schema.Use(lambda d: { ScriptLanguage(l) : v for l, v in d.items() })
+            ),
             schema.Optional('provideSandbox') : schema.Schema({
                 'paths' : [str],
                 schema.Optional('mount') : schema.Schema([ MountValidator() ],
@@ -4275,9 +4480,10 @@ class RecipeSet:
             schema.Optional('fingerprintScript', default="") : str,
             schema.Optional('fingerprintScriptBash') : str,
             schema.Optional('fingerprintScriptPwsh') : str,
+            schema.Optional('fingerprintScriptPython') : str,
             schema.Optional('fingerprintIf') : schema.Or(None, str, bool, IfExpression),
             schema.Optional('fingerprintVars') : [ varNameUseSchema ],
-            schema.Optional('scriptLanguage') : schema.And(schema.Or("bash", "PowerShell"),
+            schema.Optional('scriptLanguage') : schema.And(schema.Or("bash", "PowerShell", "python"),
                                                            schema.Use(ScriptLanguage)),
             schema.Optional('jobServer') : schema.Or(bool, "pipe", "fifo", "fifo-or-pipe"),
             schema.Optional('packageDepends') : bool,
@@ -4309,6 +4515,12 @@ class RecipeSet:
         self.__userConfigSchema = (schema.Schema(userConfigSchemaSpec), self.__pluginSettingsDeps)
 
 
+    def getInheritAppend(self):
+        return self.__inheritAppend
+
+    def getInheritPrepend(self):
+        return self.__inheritPrepend
+
     def getRecipes(self):
         return self.__recipes.keys()
 
@@ -4336,7 +4548,7 @@ class RecipeSet:
                 if cacheKey == persistedCacheKey:
                     tmp = PackageUnpickler(f, self.getRecipe, self.__plugins,
                                            pathsConfig).load()
-                    return tmp.refDeref([], {}, None, pathsConfig)
+                    return tmp.refDeref([], {}, None, {}, pathsConfig)
         except FileNotFoundError:
             pass
         except Exception as e:
@@ -4356,7 +4568,7 @@ class RecipeSet:
         except OSError as e:
             Warn("Could not save package cache: " + str(e)).show(cacheName)
 
-        return result.refDeref([], {}, None, pathsConfig)
+        return result.refDeref([], {}, None, {}, pathsConfig)
 
     def generatePackages(self, nameFormatter, sandboxEnabled=False, stablePaths=None):
         """Generate package set.

@@ -1,0 +1,20 @@
+packageVars: [BOB_HOST_PLATFORM]
+packageScript: |
+    if [[ $BOB_HOST_PLATFORM == win32 ]] ; then
+        cat >pwsh.cmd <<EOF
+    @ECHO OFF
+    SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
+    set CANARY=interposer
+    "$(cygpath -w "$(which powershell)")" %*
+    EOF
+    else
+        cat >pwsh.cmd <<EOF
+    #!/bin/bash
+    export CANARY=interposer
+    "$(which pwsh)" "\$@"
+    EOF
+        chmod a+x pwsh.cmd
+    fi
+
+provideInterpreters:
+    PowerShell: pwsh.cmd

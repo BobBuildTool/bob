@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import asyncio
+import base64
 import hashlib
 import os.path
 import struct
@@ -44,6 +44,10 @@ class AbstractIR(ABC):
         return tool
 
     @abstractmethod
+    def mungeInterpreter(self, interp):
+        return interp
+
+    @abstractmethod
     def mungeRecipeSet(self, recipeSet):
         return recipeSet
 
@@ -70,6 +74,7 @@ class StepIR(AbstractIR):
             self.__data['isFingerprinted'] = step._isFingerprinted()
             self.__data['digestScript'] = step.getDigestScript()
             self.__data['tools'] = { name : graph.addTool(tool) for name, tool in step.getTools().items() }
+            self.__data['interpreter'] = graph.addInterpreter(step.getInterpreter())
             self.__data['arguments'] = [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getArguments() ]
             self.__data['allDepSteps'] = [ graph.addStep(a, a.getPackage() != step.getPackage()) for a in step.getAllDepSteps() ]
             self.__data['env'] = step.getEnv()
@@ -97,6 +102,12 @@ class StepIR(AbstractIR):
             self.__data['toolKeysWeak'] = sorted(step._coreStep.toolDepWeak)
             self.__data['digestEnv'] = step._coreStep.digestEnv
             self.__data['auditFileNames'] = step.getAuditFileNames()
+            # For Jenkins backends the files must be converted to a string.
+            # Binary data cannot be serialized as JSON.
+            self.__data['includedFiles'] = {
+                k : base64.a85encode(v).decode('ascii')
+                for k, v in step.getIncludedFiles().items()
+            } if self.JENKINS else step.getIncludedFiles()
 
         return self
 
@@ -209,6 +220,9 @@ class StepIR(AbstractIR):
 
     def getTools(self):
         return { name : self.mungeTool(tool) for name, tool in self.__data['tools'].items() }
+
+    def getInterpreter(self):
+        return self.mungeInterpreter(self.__data['interpreter'])
 
     def getArguments(self):
         return [ self.mungeStep(arg) for arg in self.__data['arguments'] ]
@@ -397,6 +411,12 @@ class StepIR(AbstractIR):
     def getAuditFileNames(self):
         return self.__data['auditFileNames']
 
+    def getIncludedFiles(self):
+        ret = self.__data['includedFiles']
+        if self.JENKINS:
+            ret = { k : base64.a85decode(v) for k, v in ret.items() }
+        return ret
+
 
 class PackageIR(AbstractIR):
 
@@ -511,6 +531,30 @@ class ToolIR(AbstractIR):
 
     def getLibs(self):
         return self.__data['libs']
+
+class InterpreterIR(AbstractIR):
+    @classmethod
+    def fromInterpreter(cls, interpreter, graph):
+        self = cls()
+        self.__data = {}
+        self.__data['step'] = graph.addStep(interpreter.getStep(), True)
+        self.__data['path'] = interpreter.getPath()
+        return self
+
+    @classmethod
+    def fromData(cls, data):
+        self = cls()
+        self.__data = data
+        return self
+
+    def toData(self):
+        return self.__data
+
+    def getStep(self):
+        return self.mungeStep(self.__data['step'])
+
+    def getPath(self):
+        return self.__data['path']
 
 class RecipeIR(AbstractIR):
     @classmethod

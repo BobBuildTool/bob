@@ -712,7 +712,10 @@ static void ExecCommand(char *const *argv) {
   umask(022);
 
   // Does not return unless something went wrong.
-  CHECK_CALL(execvp(argv[0], argv));
+  if (execvp(argv[0], argv) < 0) {
+    fprintf(stderr, "bob-namespace-sandbox: %s: %s\n", argv[0], strerror(errno)); \
+    exit(EXIT_FAILURE);
+  }
 }
 
 int main(int argc, char *const argv[]) {

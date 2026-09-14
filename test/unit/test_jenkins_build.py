@@ -194,6 +194,48 @@ class JenkinsCleanIncremental(JenkinsTests, TestCase):
                 self.assertEqual(f.read(), "2\n")
 
 
+class JenkinsProvideInterpreters(JenkinsTests, TestCase):
+    """Verify that provideInterpreters is honored by Jenkins builds"""
+
+    def testInterpreterUsed(self):
+        """Consumer script is run with the interpreter provided by its dependency"""
+        self.writeRecipe("interp", """\
+            packageVars: [BOB_HOST_PLATFORM]
+            packageScript: |
+                if [[ $BOB_HOST_PLATFORM == win32 ]] ; then
+                    cat >bash.cmd <<EOF
+                @ECHO OFF
+                SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
+                set CANARY=interposer
+                "$(cygpath -w "$(which bash)")" %*
+                EOF
+                else
+                    cat >bash.cmd <<EOF
+                #!/bin/bash
+                export CANARY=interposer
+                "$(which bash)" "\\$@"
+                EOF
+                    chmod a+x bash.cmd
+                fi
+            provideInterpreters:
+                bash: bash.cmd
+            """)
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: interp
+                  use: [interpreters]
+            packageScript: |
+                echo "$CANARY" > result.txt
+            """)
+
+        self.executeBobJenkinsCmd("push test")
+        self.jenkinsMock.run()
+        with self.getJobResult("root") as d:
+            with open(os.path.join(d, "result.txt")) as f:
+                self.assertEqual(f.read(), "interposer\n")
+
+
 class JenkinsAuditExtra(JenkinsTests, TestCase):
 
     def testAuditMeta(self):

@@ -151,6 +151,13 @@ Sandbox
     ``use`` attribute of a dependency, the normal host executables are used.
     Sandboxed builds are described in a separate section below.
 
+Interpreters
+    The interpreters override the executable used to run scripts of a
+    particular language. Initially, the system default is used (e.g. the
+    ``bash`` found in ``$PATH``). Interpreters are defined by
+    ``provideInterpreters`` and must be explicitly imported by downstream
+    recipes by listing ``interpreters`` in the ``use`` attribute.
+
 All of this information is carried as local state when traversing the
 dependency tree. Each recipe gets a local copy that is propagated upstream.
 Any updates to downstream recipes must be done by explicitly offering the
@@ -195,9 +202,9 @@ Script languages
 
 Bob itself is written in the Python scripting language but actually independent
 of the scripting language that is used during step execution (see above).
-Currently Bob supports two scripting languages: bash and PowerShell. Classes
-and recipes may define their scripts in one or both scripting languages. The
-actually used language at build time is determined by the
+Currently Bob supports three scripting languages: bash, PowerShell and Python.
+Classes and recipes may define their scripts in one or more of these scripting
+languages. The actually used language at build time is determined by the
 :ref:`configuration-recipes-scriptLanguage` key or, if nothing was specified,
 by the project :ref:`configuration-config-scriptLanguage` setting. The other
 language scripts are ignored.
@@ -319,10 +326,11 @@ the following things must be provided by the sandbox image:
 * There must *not* be a ``home`` directory. Bob creates this directory on
   demand and will fail if it already exists.
 * There must *not* be a ``tmp`` directory for the same reason.
-* The interpreter of the used script language must be available (``bash`` or
-  ``pwsh``) and it must be in ``$PATH``. When using bash (the default) at
-  least version 4 must be installed. Bob uses associative arrays that are not
-  available in earlier versions.
+* The interpreter of the used script language must be available (``bash``,
+  ``pwsh`` or ``python``), which it must be in ``$PATH``, unless the
+  interpreter was provided by ``provideInterpreters`` from an upstream recipe.
+  When using bash (the default) at least version 4 must be installed. Bob uses
+  associative arrays that are not available in earlier versions.
 
 .. _configuration-principle-subst:
 
@@ -545,8 +553,8 @@ are configured consistent between package variants.
 
 .. _configuration-recipes-scripts:
 
-{checkout,build,package}Script[{Bash,Pwsh}]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{checkout,build,package}Script[{Bash,Pwsh,Python}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Type: String
 
@@ -562,7 +570,8 @@ symbol on the end of the first line)::
 The suffix of the keyword determines the language of the script. Using the
 ``Bash`` suffix (e.g.  ``buildScriptBash``) defines a script that is
 interpreted with ``bash``. Likewise, the ``Pwsh`` suffix (e.g.
-``buildScriptPwsh``) defines a PowerShell script. Which language is used at
+``buildScriptPwsh``) defines a PowerShell script and the ``Python`` suffix
+(e.g.  ``buildScriptPython``) defines a Python script. Which language is used at
 build time is determined by the :ref:`configuration-recipes-scriptLanguage` key
 or, if nothing was specified, by the project
 :ref:`configuration-config-scriptLanguage` setting. A keyword without a suffix
@@ -642,6 +651,10 @@ scripts they are associative arrays. See
 `Bash Arrays <https://www.gnu.org/savannah-checkouts/gnu/bash/manual/bash.html#Arrays>`_
 for more information. In PowerShell scripts they are defined as
 `Hash Tables <https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_hash_tables>`_.
+In Python scripts they are provided as ordinary ``dict`` global variables
+(e.g. ``BOB_DEP_PATHS["libfoo-dev"]``). Likewise, the environment variables
+are available through the ``os.environ`` mapping instead of ``$BOB_CWD`` resp.
+``%BOB_CWD%``.
 
 For PowerShell scripts a utility function called ``Check-Command`` is
 available. It has two arguments: the first one (``ScriptBlock``) expects a
@@ -660,10 +673,21 @@ external command fails. Make sure to wrap calls to external tools with
 ``Check-Command`` or check ``$lastexitcode`` yourself. Otherwise the build will
 not detect errors involving external commands!
 
+Python scripts are run by a plain interpreter that is started with the ``-sS``
+options. This ignores the user site directory and does not import the ``site``
+module so that as little host state as possible leaks into the build. Any
+additional modules that are needed must therefore be provided by the recipes
+(e.g. through a tool). The ``os``, ``os.path`` and ``sys`` modules are imported
+automatically. As with the other languages, external commands are not checked
+implicitly. Use e.g. ``subprocess.run(..., check=True)`` or raise an exception
+yourself so that a failing command actually fails the build. Outside of a
+sandbox the same interpreter that runs Bob is used. Inside a sandbox a
+``python`` executable must be available in ``$PATH``.
+
 .. _configuration-recipes-setup:
 
-{checkout,build,package}Setup[{Bash,Pwsh}]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{checkout,build,package}Setup[{Bash,Pwsh,Python}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Type: String
 
@@ -684,8 +708,8 @@ Other than the above differences setup scripts are identical to
 
 .. _configuration-recipes-finalize:
 
-{checkout,build,package}Finalize[{Bash,Pwsh}]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{checkout,build,package}Finalize[{Bash,Pwsh,Python}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Type: String
 
@@ -1445,6 +1469,9 @@ The following settings are supported:
 |             |                 | * ``result``: build result of the recipe.           |
 |             |                 | * ``tools``: declared build tools of the recipe.    |
 |             |                 | * ``sandbox``:  declared sandbox of the recipe.     |
+|             |                 | * ``interpreters``: declared script interpreters of |
+|             |                 |   the recipe. (see                                  |
+|             |                 |   :ref:`configuration-recipes-provideInterpreters`) |
 |             |                 |                                                     |
 |             |                 | Default: Use the result and dependencies            |
 |             |                 | (``[deps, result]``).                               |
@@ -1456,11 +1483,11 @@ The following settings are supported:
 |             |                 | Defaults to false. Only relevant if ``result`` is   |
 |             |                 | included in these ``use`` list.                     |
 +-------------+-----------------+-----------------------------------------------------+
-| forward     | Boolean         | If true, the imported environment, tools and        |
-|             |                 | sandbox will be forwarded to the dependencies       |
-|             |                 | following this one. Otherwise these variables,      |
-|             |                 | tools and/or sandbox will only be accessible in the |
-|             |                 | current recipe.                                     |
+| forward     | Boolean         | If true, the imported environment, tools, sandbox   |
+|             |                 | and interpreters will be forwarded to the           |
+|             |                 | dependencies following this one. Otherwise these    |
+|             |                 | variables, tools, sandbox and/or interpreters will  |
+|             |                 | only be accessible in the current recipe.           |
 |             |                 |                                                     |
 |             |                 | Default: False.                                     |
 +-------------+-----------------+-----------------------------------------------------+
@@ -1609,8 +1636,8 @@ Removed in version 0.25.
 
 .. _configuration-recipes-fingerprintScript:
 
-fingerprintScript[{Bash,Pwsh}]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+fingerprintScript[{Bash,Pwsh,Python}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Type: String
 
@@ -1648,8 +1675,10 @@ scripts of inherited classes are concatenated (but only if their
 The suffix of the keyword determines the language of the script. Using the
 ``Bash`` suffix (``fingerprintScriptBash``) defines a script that is
 interpreted with ``bash``.  Likewise, the ``Pwsh`` suffix
-(``fingerprintScriptPwsh``) defines a PowerShell script. Which language is used at
-build time is determined by the :ref:`configuration-recipes-scriptLanguage` key
+(``fingerprintScriptPwsh``) defines a PowerShell script and the ``Python``
+suffix (``fingerprintScriptPython``) defines a Python script. Which language is
+used at build time is determined by the
+:ref:`configuration-recipes-scriptLanguage` key
 or, if nothing was specified, by the project
 :ref:`configuration-config-scriptLanguage` setting. The keyword without a suffix
 (``fingerprintScript``) is interpreted in whatever language is finally used at
@@ -2166,6 +2195,63 @@ The user might amend the mount and search paths in ``default.yaml`` by a
 :ref:`configuration-config-sandbox` entry. The user identity can be overridden
 too.
 
+.. _configuration-recipes-provideInterpreters:
+
+provideInterpreters
+~~~~~~~~~~~~~~~~~~~
+
+Type: Dictionary (String -> Path)
+
+The ``provideInterpreters`` keyword offers script interpreters from the
+current recipe's package result to downstream recipes. The dictionary maps
+a script language name to the relative path of the interpreter executable
+within the package result. The downstream recipe must define ``interpreters``
+in the ``use`` attribute of this dependency to pick it up.
+
+The following language names are recognised:
+
+* ``bash``: Interpreter used for Bash scripts (``buildScript``,
+  ``packageScript``, etc.)
+* ``PowerShell``: Interpreter used for PowerShell scripts.
+* ``python``: Interpreter used for Python scripts.
+
+Example::
+
+    provideInterpreters:
+        bash: bin/bash
+
+This declares that the package result provides a ``bash`` interpreter at
+``bin/bash`` relative to the package root. A downstream recipe can consume
+it as follows::
+
+    depends:
+        - name: my-bash
+          use: [interpreters]
+
+After this, all Bash scripts of the downstream recipe will be executed with
+the provided interpreter instead of the system's default. If the ``forward``
+attribute is additionally set to ``True``, the interpreter is also propagated
+to the dependencies following this one::
+
+    depends:
+        - name: my-bash
+          use: [interpreters]
+          forward: True
+        - name: my-package   # also uses the interpreter from my-bash
+
+Multiple interpreters for different languages can be provided at once::
+
+    provideInterpreters:
+        bash: bin/bash
+        python: bin/python3
+
+.. note::
+    Like the sandbox, the interpreter is considered an invariant of the build.
+    Bob assumes that the consuming recipe will produce the same result
+    regardless of whether the interpreter is provided or the system default is
+    used. Make sure that the provided interpreter is compatible with the
+    scripts in the consuming recipe.
+
 .. _configuration-recipes-relocatable:
 
 relocatable
@@ -2200,14 +2286,15 @@ boolean according to the rules explained in
 scriptLanguage
 ~~~~~~~~~~~~~~
 
-Type: Enumeration: ``bash``, ``PowerShell``.
+Type: Enumeration: ``bash``, ``PowerShell``, ``python``.
 
 Defines the scripting language which is used to run the
 ``{checkout,build,package,fingerprint}Script`` scripts when building the
 package. If nothing is specified the :ref:`configuration-config-scriptLanguage`
 setting from config.yaml is used. Depending on the chosen language Bob will
-either invoke ``bash`` or ``pwsh``/``powershell`` as script interpreter. In
-either case the command must be present in ``$PATH``/``%PATH%``.
+either invoke ``bash``, ``pwsh``/``powershell`` or ``python`` as script
+interpreter. In either case the command must be present in
+``$PATH``/``%PATH%``.
 
 .. _configuration-recipes-shared:
 
@@ -2305,6 +2392,50 @@ equal.
 
 .. _Semantic Versioning: http://semver.org/
 .. _PEP 440: https://www.python.org/dev/peps/pep-0440/
+
+.. _configuration-config-inheritAppend:
+
+inheritAppend
+~~~~~~~~~~~~~
+
+Type: List of Strings
+
+Defines a list of classes that are automatically appended to the ``inherit``
+list of every recipe in the project. This has the same effect as if every
+recipe had these classes at the end of their own ``inherit`` list::
+
+    inheritAppend: [defaults-variables]
+
+If multiple layers each specify ``inheritAppend``, the lists are accumulated.
+Sub-layers are accumulated first, so the root project's ``inheritAppend``
+entries appear last in the combined list. Effectively, this gives higher layers
+a higher precedence.
+
+See also :ref:`configuration-config-inheritPrepend`.
+
+.. _configuration-config-inheritPrepend:
+
+inheritPrepend
+~~~~~~~~~~~~~~
+
+Type: List of Strings
+
+Defines a list of classes that are automatically prepended to the ``inherit``
+list of every recipe in the project. This has the same effect as if every
+recipe had these classes at the beginning of their own ``inherit`` list::
+
+    inheritPrepend: [common-functions]
+
+A typical use case is a base class that provides common defaults (e.g. compiler
+settings, environment variables) that all recipes should start from, but which
+can be overridden by an explicit ``inherit`` in a recipe.
+
+If multiple layers each specify ``inheritPrepend``, the lists are accumulated.
+Sub-layers are accumulated first, so the root project's ``inheritPrepend``
+entries appear last in the combined list. Effectively, this gives higher layers
+a higher precedence.
+
+See also :ref:`configuration-config-inheritAppend`.
 
 .. _configuration-config-layers:
 
@@ -2454,14 +2585,14 @@ This will explicitly request old behaviour for the ``defaultFileMode`` policy.
 scriptLanguage
 ~~~~~~~~~~~~~~
 
-Type: Enumeration: ``bash``, ``PowerShell``.
+Type: Enumeration: ``bash``, ``PowerShell``, ``python``.
 
 Defines the scripting language which is used to run the
 ``{checkout,build,package,fingerprint}Script`` scripts. Defaults to ``bash``.
 Might be overrided on a case-by-case basis in a class or recipe with
 :ref:`configuration-recipes-scriptLanguage`.  Depending on the chosen language
-Bob will either invoke ``bash`` or ``pwsh``/``powershell`` as script
-interpreter. In either case the command must be present in
+Bob will either invoke ``bash``, ``pwsh``/``powershell`` or ``python`` as
+script interpreter. In either case the command must be present in
 ``$PATH``/``%PATH%``.
 
 .. important::

@@ -233,7 +233,7 @@ class RecipeCommon:
         ret = Recipe(recipeSet, self.applyRecipeDefaults(recipe), "", name+".yaml",
                      cwd, name, name, {})
         ret.resolveClasses(env)
-        return ret.prepare(env, False, {})[0].refDeref([], {}, None, None)
+        return ret.prepare(env, False, {})[0].refDeref([], {}, None, {}, None)
 
 
 class TestRelocatable(RecipeCommon, TestCase):

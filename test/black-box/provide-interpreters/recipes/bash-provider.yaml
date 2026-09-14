@@ -1,0 +1,20 @@
+packageVars: [BOB_HOST_PLATFORM]
+packageScript: |
+    if [[ $BOB_HOST_PLATFORM == win32 ]] ; then
+        cat >bash.cmd <<EOF
+    @ECHO OFF
+    SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
+    set CANARY=interposer
+    "$(cygpath -w "$(which bash)")" %*
+    EOF
+    else
+        cat >bash.cmd <<EOF
+    #!/bin/bash
+    export CANARY=interposer
+    "$(which bash)" "\$@"
+    EOF
+        chmod a+x bash.cmd
+    fi
+
+provideInterpreters:
+    bash: bash.cmd

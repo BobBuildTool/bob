@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from bob.intermediate import StepIR, PackageIR, RecipeIR, ToolIR, SandboxIR, \
-    RecipeSetIR
+    RecipeSetIR, InterpreterIR
 
 class MockIR:
     @staticmethod
@@ -18,6 +18,10 @@ class MockIR:
     @staticmethod
     def addTool(tool):
         return tool
+
+    @staticmethod
+    def addInterpreter(interp):
+        return interp
 
     @staticmethod
     def addPackage(package, partial):
@@ -49,6 +53,9 @@ class MockIRs:
     def mungeTool(self, tool):
         return MockIRTool.fromTool(tool, MockIR)
 
+    def mungeInterpreter(self, interpreter):
+        return interpreter and MockIRInterpreter.fromInterpreter(interpreter, MockIR)
+
     def mungeRecipeSet(self, recipeSet):
         return MockIRRecipeSet.fromRecipeSet(recipeSet)
 
@@ -68,4 +75,7 @@ class MockIRTool(MockIRs, ToolIR):
     pass
 
 class MockIRSandbox(MockIRs, SandboxIR):
+    pass
+
+class MockIRInterpreter(MockIRs, InterpreterIR):
     pass
