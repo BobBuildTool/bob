@@ -248,12 +248,22 @@ class WebDav:
                 # exclude base path
                 if href.strip('/') == request_path.strip('/'):
                     continue
-                dir_info = dict()
+                # collect stat infos
+                stats = dict()
+                stats['mdate'] = resp.find(".//{DAV:}getlastmodified")
+                if stats['mdate'] is not None:
+                    stats['mdate'] = stats['mdate'].text
+                stats['len'] = resp.find(".//{DAV:}getcontentlength")
+                if stats['len'] is not None:
+                    stats['len'] = int(stats['len'].text)
+                stats['etag'] = resp.find(".//{DAV:}getetag")
+                if stats['etag'] is not None:
+                    stats['etag'] = stats['etag'].text
                 # collect if it is a dir, the href and self defined path (href without base path)
-                dir_info['is_dir'] = resp.find(".//{DAV:}collection") is not None
-                dir_info['href'] = href
-                dir_info['path'] = href[len(base_path):].strip('/')
-                dir_infos.append(dir_info)
+                stats['is_dir'] = resp.find(".//{DAV:}collection") is not None
+                stats['href'] = href
+                stats['path'] = href[len(base_path):].strip('/')
+                dir_infos.append(stats)
         return dir_infos
 
     def delete(self, path):
@@ -275,43 +285,3 @@ class WebDav:
             raise WebdavError(str(e))
         if status not in [200, 204, 404]:
             raise WebdavError("DELETE {} {}".format(status, reason))
-
-    def stat(self, file):
-        return self.__retry(lambda: self.__stat(file))
-
-    def __stat(self, filepath):
-        if self.exists(filepath):
-            headers = self._getHeaders()
-            # Depth: 0 - applies to the resource itself
-            headers.update({'Depth': '0'})
-
-            req = urllib.request.Request(self.getRequestURL(filepath),
-                                         headers=headers, method="PROPFIND")
-            content = None
-            try:
-                with urllib.request.urlopen (req) as response:
-                    if response.status not in [207]:
-                        raise WebdavError("PROPFIND {} {}".format(response.status, response.reason))
-                    # get response
-                    content = response.read()
-            except urllib.error.HTTPError as e:
-                e.fp.read()
-                raise WebdavError("PROPFIND {} {}".format(e.status, e.reason))
-            except (http.client.HTTPException, OSError) as e:
-                raise WebdavError(str(e))
-
-            # parse tree from content
-            tree = fromstring(content)
-            # get response tag tree
-            resp = tree.find(".//{DAV:}response")
-            stats = dict()
-            stats['mdate'] = resp.find(".//{DAV:}getlastmodified")
-            if stats['mdate'] is not None:
-                stats['mdate'] = stats['mdate'].text
-            stats['len'] = resp.find(".//{DAV:}getcontentlength")
-            if stats['len'] is not None:
-                stats['len'] = int(stats['len'].text)
-            stats['etag'] = resp.find(".//{DAV:}getetag")
-            if stats['etag'] is not None:
-                stats['etag'] = stats['etag'].text
-            return stats

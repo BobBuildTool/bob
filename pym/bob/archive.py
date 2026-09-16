@@ -639,15 +639,6 @@ class BaseArchive(TarHelper):
     def _list(self, callback, suffix):
         raise BobError("listPackages() not implemented")
 
-    def statPackage(self, buildId):
-        try:
-            return self._stat(buildId, ARTIFACT_SUFFIX)
-        except (ArtifactError, WebdavError, OSError) as e:
-            raise BobError(self._namedErrorString("Could not stat file: " + str(e)))
-
-    def _stat(self, buildId, suffix):
-        raise BobError("statPackage() not implemented")
-
     def getAudit(self, buildId):
         try:
             return self._getAudit(buildId)
@@ -814,12 +805,9 @@ class LocalArchive(BaseArchive):
                 if not dirSchema.fullmatch(l2): continue
                 for l3 in os.listdir(os.path.join(self.__basePath, l1, l2)):
                     if archiveSchema.fullmatch(l3):
+                        path = os.path.join(l1, l2, l3)
                         callback(bytes.fromhex(l1 + l2 + l3.partition("-")[0]),
-                                 os.path.join(l1, l2, l3))
-
-    def _stat(self, buildId, suffix):
-        path = os.path.join(self.__basePath, self._getPath(buildId, suffix)[1])
-        return binStat(path)
+                                 path, binStat(os.path.join(self.__basePath, path)))
 
     def _getAudit(self, buildId):
         path = os.path.join(self.__basePath, self._getPath(buildId, ARTIFACT_SUFFIX)[1])
@@ -959,36 +947,36 @@ class HttpArchive(BaseArchive):
     def _list(self, callback, suffix):
         dirSchema = re.compile(r'[0-9a-zA-Z]{2}')
         archiveSchema = re.compile(r'[0-9a-zA-Z]{36,}' + ARCHIVE_GENERATION + suffix)
-        for l1 in self.__listDir(""):
+        for l1, _ in self.__listDir(""):
             if not dirSchema.fullmatch(l1): continue
-            for l2 in self.__listDir(l1):
+            for l2, _ in self.__listDir(l1):
                 if not dirSchema.fullmatch(l2): continue
-                for l3 in self.__listDir(l1 + "/" + l2):
+                for l3, info in self.__listDir(l1 + "/" + l2):
                     if archiveSchema.fullmatch(l3):
+                        path = l1 + "/" + l2 + "/" + l3
                         callback(bytes.fromhex(l1 + l2 + l3.partition("-")[0]),
-                                 l1 + "/" + l2 + "/" + l3)
+                                 path, self.__statFromProps(info, path))
 
     def __listDir(self, path):
         path_info = self._webdav.listdir(path)
         entries = []
         for info in path_info:
             if info["path"]:
-                entries.append(info["path"].removeprefix(path + "/"))
+                entries.append((info["path"].removeprefix(path + "/"), info))
         return entries
+
+    @staticmethod
+    def __statFromProps(props, filename):
+        if props['etag'] is not None and not props['etag'].startswith('W/'):
+            return props['etag']
+        if not props['mdate'] or not props['len']:
+            raise ArtifactError("Missing stats for file " + filename)
+        from email.utils import parsedate_to_datetime
+        return struct.pack('=dL', parsedate_to_datetime(props['mdate']).timestamp(), props['len'])
 
     def _delete(self, buildId, suffix):
         filename = self._makePath(buildId, suffix)
         self._webdav.delete(filename)
-
-    def _stat(self, buildId, suffix):
-        filename = self._makePath(buildId, suffix)
-        stats = self._webdav.stat(filename)
-        if stats['etag'] is not None and not stats['etag'].startswith('W/'):
-            return stats['etag']
-        if not stats['mdate'] or not stats['len']:
-            raise ArtifactError("Missing stats for file " + filename)
-        from email.utils import parsedate_to_datetime
-        return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
 
     def _getAudit(self, buildId):
         filename = self._makePath(buildId, ARTIFACT_SUFFIX)
@@ -1387,25 +1375,18 @@ class GiteaArchive(BaseArchive):
         def foundVersion(version):
             if not versionSchema.fullmatch(version):
                 return
-            for name in self.__versionFiles(version).keys():
-                if archiveSchema.fullmatch(name):
-                    callback(bytes.fromhex(version.partition("-")[0]),
-                             self.__packagePath(version, name))
+            for name, info in self.__versionFiles(version).items():
+                if not archiveSchema.fullmatch(name):
+                    continue
+                path = self.__packagePath(version, name)
+                # Unlike the other backends we get a real content hash
+                # instead of a modification time.
+                stat = info.get("sha256")
+                if not stat:
+                    raise ArtifactError("Missing stats for file " + path)
+                callback(bytes.fromhex(version.partition("-")[0]), path, stat)
 
         self.__allVersions(foundVersion)
-
-    def _stat(self, buildId, suffix):
-        version = buildIdToName(buildId)
-        name = version + suffix
-        info = self.__versionFiles(version).get(name)
-        if info is None:
-            raise ArtifactNotFoundError()
-        # Unlike the other backends we get a real content hash instead of a
-        # modification time.
-        stat = info.get("sha256")
-        if not stat:
-            raise ArtifactError("Missing stats for file " + filename)
-        return stat
 
     def _getAudit(self, buildId):
         path = self._makePath(buildId, ARTIFACT_SUFFIX)

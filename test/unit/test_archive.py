@@ -792,26 +792,19 @@ class TestHttpArchiveRetries(Base, TestCase):
         self._testRetries(5)
 
     def testRetriesList(self):
+        """Listing also provides the stat of each found package."""
         self.spec['retries'] = 1
         with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
             found = []
-            archive._list(lambda bid, path: found.append(bid), ARTIFACT_SUFFIX)
-            self.assertEqual(found, [VALID_ARTIFACT])
+            archive._list(lambda bid, path, st: found.append((bid, st)), ARTIFACT_SUFFIX)
+            self.assertEqual(len(found), 1)
+            self.assertEqual(found[0][0], VALID_ARTIFACT)
+            self.assertIsNotNone(found[0][1])
         with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
             with self.assertRaises(WebdavError):
-                archive._list(lambda bid, path: None, ARTIFACT_SUFFIX)
-
-    def testRetriesStat(self):
-        self.spec['retries'] = 1
-        with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
-            archive = self._getHttpArchiveInstance(srv.port)
-            self.assertIsNotNone(archive._stat(VALID_ARTIFACT, ARTIFACT_SUFFIX))
-        with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
-            archive = self._getHttpArchiveInstance(srv.port)
-            with self.assertRaises(WebdavError):
-                archive._stat(VALID_ARTIFACT, ARTIFACT_SUFFIX)
+                archive._list(lambda bid, path, st: None, ARTIFACT_SUFFIX)
 
     def testRetriesDelete(self):
         self.spec['retries'] = 1
@@ -1230,16 +1223,33 @@ class TestGiteaManagedArchive(Base, TestCase):
     def testEmptyArchive(self):
         """Nothing was uploaded yet, so the package does not even exist."""
         found = []
-        self._archive().listPackages(lambda bid, path: found.append((bid, path)))
+        self._archive().listPackages(lambda bid, path, st: found.append((bid, path)))
         self.assertEqual(found, [])
 
+    def _sha256(self, name):
+        with open(name, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+
     def testListPackages(self):
-        self._createArtifact(DOWNLOAD_ARITFACT)
+        """listPackages() reports each package together with its stat.
+
+        The file hash of the registry is used as the stat, that is the
+        change indicator.
+        """
+        name = self._createArtifact(DOWNLOAD_ARITFACT)
         archive = self._archive()
         found = []
-        archive.listPackages(lambda bid, path: found.append((bid, path)))
+        archive.listPackages(lambda bid, path, st: found.append((bid, path, st)))
         self.assertEqual(found,
-            [(DOWNLOAD_ARITFACT, archive._makePath(DOWNLOAD_ARITFACT, ".tgz"))])
+            [(DOWNLOAD_ARITFACT, archive._makePath(DOWNLOAD_ARITFACT, ".tgz"),
+              self._sha256(name))])
+
+        # a changed artifact must be detected
+        with open(name, "ab") as f:
+            f.write(b'\x00')
+        found = []
+        archive.listPackages(lambda bid, path, st: found.append((bid, path, st)))
+        self.assertEqual(found[0][2], self._sha256(name))
 
     def testListPackagesWithoutArtifact(self):
         """Live-build-ids create package versions that hold no artifact.
@@ -1249,7 +1259,7 @@ class TestGiteaManagedArchive(Base, TestCase):
         """
         self._createBuildId(UPLOAD1_ARTIFACT)
         found = []
-        self._archive().listPackages(lambda bid, path: found.append((bid, path)))
+        self._archive().listPackages(lambda bid, path, st: found.append((bid, path)))
         self.assertEqual(found, [])
 
     def testListPackagesPaginated(self):
@@ -1258,30 +1268,8 @@ class TestGiteaManagedArchive(Base, TestCase):
         for bid in bids:
             self._createArtifact(bid)
         found = []
-        self._archive().listPackages(lambda bid, path: found.append(bid))
+        self._archive().listPackages(lambda bid, path, st: found.append(bid))
         self.assertEqual(sorted(found), sorted(bids))
-
-    def _sha256(self, name):
-        with open(name, "rb") as f:
-            return hashlib.sha256(f.read()).hexdigest()
-
-    def testStat(self):
-        """The file hash of the registry is the change indicator."""
-        name = self._createArtifact(DOWNLOAD_ARITFACT)
-        old = self._archive().statPackage(DOWNLOAD_ARITFACT)
-        self.assertEqual(old, self._sha256(name))
-
-        # a changed artifact must be detected
-        with open(name, "ab") as f:
-            f.write(b'\x00')
-        new = self._archive().statPackage(DOWNLOAD_ARITFACT)
-        self.assertNotEqual(new, old)
-        self.assertEqual(new, self._sha256(name))
-
-    def testStatNotFound(self):
-        self._createArtifact(DOWNLOAD_ARITFACT)
-        with self.assertRaises(BobError):
-            self._archive().statPackage(NOT_EXISTS_ARTIFACT)
 
     def testGetAudit(self):
         self._createArtifact(VALID_ARTIFACT, valid_data=True)
@@ -1304,7 +1292,7 @@ class TestGiteaManagedArchive(Base, TestCase):
         self._createArtifact(DOWNLOAD_ARITFACT)
         self.args["badApi"] = True
         with self.assertRaises(BobError):
-            self._archive().listPackages(lambda bid, path: None)
+            self._archive().listPackages(lambda bid, path, st: None)
 
 
 def createGiteaStatusHandler(responses):

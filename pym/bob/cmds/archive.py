@@ -92,10 +92,10 @@ class ArchiveScanner:
 
     def scan(self, verbose):
         found = False
-        def callback(buildId, fileName):
+        def callback(buildId, fileName, st):
             nonlocal found
             found = True
-            self.__scan(buildId, fileName, verbose)
+            self.__scan(buildId, fileName, st, verbose)
 
         self.__db.execute("BEGIN")
         try:
@@ -109,10 +109,8 @@ class ArchiveScanner:
                       file=sys.stderr)
         return found
 
-    def __scan(self, bid, fileName, verbose):
+    def __scan(self, bid, fileName, st, verbose):
         try:
-            st = self.__archiver.statPackage(bid)
-
             # Validate entry in caching db. Delete entry if stat has changed.
             # The database will clean the 'refs' table automatically.
             self.__db.execute("SELECT stat FROM files WHERE bid=? AND arch=?",

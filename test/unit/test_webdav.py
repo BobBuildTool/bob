@@ -238,27 +238,21 @@ class TestWebdav(TestCase):
         with HttpServerMock(self.srvdir) as srv:
             webdav = GetWebdav(srv.port)
             path = os.path.join(self.clntdir, TEST_FILE)
+
             # create file
             with open(os.path.join(path), 'a') as f:
                 f.write(TEST_OUTPUT)
             stats = os.stat(path)
-            res = webdav.stat(TEST_FILE)
+
+            # list via webdav
+            entries = webdav.listdir("/")
+            self.assertEqual(1, len(entries))
+            res = entries[0]
+
             # compare file stats with returned webdav stats
             self.assertEqual(res['mdate'], time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(stats[8])))
             self.assertEqual(res['len'], stats[6])
             self.assertEqual(res['etag'], f'{stats[6]:x}-{stats[1]:x}-{stats[8]:x}')
-            # modify file at a later time point
-            time.sleep(1)
-            with open(os.path.join(path), 'a') as f:
-                f.write(TEST_OUTPUT)
-            res2 = webdav.stat(TEST_FILE)
-            # new webdav stats should be different
-            self.assertNotEqual(res['mdate'], res2['mdate'])
-            self.assertNotEqual(res['len'], res2['len'])
-            self.assertNotEqual(res['etag'], res2['etag'])
-            # stat on a non-existing file should return None
-            os.unlink(path)
-            self.assertIsNone(webdav.stat(TEST_FILE))
 
     def testPartialDownloader(self):
         with HttpServerMock(self.srvdir) as srv:
