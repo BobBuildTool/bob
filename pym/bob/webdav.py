@@ -182,7 +182,20 @@ class WebDav:
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
-    def _mkdir(self, path):
+    def mkdir(self, path):
+        status, reason = self.__retry(lambda: self.__mkdir(path))
+        if status == 409:
+            (parent_path, _, _) = path.rpartition("/")
+            if parent_path:
+                self.mkdir(parent_path)
+                status, reason = self.__retry(lambda: self.__mkdir(path))
+        # We expect to create the directory (201) or it already existed (405).
+        # If the server does not support MKCOL we'd expect a 405 too and hope
+        # for the best...
+        if status not in [201, 405]:
+            raise WebdavError("MKCOL {} {}".format(status, reason))
+
+    def __mkdir(self, path):
         # MKCOL resources must have a trailing slash because they are
         # directories. Otherwise Apache might send a HTTP 301. Nginx refuses to
         # create the directory with a 409 which looks odd.
@@ -206,19 +219,6 @@ class WebDav:
         if status not in [201, 405, 409]:
             raise WebdavError("MKCOL {} {}".format(status, reason))
         return (status, reason)
-
-    def mkdir(self, path):
-        status, reason = self.__retry(lambda: self._mkdir(path))
-        if status == 409:
-            (parent_path, _, _) = path.rpartition("/")
-            if parent_path:
-                self.mkdir(parent_path)
-                status, reason = self.__retry(lambda: self._mkdir(path))
-        # We expect to create the directory (201) or it already existed (405).
-        # If the server does not support MKCOL we'd expect a 405 too and hope
-        # for the best...
-        if status not in [201, 405]:
-            raise WebdavError("MKCOL {} {}".format(status, reason))
 
     def listdir(self, path):
         return self.__retry(lambda: self.__listdir(path))
