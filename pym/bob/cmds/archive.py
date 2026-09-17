@@ -23,8 +23,6 @@ class ArchiveScanner:
     CUR_VERSION = 3
 
     def __init__(self, archiver):
-        self.__dirSchema = re.compile(r'[0-9a-zA-Z]{2}')
-        self.__archiveSchema = re.compile(r'[0-9a-zA-Z]{36,}-1.tgz')
         self.__db = None
         self.__cleanup = False
         self.__archiver = archiver
@@ -94,18 +92,14 @@ class ArchiveScanner:
 
     def scan(self, verbose):
         found = False
+        def callback(buildId, fileName, st):
+            nonlocal found
+            found = True
+            self.__scan(buildId, fileName, st, verbose)
+
+        self.__db.execute("BEGIN")
         try:
-            self.__db.execute("BEGIN")
-            for l1 in self.__archiver.listDir("."):
-                if not self.__dirSchema.fullmatch(l1): continue
-                for l2 in self.__archiver.listDir(l1):
-                    if not self.__dirSchema.fullmatch(l2): continue
-                    l2 = os.path.join(l1, l2)
-                    for l3 in self.__archiver.listDir(l2):
-                        m = self.__archiveSchema.fullmatch(l3)
-                        if not m: continue
-                        found = True
-                        self.__scan(os.path.join(l2, l3), verbose)
+            self.__archiver.listPackages(callback)
         except OSError as e:
             raise BobError("Error scanning archive: " + str(e))
         finally:
@@ -115,12 +109,8 @@ class ArchiveScanner:
                       file=sys.stderr)
         return found
 
-    def __scan(self, fileName, verbose):
+    def __scan(self, bid, fileName, st, verbose):
         try:
-            st = self.__archiver.stat(fileName)
-            bidHex, sep, suffix = fileName.partition("-")
-            bid = bytes.fromhex(bidHex[0:2] + bidHex[3:5] + bidHex[6:])
-
             # Validate entry in caching db. Delete entry if stat has changed.
             # The database will clean the 'refs' table automatically.
             self.__db.execute("SELECT stat FROM files WHERE bid=? AND arch=?",
@@ -133,7 +123,7 @@ class ArchiveScanner:
 
             # read audit trail
             if verbose: print("\tscan", fileName)
-            audit = self.__archiver.getAudit(fileName)
+            audit = self.__archiver.getAudit(bid)
             if audit is None:
                 print("\tCould not get audit for ", fileName)
                 return
@@ -159,8 +149,8 @@ class ArchiveScanner:
         self.__db.execute("DELETE FROM files WHERE bid=? AND arch=?",
             (bid, self.__archiveKey))
 
-    def deleteFile(self, filename):
-        self.__archiver.deleteFile(filename)
+    def deletePackage(self, bid):
+        self.__archiver.deletePackage(bid)
 
     def getBuildIds(self):
         self.__db.execute("SELECT bid FROM files WHERE arch=?", (self.__archiveKey,))
@@ -394,8 +384,13 @@ def getArchivers(args):
     archivers = []
     if args.local:
         # provide local directory as backend
-        archivespec = [{"name" : "local", "backend": "file", "path": "{}".format(os.getcwd()), "flags" : "[download, upload, managed]"}]
-        archiver = getSingleArchiver(None, archivespec[0])
+        archivespec = {
+            "name"    : "local",
+            "backend" : "file",
+            "path"    : os.getcwd(),
+            "flags"   : "[download, upload, managed]"
+        }
+        archiver = getSingleArchiver(None, archivespec)
         archivers.append(archiver)
     else:
         # use the configuration to find suitable archives
@@ -496,7 +491,7 @@ def doArchiveClean(parents_args, argv):
                 else:
                     if args.verbose:
                         print("\trm", victim)
-                    scanner.deleteFile(victim)
+                    scanner.deletePackage(bid)
                     scanner.remove(bid)
 
 def doArchiveFind(parents_args, argv):

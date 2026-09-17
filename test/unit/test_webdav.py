@@ -1,3 +1,7 @@
+# Bob build tool
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from bob.webdav import WebDav, WebdavError, WebdavAlreadyExistsError, WebdavNotFoundError
 from mocks.http_server import HttpServerMock
 from tempfile import TemporaryDirectory, NamedTemporaryFile
@@ -13,257 +17,360 @@ TEST_OUTPUT_SIZE=10
 TEST_PATH1="dir1"
 TEST_PATH2="dir2"
 
-def GetWebdav(port):
-    return WebDav(url=urlparse("http://localhost:{}/".format(port)), sslVerify=False)
-
 class TestWebdav(TestCase):
 
     def setUp(self):
         self.__repodir = TemporaryDirectory()
-        self.dir = self.__repodir.name
+        self.srvdir = self.__repodir.name
+        self.clntdir = os.path.join(self.srvdir, "repo")
+        os.mkdir(self.clntdir)
+        self.webdav = self._startWebdav()
         super().setUp()
 
     def tearDown(self):
         self.__repodir.cleanup()
         super().tearDown()
 
+    def _startWebdav(self, clientRetries=0, **kwargs):
+        mock = HttpServerMock(self.srvdir, **kwargs)
+        srv = mock.__enter__()
+        self.addCleanup(mock.__exit__, None, None, None)
+        return WebDav(urlparse("http://localhost:{}/repo/".format(srv.port)),
+                      retries=clientRetries)
+
+    def _serverPath(self, path):
+        return os.path.join(self.clntdir, path)
+
+    def _touch(self, path):
+        with open(path, 'a'):
+            pass
+
+    def _checkEntries(self, entries, is_dir, paths):
+        self.assertEqual(len(paths), len(entries))
+        for entry in entries:
+            self.assertEqual(entry["is_dir"], is_dir)
+            self.assertIn(entry["path"], paths)
+
     def testUpload(self):
-        with HttpServerMock(repoPath=self.dir) as srv:
-            webdav = GetWebdav(srv.port)
-            with NamedTemporaryFile() as file:
-                file.write(TEST_OUTPUT.encode('utf-8'))
-                webdav.upload(TEST_FILE, file, False)
-                # check if file got uploaded and check the content
-                self.assertTrue(os.path.exists(os.path.join(self.dir, TEST_FILE)))
-                with open(os.path.join(self.dir, TEST_FILE)) as f:
-                    content = f.readline()
-                    self.assertEqual(TEST_OUTPUT, content)
-                # try to upload again should fail with WebdavAlreadyExistsError
-                with self.assertRaises(WebdavAlreadyExistsError) as cm:
-                    webdav.upload(TEST_FILE, file, False)
-                # append same content to temp file
-                file.write(TEST_OUTPUT.encode('utf-8'))
-                webdav.upload(TEST_FILE, file, True)
-                # content should be doubled in file now
-                with open(os.path.join(self.dir, TEST_FILE)) as f:
-                    content = f.readline()
-                    self.assertEqual(TEST_OUTPUT + TEST_OUTPUT, content)
+        """Uploading a new file creates it with the given content"""
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            self.webdav.upload(TEST_FILE, file, False)
+            with open(self._serverPath(TEST_FILE)) as f:
+                self.assertEqual(f.readline(), TEST_OUTPUT)
+
+    def testUploadAlreadyExists(self):
+        """Uploading without overwrite fails if the file already exists"""
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            self.webdav.upload(TEST_FILE, file, False)
+            with self.assertRaises(WebdavAlreadyExistsError):
+                self.webdav.upload(TEST_FILE, file, False)
+
+    def testUploadOverwrite(self):
+        """Uploading with overwrite replaces the existing content"""
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            self.webdav.upload(TEST_FILE, file, False)
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            self.webdav.upload(TEST_FILE, file, True)
+            with open(self._serverPath(TEST_FILE)) as f:
+                self.assertEqual(f.readline(), TEST_OUTPUT + TEST_OUTPUT)
 
     def testUploadRetry(self):
         """A upload error is handled gracefully and can be retried"""
-        with HttpServerMock(repoPath=self.dir, retries=1) as srv:
-            webdav = GetWebdav(srv.port)
-            with NamedTemporaryFile() as file:
-                file.write(TEST_OUTPUT.encode('utf-8'))
-                # first try will result in an "internal server error"
-                with self.assertRaises(WebdavError) as cm:
-                    webdav.upload(TEST_FILE, file, False)
-                self.assertFalse(os.path.exists(os.path.join(self.dir, TEST_FILE)))
-                # second upload will succeed
+        webdav = self._startWebdav(retries=1)
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            # first try will result in an "internal server error"
+            with self.assertRaises(WebdavError):
                 webdav.upload(TEST_FILE, file, False)
-                self.assertTrue(os.path.exists(os.path.join(self.dir, TEST_FILE)))
+            self.assertFalse(os.path.exists(self._serverPath(TEST_FILE)))
+            # second upload will succeed
+            webdav.upload(TEST_FILE, file, False)
+            self.assertTrue(os.path.exists(self._serverPath(TEST_FILE)))
 
     def testUploadInterrupted(self):
         """An upload to an unresponsive server is handled gracefully"""
-        with HttpServerMock(repoPath=self.dir, noResponse=True) as srv:
-            webdav = GetWebdav(srv.port)
-            with NamedTemporaryFile() as file:
-                file.write(TEST_OUTPUT.encode('utf-8'))
-                with self.assertRaises(WebdavError):
-                    webdav.upload(TEST_FILE, file, False)
+        webdav = self._startWebdav(noResponse=True)
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            with self.assertRaises(WebdavError):
+                webdav.upload(TEST_FILE, file, False)
+
+    def testUploadRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        webdav = self._startWebdav(clientRetries=2, retries=2)
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            webdav.upload(TEST_FILE, file, False)
+        self.assertTrue(os.path.exists(self._serverPath(TEST_FILE)))
+
+    def testUploadRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        webdav = self._startWebdav(clientRetries=2, retries=3)
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            with self.assertRaises(WebdavError):
+                webdav.upload(TEST_FILE, file, False)
 
     def testDownload(self):
-        with HttpServerMock(self.dir) as srv:
-            # create file for server
-            fpath = os.path.join(self.dir, TEST_FILE)
-            with open(fpath, 'w') as f:
-                f.write(TEST_OUTPUT)
-            webdav = GetWebdav(srv.port)
-            file = webdav.download(TEST_FILE)
+        """Downloading returns the full file content"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        res = self.webdav.download(TEST_FILE)
+        self.assertEqual(res.decode('utf-8'), TEST_OUTPUT)
+
+    def testOpenDownload(self):
+        """openDownload() yields a file-like object with the full content"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT + TEST_OUTPUT)
+        with self.webdav.openDownload(TEST_FILE) as file:
             res = file.read()
-            self.assertEqual(res.decode('utf-8'), TEST_OUTPUT)
-            # add more data to file
-            with open(fpath, 'a') as f:
-                f.write(TEST_OUTPUT)
-            file = webdav.download(TEST_FILE)
-            res = file.read()
-            self.assertEqual(res.decode('utf-8'), TEST_OUTPUT+TEST_OUTPUT)
-            # test offset and length
-            file = webdav.download(TEST_FILE, offset=0, length=TEST_OUTPUT_SIZE)
-            res = file.read()
-            self.assertEqual(res.decode('utf-8'), TEST_OUTPUT)
-            # data is testoutputtestoutput, with offset 4 and length 10 we should get outputtest
-            file = webdav.download(TEST_FILE, offset=4, length=TEST_OUTPUT_SIZE)
-            res = file.read()
-            self.assertEqual(res.decode('utf-8'), 'outputtest')
-            # remove the file
-            os.unlink(os.path.join(self.dir, TEST_FILE))
-            # missing file will raise WebdavNotFoundError
-            with self.assertRaises(WebdavNotFoundError) as cm:
-                webdav.download(TEST_FILE)
-        # with 1 retry, the download will fail initially
-        with HttpServerMock(self.dir, retries=1) as srv:
-            webdav = GetWebdav(srv.port)
-            with self.assertRaises(WebdavError) as cm:
-                webdav.download(TEST_FILE)
+        self.assertEqual(res.decode('utf-8'), TEST_OUTPUT + TEST_OUTPUT)
+
+    def testDownloadRange(self):
+        """offset and length restrict the downloaded byte range"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT + TEST_OUTPUT)
+        res = self.webdav.download(TEST_FILE, offset=0, length=TEST_OUTPUT_SIZE)
+        self.assertEqual(res.decode('utf-8'), TEST_OUTPUT)
+        # data is "testoutputtestoutput"; offset 4, length 10 -> "outputtest"
+        res = self.webdav.download(TEST_FILE, offset=4, length=TEST_OUTPUT_SIZE)
+        self.assertEqual(res.decode('utf-8'), 'outputtest')
+
+    def testDownloadNotFound(self):
+        """Downloading a missing file raises WebdavNotFoundError"""
+        with self.assertRaises(WebdavNotFoundError):
+            self.webdav.download(TEST_FILE)
+
+    def testDownloadServerError(self):
+        """A single transient server error is not retried by the client itself"""
+        webdav = self._startWebdav(retries=1)
+        with self.assertRaises(WebdavError):
+            webdav.download(TEST_FILE)
 
     def testDownloadInterrupted(self):
         """An interrupted download is handled gracefully"""
-        with HttpServerMock(repoPath=self.dir, noResponse=True) as srv:
-            webdav = GetWebdav(srv.port)
-            with self.assertRaises(WebdavError):
-                webdav.download(TEST_FILE)
+        webdav = self._startWebdav(noResponse=True)
+        with self.assertRaises(WebdavError):
+            webdav.download(TEST_FILE)
+
+    def testDownloadRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=2)
+        res = webdav.download(TEST_FILE)
+        self.assertEqual(res.decode('utf-8'), TEST_OUTPUT)
+
+    def testDownloadRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=3)
+        with self.assertRaises(WebdavError):
+            webdav.download(TEST_FILE)
+
+    def testDownloadNotFoundSurvivesRetryBudget(self):
+        """A permanent 404 is retried like any other error, but the specific
+        WebdavNotFoundError is still raised once the budget is exhausted"""
+        webdav = self._startWebdav(clientRetries=2)
+        with self.assertRaises(WebdavNotFoundError):
+            webdav.download(TEST_FILE)
 
     def testExists(self):
-        with HttpServerMock(self.dir) as srv:
-            # create file for server
-            with open(os.path.join(self.dir, TEST_FILE), 'w') as f:
-                f.write(TEST_OUTPUT)
-            webdav = GetWebdav(srv.port)
-            # file exists
-            self.assertTrue(webdav.exists(TEST_FILE))
-            # delete the file and exists shall return false
-            os.unlink(os.path.join(self.dir, TEST_FILE))
-            self.assertFalse(webdav.exists(TEST_FILE))
-        # with 1 retry, exists will fail initially
-        with HttpServerMock(self.dir, retries=1, retryHead=True) as srv:
-            webdav = GetWebdav(srv.port)
-            # file exists
-            with self.assertRaises(WebdavError) as cm:
-                webdav.exists(TEST_FILE)
-            self.assertFalse(webdav.exists(TEST_FILE))
+        """exists() reports True for an existing file"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        self.assertTrue(self.webdav.exists(TEST_FILE))
+
+    def testExistsMissing(self):
+        """exists() reports False for a missing file"""
+        self.assertFalse(self.webdav.exists(TEST_FILE))
+
+    def testExistsServerError(self):
+        """A transient server error surfaces as WebdavError instead of being
+        swallowed as a plain False"""
+        webdav = self._startWebdav(retries=1, retryHead=True)
+        with self.assertRaises(WebdavError):
+            webdav.exists(TEST_FILE)
+        # the injected failure is consumed by now; the real (missing) state
+        # shows through on the next call
+        self.assertFalse(webdav.exists(TEST_FILE))
+
+    def testExistsRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=2, retryHead=True)
+        self.assertTrue(webdav.exists(TEST_FILE))
+
+    def testExistsRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=3, retryHead=True)
+        with self.assertRaises(WebdavError):
+            webdav.exists(TEST_FILE)
 
     def testDelete(self):
-        with HttpServerMock(self.dir) as srv:
-            # create file for server
-            path = os.path.join(self.dir, TEST_FILE)
-            with open(path, 'w') as f:
-                f.write(TEST_OUTPUT)
-            self.assertTrue(os.path.exists(path))
-            webdav = GetWebdav(srv.port)
-            webdav.delete(TEST_FILE)
-            # file should be deleted
-            self.assertFalse(os.path.exists(path))
-            # deleting again should not cause any problems
-            webdav.delete(TEST_FILE)
-            self.assertFalse(os.path.exists(path))
-        with HttpServerMock(self.dir, retries=1) as srv:
-            path = os.path.join(self.dir, TEST_FILE)
-            with open(path, 'w') as f:
-                f.write(TEST_OUTPUT)
-            self.assertTrue(os.path.exists(path))
-            webdav = GetWebdav(srv.port)
-            # first attempt fails, so WebdavError is rasied
-            with self.assertRaises(WebdavError) as cm:
-                webdav.delete(TEST_FILE)
-            self.assertTrue(os.path.exists(path))
-            # second attempt will succeed
-            webdav.delete(TEST_FILE)
-            # file should be deleted
-            self.assertFalse(os.path.exists(path))
+        """delete() removes an existing file"""
+        path = self._serverPath(TEST_FILE)
+        with open(path, 'w') as f:
+            f.write(TEST_OUTPUT)
+        self.webdav.delete(TEST_FILE)
+        self.assertFalse(os.path.exists(path))
 
-    def testMkdir(self):
-        with HttpServerMock(self.dir) as srv:
-            ## depth 1
-            path = os.path.join(self.dir, TEST_PATH1)
-            webdav = GetWebdav(srv.port)
+    def testDeleteMissing(self):
+        """Deleting a file that is already gone is not an error"""
+        self.webdav.delete(TEST_FILE)
+
+    def testDeleteServerError(self):
+        """A transient server error is raised on the failing attempt but does
+        not prevent a subsequent, successful delete"""
+        path = self._serverPath(TEST_FILE)
+        with open(path, 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(retries=1)
+        with self.assertRaises(WebdavError):
+            webdav.delete(TEST_FILE)
+        self.assertTrue(os.path.exists(path))
+        webdav.delete(TEST_FILE)
+        self.assertFalse(os.path.exists(path))
+
+    def testDeleteRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        path = self._serverPath(TEST_FILE)
+        with open(path, 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=2)
+        webdav.delete(TEST_FILE)
+        self.assertFalse(os.path.exists(path))
+
+    def testDeleteRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        path = self._serverPath(TEST_FILE)
+        with open(path, 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=3)
+        with self.assertRaises(WebdavError):
+            webdav.delete(TEST_FILE)
+        self.assertTrue(os.path.exists(path))
+
+    def testMkdirDepth1(self):
+        """Create a directory directly below the repository root"""
+        path = self._serverPath(TEST_PATH1)
+        self.webdav.mkdir(TEST_PATH1)
+        self.assertTrue(os.path.exists(path))
+
+    def testMkdirAlreadyExists(self):
+        """Creating a directory that already exists is not an error"""
+        path = self._serverPath(TEST_PATH1)
+        self.webdav.mkdir(TEST_PATH1)
+        self.webdav.mkdir(TEST_PATH1)
+        self.assertTrue(os.path.exists(path))
+
+    def testMkdirObstructed(self):
+        """Creating a directory obstructed by a file fails"""
+        # Create a file
+        with open(self._serverPath(TEST_PATH1), "w"):
+            pass
+
+        remote_path = TEST_PATH1 + '/' + TEST_PATH2
+        local_path = self._serverPath(os.path.join(TEST_PATH1, TEST_PATH2))
+
+        with self.assertRaises(WebdavError) as cm:
+            self.webdav.mkdir(remote_path)
+        self.assertEqual("MKCOL 409 Conflict", str(cm.exception))
+        self.assertFalse(os.path.exists(local_path))
+
+    def testMkdirDepth2(self):
+        """Create a non-existing two level directory hierarchy"""
+        remote_path = TEST_PATH1 + '/' + TEST_PATH2
+        local_path = self._serverPath(os.path.join(TEST_PATH1, TEST_PATH2))
+        self.webdav.mkdir(remote_path)
+        self.assertTrue(os.path.exists(local_path))
+
+    def testMkdirRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        path = self._serverPath(TEST_PATH1)
+        webdav = self._startWebdav(clientRetries=2, retries=2)
+        webdav.mkdir(TEST_PATH1)
+        self.assertTrue(os.path.exists(path))
+
+    def testMkdirRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        path = self._serverPath(TEST_PATH1)
+        webdav = self._startWebdav(clientRetries=2, retries=3)
+        with self.assertRaises(WebdavError):
             webdav.mkdir(TEST_PATH1)
-            self.assertTrue(os.path.exists(path))
-            ## path already exists, no error occurs
-            webdav.mkdir(TEST_PATH1)
-            self.assertTrue(os.path.exists(path))
-            os.rmdir(path)
-            ## depth 2
-            remote_path = TEST_PATH1 + '/' + TEST_PATH2
-            path = os.path.join(self.dir, TEST_PATH1, TEST_PATH2)
-            webdav = GetWebdav(srv.port)
-            # should raise exception with error code 409, because we have a depth of 2, but only request 1
-            with self.assertRaises(WebdavError) as cm:
-                webdav.mkdir(remote_path)
-            self.assertEqual("MKCOL 409 Conflict", str(cm.exception))
-            self.assertFalse(os.path.exists(path))
-            # depth 2, so it will create the parent dir here, too
-            webdav.mkdir(remote_path, 2)
-            self.assertTrue(os.path.exists(path))
-            os.rmdir(path)
+        self.assertFalse(os.path.exists(path))
 
-    def testListdir(self):
-        def checkEntries(entries, is_dir, paths):
-            def checkyEntry(entry, is_dir, paths):
-                return entry["is_dir"] == is_dir and entry["path"] in paths
-            self.assertEqual(len(paths), len(entries))
-            [self.assertTrue(checkyEntry(x, is_dir, paths)) for x in entries]
+    def testListdirRoot(self):
+        """Listing the root shows the top level directories"""
+        os.makedirs(self._serverPath(os.path.join(TEST_PATH1, TEST_PATH2)))
+        os.makedirs(self._serverPath(os.path.join(TEST_PATH2, TEST_PATH1)))
+        res = self.webdav.listdir('/')
+        self._checkEntries(res, True, [TEST_PATH1, TEST_PATH2])
 
-        def touch(path):
-            with open(path,'a') as f:
-                pass
+    def testListdirSubdir(self):
+        """Listing a sub directory shows its immediate children only"""
+        os.makedirs(self._serverPath(os.path.join(TEST_PATH1, TEST_PATH2)))
+        res = self.webdav.listdir('/' + TEST_PATH1)
+        self._checkEntries(res, True, [TEST_PATH1 + '/' + TEST_PATH2])
 
-        with HttpServerMock(self.dir) as srv:
-            # create some simple directory structure
-            path1 = os.path.join(self.dir, TEST_PATH1, TEST_PATH2)
-            path2 = os.path.join(self.dir, TEST_PATH2, TEST_PATH1)
-            os.makedirs(path1)
-            os.makedirs(path2)
-            touch(os.path.join(path1, TEST_FILE))
-            touch(os.path.join(path1, TEST_FILE2))
-            touch(os.path.join(path2, TEST_FILE))
-            # check if listdir returns the proper content
-            webdav = GetWebdav(srv.port)
-            res = webdav.listdir('/')
-            checkEntries(res, True, [TEST_PATH1, TEST_PATH2])
-            res = webdav.listdir('/' + TEST_PATH1)
-            checkEntries(res, True, [TEST_PATH1 + '/' + TEST_PATH2])
-            base_path = TEST_PATH1 + '/' + TEST_PATH2 + '/'
-            res = webdav.listdir('/' + base_path)
-            checkEntries(res, False, [base_path + TEST_FILE, base_path + TEST_FILE2 ])
-            base_path = TEST_PATH2 + '/' + TEST_PATH1 + '/'
-            res = webdav.listdir('/' + base_path)
-            checkEntries(res, False, [base_path + TEST_FILE])
+    def testListdirFiles(self):
+        """Listing a directory shows its files with their relative path"""
+        path = self._serverPath(os.path.join(TEST_PATH1, TEST_PATH2))
+        os.makedirs(path)
+        self._touch(os.path.join(path, TEST_FILE))
+        self._touch(os.path.join(path, TEST_FILE2))
+        base_path = TEST_PATH1 + '/' + TEST_PATH2 + '/'
+        res = self.webdav.listdir('/' + base_path)
+        self._checkEntries(res, False, [base_path + TEST_FILE, base_path + TEST_FILE2])
 
-            self.__repodir.cleanup()
-            self.assertTrue(len(webdav.listdir('/')) == 0)
+    def testListdirEmpty(self):
+        """Listing a non-existent directory returns no entries"""
+        self.assertEqual(self.webdav.listdir('/'), [])
 
     def testStat(self):
-        with HttpServerMock(self.dir) as srv:
-            webdav = GetWebdav(srv.port)
-            path = os.path.join(self.dir, TEST_FILE)
-            # create file
-            with open(os.path.join(path), 'a') as f:
-                f.write(TEST_OUTPUT)
-            stats = os.stat(path)
-            res = webdav.stat(TEST_FILE)
-            # compare file stats with returned webdav stats
-            self.assertEqual(res['mdate'], time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(stats[8])))
-            self.assertEqual(res['len'], stats[6])
-            self.assertEqual(res['etag'], f'{stats[6]:x}-{stats[1]:x}-{stats[8]:x}')
-            # modify file at a later time point
-            time.sleep(1)
-            with open(os.path.join(path), 'a') as f:
-                f.write(TEST_OUTPUT)
-            res2 = webdav.stat(TEST_FILE)
-            # new webdav stats should be different
-            self.assertNotEqual(res['mdate'], res2['mdate'])
-            self.assertNotEqual(res['len'], res2['len'])
-            self.assertNotEqual(res['etag'], res2['etag'])
-            # stat on a non-existing file should return None
-            os.unlink(path)
-            self.assertIsNone(webdav.stat(TEST_FILE))
+        """listdir() reports the same length, mtime and etag as the filesystem"""
+        path = self._serverPath(TEST_FILE)
+        with open(path, 'w') as f:
+            f.write(TEST_OUTPUT)
+        stats = os.stat(path)
 
-    def testPartialDownloader(self):
-        with HttpServerMock(self.dir) as srv:
-            webdav = GetWebdav(srv.port)
-            # create file for server
-            fpath = os.path.join(self.dir, TEST_FILE)
-            with open(fpath, 'w') as f:
-                f.write(TEST_OUTPUT + TEST_OUTPUT)
-            pd = webdav.getPartialDownloader(TEST_FILE, 4)
-            # first 4 bytes should be 'test'
-            self.assertEqual(pd.get().decode('utf-8'), 'test')
-            # getting 2 more bytes and we should get 'testou'
-            pd.more(2)
-            self.assertEqual(pd.get().decode('utf-8'), 'testou')
-            pd.more(4)
-            self.assertEqual(pd.get().decode('utf-8'), TEST_OUTPUT)
-            # requesting more than what we should have left will only give us the leftover
-            pd.more(11)
-            self.assertEqual(pd.get().decode('utf-8'), TEST_OUTPUT + TEST_OUTPUT)
+        entries = self.webdav.listdir("/")
+        self.assertEqual(1, len(entries))
+        res = entries[0]
+
+        self.assertEqual(res['mdate'], time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(stats[8])))
+        self.assertEqual(res['len'], stats[6])
+        self.assertEqual(res['etag'], f'{stats[6]:x}-{stats[1]:x}-{stats[8]:x}')
+
+    def testPartialDownloaderInitial(self):
+        """get() initially returns exactly the requested number of bytes"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT + TEST_OUTPUT)
+        pd = self.webdav.getPartialDownloader(TEST_FILE, 4)
+        self.assertEqual(pd.get().decode('utf-8'), 'test')
+
+    def testPartialDownloaderGrow(self):
+        """more() extends the already downloaded data by the requested amount"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT + TEST_OUTPUT)
+        pd = self.webdav.getPartialDownloader(TEST_FILE, 4)
+        pd.more(2)
+        self.assertEqual(pd.get().decode('utf-8'), 'testou')
+        pd.more(4)
+        self.assertEqual(pd.get().decode('utf-8'), TEST_OUTPUT)
+
+    def testPartialDownloaderGrowBeyondEnd(self):
+        """Requesting more data than remains only yields the leftover"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT + TEST_OUTPUT)
+        pd = self.webdav.getPartialDownloader(TEST_FILE, 4)
+        pd.more(6)
+        pd.more(11)
+        self.assertEqual(pd.get().decode('utf-8'), TEST_OUTPUT + TEST_OUTPUT)

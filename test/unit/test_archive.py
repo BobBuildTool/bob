@@ -14,7 +14,6 @@ import hashlib
 import http.server
 import json
 import pickle
-import posixpath
 import os, os.path
 import socketserver
 import stat
@@ -26,7 +25,7 @@ import sys
 from mocks.http_server import HttpServerMock
 
 from bob.archive import DummyArchive, HttpArchive, GiteaArchive, getArchiver, \
-    ArtifactExistsError
+    ArtifactExistsError, ARTIFACT_SUFFIX
 from bob.errors import BobError, BuildError
 from bob.utils import runInEventLoop, getProcessPoolExecutor
 from bob.webdav import WebdavError, WebdavNotFoundError, WebdavAlreadyExistsError, \
@@ -793,54 +792,40 @@ class TestHttpArchiveRetries(Base, TestCase):
         self._testRetries(5)
 
     def testRetriesList(self):
+        """Listing also provides the stat of each found package."""
         self.spec['retries'] = 1
         with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
-            self.assertIsNotNone(archive._listDir('/'))
+            found = []
+            archive._list(lambda bid, path, st: found.append((bid, st)), ARTIFACT_SUFFIX)
+            self.assertEqual(len(found), 1)
+            self.assertEqual(found[0][0], VALID_ARTIFACT)
+            self.assertIsNotNone(found[0][1])
         with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
             with self.assertRaises(WebdavError):
-                archive._listDir('/')
-
-    def testRetriesStat(self):
-        bid = hexlify(VALID_ARTIFACT).decode("ascii")
-        filepath = posixpath.join(bid[0:2], bid[2:4], bid[4:] + "-1.tgz")
-        self.spec['retries'] = 1
-        with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
-            archive = self._getHttpArchiveInstance(srv.port)
-            self.assertIsNotNone(archive._stat(filepath))
-        with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
-            archive = self._getHttpArchiveInstance(srv.port)
-            with self.assertRaises(WebdavError):
-                archive._stat(filepath)
+                archive._list(lambda bid, path, st: None, ARTIFACT_SUFFIX)
 
     def testRetriesDelete(self):
-        filename = 'test'
-        filepath = os.path.join(self.repo.name, filename)
-        with open(filepath, 'w') as f:
-            f.write('test')
         self.spec['retries'] = 1
         with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
-            self.assertIsNone(archive._delete(filename))
-        with open(filepath, 'w') as f:
-            f.write('test')
+            self.assertIsNone(archive._delete(VALID_ARTIFACT, ARTIFACT_SUFFIX))
+        self._createArtifact(VALID_ARTIFACT, valid_data=True)
         with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
             with self.assertRaises(WebdavError):
-                archive._delete(filename)
+                archive._delete(VALID_ARTIFACT, ARTIFACT_SUFFIX)
 
     def testRetriesAudit(self):
-        bid = hexlify(VALID_ARTIFACT).decode("ascii")
-        filepath = posixpath.join(bid[0:2], bid[2:4], bid[4:] + "-1.tgz")
         self.spec['retries'] = 1
         with HttpServerMock(repoPath=self.repo.name, retries=1) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
-            self.assertIsNotNone(archive._getAudit(filepath))
+            self.assertIsNotNone(archive._getAudit(VALID_ARTIFACT))
         with HttpServerMock(repoPath=self.repo.name, retries=2) as srv:
             archive = self._getHttpArchiveInstance(srv.port)
             with self.assertRaises(WebdavError):
-                archive._getAudit(filepath)
+                archive._getAudit(VALID_ARTIFACT)
 
 
 def createGiteaHandler(repoPath, args, expectedAuth=None):
@@ -1057,7 +1042,7 @@ class TestGiteaArchive(BaseTester, TestCase):
         spec = {"backend":"gitea", "url":"https://gitea.example/git",
                 "owner":"o", "package":"p"}
         self.assertEqual(GiteaArchive(spec).getArchiveName(),
-            "https://gitea.example/git/api/packages/o/generic/p")
+            "https://gitea.example/git")
         self.assertEqual(GiteaArchive(dict(spec, name="my-archive")).getArchiveName(),
             "my-archive")
 
@@ -1232,93 +1217,82 @@ class TestGiteaManagedArchive(Base, TestCase):
                 'url':"http://localhost:{}".format(self.httpd.server_address[1])}
         return getArchiver(DummyRecipeSet(spec))
 
-    @staticmethod
-    def _scanPath(bid, suffix=".tgz"):
-        """The path of an artifact as the archive command sees it."""
-        bid = hexlify(bid).decode("ascii")
-        return posixpath.join(bid[0:2], bid[2:4], bid[4:] + "-1" + suffix)
-
     def testCanManage(self):
         self.assertTrue(self._archive().canManage())
 
     def testEmptyArchive(self):
         """Nothing was uploaded yet, so the package does not even exist."""
-        self.assertEqual(self._archive().listDir("."), [])
-
-    def testListDir(self):
-        self._createArtifact(DOWNLOAD_ARITFACT)
-        bid = hexlify(DOWNLOAD_ARITFACT).decode("ascii")
-        archive = self._archive()
-
-        self.assertEqual(archive.listDir("."), [bid[0:2]])
-        self.assertEqual(archive.listDir(bid[0:2]), [bid[2:4]])
-        self.assertEqual(archive.listDir(posixpath.join(bid[0:2], bid[2:4])),
-                         [bid[4:] + "-1.tgz"])
-
-    def testListDirWithoutArtifact(self):
-        """Live-build-ids create package versions that hold no artifact.
-
-        Deriving the file names from the version names alone would make the
-        scanner stat a tarball that does not exist.
-        """
-        self._createBuildId(UPLOAD1_ARTIFACT)
-        bid = hexlify(UPLOAD1_ARTIFACT).decode("ascii")
-        entries = self._archive().listDir(posixpath.join(bid[0:2], bid[2:4]))
-        self.assertEqual(entries, [bid[4:] + "-1.buildid"])
-
-    def testListDirPaginated(self):
-        """The package API returns at most 50 versions per request."""
-        bids = [ bytes([i]) + b'\x42'*19 for i in range(60) ]
-        for bid in bids:
-            self._createBuildId(bid)
-        self.assertEqual(self._archive().listDir("."),
-                         sorted(hexlify(bid).decode("ascii")[0:2] for bid in bids))
+        found = []
+        self._archive().listPackages(lambda bid, path, st: found.append((bid, path)))
+        self.assertEqual(found, [])
 
     def _sha256(self, name):
         with open(name, "rb") as f:
             return hashlib.sha256(f.read()).hexdigest()
 
-    def testStat(self):
-        """The file hash of the registry is the change indicator."""
+    def testListPackages(self):
+        """listPackages() reports each package together with its stat.
+
+        The file hash of the registry is used as the stat, that is the
+        change indicator.
+        """
         name = self._createArtifact(DOWNLOAD_ARITFACT)
-        path = self._scanPath(DOWNLOAD_ARITFACT)
-        old = self._archive().stat(path)
-        self.assertEqual(old, self._sha256(name))
+        archive = self._archive()
+        found = []
+        archive.listPackages(lambda bid, path, st: found.append((bid, path, st)))
+        self.assertEqual(found,
+            [(DOWNLOAD_ARITFACT, archive._makePath(DOWNLOAD_ARITFACT, ".tgz"),
+              self._sha256(name))])
 
         # a changed artifact must be detected
         with open(name, "ab") as f:
             f.write(b'\x00')
-        new = self._archive().stat(path)
-        self.assertNotEqual(new, old)
-        self.assertEqual(new, self._sha256(name))
+        found = []
+        archive.listPackages(lambda bid, path, st: found.append((bid, path, st)))
+        self.assertEqual(found[0][2], self._sha256(name))
 
-    def testStatNotFound(self):
-        self._createArtifact(DOWNLOAD_ARITFACT)
-        with self.assertRaises(BobError):
-            self._archive().stat(self._scanPath(NOT_EXISTS_ARTIFACT))
+    def testListPackagesWithoutArtifact(self):
+        """Live-build-ids create package versions that hold no artifact.
+
+        The scanner must not be told about them since there is no tarball to
+        stat in the first place.
+        """
+        self._createBuildId(UPLOAD1_ARTIFACT)
+        found = []
+        self._archive().listPackages(lambda bid, path, st: found.append((bid, path)))
+        self.assertEqual(found, [])
+
+    def testListPackagesPaginated(self):
+        """The package API returns at most 50 versions per request."""
+        bids = [ bytes([i]) + b'\x42'*19 for i in range(60) ]
+        for bid in bids:
+            self._createArtifact(bid)
+        found = []
+        self._archive().listPackages(lambda bid, path, st: found.append(bid))
+        self.assertEqual(sorted(found), sorted(bids))
 
     def testGetAudit(self):
         self._createArtifact(VALID_ARTIFACT, valid_data=True)
-        audit = self._archive().getAudit(self._scanPath(VALID_ARTIFACT))
+        audit = self._archive().getAudit(VALID_ARTIFACT)
         self.assertIsNotNone(audit)
         self.assertEqual(audit.getArtifact().getMetaData(), "1")
 
     def testDelete(self):
         name = self._createArtifact(DOWNLOAD_ARITFACT)
-        self._archive().deleteFile(self._scanPath(DOWNLOAD_ARITFACT))
+        self._archive().deletePackage(DOWNLOAD_ARITFACT)
         self.assertFalse(os.path.exists(name))
 
     def testDeleteNotFound(self):
         """Deleting a file that is already gone is not an error."""
         self._createArtifact(DOWNLOAD_ARITFACT)
-        self._archive().deleteFile(self._scanPath(NOT_EXISTS_ARTIFACT))
+        self._archive().deletePackage(NOT_EXISTS_ARTIFACT)
 
     def testBrokenApiReply(self):
         """A server that does not speak the package API must not throw up."""
         self._createArtifact(DOWNLOAD_ARITFACT)
         self.args["badApi"] = True
         with self.assertRaises(BobError):
-            self._archive().listDir(".")
+            self._archive().listPackages(lambda bid, path, st: None)
 
 
 def createGiteaStatusHandler(responses):

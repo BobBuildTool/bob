@@ -36,6 +36,7 @@ import io
 import json
 import os
 import os.path
+import re
 import shutil
 import signal
 import struct
@@ -127,7 +128,8 @@ class ArtifactExistsError(ArtifactError):
 
 class TarHelper:
 
-    def __extractPackage(self, tar, audit, content):
+    @staticmethod
+    def __extractPackage(tar, audit, content):
         if tar.pax_headers.get('bob-archive-vsn', "0") != "1":
             raise BuildError("Unsupported binary artifact")
 
@@ -155,14 +157,16 @@ class TarHelper:
                 raise BuildError("Binary artifact contained unknown file: " + f.name)
             f = tar.next()
 
-    def _extract(self, fileobj, audit, content):
+    @staticmethod
+    def _extract(fileobj, audit, content):
         with tarfileOpen(None, "r|*", fileobj=fileobj, errorlevel=1) as tar:
             removePath(audit)
             removePath(content)
             os.makedirs(content)
-            self.__extractPackage(tar, audit, content)
+            TarHelper.__extractPackage(tar, audit, content)
 
-    def _extractAudit(self, filename=None, fileobj=None):
+    @staticmethod
+    def _extractAudit(filename=None, fileobj=None):
         with tarfileOpen(name=filename, mode="r|*", fileobj=fileobj, errorlevel=1) as tar:
             # validate
             if tar.pax_headers.get('bob-archive-vsn') != "1":
@@ -182,7 +186,8 @@ class TarHelper:
 
             return Audit.fromByteStream(auditJson, filename)
 
-    def _pack(self, name, fileobj, audit, content):
+    @staticmethod
+    def _pack(name, fileobj, audit, content):
         pax = { 'bob-archive-vsn' : "1" }
         with gzip.open(name or fileobj, 'wb', 6) as gzf:
             with tarfileOpen(name, "w", fileobj=gzf,
@@ -616,40 +621,31 @@ class BaseArchive(TarHelper):
             except (concurrent.futures.CancelledError, concurrent.futures.process.BrokenProcessPool):
                 raise BuildError(self._namedErrorString("Download of fingerprint interrupted."))
 
-    def deleteFile(self, filepath):
+    def deletePackage(self, buildId):
         try:
-            self._delete(filepath)
+            self._delete(buildId, ARTIFACT_SUFFIX)
         except (ArtifactError, WebdavError, OSError) as e:
             raise BobError(self._namedErrorString("Could not delete file: " + str(e)))
 
-    def _delete(self, filepath):
-        raise BobError("deleteFile() not implemented")
+    def _delete(self, buildId, suffix):
+        raise BobError("deletePackage() not implemented")
 
-    def listDir(self, path):
+    def listPackages(self, callback):
         try:
-            return self._listDir(path)
+            return self._list(callback, ARTIFACT_SUFFIX)
         except (ArtifactError, WebdavError, OSError) as e:
             raise BobError(self._namedErrorString("Could not list dir: " + str(e)))
 
-    def _listDir(self, path):
-        raise BobError("listDir() not implemented")
+    def _list(self, callback, suffix):
+        raise BobError("listPackages() not implemented")
 
-    def stat(self, filepath):
+    def getAudit(self, buildId):
         try:
-            return self._stat(filepath)
-        except (ArtifactError, WebdavError, OSError) as e:
-            raise BobError(self._namedErrorString("Could not stat file: " + str(e)))
-
-    def _stat(self, filepath):
-        raise BobError("stat() not implemented")
-
-    def getAudit(self, filepath):
-        try:
-            return self._getAudit(filepath)
+            return self._getAudit(buildId)
         except (ArtifactError, WebdavError, OSError) as e:
             raise BobError(self._namedErrorString("Could not get audit from file: " + str(e)))
 
-    def _getAudit(self, filepath):
+    def _getAudit(self, buildId):
         raise BobError("getAudit() not implemented")
 
     def getArchiveUri(self):
@@ -791,7 +787,8 @@ class LocalArchive(BaseArchive):
             NamedTemporaryFile(dir=packageResultPath, delete=False),
             self.__fileMode, packageResultFile, overwrite)
 
-    def _delete(self, filename):
+    def _delete(self, buildId, suffix):
+        filename = self._getPath(buildId, suffix)[1]
         try:
             os.unlink(os.path.join(self.__basePath, filename))
         except FileNotFoundError:
@@ -799,14 +796,22 @@ class LocalArchive(BaseArchive):
         except OSError as e:
             raise BuildError(self._namedErrorString("Cannot remove {}: {}".format(filename, str(e))))
 
-    def _listDir(self, path):
-        return os.listdir(os.path.join(self.__basePath, path))
+    def _list(self, callback, suffix):
+        dirSchema = re.compile(r'[0-9a-zA-Z]{2}')
+        archiveSchema = re.compile(r'[0-9a-zA-Z]{36,}' + ARCHIVE_GENERATION + suffix)
+        for l1 in os.listdir(self.__basePath):
+            if not dirSchema.fullmatch(l1): continue
+            for l2 in os.listdir(os.path.join(self.__basePath, l1)):
+                if not dirSchema.fullmatch(l2): continue
+                for l3 in os.listdir(os.path.join(self.__basePath, l1, l2)):
+                    if archiveSchema.fullmatch(l3):
+                        path = os.path.join(l1, l2, l3)
+                        callback(bytes.fromhex(l1 + l2 + l3.partition("-")[0]),
+                                 path, binStat(os.path.join(self.__basePath, path)))
 
-    def _stat(self, filename):
-        return binStat(os.path.join(self.__basePath, filename))
-
-    def _getAudit(self, filename):
-        return self._extractAudit(filename=os.path.join(self.__basePath, filename))
+    def _getAudit(self, buildId):
+        path = os.path.join(self.__basePath, self._getPath(buildId, ARTIFACT_SUFFIX)[1])
+        return self._extractAudit(filename=path)
 
     def getArchiveUri(self):
         return self.__basePath
@@ -863,74 +868,61 @@ class LocalArchiveUploader:
         return False
 
 
-def retryWebdavRequest(request, retries):
-    """Run a WebDav request, retrying transient transport errors."""
-    while True:
-        try:
-            return request()
-        except (WebdavError, OSError) as e:
-            if retries == 0: raise
-            retries -= 1
-
-
-def getWebdavAudit(webdav, path, retries, extract):
+def getWebdavAudit(webdav, path):
     """Read the audit trail of a remote artifact.
 
     Only the beginning of the artifact is fetched. If the audit trail is not
     part of it yet, more data is requested until it can be extracted.
     """
-    downloader = retryWebdavRequest(lambda: webdav.getPartialDownloader(path), retries)
+    downloader = webdav.getPartialDownloader(path)
     while True:
         try:
-            return extract(io.BytesIO(downloader.get()))
+            return TarHelper._extractAudit(fileobj=io.BytesIO(downloader.get()))
         except (EOFError, tarfile.ReadError):
-            # partial downloader reached EOF or could not extract the audit from the tarfile, so we get more data
-            retryWebdavRequest(lambda: downloader.more(), retries)
+            # partial downloader reached EOF or could not extract the audit
+            # from the tarfile, so we get more data
+            downloader.more(),
 
 
 class HttpArchive(BaseArchive):
     def __init__(self, spec):
         super().__init__(spec)
         self.__url = urllib.parse.urlparse(spec["url"])
-        self._webdav = WebDav(self.__url, spec.get("sslVerify", True))
-        self._retries = spec.get("retries", 1)
+        self._webdav = WebDav(self.__url, spec.get("sslVerify", True),
+                              spec.get("retries", 1))
 
     def getArchiveName(self):
         name = super().getArchiveName()
         if name:
             return name
 
-        url = self.__url
-        return urllib.parse.urlunparse((url.scheme, getNetLoc(url), url.path, '', '', ''))
-
-    def __retry(self, request):
-        return retryWebdavRequest(request, self._retries)
+        return self._webdav.getRequestURL("")
 
     def _canManage(self):
         return True
 
     def _makePath(self, buildId, suffix):
         packageResultId = buildIdToName(buildId)
-        return "/".join([self.__url.path, packageResultId[0:2], packageResultId[2:4],
+        return "/".join([packageResultId[0:2], packageResultId[2:4],
             packageResultId[4:] + suffix])
 
     def _makeParentDirs(self, path):
-        (dirs, _, _) = path.rpartition("/")
-        return self.__retry(lambda: self._webdav.mkdir(dirs, dirs.count("/")))
+        (dirs, _, _) = path.strip("/").rpartition("/")
+        if dirs:
+            self._webdav.mkdir(dirs)
 
     def _remoteName(self, buildId, suffix):
-        url = self.__url
-        return urllib.parse.urlunparse((url.scheme, getNetLoc(url), self._makePath(buildId, suffix), '', '', ''))
+        return self._webdav.getRequestURL(self._makePath(buildId, suffix))
 
     def _exists(self, path):
-        return self.__retry(lambda: self._webdav.exists(path))
+        return self._webdav.exists(path)
 
     def _openDownloadFile(self, buildId, suffix):
         path = self._makePath(buildId, suffix)
-        return self.__retry(lambda: self.__openDownloadFile(path))
+        return self.__openDownloadFile(path)
 
     def __openDownloadFile(self, path):
-        return HttpDownloader(self, self._webdav.download(path))
+        return HttpDownloader(self, self._webdav.openDownload(path))
 
     def _openUploadFile(self, buildId, suffix, overwrite):
         path = self._makePath(buildId, suffix)
@@ -950,31 +942,45 @@ class HttpArchive(BaseArchive):
         return HttpUploader(self, path, overwrite)
 
     def _putUploadFile(self, path, tmp, overwrite):
-        return self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
+        return self._webdav.upload(path, tmp, overwrite)
 
-    def _listDir(self, path):
-        path_info = self.__retry(lambda: self._webdav.listdir(path))
+    def _list(self, callback, suffix):
+        dirSchema = re.compile(r'[0-9a-zA-Z]{2}')
+        archiveSchema = re.compile(r'[0-9a-zA-Z]{36,}' + ARCHIVE_GENERATION + suffix)
+        for l1, _ in self.__listDir(""):
+            if not dirSchema.fullmatch(l1): continue
+            for l2, _ in self.__listDir(l1):
+                if not dirSchema.fullmatch(l2): continue
+                for l3, info in self.__listDir(l1 + "/" + l2):
+                    if archiveSchema.fullmatch(l3):
+                        path = l1 + "/" + l2 + "/" + l3
+                        callback(bytes.fromhex(l1 + l2 + l3.partition("-")[0]),
+                                 path, self.__statFromProps(info, path))
+
+    def __listDir(self, path):
+        path_info = self._webdav.listdir(path)
         entries = []
         for info in path_info:
             if info["path"]:
-                entries.append(info["path"].removeprefix(path + "/"))
+                entries.append((info["path"].removeprefix(path + "/"), info))
         return entries
 
-    def _delete(self, filename):
-        self.__retry(lambda: self._webdav.delete(filename))
-
-    def _stat(self, filename):
-        stats = self.__retry(lambda: self._webdav.stat(filename))
-        if stats['etag'] is not None and not stats['etag'].startswith('W/'):
-            return stats['etag']
-        if not stats['mdate'] or not stats['len']:
+    @staticmethod
+    def __statFromProps(props, filename):
+        if props['etag'] is not None and not props['etag'].startswith('W/'):
+            return props['etag']
+        if not props['mdate'] or not props['len']:
             raise ArtifactError("Missing stats for file " + filename)
         from email.utils import parsedate_to_datetime
-        return struct.pack('=dL', parsedate_to_datetime(stats['mdate']).timestamp(), stats['len'])
+        return struct.pack('=dL', parsedate_to_datetime(props['mdate']).timestamp(), props['len'])
 
-    def _getAudit(self, filename):
-        return getWebdavAudit(self._webdav, "/".join([self.__url.path, filename]),
-            self._retries, lambda f: self._extractAudit(fileobj=f))
+    def _delete(self, buildId, suffix):
+        filename = self._makePath(buildId, suffix)
+        self._webdav.delete(filename)
+
+    def _getAudit(self, buildId):
+        filename = self._makePath(buildId, ARTIFACT_SUFFIX)
+        return getWebdavAudit(self._webdav, filename)
 
     def getArchiveUri(self):
         return getNetLoc(self.__url) + self.__url.path
@@ -1255,23 +1261,21 @@ class GiteaArchive(BaseArchive):
         self.__url = urllib.parse.urlparse(spec["url"])
         self.__owner = spec["owner"]
         self.__package = spec["package"]
-        self._webdav = WebDav(self.__url, spec.get("sslVerify", True))
-        self._retries = spec.get("retries", 1)
+        self._webdav = WebDav(self.__url, spec.get("sslVerify", True), spec.get("retries", 1))
         # Caches of the managed operations. They are filled on demand and are
         # only relevant for the lifetime of a "bob archive" invocation.
         self.__versions = None
         self.__files = {}
 
     def __basePath(self):
-        return "/".join([self.__url.path.rstrip("/"), "api", "packages",
-            self.__owner, "generic", self.__package])
+        return "/".join(["api", "packages", self.__owner, "generic", self.__package])
 
     def getArchiveName(self):
         name = super().getArchiveName()
         if name:
             return name
-        return urllib.parse.urlunparse((self.__url.scheme, getNetLoc(self.__url),
-            self.__basePath(), '', '', ''))
+
+        return self._webdav.getRequestURL("")
 
     def _canManage(self):
         return True
@@ -1286,18 +1290,14 @@ class GiteaArchive(BaseArchive):
         return self.__packagePath(packageResultId, packageResultId + suffix)
 
     def _remoteName(self, buildId, suffix):
-        return urllib.parse.urlunparse((self.__url.scheme, getNetLoc(self.__url),
-            self._makePath(buildId, suffix), '', '', ''))
-
-    def __retry(self, request):
-        return retryWebdavRequest(request, self._retries)
+        return self._webdav.getRequestURL(self._makePath(buildId, suffix))
 
     def _exists(self, path):
-        return self.__retry(lambda: self._webdav.exists(path))
+        return self._webdav.exists(path)
 
     def _openDownloadFile(self, buildId, suffix):
         path = self._makePath(buildId, suffix)
-        return self.__retry(lambda: HttpDownloader(self, self._webdav.download(path)))
+        return HttpDownloader(self, self._webdav.openDownload(path))
 
     def _openUploadFile(self, buildId, suffix, overwrite):
         path = self._makePath(buildId, suffix)
@@ -1307,13 +1307,13 @@ class GiteaArchive(BaseArchive):
             # Delete a possibly existing file first. This is inherently racy:
             # a concurrent upload may still squeeze in between the delete and
             # the PUT below and let the latter fail with a conflict.
-            self.__retry(lambda: self._webdav.deletePath(path))
+            self._webdav.delete(path)
         elif self._exists(path):
             raise ArtifactExistsError()
         return HttpUploader(self, path, overwrite)
 
     def _putUploadFile(self, path, tmp, overwrite):
-        return self.__retry(lambda: self._webdav.upload(path, tmp, overwrite))
+        return self._webdav.upload(path, tmp, overwrite)
 
     #
     # Managed operations. The registry itself cannot enumerate its content.
@@ -1322,41 +1322,35 @@ class GiteaArchive(BaseArchive):
     #
 
     def __apiPath(self, *parts):
-        return "/".join([self.__url.path.rstrip("/"), "api", "v1", "packages",
-            self.__owner, "generic", self.__package, *parts])
+        return "/".join(["api", "v1", "packages", self.__owner, "generic",
+                         self.__package, *parts])
 
     def __apiGet(self, path, query=None):
-        def request():
-            with self._webdav.download(path, query=query) as reply:
-                return reply.read()
-
         try:
-            return json.loads(self.__retry(request).decode("utf-8"))
+            return json.loads(self._webdav.download(path, query=query).decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as e:
             raise WebdavError("Invalid reply of package API: " + str(e))
 
-    def __allVersions(self):
+    def __allVersions(self, callback):
         """All package versions, that is all artifacts of the archive."""
-        if self.__versions is None:
-            versions = []
-            page = 1
-            while True:
-                try:
-                    reply = self.__apiGet(self.__apiPath(),
-                        "page={}&limit={}".format(page, self.PAGE_SIZE))
-                except WebdavNotFoundError:
-                    # The package is created with the first upload. Until then
-                    # the archive is simply empty.
-                    break
-                try:
-                    versions.extend(i["version"] for i in reply)
-                except (KeyError, TypeError):
-                    raise WebdavError("Unexpected reply of package API")
-                if len(reply) < self.PAGE_SIZE: break
-                page += 1
-            self.__versions = versions
+        page = 1
+        while True:
+            try:
+                reply = self.__apiGet(self.__apiPath(),
+                    "page={}&limit={}".format(page, self.PAGE_SIZE))
+            except WebdavNotFoundError:
+                # The package is created with the first upload. Until then
+                # the archive is simply empty.
+                break
 
-        return self.__versions
+            try:
+                for i in reply:
+                    callback(i["version"])
+            except (KeyError, TypeError):
+                raise WebdavError("Unexpected reply of package API")
+
+            if len(reply) < self.PAGE_SIZE: break
+            page += 1
 
     def __versionFiles(self, version):
         """The files of a single package version, indexed by their name.
@@ -1364,72 +1358,43 @@ class GiteaArchive(BaseArchive):
         A version holds at most the tarball, the build-id and the fingerprint
         of one artifact, so the reply always fits into a single page.
         """
-        files = self.__files.get(version)
-        if files is None:
-            try:
-                reply = self.__apiGet(self.__apiPath(version, "files"))
-            except WebdavNotFoundError:
-                reply = []
-            try:
-                files = { i["name"] : i for i in reply }
-            except (KeyError, TypeError):
-                raise WebdavError("Unexpected reply of package API")
-            self.__files[version] = files
+        try:
+            reply = self.__apiGet(self.__apiPath(version, "files"))
+        except WebdavNotFoundError:
+            reply = []
 
-        return files
+        try:
+            return { i["name"] : i for i in reply }
+        except (KeyError, TypeError):
+            raise WebdavError("Unexpected reply of package API")
 
-    @staticmethod
-    def __splitPath(filename):
-        """Translate an archive command path back to version and file name.
+    def _list(self, callback, suffix):
+        versionSchema = re.compile(r'[0-9a-zA-Z]{36,}' + ARCHIVE_GENERATION)
+        archiveSchema = re.compile(r'[0-9a-zA-Z]{36,}' + ARCHIVE_GENERATION + suffix)
 
-        The archive command works on the "<xx>/<yy>/<rest>.tgz" layout of the
-        file and http backends. Our version is the file name without the
-        separators and without the suffix.
-        """
-        name = filename.replace("\\", "/").replace("/", "")
-        return name.rpartition(".")[0], name
+        def foundVersion(version):
+            if not versionSchema.fullmatch(version):
+                return
+            for name, info in self.__versionFiles(version).items():
+                if not archiveSchema.fullmatch(name):
+                    continue
+                path = self.__packagePath(version, name)
+                # Unlike the other backends we get a real content hash
+                # instead of a modification time.
+                stat = info.get("sha256")
+                if not stat:
+                    raise ArtifactError("Missing stats for file " + path)
+                callback(bytes.fromhex(version.partition("-")[0]), path, stat)
 
-    def _listDir(self, path):
-        prefix = path.replace("\\", "/").strip("/")
-        if prefix == ".": prefix = ""
-        versions = self.__allVersions()
+        self.__allVersions(foundVersion)
 
-        # The first two levels are just the first four characters of the
-        # version, that is of the build-id.
-        if prefix == "":
-            return sorted({ v[0:2] for v in versions })
-        elif len(prefix) == 2:
-            return sorted({ v[2:4] for v in versions if v.startswith(prefix) })
+    def _getAudit(self, buildId):
+        path = self._makePath(buildId, ARTIFACT_SUFFIX)
+        return getWebdavAudit(self._webdav, path)
 
-        # Only on the last level the files matter. Asking for them is
-        # required: uploaded live-build-ids and fingerprints create versions
-        # that hold no artifact at all.
-        prefix = prefix.replace("/", "")
-        return sorted(name[4:] for v in versions if v.startswith(prefix)
-                                for name in self.__versionFiles(v))
-
-    def _stat(self, filename):
-        version, name = self.__splitPath(filename)
-        info = self.__versionFiles(version).get(name)
-        if info is None:
-            raise ArtifactNotFoundError()
-        # Unlike the other backends we get a real content hash instead of a
-        # modification time.
-        stat = info.get("sha256")
-        if not stat:
-            raise ArtifactError("Missing stats for file " + filename)
-        return stat
-
-    def _getAudit(self, filename):
-        version, name = self.__splitPath(filename)
-        return getWebdavAudit(self._webdav, self.__packagePath(version, name),
-            self._retries, lambda f: self._extractAudit(fileobj=f))
-
-    def _delete(self, filename):
-        version, name = self.__splitPath(filename)
-        self.__retry(lambda: self._webdav.deletePath(self.__packagePath(version, name)))
-        # The server drops the version together with its last file.
-        self.__files.pop(version, None)
+    def _delete(self, buildId, suffix):
+        path = self._makePath(buildId, suffix)
+        self._webdav.delete(path)
 
     def getArchiveUri(self):
         return getNetLoc(self.__url) + self.__url.path
