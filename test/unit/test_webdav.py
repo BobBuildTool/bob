@@ -31,11 +31,12 @@ class TestWebdav(TestCase):
         self.__repodir.cleanup()
         super().tearDown()
 
-    def _startWebdav(self, **kwargs):
+    def _startWebdav(self, clientRetries=0, **kwargs):
         mock = HttpServerMock(self.srvdir, **kwargs)
         srv = mock.__enter__()
         self.addCleanup(mock.__exit__, None, None, None)
-        return WebDav(urlparse("http://localhost:{}/repo/".format(srv.port)))
+        return WebDav(urlparse("http://localhost:{}/repo/".format(srv.port)),
+                      retries=clientRetries)
 
     def _serverPath(self, path):
         return os.path.join(self.clntdir, path)
@@ -97,6 +98,22 @@ class TestWebdav(TestCase):
             with self.assertRaises(WebdavError):
                 webdav.upload(TEST_FILE, file, False)
 
+    def testUploadRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        webdav = self._startWebdav(clientRetries=2, retries=2)
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            webdav.upload(TEST_FILE, file, False)
+        self.assertTrue(os.path.exists(self._serverPath(TEST_FILE)))
+
+    def testUploadRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        webdav = self._startWebdav(clientRetries=2, retries=3)
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            with self.assertRaises(WebdavError):
+                webdav.upload(TEST_FILE, file, False)
+
     def testDownload(self):
         """Downloading returns the full file content"""
         with open(self._serverPath(TEST_FILE), 'w') as f:
@@ -139,6 +156,29 @@ class TestWebdav(TestCase):
         with self.assertRaises(WebdavError):
             webdav.download(TEST_FILE)
 
+    def testDownloadRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=2)
+        res = webdav.download(TEST_FILE)
+        self.assertEqual(res.decode('utf-8'), TEST_OUTPUT)
+
+    def testDownloadRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=3)
+        with self.assertRaises(WebdavError):
+            webdav.download(TEST_FILE)
+
+    def testDownloadNotFoundSurvivesRetryBudget(self):
+        """A permanent 404 is retried like any other error, but the specific
+        WebdavNotFoundError is still raised once the budget is exhausted"""
+        webdav = self._startWebdav(clientRetries=2)
+        with self.assertRaises(WebdavNotFoundError):
+            webdav.download(TEST_FILE)
+
     def testExists(self):
         """exists() reports True for an existing file"""
         with open(self._serverPath(TEST_FILE), 'w') as f:
@@ -158,6 +198,21 @@ class TestWebdav(TestCase):
         # the injected failure is consumed by now; the real (missing) state
         # shows through on the next call
         self.assertFalse(webdav.exists(TEST_FILE))
+
+    def testExistsRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=2, retryHead=True)
+        self.assertTrue(webdav.exists(TEST_FILE))
+
+    def testExistsRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=3, retryHead=True)
+        with self.assertRaises(WebdavError):
+            webdav.exists(TEST_FILE)
 
     def testDelete(self):
         """delete() removes an existing file"""
@@ -183,6 +238,25 @@ class TestWebdav(TestCase):
         self.assertTrue(os.path.exists(path))
         webdav.delete(TEST_FILE)
         self.assertFalse(os.path.exists(path))
+
+    def testDeleteRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        path = self._serverPath(TEST_FILE)
+        with open(path, 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=2)
+        webdav.delete(TEST_FILE)
+        self.assertFalse(os.path.exists(path))
+
+    def testDeleteRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        path = self._serverPath(TEST_FILE)
+        with open(path, 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav = self._startWebdav(clientRetries=2, retries=3)
+        with self.assertRaises(WebdavError):
+            webdav.delete(TEST_FILE)
+        self.assertTrue(os.path.exists(path))
 
     def testMkdirDepth1(self):
         """Create a directory directly below the repository root"""
@@ -217,6 +291,21 @@ class TestWebdav(TestCase):
         local_path = self._serverPath(os.path.join(TEST_PATH1, TEST_PATH2))
         self.webdav.mkdir(remote_path)
         self.assertTrue(os.path.exists(local_path))
+
+    def testMkdirRetryBudgetAbsorbsFailures(self):
+        """The client silently retries transient failures up to its budget"""
+        path = self._serverPath(TEST_PATH1)
+        webdav = self._startWebdav(clientRetries=2, retries=2)
+        webdav.mkdir(TEST_PATH1)
+        self.assertTrue(os.path.exists(path))
+
+    def testMkdirRetryBudgetExceeded(self):
+        """One failure more than the budget still raises WebdavError"""
+        path = self._serverPath(TEST_PATH1)
+        webdav = self._startWebdav(clientRetries=2, retries=3)
+        with self.assertRaises(WebdavError):
+            webdav.mkdir(TEST_PATH1)
+        self.assertFalse(os.path.exists(path))
 
     def testListdirRoot(self):
         """Listing the root shows the top level directories"""
