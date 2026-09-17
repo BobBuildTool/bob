@@ -193,12 +193,19 @@ class WebDav:
                                      headers=self._getHeaders(), method="MKCOL")
         try:
             with urllib.request.urlopen (req, context=self.__createContext()) as resp:
-                return (resp.status, None)
+                status, reason = resp.status, None
         except urllib.error.HTTPError as e:
             e.fp.read()
-            return (e.status, e.reason)
+            status, reason = e.status, e.reason
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
+
+        # Only the status codes that mkdir() interprets itself are passed
+        # through. Everything else (e.g. a transient 500) is a plain error
+        # that must be retried instead of being handled as a valid result.
+        if status not in [201, 405, 409]:
+            raise WebdavError("MKCOL {} {}".format(status, reason))
+        return (status, reason)
 
     def mkdir(self, path):
         status, reason = self.__retry(lambda: self._mkdir(path))
