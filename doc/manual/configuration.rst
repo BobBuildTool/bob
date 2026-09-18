@@ -3033,9 +3033,16 @@ these suffixes instead of the bare ``preMirror``/``fallbackMirror`` to enable
 interoperability between projects, layers and the local user configuration.
 
 Each mirror entry specifies the SCM type (``scm``), a regular expression to
-match the URL (``url``) and a replacement URL (``mirror``). Optionally, it is
-possible to upload to the mirror (``upload``). Currently only the URL SCM is
-supported for mirrors.
+match the URL (``url``) and a replacement URL (``mirror``). Optionally, for
+the URL SCM it is possible to upload to the mirror (``upload``). Currently
+the URL and SVN SCMs are supported for mirrors. For the SVN SCM, mirrors are
+only tried during the initial checkout of a working copy. Uploading to a SVN
+mirror is not supported.
+
+.. attention::
+   Bob assumes that SVN mirrors hold the same content as the primary URL. This
+   implies that changing the mirror URLs won't lead to new checkout executions.
+   Only the primary URL of the recipe is indicative for the content.
 
 Examples::
 
@@ -3046,6 +3053,9 @@ Examples::
         - scm: url
           url: "https?://ftp.gnu.org/(pub/)?gnu/(.*)"
           mirror: "http://www.mirrorservice.org/sites/ftp.gnu.org/gnu/\\2"
+        - scm: svn
+          url: "https://company.local/svn/repo/(.*)"
+          mirror: "file:///Z:/attic/svn/repo/\\1"
 
 A typical mirror configuration for the global user configuration could look
 like the following. It mirrors all remote URLs to a local directory::
