@@ -4100,7 +4100,8 @@ class RecipeSet:
                 os.path.join(os.path.expanduser("~"), '.config')), 'bob', 'default.yaml'))
 
         # Begin with root layer
-        allLayers = self.__parseLayer(LayerSpec(""), "9999", recipesRoot, None)
+        allLayerSpecs = { "" : LayerSpec("") }
+        allLayers = self.__parseLayer("", allLayerSpecs, "9999", recipesRoot, None)
 
         # Add string functions added after 1.0. We did not reserve a namespace
         # and we better not break existing recipes.
@@ -4253,8 +4254,8 @@ class RecipeSet:
             ret[name] = (behaviour, None)
         return ret
 
-    def __parseLayer(self, layerSpec, maxVer, recipesRoot, upperLayer):
-        layer = layerSpec.getName()
+    def __parseLayer(self, layer, allLayerSpecs, maxVer, recipesRoot, upperLayer):
+        layerSpec = allLayerSpecs[layer]
         if layer:
             # Managed layers imply that layers are potentially nested instead
             # of being checked out next to each other in the build directory.
@@ -4311,11 +4312,17 @@ class RecipeSet:
         else:
             self.__policies = self.calculatePolicies(config)
 
-        # First parse any sub-layers. Their settings have a lower precedence
+        # First update layer specs of yet unknown layers. Already discovered
+        # layers are kept because they were declared by higher layers.
+        for l in config.get("layers", []):
+            if l.getName() not in allLayerSpecs:
+                allLayerSpecs[l.getName()] = l
+
+        # Next parse any sub-layers. Their settings have a lower precedence
         # and may be overwritten by higher layers.
         allLayers = []
         for l in config.get("layers", []):
-            allLayers.extend(self.__parseLayer(l, maxVer, recipesRoot, layer))
+            allLayers.extend(self.__parseLayer(l.getName(), allLayerSpecs, maxVer, recipesRoot, layer))
 
         # Load plugins and re-create schemas as new keys may have been added
         self.__loadPlugins(rootDir, layer, config.get("plugins", []))
