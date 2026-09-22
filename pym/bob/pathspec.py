@@ -791,13 +791,9 @@ class PackageSet:
         predExpr = pyparsing.infix_notation(
             locationPath ^ stringLiteral ^ functionCall,
             [
-                ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks, self.__getGraphRoot, 9)),
-                ('<',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 8)),
-                ('<=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 7)),
-                ('>',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 6)),
-                ('>=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 5)),
-                ('==', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 4)),
-                ('!=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 3)),
+                ('!', 1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks, self.__getGraphRoot, 5)),
+                (pyparsing.one_of('< <= > >='), 2, pyparsing.opAssoc.LEFT, infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 4)),
+                (pyparsing.one_of('== !='), 2, pyparsing.opAssoc.LEFT, infixBinaryOp(BinaryStrOperator, self.__getGraphIter, 3)),
                 ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator, precedence=2)),
                 ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator, precedence=1))
             ])
