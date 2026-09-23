@@ -894,10 +894,26 @@ class PackageSet:
             self.__graph = None
 
     def getAliases(self):
+        """Get all defined path aliases.
+
+        Aliases are substituted for the first path element of a relative
+        location path. See :ref:`manpage-bobpaths-aliases` for details.
+
+        :return: List of alias names.
+        :rtype: list[str]
+        """
         return list(self.__aliases.keys())
 
     def getRootPackage(self):
-        """Get virtual root package."""
+        """Get virtual root package.
+
+        The root package is a synthetic package that has all root recipes as
+        its direct dependencies. It is the starting point of every absolute
+        location path.
+
+        :return: The virtual root package.
+        :rtype: bob.input.Package
+        """
         if self.__root is None:
             self.__root = self.__generator()
         return self.__root
@@ -912,10 +928,22 @@ class PackageSet:
         return self.__findResultNodes(self.__getGraphRoot(), nodes, valid, queryAll)
 
     def queryPackagePath(self, path, queryAll=False):
-        """Execute query and return bob.input.Package objects.
+        """Execute a package query and return the matching packages.
 
-        Setting 'queryAll' to True will return all alternate paths to a result
-        package instead of only the first one.
+        The ``path`` is parsed and evaluated as a :ref:`package path
+        <manpage-bobpaths>`. Any alias present as the first path element of a
+        relative path is substituted before the query is executed.
+
+        :param path: Package path query.
+        :type path: str
+        :param queryAll: If a package is reachable through more than one
+            path, return it once for every path that matches instead of only
+            the first one.
+        :type queryAll: bool
+        :return: All packages that matched the query.
+        :rtype: list[bob.input.Package]
+        :raises bob.errors.BobError: The query could not be parsed or
+            evaluated.
         """
         (nodes, valid) = self.__query(path)
         return self.__findResultPackages(self.__getGraphRoot(), self.getRootPackage(), nodes, valid, queryAll)
