@@ -401,12 +401,8 @@ class IfExpressionParser:
             stringLiteral ^ functionCall ,
             [
                 ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotOperator(s, loc, toks)),
-                ('<',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
-                ('<=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
-                ('>',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
-                ('>=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
-                ('==', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
-                ('!=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryStrOperator)),
+                (pyparsing.one_of('< <= > >='), 2, pyparsing.opAssoc.LEFT, infixBinaryOp(BinaryStrOperator)),
+                (pyparsing.one_of('== !='), 2, pyparsing.opAssoc.LEFT, infixBinaryOp(BinaryStrOperator)),
                 ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator)),
                 ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(BinaryBoolOperator))
             ])

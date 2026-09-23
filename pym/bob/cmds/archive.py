@@ -343,12 +343,8 @@ def query(scanner, expressions):
         stringLiteral | varReference,
         [
             ('!',  1, pyparsing.opAssoc.RIGHT, lambda s, loc, toks: NotPredicate(s, loc, toks)),
-            ('<',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
-            ('<=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
-            ('>',  2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
-            ('>=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
-            ('==', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
-            ('!=', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(ComparePredicate)),
+            (pyparsing.one_of('< <= > >='), 2, pyparsing.opAssoc.LEFT, infixBinaryOp(ComparePredicate)),
+            (pyparsing.one_of('== !='), 2, pyparsing.opAssoc.LEFT, infixBinaryOp(ComparePredicate)),
             ('&&', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(AndPredicate)),
             ('||', 2, pyparsing.opAssoc.LEFT,  infixBinaryOp(OrPredicate))
         ])
