@@ -1531,6 +1531,43 @@ class TestLayers(RecipesTmp, TestCase):
         self.assertEqual(err.exception.slogan,
                          "Managed layers aren't enabled! See the managedLayers policy for details.")
 
+    def testManagedDisposition(self):
+        """Test that the outer-most layer decides where a layer is located.
+
+        Layer 'X' is declared by the root project as a managed (SCM)
+        layer. It must therefore be searched in the build directory (the
+        current working directory). Layer 'A' is processed first and
+        merely names 'X' again as a plain, unmanaged layer. This must not
+        cause 'X' to be looked up relative to the project directory
+        instead.
+        """
+        os.makedirs(os.path.join("proj", "recipes"))
+        with open(os.path.join("proj", "config.yaml"), "w") as f:
+            yaml.dump({
+                "bobMinimumVersion" : "1.2",
+                "layers" : [
+                    "A",
+                    {
+                        "name" : "X",
+                        "scm" : "git",
+                        "url" : "git@server.test:bob.git",
+                    },
+                ],
+            }, f)
+
+        os.makedirs(os.path.join("proj", "layers", "A"))
+        with open(os.path.join("proj", "layers", "A", "config.yaml"), "w") as f:
+            yaml.dump({ "layers" : [ "X" ] }, f)
+
+        # 'X' must only exist in the build directory (cwd), not underneath
+        # the project directory, to prove that it was found there.
+        os.makedirs(os.path.join("layers", "X"))
+        with open(os.path.join("layers", "X", "config.yaml"), "w") as f:
+            yaml.dump({}, f)
+
+        recipes = RecipeSet()
+        recipes.parse(recipesRoot="proj")
+
 class TestIfExpression(RecipesTmp, TestCase):
     """ Test if expressions """
     def setUp(self):
