@@ -27,7 +27,7 @@ DEBUG = 2
 TRACE = 3
 
 COLORS2CODE = [ "", "", "32", "34", "33", "31", "32;1", "32", "1;32;48;5;22", "31", "1;31;48;5;52" ]
-COLORS2TEXT = [ "NOTE", "NOTE", "NOTE", "INFO", "WARN", "ERR ", "====" ]
+COLORS2TEXT = [ "NOTE", "SKIP", "OK", "INFO", "WARN", "ERR" ]
 COLORS2MARK = [ " ", " ", "✔", "★", "⚠", "✘"]
 
 def colorize(string, color):
@@ -445,7 +445,7 @@ class ParallelTtyUI(BaseTUI):
 
 
 class ParallelDumbUIAction(BaseTUIAction):
-    def __init__(self, tui, job, name, msg, ellipsis, showDetails):
+    def __init__(self, tui, job, name, msg, ellipsis, showDetails, getTime):
         super().__init__(showDetails)
         self.__tui = tui
         self.__job = job
@@ -453,6 +453,8 @@ class ParallelDumbUIAction(BaseTUIAction):
         self.__msg = msg
         self.__ellipsis = ellipsis
         if not ellipsis: self.setError("")
+        self.__getTime = getTime
+        self.__startTime = getTime()
 
     def __enter__(self):
         return self
@@ -472,25 +474,27 @@ class ParallelDumbUIAction(BaseTUIAction):
         elif exc_type is not None and self.err_message:
             kind = self.err_kind
             stderr = self.err_message
-        self.__tui._printResult(self.__job, msg, stderr, kind)
+        msg += " ({})".format(duration2text(self.__getTime() - self.__startTime))
+        self.__tui._printResult(self.__job, COLORS2TEXT[kind & 7], msg, stderr, kind)
         return False
 
 class ParallelDumbUI(BaseTUI):
-    def __init__(self, verbosity):
+    def __init__(self, verbosity, loop):
         super().__init__(verbosity)
         self.__index = 1
+        self.__loop = loop
 
     def __nextJob(self):
         ret = self.__index
         self.__index += 1
         return ret
 
-    def _print(self, job, msg, kind, stage=""):
-        level = COLORS2TEXT[kind & 7]
-        print("[{:<5} {:>4}] {}: {}".format(stage, job, level, colorize(msg, kind)))
+    def _print(self, job, tag, msg, kind):
+        prefix = "[{:>3}]".format(job) if job else "     "
+        print(prefix, colorize("{:<5} {}".format(tag, msg), kind))
 
-    def _printResult(self, job, msg, stderr, kind):
-        self._print(job, msg, kind, "End")
+    def _printResult(self, job, tag, msg, stderr, kind):
+        self._print(job, tag, msg, kind)
         if stderr:
             # Print error messages on stderr when being on a dumb output. It is
             # probably redirected by some other script or an analyzed IDE (think
@@ -499,12 +503,12 @@ class ParallelDumbUI(BaseTUI):
 
     def log(self, message, kind, severity):
         if not self._isVisible(severity): return
-        self._print("****", message, kind, "*****")
+        print(colorize("***** " + message, kind))
 
     def stepMessage(self, step, action, message, kind, severity):
         if not self._isVisible(severity): return
-        self._print("", "{:10}{} - {}".format(action,
-            step.getPackage().getName(), message), kind)
+        self._print(None, COLORS2TEXT[kind & 7], "{:10}{} - {}".format(
+            action, step.getPackage().getName(), message), kind)
 
     def stepAction(self, step, action, message, severity, details):
         return self.__action(step, action, message, severity, details, True)
@@ -524,9 +528,10 @@ class ParallelDumbUI(BaseTUI):
 
         job = self.__nextJob()
         name = step.getPackage().getName()
-        self._print(job, "{:10}{} - {}".format(action, name, message), EXECUTED, "Start")
+        self._print(job, "....", "{:10}{} - {}".format(action, name, message), EXECUTED)
         msg = "{:10}{} - {}{}".format(action, name, message, details)
-        return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails)
+        return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails,
+                                    self.__loop.time)
 
 def log(message, kind, severity=ALWAYS):
     __tui.log(message, kind, severity)
@@ -555,7 +560,7 @@ def setTui(maxJobs, loop):
     elif __onTTY:
         __tui = ParallelTtyUI(__tui.getVerbosity(), maxJobs, loop)
     else:
-        __tui = ParallelDumbUI(__tui.getVerbosity())
+        __tui = ParallelDumbUI(__tui.getVerbosity(), loop)
 
 def cleanup():
     __tui.cleanup()
