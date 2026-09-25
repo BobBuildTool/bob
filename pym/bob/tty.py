@@ -638,16 +638,16 @@ class MassiveParallelTtyUI(BaseTUI):
         self.__tasksDone = done
         self.__tasksNum = num
 
-def log(message, kind, severity=-2):
+def log(message, kind, severity=ALWAYS):
     __tui.log(message, kind, severity)
 
-def stepMessage(step, action, message, kind, severity=-2):
+def stepMessage(step, action, message, kind, severity=ALWAYS):
     __tui.stepMessage(step, action, message, kind, severity)
 
-def stepAction(step, action, message, severity=-2, details=""):
+def stepAction(step, action, message, severity=ALWAYS, details=""):
     return __tui.stepAction(step, action, message, severity, details)
 
-def stepExec(step, action, message, severity=-2, details=""):
+def stepExec(step, action, message, severity=ALWAYS, details=""):
     return __tui.stepExec(step, action, message, severity, details)
 
 def setVerbosity(verbosity):
