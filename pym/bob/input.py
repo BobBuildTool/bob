@@ -12,7 +12,7 @@ from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression, \
     EXTRA_STRING_FUNS
-from .tty import InfoOnce, Warn, WarnOnce, setColorMode, setParallelTUIThreshold
+from .tty import InfoOnce, Warn, WarnOnce, setColorMode
 from .utils import asHexStr, joinScripts, compareVersion, binStat, \
     updateDicRecursive, hashString, getPlatformTag, getPlatformString, \
     replacePath, getPlatformEnvWhiteList, isAbsPath
@@ -4340,7 +4340,6 @@ class RecipeSet:
         # color mode provided in cmd line takes precedence
         # (if no color mode provided by user, default one will be used)
         setColorMode(self._colorModeConfig or self.__uiConfig.get('color', 'auto'))
-        setParallelTUIThreshold(self.__uiConfig.get('parallelTUIThreshold', 16))
 
         allLayers.append((layer, rootDir, config["scriptLanguage"]))
         return allLayers

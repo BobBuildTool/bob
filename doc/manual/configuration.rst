@@ -3254,10 +3254,8 @@ color
         Use colors only when TTY console detected (default)
 
 parallelTUIThreshold
-    Set the threshold for switching between TUIs. Default: 16
-
-    If the number of jobs exceeds this threshold the TUI switches from one
-    status line per job to a TUI using only two status lines.
+    This parameter has been removed. Still accept for compatibility with older
+    Bob versions.
 
 queryMode
     Set the behaviour of package queries when no package is matched. Can be
