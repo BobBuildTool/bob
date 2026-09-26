@@ -224,12 +224,12 @@ def duration2text(duration):
         return "{:.1f}s".format(duration)
 
 class ParallelTtyUIAction(BaseTUIAction):
-    def __init__(self, tui, job, slot, name, msg, ellipsis, showDetails, getTime):
+    def __init__(self, tui, job, slot, path, msg, ellipsis, showDetails, getTime):
         super().__init__(showDetails)
         self.__tui = tui
         self.__job = job
         self.__slot = slot
-        self.__name = name
+        self.__path = path
         self.__msg = msg
         self.__ellipsis = ellipsis
         if not ellipsis: self.setError("")
@@ -258,8 +258,10 @@ class ParallelTtyUIAction(BaseTUIAction):
         msg = colorize(COLORS2MARK[kind & 7] + " " + msg, kind)+ " - " + duration
 
         if not self.__ellipsis and exc_type is not None and self.err_message:
-            ruler = colorize("═" * terminalSize.columns, self.err_kind)
-            msg = [msg, ruler, self.err_message, ruler]
+            header = ">> " + self.__path + " "
+            header = colorize(header + "═" * (terminalSize.columns - len(header)), self.err_kind)
+            trailer = colorize("═" * terminalSize.columns, self.err_kind)
+            msg = [msg, header, self.err_message, trailer]
 
         self.__tui._putResult(self.__slot, msg)
         return False
@@ -417,9 +419,10 @@ class ParallelTtyUI(BaseTUI):
         slot = 0
         while self.__slots[slot] is not None: slot += 1
         name = step.getPackage().getName()
+        path = "/".join(step.getPackage().getStack())
         self.__slots[slot] = job
         msg = "{:10}{} - {}{}".format(action, name, message, details)
-        ret = ParallelTtyUIAction(self, job, slot, name, msg, ellipsis, showDetails, self.__loop.time)
+        ret = ParallelTtyUIAction(self, job, slot, path, msg, ellipsis, showDetails, self.__loop.time)
         self.__jobs[job] = (ret, "{:10}{} - {}".format(action, name, message))
         self.__putFooter()
         return ret
@@ -445,11 +448,11 @@ class ParallelTtyUI(BaseTUI):
 
 
 class ParallelDumbUIAction(BaseTUIAction):
-    def __init__(self, tui, job, name, msg, ellipsis, showDetails, getTime):
+    def __init__(self, tui, job, path, msg, ellipsis, showDetails, getTime):
         super().__init__(showDetails)
         self.__tui = tui
         self.__job = job
-        self.__name = name
+        self.__path = path
         self.__msg = msg
         self.__ellipsis = ellipsis
         if not ellipsis: self.setError("")
@@ -475,6 +478,8 @@ class ParallelDumbUIAction(BaseTUIAction):
             kind = self.err_kind
             stderr = self.err_message
         msg += " ({})".format(duration2text(self.__getTime() - self.__startTime))
+        if kind == ERROR:
+            msg += "\n>> " + self.__path
         self.__tui._printResult(self.__job, COLORS2TEXT[kind & 7], msg, stderr, kind)
         return False
 
@@ -528,9 +533,10 @@ class ParallelDumbUI(BaseTUI):
 
         job = self.__nextJob()
         name = step.getPackage().getName()
+        path = "/".join(step.getPackage().getStack())
         self._print(job, "....", "{:10}{} - {}".format(action, name, message), EXECUTED)
         msg = "{:10}{} - {}{}".format(action, name, message, details)
-        return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails,
+        return ParallelDumbUIAction(self, job, path, msg, ellipsis, showDetails,
                                     self.__loop.time)
 
 def log(message, kind, severity=ALWAYS):
