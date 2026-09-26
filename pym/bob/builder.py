@@ -14,6 +14,7 @@ from .scm import getScm
 from .state import BobState
 from .stringparser import Env
 from .tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit, \
+    setJobServer, \
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from .utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
@@ -210,6 +211,10 @@ class ExternalJobServer:
     def getMakeFd(self):
         return self.__makeFds
 
+    def getTokens(self):
+        # We own the implicit token. Only the others are in the pipe.
+        return self.__extJobserverCfg.jobs() - 1
+
     def getSubMakeJobserverCfg(self, style):
         assert style in ("fifo", "pipe", "fifo-or-pipe")
         if self.__extJobserverCfg.isFifo() and style in ("fifo", "fifo-or-pipe"):
@@ -241,6 +246,9 @@ class InternalJobServer:
 
     def getMakeFd(self):
         return (self.__rfd, self.__wfd)
+
+    def getTokens(self):
+        return self.__jobs
 
     def getSubMakeJobserverCfg(self, style):
         assert style in ("fifo", "pipe", "fifo-or-pipe")
@@ -327,10 +335,13 @@ class JobServer:
             runnersSemaphore = JobServerSemaphore(jobServer.getMakeFd(), False)
 
         self.__jobServer = jobServer
+        if jobServer is not None:
+            setJobServer(jobServer.getMakeFd()[0], jobServer.getTokens())
         return (jobServer, runnersSemaphore)
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.__jobServer:
+            setJobServer(None, 0)
             self.__jobServer.shutdown()
         return False
 

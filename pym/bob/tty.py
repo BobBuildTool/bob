@@ -138,6 +138,9 @@ class BaseTUI:
     def setProgress(self, done, num):
         pass
 
+    def setJobServer(self, fd, tokens):
+        pass
+
     def _isVisible(self, severity):
         if isinstance(severity, int):
             return severity <= self.__verbosity
@@ -223,6 +226,20 @@ def duration2text(duration):
     else:
         return "{:.1f}s".format(duration)
 
+HISTOGRAM_BARS = " ▁▂▃▄▅▆▇█"
+
+def utilization2color(util):
+    """Map utilization (0..1) to a green-yellow-red gradient.
+
+    Uses the 256 color palette cube where each channel has 6 levels. Red is
+    ramped up first to reach yellow, then green is ramped down. Channels are
+    capped at level 3 to keep the colors muted.
+    """
+    step = round(min(max(util, 0.0), 1.0) * 6)
+    red = min(step, 3)
+    green = min(6 - step, 3)
+    return "38;5;{}".format(16 + 36*red + 6*green)
+
 class ParallelTtyUIAction(BaseTUIAction):
     def __init__(self, tui, job, slot, path, msg, ellipsis, showDetails, getTime):
         super().__init__(showDetails)
@@ -278,6 +295,17 @@ class ParallelTtyUI(BaseTUI):
         self.__loop = loop
         self.__footerLines = 0
 
+        # Job utilization histogram. Each entry is the average fraction of
+        # job server tokens that were in use during one second. Only shown
+        # while a job server is registered whose free tokens can be queried.
+        from collections import deque
+        self.__utilHistory = deque(maxlen=1024)
+        self.__utilSum = 0
+        self.__utilSamples = 0
+        self.__utilStart = loop.time()
+        self.__jobServerFd = None
+        self.__jobServerTokens = 0
+
         self.__ttyInit()
 
     def __ttyInit(self):
@@ -303,8 +331,62 @@ class ParallelTtyUI(BaseTUI):
         if sys.platform == "win32":
             global terminalSize
             terminalSize = shutil.get_terminal_size()
+        self.__sampleUtilization()
         self.__putFooter()
         self.__timer = self.__loop.call_later(0.1, self.__timerTick)
+
+    def __availableTokens(self, fd):
+        """Get number of free tokens in job server pipe.
+
+        Returns None if the FIONREAD ioctl is not supported or failed.
+        """
+        try:
+            import fcntl, struct, termios
+            buf = fcntl.ioctl(fd, termios.FIONREAD, struct.pack("i", 0))
+            return struct.unpack("i", buf)[0]
+        except (ImportError, AttributeError, OSError, ValueError):
+            return None
+
+    def setJobServer(self, fd, tokens):
+        if fd is not None and (tokens <= 0 or self.__availableTokens(fd) is None):
+            fd = None
+        self.__jobServerFd = fd
+        self.__jobServerTokens = tokens
+        self.__utilSum = 0
+        self.__utilSamples = 0
+        self.__utilStart = self.__loop.time()
+
+    def __sampleUtilization(self):
+        if self.__jobServerFd is None:
+            return
+        available = self.__availableTokens(self.__jobServerFd)
+        if available is None:
+            self.__jobServerFd = None
+            return
+
+        used = self.__jobServerTokens - available
+        self.__utilSum += min(max(used / self.__jobServerTokens, 0.0), 1.0)
+        self.__utilSamples += 1
+        now = self.__loop.time()
+        if now - self.__utilStart >= 1.0:
+            self.__utilHistory.append(self.__utilSum / self.__utilSamples)
+            self.__utilSum = 0
+            self.__utilSamples = 0
+            self.__utilStart = now
+
+    def __histogram(self, width):
+        """Render utilization history, newest first, at most width chars.
+
+        Returns the colorized histogram and its printable length.
+        """
+        levels = len(HISTOGRAM_BARS) - 1
+        bars = []
+        for util in reversed(self.__utilHistory):
+            if len(bars) >= width: break
+            level = round(util * levels)
+            if util > 0 and level == 0: level = 1
+            bars.append(colorize(HISTOGRAM_BARS[level], utilization2color(util)))
+        return "".join(bars), len(bars)
 
     def __nextJob(self):
         ret = self.__index
@@ -361,10 +443,15 @@ class ParallelTtyUI(BaseTUI):
                     len(self.__jobs), self.__maxJobs,
                     self.__tasksDone*100//self.__tasksNum,
                     self.__tasksDone, self.__tasksNum)
-        tailSize = max(columns - 4 - len(status), 0)
+        if self.__jobServerFd is not None:
+            tailSize = max(columns - 7 - len(status), 0)
+            histogram, histogramSize = self.__histogram(tailSize)
+            tail = "─ {} {}".format(histogram, "─" * (tailSize - histogramSize))
+        else:
+            tail = "─" * max(columns - 4 - len(status), 0)
         # Erase to the end of the screen to remove stale lines of a previous,
         # larger footer.
-        print("\x1b[J╰──{}{}╯".format(status, "─" * tailSize), end="")
+        print("\x1b[J╰──{}{}╯".format(status, tail), end="")
         # Move up <lines> lines, enable line wrap
         print("\x1b[{}A".format(lines), "\x1b[?7h\r", sep='', end='')
         self.__footerLines = lines
@@ -557,6 +644,14 @@ def setVerbosity(verbosity):
 
 def setProgress(done, num):
     __tui.setProgress(done, num)
+
+def setJobServer(fd, tokens):
+    """Register the job server pipe to show its utilization.
+
+    Pass the read end of the job server pipe and the number of tokens that
+    are available in it when idle. Pass fd=None to unregister it again.
+    """
+    __tui.setJobServer(fd, tokens)
 
 def setTui(maxJobs, loop):
     global __tui
