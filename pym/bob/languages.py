@@ -659,8 +659,7 @@ class PythonLanguage:
         env.update({
             "PATH": '"' + pathSep + '".join([' + ", ".join(
                 [repr(os.path.abspath(p)) for p in spec.paths] +
-                (['os.environ.get("PATH", "")'] if not spec.fatSandbox else
-                 [repr(p) for p in spec.sandboxPaths])
+                (['os.environ.get("PATH", "")'])
             ) + '])',
             "LD_LIBRARY_PATH": '"' + pathSep + '".join(' +
                 repr([ os.path.abspath(p) for p in spec.libraryPaths ]) + ')',
