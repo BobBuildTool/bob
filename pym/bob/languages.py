@@ -659,7 +659,7 @@ class PythonLanguage:
         env.update({
             "PATH": '"' + pathSep + '".join([' + ", ".join(
                 [repr(os.path.abspath(p)) for p in spec.paths] +
-                (['os.environ.get("PATH", "")'] if not spec.hasSandbox else
+                (['os.environ.get("PATH", "")'] if not spec.fatSandbox else
                  [repr(p) for p in spec.sandboxPaths])
             ) + '])',
             "LD_LIBRARY_PATH": '"' + pathSep + '".join(' +
@@ -722,7 +722,7 @@ class PythonLanguage:
 
     @staticmethod
     def __scriptFilePaths(spec, tmpDir):
-        if spec.hasSandbox:
+        if spec.fatSandbox:
             execScriptFile = "/.script.py"
             realScriptFile = (spec.scriptHint or os.path.join(tmpDir, ".script")) + ".py"
         else:
@@ -738,7 +738,7 @@ class PythonLanguage:
             f.write(PythonLanguage.__formatSetup(spec))
 
         interpreter = spec.interpreterPath and os.path.abspath(spec.interpreterPath) \
-                      or ("python3" if spec.hasSandbox else sys.executable)
+                      or ("python3" if spec.fatSandbox else sys.executable)
         args = [interpreter, "-sS", "-i", execScriptFile]
         args.extend(os.path.abspath(a) for a in spec.args)
 
@@ -751,7 +751,7 @@ class PythonLanguage:
             f.write(PythonLanguage.__formatScript(spec, script, tmpDir, trace))
 
         interpreter = spec.interpreterPath and os.path.abspath(spec.interpreterPath) \
-                      or ("python3" if spec.hasSandbox else sys.executable)
+                      or ("python3" if spec.fatSandbox else sys.executable)
         args = [interpreter, "-sS", execScriptFile]
         args.extend(os.path.abspath(a) for a in spec.args)
 
@@ -784,7 +784,7 @@ class PythonLanguage:
     @staticmethod
     def setupFingerprint(spec, env, trace):
         interpreter = spec.interpreterPath and os.path.abspath(spec.interpreterPath) \
-                      or ("python3" if spec.hasSandbox else sys.executable)
+                      or ("python3" if spec.fatSandbox else sys.executable)
         return [interpreter, "-sS", "-c", spec.fingerprintScript]
 
 
