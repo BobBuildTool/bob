@@ -361,7 +361,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 help="A preBuildHook is set but it returned with a non-zero status.")
         success = False
         if jobserverCfg.jobs() > 1:
-            setTui(jobserverCfg.jobs())
+            setTui(jobserverCfg.jobs(), loop)
             builder.enableBufferedIO()
         try:
             builder.cook([ExecutableStep.fromStep(b, LazyIR) for b in backlog],
@@ -380,7 +380,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                     results.append(resultPath)
             success = True
         finally:
-            if jobserverCfg.jobs() > 1: setTui(1)
+            if jobserverCfg.jobs() > 1: setTui(1, None)
             builder.saveBuildState()
             runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
 

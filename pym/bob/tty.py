@@ -27,7 +27,8 @@ DEBUG = 2
 TRACE = 3
 
 COLORS2CODE = [ "", "", "32", "34", "33", "31", "32;1", "32", "1;32;48;5;22", "31", "1;31;48;5;52" ]
-COLORS2TEXT = [ "NOTE", "NOTE", "NOTE", "INFO", "WARN", "ERR ", "====" ]
+COLORS2TEXT = [ "NOTE", "SKIP", "OK", "INFO", "WARN", "ERR" ]
+COLORS2MARK = [ " ", " ", "✔", "★", "⚠", "✘"]
 
 def colorize(string, color):
     if isinstance(color, int):
@@ -137,6 +138,9 @@ class BaseTUI:
     def setProgress(self, done, num):
         pass
 
+    def setJobServer(self, fd, tokens):
+        pass
+
     def _isVisible(self, severity):
         if isinstance(severity, int):
             return severity <= self.__verbosity
@@ -212,17 +216,42 @@ class SingleTUI(BaseTUI):
             print(colorize("   {:10}{}{}".format(action, message, details), EXECUTED))
             return DummyTUIAction()
 
+def duration2text(duration):
+    if duration >= 60*60:
+        duration = int(duration)
+        return "{:d}h{:02d}m".format(duration // 3600, (duration // 60) % 60)
+    elif duration >= 60:
+        duration = int(duration)
+        return "{:d}m{:02d}s".format(duration // 60, duration % 60)
+    else:
+        return "{:.1f}s".format(duration)
+
+HISTOGRAM_BARS = " ▁▂▃▄▅▆▇█"
+
+def utilization2color(util):
+    """Map utilization (0..1) to a green-yellow-red gradient.
+
+    Uses the 256 color palette cube where each channel has 6 levels. Red is
+    ramped up first to reach yellow, then green is ramped down. Channels are
+    capped at level 3 to keep the colors muted.
+    """
+    step = round(min(max(util, 0.0), 1.0) * 6)
+    red = min(step, 3)
+    green = min(6 - step, 3)
+    return "38;5;{}".format(16 + 36*red + 6*green)
 
 class ParallelTtyUIAction(BaseTUIAction):
-    def __init__(self, tui, job, slot, name, msg, ellipsis, showDetails):
+    def __init__(self, tui, job, slot, path, msg, ellipsis, showDetails, getTime):
         super().__init__(showDetails)
         self.__tui = tui
         self.__job = job
         self.__slot = slot
-        self.__name = name
+        self.__path = path
         self.__msg = msg
         self.__ellipsis = ellipsis
         if not ellipsis: self.setError("")
+        self.__getTime = getTime
+        self.startTime = getTime()
 
     def __enter__(self):
         return self
@@ -232,24 +261,30 @@ class ParallelTtyUIAction(BaseTUIAction):
             kind = ERROR
         else:
             kind = EXECUTED
-        msg = "[{:>4}] {}".format(self.__job, colorize(self.__msg, kind))
+
+        msg = self.__msg
         if self.__ellipsis:
             if exc_type is None:
                 kind = self.ok_kind
-                status = self.ok_message
+                msg += self.ok_message
             else:
                 kind = self.err_kind
-                status = self.err_message
-            msg += colorize(status, kind)
+                msg += self.err_message
+
+        duration = duration2text(self.__getTime() - self.startTime)
+        msg = colorize(COLORS2MARK[kind & 7] + " " + msg, kind)+ " - " + duration
+
         if not self.__ellipsis and exc_type is not None and self.err_message:
-            msg = [msg] + [
-                "[{:>4}] |{}| {}".format(self.__job, colorize(self.__name, self.err_kind), l)
-                for l in self.err_message.split("\n")]
+            header = ">> " + self.__path + " "
+            header = colorize(header + "═" * (terminalSize.columns - len(header)), self.err_kind)
+            trailer = colorize("═" * terminalSize.columns, self.err_kind)
+            msg = [msg, header, self.err_message, trailer]
+
         self.__tui._putResult(self.__slot, msg)
         return False
 
 class ParallelTtyUI(BaseTUI):
-    def __init__(self, verbosity, maxJobs):
+    def __init__(self, verbosity, maxJobs, loop):
         super().__init__(verbosity)
         self.__index = 1
         self.__maxJobs = maxJobs
@@ -257,6 +292,19 @@ class ParallelTtyUI(BaseTUI):
         self.__slots = [None] * maxJobs
         self.__tasksDone = 0
         self.__tasksNum = 1
+        self.__loop = loop
+        self.__footerLines = 0
+
+        # Job utilization histogram. Each entry is the average fraction of
+        # job server tokens that were in use during one second. Only shown
+        # while a job server is registered whose free tokens can be queried.
+        from collections import deque
+        self.__utilHistory = deque(maxlen=1024)
+        self.__utilSum = 0
+        self.__utilSamples = 0
+        self.__utilStart = loop.time()
+        self.__jobServerFd = None
+        self.__jobServerTokens = 0
 
         self.__ttyInit()
 
@@ -275,35 +323,144 @@ class ParallelTtyUI(BaseTUI):
         except ImportError:
             pass
 
+        # Update every 0.1s
+        self.__timer = self.__loop.call_later(0.1, self.__timerTick)
+
+    def __timerTick(self):
+        # We have to poll for size changes on Windows. :(
+        if sys.platform == "win32":
+            global terminalSize
+            terminalSize = shutil.get_terminal_size()
+        self.__sampleUtilization()
+        self.__putFooter()
+        self.__timer = self.__loop.call_later(0.1, self.__timerTick)
+
+    def __availableTokens(self, fd):
+        """Get number of free tokens in job server pipe.
+
+        Returns None if the FIONREAD ioctl is not supported or failed.
+        """
+        try:
+            import fcntl, struct, termios
+            buf = fcntl.ioctl(fd, termios.FIONREAD, struct.pack("i", 0))
+            return struct.unpack("i", buf)[0]
+        except (ImportError, AttributeError, OSError, ValueError):
+            return None
+
+    def setJobServer(self, fd, tokens):
+        if fd is not None and (tokens <= 0 or self.__availableTokens(fd) is None):
+            fd = None
+        self.__jobServerFd = fd
+        self.__jobServerTokens = tokens
+        self.__utilSum = 0
+        self.__utilSamples = 0
+        self.__utilStart = self.__loop.time()
+
+    def __sampleUtilization(self):
+        if self.__jobServerFd is None:
+            return
+        available = self.__availableTokens(self.__jobServerFd)
+        if available is None:
+            self.__jobServerFd = None
+            return
+
+        used = self.__jobServerTokens - available
+        self.__utilSum += min(max(used / self.__jobServerTokens, 0.0), 1.0)
+        self.__utilSamples += 1
+        now = self.__loop.time()
+        if now - self.__utilStart >= 1.0:
+            self.__utilHistory.append(self.__utilSum / self.__utilSamples)
+            self.__utilSum = 0
+            self.__utilSamples = 0
+            self.__utilStart = now
+
+    def __histogram(self, width):
+        """Render utilization history, newest first, at most width chars.
+
+        Returns the colorized histogram and its printable length.
+        """
+        levels = len(HISTOGRAM_BARS) - 1
+        bars = []
+        for util in reversed(self.__utilHistory):
+            if len(bars) >= width: break
+            level = round(util * levels)
+            if util > 0 and level == 0: level = 1
+            bars.append(colorize(HISTOGRAM_BARS[level], utilization2color(util)))
+        return "".join(bars), len(bars)
+
     def __nextJob(self):
         ret = self.__index
         self.__index += 1
         return ret
 
     def __putLineCont(self, line):
-        print("\r" + "\x1b[2K", line, "\x1b[K", sep="")
+        # Erase every line individually. The text might wrap or span multiple
+        # lines which would otherwise leave remnants of the footer behind.
+        # Erasing to the end of the screen (ED) must be avoided here: if the
+        # cursor is in the top left corner, some terminals (e.g. tmux with
+        # "scroll-on-clear") move the whole screen into the history buffer.
+        for l in line.split("\n"):
+            print("\r\x1b[2K", l, "\x1b[K", sep="")
 
     def __putLine(self, line):
         self.__putLineCont(line)
         self.__putFooter()
 
     def __putFooter(self):
-        # CR, disable line wrap, erase line, ...
-        print("\r\x1b[?7l\x1b[2K====== {}/{} jobs running, {}% ({}/{} tasks) done "
-                .format(len(self.__jobs), self.__maxJobs,
-                        self.__tasksDone*100//self.__tasksNum,
-                        self.__tasksDone, self.__tasksNum),
-              end="")
-        i = 0
-        while i < self.__maxJobs:
-            num = self.__slots[i]
-            if num is not None:
-                print("\n\x1b[2K {:>4}  {}".format(num, self.__jobs[num]), end='')
-            else:
-                print("\n\x1b[2K ****  <idle>", end='')
-            i += 1
-        # Move up <i> lines, enable line wrap
-        print("\x1b[{}A".format(i), "\x1b[?7h\r", sep='', end='')
+        # Take a snapshot. The terminal size might be changed asynchronously
+        # by the SIGWINCH handler.
+        columns = terminalSize.columns
+        rows = terminalSize.lines
+
+        # CR, disable line wrap
+        print("\r\x1b[?7l", end="")
+
+        # Print all active jobs. The footer must never be higher than the
+        # terminal. Otherwise the top of it would scroll out of the screen.
+        maxLines = max(rows - 2, 1)
+        active = [ num for num in self.__slots if num is not None ]
+        if len(active) > maxLines:
+            hidden = len(active) - maxLines + 1
+            active = active[:maxLines-1]
+        else:
+            hidden = 0
+
+        lines = 1
+        now = self.__loop.time()
+        print("\x1b[2K╭{}╮\n".format("─" * (columns - 2)), end='')
+        for num in active:
+            action, message = self.__jobs[num]
+            duration = duration2text(now - action.startTime)
+            fill = " " * (columns - 6 - len(message) - len(duration))
+            print("\x1b[2K│ {} - {}{}│\n".format(colorize(message, EXECUTED), duration, fill), end='')
+            lines += 1
+        if hidden:
+            message = "... and {} more".format(hidden)
+            print("\x1b[2K│ {}{}│\n".format(message, " " * (columns - 3 - len(message))), end='')
+            lines += 1
+
+        status = " {}/{} jobs running, {}% ({}/{} tasks) done ".format(
+                    len(self.__jobs), self.__maxJobs,
+                    self.__tasksDone*100//self.__tasksNum,
+                    self.__tasksDone, self.__tasksNum)
+        if self.__jobServerFd is not None:
+            tailSize = max(columns - 7 - len(status), 0)
+            histogram, histogramSize = self.__histogram(tailSize)
+            tail = "─ {} {}".format(histogram, "─" * (tailSize - histogramSize))
+        else:
+            tail = "─" * max(columns - 4 - len(status), 0)
+        # Erase to the end of the screen to remove stale lines of a previous,
+        # larger footer.
+        print("\x1b[J╰──{}{}╯".format(status, tail), end="")
+        # Move up <lines> lines, enable line wrap
+        print("\x1b[{}A".format(lines), "\x1b[?7h\r", sep='', end='')
+        self.__footerLines = lines
+
+        # The last line has no newline and is thus still buffered. Flush it
+        # so that the cursor is really at the top of the footer. Otherwise
+        # anything that is written directly to the terminal (e.g. stderr)
+        # would appear at the wrong position.
+        sys.stdout.flush()
 
     def _putResult(self, slot, msg):
         job = self.__slots[slot]
@@ -320,11 +477,11 @@ class ParallelTtyUI(BaseTUI):
 
     def log(self, message, kind, severity):
         if not self._isVisible(severity): return
-        print(colorize("[****] {}".format(message), kind))
+        self.__putLine(colorize("{} {}".format(COLORS2MARK[kind & 7], message), kind))
 
     def stepMessage(self, step, action, message, kind, severity):
         if not self._isVisible(severity): return
-        self.__putLine("[    ] {}".format(colorize(
+        self.__putLine("  {}".format(colorize(
             "{:10}{} - {}".format(action, step.getPackage().getName(), message), kind)))
 
     def stepAction(self, step, action, message, severity, details):
@@ -334,7 +491,9 @@ class ParallelTtyUI(BaseTUI):
         return self.__action(step, action, message, severity, details, False)
 
     def __action(self, step, action, message, severity, details, ellipsis):
-        if not self._isVisible(severity): return DummyTUIAction()
+        if not self._isVisible(severity):
+            return DummyTUIAction()
+
         showDetails = self._isVisible(INFO)
         if showDetails and details:
             details = " " + details
@@ -347,17 +506,19 @@ class ParallelTtyUI(BaseTUI):
         slot = 0
         while self.__slots[slot] is not None: slot += 1
         name = step.getPackage().getName()
+        path = "/".join(step.getPackage().getStack())
         self.__slots[slot] = job
-        self.__jobs[job] = colorize("{:10}{} - {}".format(action, name, message), EXECUTED)
-        self.__putFooter()
         msg = "{:10}{} - {}{}".format(action, name, message, details)
-        return ParallelTtyUIAction(self, job, slot, name, msg, ellipsis, showDetails)
+        ret = ParallelTtyUIAction(self, job, slot, path, msg, ellipsis, showDetails, self.__loop.time)
+        self.__jobs[job] = (ret, "{:10}{} - {}".format(action, name, message))
+        self.__putFooter()
+        return ret
 
     def cleanup(self):
         self.__putFooter()
-        for i in range(max(len(self.__jobs), self.__maxJobs)+1):
-            print()
-        print("\x1b[?25h")
+        # Move below the footer and enable cursor
+        print("\n" * self.__footerLines, "\x1b[?25h", sep="")
+        sys.stdout.flush()
         try:
             import termios
             termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
@@ -374,14 +535,16 @@ class ParallelTtyUI(BaseTUI):
 
 
 class ParallelDumbUIAction(BaseTUIAction):
-    def __init__(self, tui, job, name, msg, ellipsis, showDetails):
+    def __init__(self, tui, job, path, msg, ellipsis, showDetails, getTime):
         super().__init__(showDetails)
         self.__tui = tui
         self.__job = job
-        self.__name = name
+        self.__path = path
         self.__msg = msg
         self.__ellipsis = ellipsis
         if not ellipsis: self.setError("")
+        self.__getTime = getTime
+        self.__startTime = getTime()
 
     def __enter__(self):
         return self
@@ -401,25 +564,29 @@ class ParallelDumbUIAction(BaseTUIAction):
         elif exc_type is not None and self.err_message:
             kind = self.err_kind
             stderr = self.err_message
-        self.__tui._printResult(self.__job, msg, stderr, kind)
+        msg += " ({})".format(duration2text(self.__getTime() - self.__startTime))
+        if kind == ERROR:
+            msg += "\n>> " + self.__path
+        self.__tui._printResult(self.__job, COLORS2TEXT[kind & 7], msg, stderr, kind)
         return False
 
 class ParallelDumbUI(BaseTUI):
-    def __init__(self, verbosity):
+    def __init__(self, verbosity, loop):
         super().__init__(verbosity)
         self.__index = 1
+        self.__loop = loop
 
     def __nextJob(self):
         ret = self.__index
         self.__index += 1
         return ret
 
-    def _print(self, job, msg, kind, stage=""):
-        level = COLORS2TEXT[kind & 7]
-        print("[{:<5} {:>4}] {}: {}".format(stage, job, level, colorize(msg, kind)))
+    def _print(self, job, tag, msg, kind):
+        prefix = "[{:>3}]".format(job) if job else "     "
+        print(prefix, colorize("{:<5} {}".format(tag, msg), kind))
 
-    def _printResult(self, job, msg, stderr, kind):
-        self._print(job, msg, kind, "End")
+    def _printResult(self, job, tag, msg, stderr, kind):
+        self._print(job, tag, msg, kind)
         if stderr:
             # Print error messages on stderr when being on a dumb output. It is
             # probably redirected by some other script or an analyzed IDE (think
@@ -428,12 +595,12 @@ class ParallelDumbUI(BaseTUI):
 
     def log(self, message, kind, severity):
         if not self._isVisible(severity): return
-        self._print("****", message, kind, "*****")
+        print(colorize("***** " + message, kind))
 
     def stepMessage(self, step, action, message, kind, severity):
         if not self._isVisible(severity): return
-        self._print("", "{:10}{} - {}".format(action,
-            step.getPackage().getName(), message), kind)
+        self._print(None, COLORS2TEXT[kind & 7], "{:10}{} - {}".format(
+            action, step.getPackage().getName(), message), kind)
 
     def stepAction(self, step, action, message, severity, details):
         return self.__action(step, action, message, severity, details, True)
@@ -453,130 +620,22 @@ class ParallelDumbUI(BaseTUI):
 
         job = self.__nextJob()
         name = step.getPackage().getName()
-        self._print(job, "{:10}{} - {}".format(action, name, message), EXECUTED, "Start")
+        path = "/".join(step.getPackage().getStack())
+        self._print(job, "....", "{:10}{} - {}".format(action, name, message), EXECUTED)
         msg = "{:10}{} - {}{}".format(action, name, message, details)
-        return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails)
+        return ParallelDumbUIAction(self, job, path, msg, ellipsis, showDetails,
+                                    self.__loop.time)
 
-class MassiveParallelTtyUI(BaseTUI):
-    def __init__(self, verbosity, maxJobs):
-        super().__init__(verbosity)
-        self.__index = 1
-        self.__maxJobs = maxJobs
-        self.__jobs = {}
-        self.__tasksDone = 0
-        self.__tasksNum = 1
-
-        self.__ttyInit()
-
-    def __ttyInit(self):
-        # disable cursor
-        print("\x1b[?25l")
-
-        # disable echo
-        try:
-            import termios
-            fd = sys.stdin.fileno()
-            self.__oldTcAttr = termios.tcgetattr(fd)
-            new = termios.tcgetattr(fd)
-            new[3] = new[3] & ~termios.ECHO
-            termios.tcsetattr(fd, termios.TCSADRAIN, new)
-        except ImportError:
-            pass
-
-    def __nextJob(self):
-        ret = self.__index
-        self.__index += 1
-        return ret
-
-    def __putLineCont(self, line):
-        print("\r" + "\x1b[2K", line, "\x1b[K", sep="")
-
-    def __putLine(self, line):
-        self.__putLineCont(line)
-        self.__putFooter()
-
-    def __putFooter(self):
-        # CR, disable line wrap, erase line, ...
-        print("\r\x1b[?7l\x1b[2K====== {}/{} jobs running, {}% ({}/{} tasks) done "
-                .format(len(self.__jobs), self.__maxJobs,
-                        self.__tasksDone*100//self.__tasksNum,
-                        self.__tasksDone, self.__tasksNum))
-        for i, name in sorted(self.__jobs.items()):
-            print("[{} {}]".format(i, name), end="")
-        # Move up one lines, enable line wrap
-        print("\x1b[A\x1b[?7h\r", end='')
-
-    def _print(self, job, msg, kind, stage=""):
-        self.__putLine("[{:<5} {:>4}] {}".format(stage, job, colorize(msg, kind)))
-
-    def _printResult(self, job, msg, stderr, kind):
-        del self.__jobs[job]
-        self._print(job, msg, kind, "End")
-        if stderr:
-            for l in stderr.splitlines():
-                self.__putLineCont("[{:<5} {:>4}] {}".format("ERR", job, l))
-            self.__putFooter()
-
-    def log(self, message, kind, severity):
-        if not self._isVisible(severity): return
-        self._print("****", message, kind, "*****")
-
-    def stepMessage(self, step, action, message, kind, severity):
-        if not self._isVisible(severity): return
-        self._print("", "{:10}{} - {}".format(action,
-            step.getPackage().getName(), message), kind)
-
-    def stepAction(self, step, action, message, severity, details):
-        return self.__action(step, action, message, severity, details, True)
-
-    def stepExec(self, step, action, message, severity, details):
-        return self.__action(step, action, message, severity, details, False)
-
-    def __action(self, step, action, message, severity, details, ellipsis):
-        if not self._isVisible(severity): return DummyTUIAction()
-        showDetails = self._isVisible(INFO)
-        if showDetails and details:
-            details = " " + details
-        else:
-            details = ""
-        if ellipsis:
-            details += ": "
-
-        job = self.__nextJob()
-        name = step.getPackage().getName()
-        self.__jobs[job] = "{} {}".format(action, name)
-        self._print(job, "{:10}{} - {}".format(action, name, message), EXECUTED, "Start")
-        msg = "{:10}{} - {}{}".format(action, name, message, details)
-        return ParallelDumbUIAction(self, job, name, msg, ellipsis, showDetails)
-
-    def cleanup(self):
-        self.__putFooter()
-        print()
-        print("\x1b[?25h")
-        try:
-            import termios
-            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self.__oldTcAttr)
-        except ImportError:
-            pass
-
-    def resume(self):
-        self.__ttyInit()
-        self.__putFooter()
-
-    def setProgress(self, done, num):
-        self.__tasksDone = done
-        self.__tasksNum = num
-
-def log(message, kind, severity=-2):
+def log(message, kind, severity=ALWAYS):
     __tui.log(message, kind, severity)
 
-def stepMessage(step, action, message, kind, severity=-2):
+def stepMessage(step, action, message, kind, severity=ALWAYS):
     __tui.stepMessage(step, action, message, kind, severity)
 
-def stepAction(step, action, message, severity=-2, details=""):
+def stepAction(step, action, message, severity=ALWAYS, details=""):
     return __tui.stepAction(step, action, message, severity, details)
 
-def stepExec(step, action, message, severity=-2, details=""):
+def stepExec(step, action, message, severity=ALWAYS, details=""):
     return __tui.stepExec(step, action, message, severity, details)
 
 def setVerbosity(verbosity):
@@ -586,18 +645,23 @@ def setVerbosity(verbosity):
 def setProgress(done, num):
     __tui.setProgress(done, num)
 
-def setTui(maxJobs):
+def setJobServer(fd, tokens):
+    """Register the job server pipe to show its utilization.
+
+    Pass the read end of the job server pipe and the number of tokens that
+    are available in it when idle. Pass fd=None to unregister it again.
+    """
+    __tui.setJobServer(fd, tokens)
+
+def setTui(maxJobs, loop):
     global __tui
     __tui.cleanup()
     if maxJobs <= 1:
         __tui = SingleTUI(__tui.getVerbosity())
     elif __onTTY:
-        if maxJobs <= __parallelTUIThreshold:
-            __tui = ParallelTtyUI(__tui.getVerbosity(), maxJobs)
-        else:
-            __tui = MassiveParallelTtyUI(__tui.getVerbosity(), maxJobs)
+        __tui = ParallelTtyUI(__tui.getVerbosity(), maxJobs, loop)
     else:
-        __tui = ParallelDumbUI(__tui.getVerbosity())
+        __tui = ParallelDumbUI(__tui.getVerbosity(), loop)
 
 def cleanup():
     __tui.cleanup()
@@ -619,14 +683,21 @@ def handleTerminalStop(signum, frame):
     signal.raise_signal(signal.SIGSTOP)
     __tui.resume()
 
+def handleWinChange(signal, frame):
+    global terminalSize
+    terminalSize = shutil.get_terminal_size()
+
 # module initialization
 
 __onTTY = (sys.stdout.isatty() and sys.stderr.isatty())
 __useColor = False
 __tui = SingleTUI(NORMAL)
-__parallelTUIThreshold = 16
 
 if __onTTY:
+    # Get (initial) terminal size
+    import shutil
+    terminalSize = shutil.get_terminal_size()
+
     if sys.platform == "win32":
         # Try to set ENABLE_VIRTUAL_TERMINAL_PROCESSING flag. Enables vt100 color
         # codes on Windows 10 console. If this fails we inhibit color code usage
@@ -642,6 +713,7 @@ if __onTTY:
         # Intercept SIGTSTP to leave TTY in a sane state if user presses Ctrl+Z.
         import signal
         signal.signal(signal.SIGTSTP, handleTerminalStop)
+        signal.signal(signal.SIGWINCH, handleWinChange)
 
 
 def setColorMode(mode):
@@ -652,10 +724,6 @@ def setColorMode(mode):
         __useColor = True
     elif mode == 'auto':
         __useColor = __onTTY
-
-def setParallelTUIThreshold(num):
-    global __parallelTUIThreshold
-    __parallelTUIThreshold = num
 
 # auto is the default
 setColorMode('auto')
