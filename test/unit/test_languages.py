@@ -373,7 +373,7 @@ class TestPythonLanguage(TestCase):
             self.assertEqual(args[0], os.path.abspath("my/python3"))
 
     def testSetupCallSandboxUsesPython3(self):
-        spec = FakeSpec(mainScript="pass", hasSandbox=True)
+        spec = FakeSpec(mainScript="pass", fatSandbox=True)
         with TemporaryDirectory() as tmp:
             realFile, execFile, args = PythonLanguage.setupCall(spec, tmp, False, False)
             self.assertEqual(args[0], "python3")
@@ -412,7 +412,7 @@ class TestPythonLanguage(TestCase):
         self.assertEqual(args, [sys.executable, "-sS", "-c", "print('fp')"])
 
     def testSetupFingerprintSandboxUsesPython3(self):
-        spec = FakeSpec(fingerprintScript="print('fp')", hasSandbox=True)
+        spec = FakeSpec(fingerprintScript="print('fp')", fatSandbox=True)
         args = PythonLanguage.setupFingerprint(spec, {"BOB_CWD": "/x"}, False)
         self.assertEqual(args[0], "python3")
 
