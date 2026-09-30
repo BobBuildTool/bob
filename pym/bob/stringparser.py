@@ -560,12 +560,17 @@ class Env(MutableMapping):
     def clear(self):
         self.data.clear()
 
-    def copy(self):
-        ret = Env(self.data)
+    def __clone(self, data):
+        # Bypass __init__ because all members are overwritten anyway.
+        ret = Env.__new__(Env)
+        ret.data = data
         ret.funs = self.funs
         ret.funArgs = self.funArgs
         ret.touched = self.touched
         return ret
+
+    def copy(self):
+        return self.__clone(self.data.copy())
 
     def get(self, key, default=None):
         self.__touch(key)
@@ -590,9 +595,9 @@ class Env(MutableMapping):
         raise NotImplementedError("values() not supported")
 
     def derive(self, overrides = {}):
-        ret = self.copy()
-        ret.data.update(overrides)
-        return ret
+        data = self.data.copy()
+        data.update(overrides)
+        return self.__clone(data)
 
     def detach(self):
         return self.data.copy()
@@ -610,24 +615,15 @@ class Env(MutableMapping):
         if allowed is None:
             return self.copy()
         else:
-            ret = Env()
-            ret.data = { key : self.data[key] for key in (set(self.data.keys()) & allowed) }
-            ret.funs = self.funs
-            ret.funArgs = self.funArgs
-            ret.touched = self.touched
-            return ret
+            data = self.data
+            return self.__clone({ key : data[key] for key in allowed if key in data })
 
     def filter(self, allowed):
         if allowed is None:
             return self.copy()
         else:
-            ret = Env()
-            ret.data = { key : value for (key, value) in self.data.items()
-                if checkGlobList(key, allowed) }
-            ret.funs = self.funs
-            ret.funArgs = self.funArgs
-            ret.touched = self.touched
-            return ret
+            return self.__clone({ key : value for (key, value) in self.data.items()
+                if checkGlobList(key, allowed) })
 
     def substitute(self, value, prop, nounset=True):
         try:
