@@ -517,8 +517,13 @@ class Env(MutableMapping):
         self.funArgs = {}
         self.touched = [ set() ]
 
+    # The touched sets form a stack where each set is a superset of all sets
+    # that were pushed after it. Hence we can stop as soon as a set already
+    # contains the key.
     def __touch(self, key):
-        for i in self.touched: i.add(key)
+        for i in reversed(self.touched):
+            if key in i: break
+            i.add(key)
 
     def __contains__(self, key):
         self.__touch(key)
@@ -652,7 +657,9 @@ class Env(MutableMapping):
         self.touched = self.touched + [ set() ]
 
     def touch(self, keys):
-        for i in self.touched:
+        for i in reversed(self.touched):
+            keys = keys - i
+            if not keys: break
             i.update(keys)
 
     def touchedKeys(self):
