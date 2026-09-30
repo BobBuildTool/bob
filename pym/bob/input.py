@@ -21,6 +21,7 @@ from os.path import expanduser
 from string import Template
 from textwrap import dedent
 import copy
+import copyreg
 import hashlib
 import fnmatch
 import os, os.path
@@ -4572,7 +4573,7 @@ class RecipeSet:
             newCacheName = cacheName + ".new"
             with open(newCacheName, "wb") as f:
                 f.write(cacheKey)
-                PackagePickler(f, pathsConfig).dump(result)
+                PackagePickler(f).dump(result)
             replacePath(newCacheName, cacheName)
         except OSError as e:
             Warn("Could not save package cache: " + str(e)).show(cacheName)
@@ -4733,18 +4734,22 @@ class YamlCache:
         return False
 
 
-class PackagePickler(pickle.Pickler):
-    def __init__(self, file, pathsConfig):
-        super().__init__(file, -1, fix_imports=False)
-        self.__pathsConfig = pathsConfig
+def _unpickleRecipe(packageName):
+    """Placeholder that is substituted by PackageUnpickler."""
+    raise pickle.UnpicklingError("unsupported object")
 
-    def persistent_id(self, obj):
-        if obj is self.__pathsConfig:
-            return ("pathscfg", None)
-        elif isinstance(obj, Recipe):
-            return ("recipe", obj.getPackageName())
-        else:
-            return None
+def _unpicklePathsConfig():
+    """Placeholder that is substituted by PackageUnpickler."""
+    raise pickle.UnpicklingError("unsupported object")
+
+class PackagePickler(pickle.Pickler):
+    # Use the dispatch table to replace Recipe and PathsConfig objects.
+    dispatch_table = copyreg.dispatch_table.copy()
+    dispatch_table[Recipe] = lambda obj: (_unpickleRecipe, (obj.getPackageName(),))
+    dispatch_table[PathsConfig] = lambda obj: (_unpicklePathsConfig, ())
+
+    def __init__(self, file):
+        super().__init__(file, -1, fix_imports=False)
 
 class PackageUnpickler(pickle.Unpickler):
     def __init__(self, file, recipeGetter, plugins, pathsConfig):
@@ -4753,17 +4758,12 @@ class PackageUnpickler(pickle.Unpickler):
         self.__plugins = plugins
         self.__pathsConfig = pathsConfig
 
-    def persistent_load(self, pid):
-        (tag, key) = pid
-        if tag == "pathscfg":
-            return self.__pathsConfig
-        elif tag == "recipe":
-            return self.__recipeGetter(key)
-        else:
-            raise pickle.UnpicklingError("unsupported object")
-
     def find_class(self, module, name):
-        if module.startswith("__bob_plugin_"):
+        if module == __name__ and name == "_unpickleRecipe":
+            return self.__recipeGetter
+        elif module == __name__ and name == "_unpicklePathsConfig":
+            return lambda: self.__pathsConfig
+        elif module.startswith("__bob_plugin_"):
             return getattr(self.__plugins[module], name)
         else:
             return super().find_class(module, name)
