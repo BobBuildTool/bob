@@ -233,3 +233,77 @@ def wrapValidator(validator, message):
         else:
             raise schema.SchemaError(message)
     return wrapper
+
+class StrDictValidator:
+    """Validate a dict that has only plain string keys.
+
+    Behaves like a plain schema dict whose keys are strings or
+    ``schema.Optional`` strings. The schema library tries every schema key for
+    every key of the data, raising and formatting an exception on each
+    mismatch, which is very slow for large specs like the recipe schema.
+    Instead, the keys are looked up directly here. The value schemas are still
+    validated by the schema library.
+
+    The spec is compiled lazily on first use so that recursive specs can be
+    completed after the validator was created.
+    """
+
+    def __init__(self, spec):
+        self.__spec = spec
+        self.__keys = None
+
+    def __repr__(self):
+        return "Schema({!r})".format(self.__spec)
+
+    def __compile(self):
+        keys = {}
+        required = set()
+        defaults = []
+        for key, value in self.__spec.items():
+            if isinstance(key, schema.Optional):
+                name = key.schema
+                if hasattr(key, "default"):
+                    defaults.append((name, key.default))
+            else:
+                name = key
+                required.add(name)
+            if not isinstance(name, str):
+                raise TypeError("StrDictValidator only supports string keys: " + repr(key))
+            keys[name] = schema.Schema(value)
+        self.__required = required
+        self.__defaults = defaults
+        self.__keys = keys
+
+    def validate(self, data, **kwargs):
+        if self.__keys is None: self.__compile()
+        if not isinstance(data, dict):
+            raise schema.SchemaUnexpectedTypeError(
+                "%r should be instance of 'dict'" % (data,), None)
+
+        # Evaluate dictionaries last. Same order as the schema library.
+        new = {}
+        for key, value in sorted(data.items(), key=lambda i: isinstance(i[1], dict)):
+            s = self.__keys.get(key) if isinstance(key, str) else None
+            if s is None: continue
+            try:
+                new[key] = s.validate(value, **kwargs)
+            except schema.SchemaError as x:
+                raise schema.SchemaError(["Key '%s' error:" % key] + x.autos,
+                                         [None] + x.errors)
+
+        if not self.__required.issubset(new.keys()):
+            missingKeys = self.__required - new.keys()
+            raise schema.SchemaMissingKeyError("Missing key{}: {}".format(
+                "s" if len(missingKeys) > 1 else "",
+                ", ".join(repr(k) for k in sorted(missingKeys))), None)
+        if len(new) != len(data):
+            wrongKeys = [ k for k in data.keys() if k not in new ]
+            raise schema.SchemaWrongKeyError("Wrong key{} {} in {!r}".format(
+                "s" if len(wrongKeys) > 1 else "",
+                ", ".join(repr(k) for k in sorted(wrongKeys, key=repr)), data), None)
+
+        for name, default in self.__defaults:
+            if name not in new:
+                new[name] = default() if callable(default) else default
+
+        return new

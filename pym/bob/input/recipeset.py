@@ -25,7 +25,7 @@ from .plugins import BuiltinSetting, PluginSetting, SentinelSetting, \
     isPluginPropertyClass, isPluginStateClass
 from .recipe import AliasPackage, MULTIPACKAGE_NAME_SCHEMA, Recipe
 from .validators import ArchiveValidator, AuditFilesValidator, MountValidator, \
-    ScmValidator, ToolValidator, VarDefineValidator, wrapValidator
+    ScmValidator, ToolValidator, VarDefineValidator, wrapValidator, StrDictValidator
 import hashlib
 import fnmatch
 import os, os.path
@@ -1057,7 +1057,7 @@ class RecipeSet:
         dependsClause = schema.Schema([
             schema.Or(
                 str,
-                schema.Schema(dependsInnerClause)
+                StrDictValidator(dependsInnerClause)
             )
         ])
         dependsInnerClause[schema.Optional('depends')] = dependsClause
@@ -1125,7 +1125,7 @@ class RecipeSet:
             schema.Optional('provideTools') : schema.Schema({
                 str: schema.Or(
                     str,
-                    schema.Schema({
+                    StrDictValidator({
                         'path' : str,
                         schema.Optional('libs') : [str],
                         schema.Optional('netAccess') : bool,
@@ -1146,7 +1146,7 @@ class RecipeSet:
                 schema.Schema({ schema.Optional(l.value) : str for l in ScriptLanguage }),
                 schema.Use(lambda d: { ScriptLanguage(l) : v for l, v in d.items() })
             ),
-            schema.Optional('provideSandbox') : schema.Schema({
+            schema.Optional('provideSandbox') : StrDictValidator({
                 'paths' : [str],
                 schema.Optional('mount') : schema.Schema([ MountValidator() ],
                     error="provideSandbox: invalid 'mount' property"),
@@ -1177,13 +1177,14 @@ class RecipeSet:
                 wrapValidator(prop.validate,
                               "property '"+name+"' has an invalid type"))
 
-        self.__classSchema = (schema.Schema(classSchemaSpec), self.__pluginPropDeps)
+        self.__classSchema = (StrDictValidator(classSchemaSpec), self.__pluginPropDeps)
 
         recipeSchemaSpec = classSchemaSpec.copy()
+        recipeSchema = StrDictValidator(recipeSchemaSpec)
         recipeSchemaSpec[schema.Optional('multiPackage')] = schema.Schema({
-            MULTIPACKAGE_NAME_SCHEMA : recipeSchemaSpec
+            MULTIPACKAGE_NAME_SCHEMA : recipeSchema
         })
-        self.__recipeSchema = (schema.Schema(recipeSchemaSpec), self.__pluginPropDeps)
+        self.__recipeSchema = (recipeSchema, self.__pluginPropDeps)
 
         userConfigSchemaSpec = {
             schema.Optional('include') : schema.Schema([str]),
