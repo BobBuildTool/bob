@@ -544,6 +544,16 @@ class PatchScm(Scm):
 
     def getDirectory(self): return self.__scm.getDirectory()
     def getSource(self): return self.__scm.getSource()
+    def hasJenkinsPlugin(self):
+        return self.__scm.hasJenkinsPlugin()
+    def asJenkins(self, workPath, config):
+        return self.__scm.asJenkins(workPath, config)
+    def getJenkinsPreRunProperties(self):
+        if self.__scm.hasJenkinsPlugin():
+            props = self.getProperties(True)
+            props['__patchOnly'] = True
+            return props
+        return None
     def isDeterministic(self): return self.__scm.isDeterministic()
     def isLocal(self): return self.__scm.isLocal()
     def hasLiveBuildId(self): return self.__scm.hasLiveBuildId()
