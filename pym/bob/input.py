@@ -2776,7 +2776,10 @@ class Recipe(object):
                 subTreePackages.add(recipeName)
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
-                depRef = CoreRef(depCoreStep, [p.name], thisDepDiffTools, thisDepDiffSandbox,
+                # The stack is never modified. Share it between all references
+                # to keep the number of objects low.
+                depStackAdd = [p.name]
+                depRef = CoreRef(depCoreStep, depStackAdd, thisDepDiffTools, thisDepDiffSandbox,
                                  thisDepDiffInterpreters)
             except ParseError as e:
                 e.pushFrame(r.getPackageName())
@@ -2811,20 +2814,20 @@ class Recipe(object):
                     if dep.provideGlobal: depStates[n].onSkip(depCoreStep.corePackage.states[n])
             if dep.useDeps:
                 indirectPackages.extend(
-                    CoreRef(d, [p.name], origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
+                    CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
                     for d in depCoreStep.providedDeps)
             if dep.useBuildResult and depTrack.useResultOnce():
                 results.append(depRef)
                 if dep.checkoutDep: checkoutDeps.append(depRef)
             if dep.useTools:
                 tools.update(depCoreStep.providedTools)
-                diffTools.update( (n, CoreRef(d, [p.name], origDepDiffTools, origDepDiffSandbox,
+                diffTools.update( (n, CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox,
                                               origDepDiffInterpreters))
                     for n, d in depCoreStep.providedTools.items() )
                 if dep.provideGlobal:
                     depTools.update(depCoreStep.providedTools)
                     depDiffTools = depDiffTools.copy()
-                    depDiffTools.update( (n, CoreRef(d, [p.name], origDepDiffTools, origDepDiffSandbox,
+                    depDiffTools.update( (n, CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox,
                                                      origDepDiffInterpreters))
                         for n, d in depCoreStep.providedTools.items() )
             if dep.useEnv:
@@ -2832,7 +2835,7 @@ class Recipe(object):
                 if dep.provideGlobal: depEnv.update(depCoreStep.providedEnv)
             if dep.useSandbox and (depCoreStep.providedSandbox is not None):
                 sandbox = depCoreStep.providedSandbox
-                diffSandbox = CoreRef(depCoreStep.providedSandbox, [p.name], origDepDiffTools,
+                diffSandbox = CoreRef(depCoreStep.providedSandbox, depStackAdd, origDepDiffTools,
                     origDepDiffSandbox, origDepDiffInterpreters)
                 if dep.provideGlobal:
                     depSandbox = sandbox
@@ -2842,17 +2845,18 @@ class Recipe(object):
                     if dep.provideGlobal: depEnv.update(sandbox.environment)
             if dep.useInterpreters:
                 interpreters.update(depCoreStep.providedInterpreters)
-                diffInterpreters.update( (n, CoreRef(d, [p.name], origDepDiffTools, origDepDiffSandbox,
+                diffInterpreters.update( (n, CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox,
                                                      origDepDiffInterpreters))
                     for n, d in depCoreStep.providedInterpreters.items() )
                 if dep.provideGlobal:
                     depInterpreters.update(depCoreStep.providedInterpreters)
                     depDiffInterpreters = depDiffInterpreters.copy()
-                    depDiffInterpreters.update( (n, CoreRef(d, [p.name], origDepDiffTools,
+                    depDiffInterpreters.update( (n, CoreRef(d, depStackAdd, origDepDiffTools,
                                                             origDepDiffSandbox, origDepDiffInterpreters))
                         for n, d in depCoreStep.providedInterpreters.items() )
 
-            maybeProvideDeps.append((p.name, depRef, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters))
+            maybeProvideDeps.append((p.name, depStackAdd, depRef, origDepDiffTools, origDepDiffSandbox,
+                                     origDepDiffInterpreters))
 
         # check provided dependencies
         providedDeps = set()
@@ -2862,10 +2866,11 @@ class Recipe(object):
                 raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern.pattern))
             providedDeps |= l
 
-        for (name, depRef, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters) in maybeProvideDeps:
+        for (name, depStackAdd, depRef, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters) \
+                in maybeProvideDeps:
             if name in providedDeps:
                 provideDeps.append(depRef)
-                provideDeps.extend([CoreRef(d, [name], origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
+                provideDeps.extend([CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
                     for d in depRef.refGetDestination().providedDeps])
 
         # Filter indirect packages and add to result list if necessary. Most
