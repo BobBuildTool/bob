@@ -21,6 +21,7 @@ from os.path import expanduser
 from string import Template
 from textwrap import dedent
 import copy
+import copyreg
 import hashlib
 import fnmatch
 import os, os.path
@@ -1649,7 +1650,7 @@ corePackageInternal = CorePackageInternal()
 class CorePackage:
     __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
         "states", "tools", "sandbox", "interpreters", "checkoutStep", "buildStep", "packageStep",
-        "pkgId", "metaEnv", "packageName", "isShared")
+        "pkgId", "metaEnv", "packageName", "isShared", "name")
 
     def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox, interpreters, diffInterpreters,
                  directDepSteps, indirectDepSteps, states, pkgId, metaEnv,
@@ -1666,6 +1667,7 @@ class CorePackage:
         self.metaEnv = metaEnv
         self.packageName = packageName
         self.isShared = isShared
+        self.name = recipe.getPackageName() if packageName is None else packageName
 
     def refDeref(self, stack, inputTools, inputSandbox, inputInterpreters, pathsConfig):
         tools, sandbox, interpreters = self.internalRef.refDeref(stack, inputTools, inputSandbox,
@@ -1703,10 +1705,7 @@ class CorePackage:
 
     def getName(self):
         """Name of the package"""
-        if self.packageName is None:
-            return self.recipe.getPackageName()
-        else:
-            return self.packageName
+        return self.name
 
     def getMetaEnv(self):
         return self.metaEnv
@@ -1773,9 +1772,12 @@ class Package(object):
     def _getInterpreter(self):
         return self.__interpreters.get(self.__corePackage.recipe.scriptLanguage.index)
 
+    def _getCorePackage(self):
+        return self.__corePackage
+
     def getName(self):
         """Name of the package"""
-        return self.__corePackage.getName()
+        return self.__corePackage.name
 
     def getMetaEnv(self):
         """meta variables of package"""
@@ -2086,7 +2088,7 @@ class UniquePackageList:
 
     def append(self, ref):
         step = ref.refGetDestination()
-        name = step.corePackage.getName()
+        name = step.corePackage.name
         ref2 = self.cache.get(name)
         if ref2 is None:
             self.cache[name] = ref
@@ -2774,7 +2776,10 @@ class Recipe(object):
                 subTreePackages.add(recipeName)
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
-                depRef = CoreRef(depCoreStep, [p.getName()], thisDepDiffTools, thisDepDiffSandbox,
+                # The stack is never modified. Share it between all references
+                # to keep the number of objects low.
+                depStackAdd = [p.name]
+                depRef = CoreRef(depCoreStep, depStackAdd, thisDepDiffTools, thisDepDiffSandbox,
                                  thisDepDiffInterpreters)
             except ParseError as e:
                 e.pushFrame(r.getPackageName())
@@ -2783,7 +2788,7 @@ class Recipe(object):
             # A dependency should be named only once. Hence we can
             # optimistically create the DepTracker object. If the dependency is
             # named more than one we make sure that it is the same variant.
-            depTrack = thisDeps.setdefault(p.getName(), DepTracker(depRef, dep))
+            depTrack = thisDeps.setdefault(p.name, DepTracker(depRef, dep))
             if depTrack.prime():
                 directPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
@@ -2791,7 +2796,7 @@ class Recipe(object):
             else:
                 sources = " and ".join(set([dep.origin.getPrimarySource(), depTrack.depEntry.origin.getPrimarySource()]))
                 raise ParseError("Duplicate dependency '{}'. Each dependency must only be named once!"
-                                    .format(p.getName()),
+                                    .format(p.name),
                                  help=f"The dependencies were declared in {sources}.")
 
             # Remember dependency diffs before changing them
@@ -2809,20 +2814,20 @@ class Recipe(object):
                     if dep.provideGlobal: depStates[n].onSkip(depCoreStep.corePackage.states[n])
             if dep.useDeps:
                 indirectPackages.extend(
-                    CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
+                    CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
                     for d in depCoreStep.providedDeps)
             if dep.useBuildResult and depTrack.useResultOnce():
                 results.append(depRef)
                 if dep.checkoutDep: checkoutDeps.append(depRef)
             if dep.useTools:
                 tools.update(depCoreStep.providedTools)
-                diffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox,
+                diffTools.update( (n, CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox,
                                               origDepDiffInterpreters))
                     for n, d in depCoreStep.providedTools.items() )
                 if dep.provideGlobal:
                     depTools.update(depCoreStep.providedTools)
                     depDiffTools = depDiffTools.copy()
-                    depDiffTools.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox,
+                    depDiffTools.update( (n, CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox,
                                                      origDepDiffInterpreters))
                         for n, d in depCoreStep.providedTools.items() )
             if dep.useEnv:
@@ -2830,7 +2835,7 @@ class Recipe(object):
                 if dep.provideGlobal: depEnv.update(depCoreStep.providedEnv)
             if dep.useSandbox and (depCoreStep.providedSandbox is not None):
                 sandbox = depCoreStep.providedSandbox
-                diffSandbox = CoreRef(depCoreStep.providedSandbox, [p.getName()], origDepDiffTools,
+                diffSandbox = CoreRef(depCoreStep.providedSandbox, depStackAdd, origDepDiffTools,
                     origDepDiffSandbox, origDepDiffInterpreters)
                 if dep.provideGlobal:
                     depSandbox = sandbox
@@ -2840,17 +2845,18 @@ class Recipe(object):
                     if dep.provideGlobal: depEnv.update(sandbox.environment)
             if dep.useInterpreters:
                 interpreters.update(depCoreStep.providedInterpreters)
-                diffInterpreters.update( (n, CoreRef(d, [p.getName()], origDepDiffTools, origDepDiffSandbox,
+                diffInterpreters.update( (n, CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox,
                                                      origDepDiffInterpreters))
                     for n, d in depCoreStep.providedInterpreters.items() )
                 if dep.provideGlobal:
                     depInterpreters.update(depCoreStep.providedInterpreters)
                     depDiffInterpreters = depDiffInterpreters.copy()
-                    depDiffInterpreters.update( (n, CoreRef(d, [p.getName()], origDepDiffTools,
+                    depDiffInterpreters.update( (n, CoreRef(d, depStackAdd, origDepDiffTools,
                                                             origDepDiffSandbox, origDepDiffInterpreters))
                         for n, d in depCoreStep.providedInterpreters.items() )
 
-            maybeProvideDeps.append((p.getName(), depRef, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters))
+            maybeProvideDeps.append((p.name, depStackAdd, depRef, origDepDiffTools, origDepDiffSandbox,
+                                     origDepDiffInterpreters))
 
         # check provided dependencies
         providedDeps = set()
@@ -2860,10 +2866,11 @@ class Recipe(object):
                 raise ParseError("Unknown dependency '{}' in provideDeps".format(pattern.pattern))
             providedDeps |= l
 
-        for (name, depRef, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters) in maybeProvideDeps:
+        for (name, depStackAdd, depRef, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters) \
+                in maybeProvideDeps:
             if name in providedDeps:
                 provideDeps.append(depRef)
-                provideDeps.extend([CoreRef(d, [name], origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
+                provideDeps.extend([CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
                     for d in depRef.refGetDestination().providedDeps])
 
         # Filter indirect packages and add to result list if necessary. Most
@@ -2872,7 +2879,7 @@ class Recipe(object):
         indirectPackages = []
         for depRef in tmp:
             depCoreStep = depRef.refGetDestination()
-            name = depCoreStep.corePackage.getName()
+            name = depCoreStep.corePackage.name
             depTrack = thisDeps.get(name)
             if depTrack is None:
                 thisDeps[name] = depTrack = DepTracker(depRef, None)
@@ -3120,11 +3127,11 @@ These dependencies constitute different variants of '{PKG}' and can therefore no
 
     def __raiseIncompatibleLocal(self, r):
         raise ParseError("Multiple incompatible dependencies to package: {}"
-            .format(r.corePackage.getName()),
+            .format(r.corePackage.name),
             help=
 """This error is caused by naming '{PKG}' multiple times in the recipe with incompatible variants.
 Every dependency must only be given once."""
-    .format(PKG=r.corePackage.getName()))
+    .format(PKG=r.corePackage.name))
 
     def __raiseIncompatibleTools(self, tools, toolDepPackage):
         toolsVars = {}
@@ -4569,7 +4576,7 @@ class RecipeSet:
             newCacheName = cacheName + ".new"
             with open(newCacheName, "wb") as f:
                 f.write(cacheKey)
-                PackagePickler(f, pathsConfig).dump(result)
+                PackagePickler(f).dump(result)
             replacePath(newCacheName, cacheName)
         except OSError as e:
             Warn("Could not save package cache: " + str(e)).show(cacheName)
@@ -4730,18 +4737,22 @@ class YamlCache:
         return False
 
 
-class PackagePickler(pickle.Pickler):
-    def __init__(self, file, pathsConfig):
-        super().__init__(file, -1, fix_imports=False)
-        self.__pathsConfig = pathsConfig
+def _unpickleRecipe(packageName):
+    """Placeholder that is substituted by PackageUnpickler."""
+    raise pickle.UnpicklingError("unsupported object")
 
-    def persistent_id(self, obj):
-        if obj is self.__pathsConfig:
-            return ("pathscfg", None)
-        elif isinstance(obj, Recipe):
-            return ("recipe", obj.getPackageName())
-        else:
-            return None
+def _unpicklePathsConfig():
+    """Placeholder that is substituted by PackageUnpickler."""
+    raise pickle.UnpicklingError("unsupported object")
+
+class PackagePickler(pickle.Pickler):
+    # Use the dispatch table to replace Recipe and PathsConfig objects.
+    dispatch_table = copyreg.dispatch_table.copy()
+    dispatch_table[Recipe] = lambda obj: (_unpickleRecipe, (obj.getPackageName(),))
+    dispatch_table[PathsConfig] = lambda obj: (_unpicklePathsConfig, ())
+
+    def __init__(self, file):
+        super().__init__(file, -1, fix_imports=False)
 
 class PackageUnpickler(pickle.Unpickler):
     def __init__(self, file, recipeGetter, plugins, pathsConfig):
@@ -4750,17 +4761,12 @@ class PackageUnpickler(pickle.Unpickler):
         self.__plugins = plugins
         self.__pathsConfig = pathsConfig
 
-    def persistent_load(self, pid):
-        (tag, key) = pid
-        if tag == "pathscfg":
-            return self.__pathsConfig
-        elif tag == "recipe":
-            return self.__recipeGetter(key)
-        else:
-            raise pickle.UnpicklingError("unsupported object")
-
     def find_class(self, module, name):
-        if module.startswith("__bob_plugin_"):
+        if module == __name__ and name == "_unpickleRecipe":
+            return self.__recipeGetter
+        elif module == __name__ and name == "_unpicklePathsConfig":
+            return lambda: self.__pathsConfig
+        elif module.startswith("__bob_plugin_"):
             return getattr(self.__plugins[module], name)
         else:
             return super().find_class(module, name)

@@ -64,7 +64,7 @@ class TestEnv(TestCase):
 
     def testTouch(self):
         e1 = Env()
-        e1.touch(['foo'])
+        e1.touch(set(['foo']))
         self.assertEqual(e1.touchedKeys(), set(['foo']))
 
     def testSubstituteCondDictErrors(self):
