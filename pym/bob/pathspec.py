@@ -592,7 +592,7 @@ class PkgGraphNode:
                 # memory first and persist every node exactly once afterwards.
                 db.execute("DELETE FROM graph")
                 nodes = {}
-                root = PkgGraphNode.__buildGraph(nodes, rootGenerator())
+                root = PkgGraphNode.__buildGraph(nodes, rootGenerator()._getCorePackage(), "")
                 db.executemany("INSERT INTO graph VALUES (?, ?)",
                     ((key, pickle.dumps(node, -1)) for key, node in nodes.items()))
                 db.execute("INSERT OR REPLACE INTO meta VALUES ('vsn', ?), ('root', ?)",
@@ -665,31 +665,35 @@ class PkgGraphNode:
         return self.__name
 
     @staticmethod
-    def __buildGraph(nodes, pkg, parent=None, directParent=True):
+    def __buildGraph(nodes, corePkg, stack, parent=None, directParent=True):
         """Recursively build the package graph purely in memory.
 
         The 'nodes' dict is used both to remember already visited packages (by
-        their id) and to accumulate their parents.
+        their id) and to accumulate their parents. Iterates the CorePackage
+        graph to avoid dereferencing the CoreRef objects because this is
+        expensive.
         """
-        key = pkg._getId()
+        key = corePkg.pkgId
         entry = nodes.get(key)
         if entry is None:
             # recurse
             parents = { parent : directParent } if parent is not None else {}
             childs = OrderedDict()
-            nodes[key] = (pkg.getName(), parents, childs)
-            for d in pkg.getDirectDepSteps():
-                subPkg = d.getPackage()
-                subPkgId = PkgGraphNode.__buildGraph(nodes, subPkg, key, True)
-                childs[subPkg.getName()] = (subPkgId, True, "")
-            prefixLen = len("/".join(pkg.getStack()))
-            for d in pkg.getIndirectDepSteps():
-                subPkg = d.getPackage()
-                subPkgName = subPkg.getName()
+            nodes[key] = (corePkg.getName(), parents, childs)
+            for subRef in corePkg.directDepSteps:
+                subCorePkg = subRef.refGetDestination().corePackage
+                subPkgStack = "/".join([stack] + subRef.refGetStack())
+                subPkgId = PkgGraphNode.__buildGraph(nodes, subCorePkg, subPkgStack, key, True)
+                childs[subCorePkg.getName()] = (subPkgId, True, "")
+            prefixLen = len(stack)
+            for subRef in corePkg.indirectDepSteps:
+                subCorePkg = subRef.refGetDestination().corePackage
+                subPkgStack = "/".join([stack] + subRef.refGetStack())
+                subPkgName = subCorePkg.getName()
                 if subPkgName in childs: continue
-                subPkgId = PkgGraphNode.__buildGraph(nodes, subPkg, key, False)
+                subPkgId = PkgGraphNode.__buildGraph(nodes, subCorePkg, subPkgStack, key, False)
                 childs[subPkgName] = ( subPkgId, False,
-                    ".." + "/".join(subPkg.getStack())[prefixLen:] )
+                    ".." + subPkgStack[prefixLen:] )
         elif parent is not None:
             # Direct dependencies are traversed first. Thus we don't need to
             # worry that a parent is flipping between direct and indirect.

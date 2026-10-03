@@ -1773,6 +1773,9 @@ class Package(object):
     def _getInterpreter(self):
         return self.__interpreters.get(self.__corePackage.recipe.scriptLanguage.index)
 
+    def _getCorePackage(self):
+        return self.__corePackage
+
     def getName(self):
         """Name of the package"""
         return self.__corePackage.getName()
