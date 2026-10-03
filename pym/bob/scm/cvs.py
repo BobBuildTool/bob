@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .scm import Scm, ScmTaint, ScmStatus
+from .patch import PatchScm
 import re
 import schema
 import os
@@ -12,7 +13,8 @@ import subprocess
 class CvsScm(Scm):
 
     DEFAULTS = {
-        schema.Optional('dir') : str
+        schema.Optional('dir') : str,
+        schema.Optional('patches') : PatchScm.PATCHES_SHEMA,
     }
 
     __SCHEMA = {

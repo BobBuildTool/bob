@@ -27,6 +27,7 @@ FLAG_TO_VERBOSITY = {
     ScmTaint.modified       : NORMAL,       # modified
     ScmTaint.new            : NORMAL,
     ScmTaint.overridden     : DEBUG,
+    ScmTaint.patched        : INFO,       # expected managed overlay
     ScmTaint.switched       : NORMAL,       # modified
     ScmTaint.unknown        : NORMAL,       # cannot tell, could be modified
     ScmTaint.unpushed_main  : NORMAL,       # modified
@@ -106,6 +107,7 @@ class Printer:
     def __showCheckoutStep(self, pp, checkoutStep):
         workspace = checkoutStep.getWorkspacePath()
         oldCheckoutState = BobState().getDirectoryState(workspace, True)
+        overlayState = oldCheckoutState.get(2, {})
         checkoutState = checkoutStep.getScmDirectories()
         scms = { scm.getDirectory() : scm for scm in checkoutStep.getScmList() }
         result = {}
@@ -118,7 +120,8 @@ class Printer:
 
             if scmDigest == checkoutState.get(scmDir, (None, None))[0]:
                 # The digest still matches -> use recipe values
-                status = scms[scmDir].status(workspace)
+                scm = scms[scmDir]
+                status = scm.statusWithOverlay(workspace, overlayState.get(scmDir))
             elif scmSpec is not None:
                 # New project that kept scm spec -> compare with that and mark
                 # as attic
@@ -292,4 +295,3 @@ def doStatus(argv, bobRoot):
             printer.showAllDirs(args.attic)
     finally:
         BobState().setSynchronous()
-

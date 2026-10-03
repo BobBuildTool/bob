@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from ..errors import ParseError
-from ..utils import joinLines
+from ..utils import joinLines, hashDirectory
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from shlex import quote
@@ -12,6 +12,10 @@ import fnmatch
 import re
 
 SYNTHETIC_SCM_PROPS = frozenset(('__source', 'recipe', 'overridden'))
+
+def overlayFingerprint(path):
+    """Fingerprint policy shared by overlay state, status and audit records."""
+    return hashDirectory(path, ignoreDirs=['.git', '.svn', 'CVS']).hex()
 
 def _freezeValue(value):
     """Recursively turn a (possibly nested) value into a hashable one.
@@ -130,6 +134,7 @@ class ScmTaint(Enum):
     modified = 'M'
     new = 'N'
     overridden = 'O'
+    patched = 'P'
     switched = 'S'
     unknown = '?'
     unpushed_main = 'U'
@@ -218,6 +223,9 @@ class ScmStatus:
             self.__flags[flag] = joinLines(self.__flags[flag], description)
         else:
             self.__flags[flag] = description
+
+    def remove(self, flag):
+        self.__flags.pop(flag, None)
 
     def merge(self, other):
         for flag,description in other.__flags.items():
@@ -314,6 +322,10 @@ class Scm(metaclass=ABCMeta):
         """Does this SCM use a Jenins plugin?"""
         return False
 
+    def getJenkinsPreRunProperties(self):
+        """Return an optional SCM command to run after a Jenkins plugin."""
+        return None
+
     @abstractmethod
     def getDirectory(self):
         """Return relative directory that this SCM owns in the workspace."""
@@ -378,6 +390,18 @@ class Scm(metaclass=ABCMeta):
 
     def postAttic(self, workspace):
         pass
+
+    def getProtectedPaths(self):
+        """Paths below this SCM directory that patch overlays may not modify."""
+        return []
+
+    def getOverlayState(self):
+        """Return an overlay manifest, or None for an ordinary SCM."""
+        return None
+
+    def statusWithOverlay(self, workspacePath, overlay=None):
+        """Inspect checkout state without changing the SCM status interface."""
+        return self.status(workspacePath)
 
 class ScmAudit(metaclass=ABCMeta):
     @classmethod

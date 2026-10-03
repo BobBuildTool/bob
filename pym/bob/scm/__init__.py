@@ -10,6 +10,7 @@ from .git import GitScm, GitAudit
 from .imp import ImportScm, ImportAudit
 from .svn import SvnScm, SvnAudit
 from .url import UrlScm, UrlAudit
+from .patch import PatchScm
 import os.path
 import schema
 
@@ -58,22 +59,23 @@ def auditFromData(data):
         raise ParseError("Error while validating audit: {} {}".format(str(e), str(data)))
 
 def getScm(spec, overrides=[], recipeSet=None):
+    patches = spec.get('patches', [])
     scm = spec["scm"]
     if scm == "git":
-        return GitScm(spec, overrides,
+        ret = GitScm(spec, overrides,
             recipeSet and recipeSet.getPolicy('scmIgnoreUser'),
             recipeSet and recipeSet.getPolicy('gitCommitOnBranch'))
     elif scm == "import":
-        return ImportScm(spec, overrides,
+        ret = ImportScm(spec, overrides,
             recipeSet and recipeSet.getPolicy('pruneImportScm'),
             recipeSet and recipeSet.getPolicy('fixImportScmVariant'),
             recipeSet and recipeSet.getProjectRoot())
     elif scm == "svn":
-        return SvnScm(spec, overrides)
+        ret = SvnScm(spec, overrides)
     elif scm == "cvs":
-        return CvsScm(spec, overrides)
+        ret = CvsScm(spec, overrides)
     elif scm == "url":
-        return UrlScm(spec, overrides,
+        ret = UrlScm(spec, overrides,
             recipeSet and recipeSet.getPolicy('scmIgnoreUser'),
             recipeSet.getPreMirrors() if recipeSet else [],
             recipeSet.getFallbackMirrors() if recipeSet else [],
@@ -81,3 +83,7 @@ def getScm(spec, overrides=[], recipeSet=None):
             recipeSet and recipeSet.getPolicy('urlScmSeparateDownload'))
     else:
         raise ParseError("Unknown SCM '{}'".format(scm))
+    return PatchScm(ret, patches, spec.get('__patchOverlay'),
+                    spec.get('__patchOnly', False),
+                    spec.get('__patchOverlayFailed', False), recipeSet,
+                    spec.get('__patchOverlayBase')) if patches else ret

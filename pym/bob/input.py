@@ -7,7 +7,7 @@ from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError, BobError
 from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage, PythonLanguage
 from .pathspec import PackageSet
-from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
+from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, PatchScm, ScmOverride, \
     auditFromDir, auditFromProperties, getScm, SYNTHETIC_SCM_PROPS
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression, \
@@ -2396,6 +2396,9 @@ class Recipe(object):
         for scm in self.__checkoutSCMs:
             scm["__source"] = sourceName
             scm["recipe"] = sourceFile
+            if scm.get("patches"):
+                PatchScm.trackPatchFiles(sourceFile, scm["patches"],
+                                         recipeSet.loadBinary)
         self.__checkoutAsserts = recipe.get("checkoutAssert", [])
         i = 0
         for a in self.__checkoutAsserts:
