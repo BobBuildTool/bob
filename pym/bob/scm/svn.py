@@ -10,7 +10,9 @@ from .scm import Scm, ScmAudit, ScmTaint, ScmStatus
 from shlex import quote
 from textwrap import indent
 import os, os.path
+import re
 import schema
+import shutil
 import subprocess
 from xml.etree import ElementTree
 
@@ -43,17 +45,27 @@ class SvnScm(Scm):
         **__DEFAULTS,
     })
 
+    MIRRORS_SCHEMA = schema.Schema({
+        'scm' : 'svn',
+        'url' : re.compile,
+        'mirror' : str,
+    })
+
     DEFAULT_VALUES = {
         "dir" : ".",
         "sslVerify" : True,
     }
 
-    def __init__(self, spec, overrides=[]):
+    def __init__(self, spec, overrides=[], preMirrors=[], fallbackMirrors=[]):
         super().__init__(spec, overrides)
         self.__url = spec["url"]
         self.__dir = spec.get("dir", ".")
         self.__revision = spec.get("revision")
         self.__sslVerify = spec.get('sslVerify', True)
+        self.__preMirrors = preMirrors
+        self.__fallbackMirrors = fallbackMirrors
+        self.__preMirrorsUrls = spec.get("preMirrors")
+        self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
 
     def getProperties(self, isJenkins, pretty=False):
         ret = super().getProperties(isJenkins, pretty)
@@ -62,6 +74,8 @@ class SvnScm(Scm):
             "url" : self.__url,
             "dir" : self.__dir,
             'sslVerify' : self.__sslVerify,
+            'preMirrors' : self.__getPreMirrors(),
+            'fallbackMirrors' : self.__getFallbackMirrors(),
         })
         if self.__revision:
             ret["revision"] = self.__revision
@@ -71,6 +85,26 @@ class SvnScm(Scm):
                     if v is not None and v != self.DEFAULT_VALUES.get(k) }
 
         return ret
+
+    def __applyMirrors(self, mirrors):
+        return [ re.sub(m['url'], m['mirror'], self.__url)
+                 for m in mirrors
+                 if m['scm'] == 'svn' and re.match(m['url'], self.__url) ]
+
+    def __getPreMirrors(self):
+        ret = self.__preMirrorsUrls
+        if ret is None:
+            ret = self.__preMirrorsUrls = self.__applyMirrors(self.__preMirrors)
+        return ret
+
+    def __getFallbackMirrors(self):
+        ret = self.__fallbackMirrorsUrls
+        if ret is None:
+            ret = self.__fallbackMirrorsUrls = self.__applyMirrors(self.__fallbackMirrors)
+        return ret
+
+    def _getCandidateUrls(self):
+        return self.__getPreMirrors() + [self.__url] + self.__getFallbackMirrors()
 
     async def invoke(self, invoker, workspaceCreated):
         options = [ "--non-interactive" ]
@@ -83,7 +117,16 @@ class SvnScm(Scm):
             if "/tags/" not in self.__url:
                 await invoker.checkCommand(["svn", "up"] + options, cwd=self.__dir)
         else:
-            await invoker.checkCommand(["svn", "co"] + options + [self.__url, self.__dir])
+            for url in self._getCandidateUrls():
+                ret = await invoker.callCommand(["svn", "co"] + options + [url, self.__dir])
+                if ret == 0:
+                    break
+                invoker.warn("Checkout from '{}' failed!".format(url))
+                svnDir = invoker.joinPath(self.__dir, ".svn")
+                if os.path.isdir(svnDir):
+                    shutil.rmtree(svnDir)
+            else:
+                invoker.fail("Checkout of '{}' failed!".format(self.__url))
 
     def asDigestScript(self):
         """Return forward compatible stable string describing this svn module.
@@ -134,6 +177,11 @@ class SvnScm(Scm):
         return str(self.__revision).isnumeric()
 
     def hasJenkinsPlugin(self):
+        # The Jenkins plugin does not support mirrors. Fall back to direct
+        # execution in this case.
+        if self.__getPreMirrors() or self.__getFallbackMirrors():
+            return False
+
         return True
 
     def callSubversion(self, workspacePath, *args):

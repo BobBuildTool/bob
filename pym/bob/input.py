@@ -3602,6 +3602,7 @@ class RecipeSet:
     }
 
     MIRRORS_SCHEMA = ScmValidator({
+        'svn' : SvnScm.MIRRORS_SCHEMA,
         'url' : UrlScm.MIRRORS_SCHEMA,
     })
 
