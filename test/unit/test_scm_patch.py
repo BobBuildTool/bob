@@ -510,3 +510,18 @@ class TestPatchScm(TestCase):
             self.writePatch(body)
             with self.assertRaises(ParseError):
                 asyncio.run(self.scm([{'file': 'change.patch'}]).invoke(invoker, False))
+    def test_jenkins_uses_serialized_pre_run_overlay(self):
+        self.writePatch('--- a/message\n+++ b/message\n@@ -1 +1 @@\n-old\n+first\n')
+        scm = self.scm([{'file': 'change.patch'}])
+        self.assertFalse(scm.hasJenkinsPlugin())
+        self.assertIn('__data', scm.getProperties(True)['patches'][0])
+
+    def test_jenkins_plugin_checkout_is_followed_by_patch_only_command(self):
+        self.writePatch('--- a/message\n+++ b/message\n@@ -1 +1 @@\n-old\n+first\n')
+        base = PluginScm(self.recipe)
+        scm = PatchScm(base, [{'file': 'change.patch'}], patchOnly=True)
+        self.assertTrue(scm.hasJenkinsPlugin())
+        self.assertEqual(scm.asJenkins('', None), 'plugin')
+        self.assertTrue(scm.getJenkinsPreRunProperties()['__patchOnly'])
+        asyncio.run(scm.invoke(Invoker(self.workspace), False))
+        self.assertFalse(base.invoked)

@@ -1488,7 +1488,15 @@ class CoreCheckoutStep(CoreStep):
         return [s.getProperties(False) for s in self.scmList]
 
     def getJenkinsPreRunCmds(self):
-        return [ s.getProperties(True) for s in self.scmList if not s.hasJenkinsPlugin() ]
+        ret = []
+        for scm in self.scmList:
+            if not scm.hasJenkinsPlugin():
+                ret.append(scm.getProperties(True))
+            else:
+                props = scm.getJenkinsPreRunProperties()
+                if props is not None:
+                    ret.append(props)
+        return ret
 
     def getSetupScript(self):
         return self.corePackage.recipe.checkoutSetupScript
@@ -4837,4 +4845,3 @@ class PackageUnpickler(pickle.Unpickler):
             return getattr(self.__plugins[module], name)
         else:
             return super().find_class(module, name)
-
