@@ -37,7 +37,7 @@ class _Literal:
     def __init__(self, text):
         self.text = text
 
-    def eval(self, env, funs, funArgs, nounset, subst):
+    def eval(self, env, funs, funArgs, nounset):
         return self.text
 
 class _Concat:
@@ -47,8 +47,8 @@ class _Concat:
     def __init__(self, parts):
         self.parts = parts
 
-    def eval(self, env, funs, funArgs, nounset, subst):
-        return "".join(p.eval(env, funs, funArgs, nounset, subst) for p in self.parts)
+    def eval(self, env, funs, funArgs, nounset):
+        return "".join(p.eval(env, funs, funArgs, nounset) for p in self.parts)
 
 class _VarBare:
     """Bare '$name' variable reference."""
@@ -57,10 +57,10 @@ class _VarBare:
     def __init__(self, name):
         self.name = name
 
-    def eval(self, env, funs, funArgs, nounset, subst):
+    def eval(self, env, funs, funArgs, nounset):
         varValue = env.get(self.name)
         if varValue is None:
-            if subst and nounset:
+            if nounset:
                 raise ParseError("Unset variable: " + self.name)
             return ""
         else:
@@ -76,28 +76,26 @@ class _VarBraced:
         self.sign = sign
         self.argNode = argNode
 
-    def eval(self, env, funs, funArgs, nounset, subst):
-        varName = self.nameNode.eval(env, funs, funArgs, nounset, subst)
+    def eval(self, env, funs, funArgs, nounset):
+        varName = self.nameNode.eval(env, funs, funArgs, nounset)
         unset = varName not in env
         if self.hasColon:
             # or null...
             if not unset: unset = env[varName] == ""
 
         if self.sign == '-':
-            default = self.argNode.eval(env, funs, funArgs, nounset, subst and unset)
             if unset:
-                return default
+                return self.argNode.eval(env, funs, funArgs, nounset)
             else:
                 return env[varName]
         elif self.sign == '+':
-            alternate = self.argNode.eval(env, funs, funArgs, nounset, subst and not unset)
             if unset:
                 return ""
             else:
-                return alternate
+                return self.argNode.eval(env, funs, funArgs, nounset)
         else:
             if varName not in env:
-                if subst and nounset:
+                if nounset:
                     raise ParseError("Unset variable: " + varName)
                 else:
                     return ""
@@ -110,11 +108,8 @@ class _Command:
     def __init__(self, wordNodes):
         self.wordNodes = wordNodes
 
-    def eval(self, env, funs, funArgs, nounset, subst):
-        words = [ w.eval(env, funs, funArgs, nounset, subst) for w in self.wordNodes ]
-
-        if not subst:
-            return ""
+    def eval(self, env, funs, funArgs, nounset):
+        words = [ w.eval(env, funs, funArgs, nounset) for w in self.wordNodes ]
 
         if len(words) < 1:
             raise ParseError("Expected function name")
@@ -323,7 +318,7 @@ class StringParser:
             return text
         else:
             node = _parseTemplate(text)
-            return node.eval(self.env, self.funs, self.funArgs, self.nounset, True)
+            return node.eval(self.env, self.funs, self.funArgs, self.nounset)
 
 class IfExpression():
     __slots__ = ('__expr')
