@@ -67,8 +67,6 @@ class GitScm(Scm):
         schema.Optional('singleBranch') : bool,
         schema.Optional('submodules') : schema.Or(bool, [str]),
         schema.Optional('recurseSubmodules') : bool,
-        schema.Optional('patches') : [dict],
-        schema.Optional('patchFingerprint') : str,
         schema.Optional('shallowSubmodules') : bool,
         schema.Optional('shallow') : schema.Or(int, str),
         schema.Optional('references') :
@@ -1095,6 +1093,8 @@ class GitAudit(ScmAudit):
         'commit' : str,
         'description' : str,
         'dirty' : bool,
+        schema.Optional('patches') : [dict],
+        schema.Optional('patchFingerprint') : str,
         schema.Optional('submodules') : schema.Or(bool, [str]),
         schema.Optional('recurseSubmodules') : bool,
     })
