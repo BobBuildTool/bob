@@ -679,17 +679,17 @@ class PkgGraphNode:
             # recurse
             parents = { parent : directParent } if parent is not None else {}
             childs = OrderedDict()
-            nodes[key] = (corePkg.getName(), parents, childs)
+            nodes[key] = (corePkg.name, parents, childs)
             for subRef in corePkg.directDepSteps:
                 subCorePkg = subRef.refGetDestination().corePackage
                 subPkgStack = "/".join([stack] + subRef.refGetStack())
                 subPkgId = PkgGraphNode.__buildGraph(nodes, subCorePkg, subPkgStack, key, True)
-                childs[subCorePkg.getName()] = (subPkgId, True, "")
+                childs[subCorePkg.name] = (subPkgId, True, "")
             prefixLen = len(stack)
             for subRef in corePkg.indirectDepSteps:
                 subCorePkg = subRef.refGetDestination().corePackage
                 subPkgStack = "/".join([stack] + subRef.refGetStack())
-                subPkgName = subCorePkg.getName()
+                subPkgName = subCorePkg.name
                 if subPkgName in childs: continue
                 subPkgId = PkgGraphNode.__buildGraph(nodes, subCorePkg, subPkgStack, key, False)
                 childs[subPkgName] = ( subPkgId, False,
