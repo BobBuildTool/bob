@@ -6,12 +6,14 @@
 from . import BOB_INPUT_HASH, DEBUG
 from .errors import BuildError, ParseError
 from .scm import GitAudit, SvnAudit, UrlAudit, ImportAudit, auditFromData
+from .scm.scm import overlayFingerprint
 from .utils import asHexStr, hashFile, binStat
 from datetime import datetime, timezone
 import gzip
 import hashlib
 import io
 import json
+import os
 import platform
 import pickle
 import schema
@@ -195,7 +197,12 @@ class Artifact:
         scm = Artifact.SCMS.get(name)
         if scm is None:
             raise BuildError("Cannot handle SCM: " + name)
-        self.__data['scms'].append((await scm.fromDir(workspace, dir, extra)).dump())
+        data = (await scm.fromDir(workspace, dir, extra)).dump()
+        if 'patches' in extra:
+            data['patches'] = extra['patches']
+            data['patchFingerprint'] = overlayFingerprint(
+                os.path.join(workspace, extra['patchDirectory']))
+        self.__data['scms'].append(data)
         self.__invalidateId()
 
     def addTool(self, name, toolId):
@@ -400,4 +407,3 @@ class Audit:
         audit = Audit.fromFile(arg)
         self.__merge(audit)
         self.__artifact.addArg(audit.getId())
-
