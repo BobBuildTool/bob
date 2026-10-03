@@ -8,6 +8,7 @@ from ..stringparser import isTrue, IfExpression
 from ..tty import WarnOnce, stepAction, INFO, TRACE, WARNING
 from ..utils import check_output, joinLines, run, removeUserFromUrl
 from .scm import Scm, ScmAudit, ScmStatus, ScmTaint
+from .patch import PatchScm
 from shlex import quote
 from textwrap import dedent, indent
 from xml.etree import ElementTree
@@ -66,6 +67,8 @@ class GitScm(Scm):
         schema.Optional('singleBranch') : bool,
         schema.Optional('submodules') : schema.Or(bool, [str]),
         schema.Optional('recurseSubmodules') : bool,
+        schema.Optional('patches') : [dict],
+        schema.Optional('patchFingerprint') : str,
         schema.Optional('shallowSubmodules') : bool,
         schema.Optional('shallow') : schema.Or(int, str),
         schema.Optional('references') :
@@ -91,6 +94,7 @@ class GitScm(Scm):
     DEFAULTS = {
         **__DEFAULTS,
         schema.Optional('dir') : str,
+        schema.Optional('patches') : PatchScm.PATCHES_SHEMA,
     }
 
     SCHEMA = schema.Schema({
