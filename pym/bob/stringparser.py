@@ -151,6 +151,13 @@ class _Tokenizer:
         return self.text[i:i+1]
 
     def nextToken(self, extra=None):
+        """Get next token.
+
+        Returns None at the end of the string, the delimiter character if
+        directly on a delimiter or a '_Literal' node with the text up to the
+        next delimiter. The text is returned as node so that an escaped
+        character cannot be mistaken for a delimiter.
+        """
         delim=['\"', '\'', '$']
         if extra: delim.extend(extra)
 
@@ -176,7 +183,7 @@ class _Tokenizer:
             i += 1
         tok.append(self.text[start:i])
         self.index = i
-        return "".join(tok)
+        return _Literal("".join(tok))
 
     def getRestOfName(self):
         """Get remainder of bare variable name"""
@@ -236,7 +243,7 @@ class _Tokenizer:
                     raise ParseError('Unexpected end of string')
                 break
             else:
-                s.append(_Literal(tok))
+                s.append(tok)
             tok = self.nextToken(delim)
         else:
             if keep: self.index -= 1

@@ -103,6 +103,18 @@ class TestStringParser(TestCase):
         self.assertEqual(self.p.parse("${null:-\\}}"), "}")
         self.assertEqual(self.p.parse("$(echo,foo\\,bar)"), "1:foo,bar")
 
+        # Escaped characters that make up a whole token must not be mistaken
+        # for delimiters.
+        self.assertEqual(self.p.parse("\\$"), "$")
+        self.assertEqual(self.p.parse("\\$$asdf"), "$qwer")
+        self.assertEqual(self.p.parse("\\\""), "\"")
+        self.assertEqual(self.p.parse("\\\"$asdf"), "\"qwer")
+        self.assertEqual(self.p.parse("\\'"), "'")
+        self.assertEqual(self.p.parse("\"\\\"\""), "\"")
+        self.assertEqual(self.p.parse("${null:-\\}x}"), "}x")
+        self.assertEqual(self.p.parse("$(echo,\\,)"), "1:,")
+        self.assertEqual(self.p.parse("$(echo,\\),a)"), "1:);2:a")
+
     def testFails(self):
         self.assertRaises(ParseError, self.p.parse, "$")
         self.assertRaises(ParseError, self.p.parse, "asdf\\")
