@@ -1,5 +1,9 @@
 root: True
 
+depends:
+    - name: sandbox
+      use: [sandbox]
+
 checkoutSCM:
     scm: url
     url: "/dev/null"

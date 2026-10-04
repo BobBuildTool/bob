@@ -15,10 +15,11 @@ Synopsis
 
 ::
 
-    bob status [-h] [--develop | --release] [-c CONFIGFILE] [-D DEFINES]
-               [--attic] [-r] [--sandbox | --no-sandbox] [--show-clean]
-               [--show-overrides] [-v]
-               [packages [packages ...]]
+    bob status [-h] [--develop | --release] [--attic] [-r] [-D DEFINES]
+               [-c CONFIGFILE] [--sandbox | --slim-sandbox |
+               --dev-sandbox | --strict-sandbox | --no-sandbox]
+               [--show-clean] [--show-overrides] [-v]
+               [packages ...]
 
 Description
 -----------
@@ -55,6 +56,9 @@ Options
 ``--develop``
     Use developer mode. This is the default.
 
+``--dev-sandbox``
+    Enable development sandboxing.
+
 ``--no-sandbox``
     Disable sandboxing
 
@@ -68,7 +72,13 @@ Options
     Use release mode.
 
 ``--sandbox``
-    Enable sandboxing
+    Enable partial sandboxing.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing.
 
 ``--show-clean``
     Show the status of a checkout even if unmodified. This includes

@@ -7,7 +7,7 @@
 
 from ..input import RecipeSet
 from ..errors import ParseError, BuildError
-from .helpers import processDefines
+from .helpers import processDefines, addStandardArgs
 import argparse
 import codecs
 import sys
@@ -83,21 +83,7 @@ def doLS(argv, bobRoot):
                        help="Prints the full path prefix for each package")
     group.add_argument('-d', '--direct', default=False, action='store_true',
                        help="List packages themselves, not their contents")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=False,
-        help="Enable sandboxing")
-    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
-        help="Enable slim sandboxing")
-    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
-        help="Enable development sandboxing")
-    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
-        help="Enable strict sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
-        help="Disable sandboxing")
+    addStandardArgs(parser)
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -135,23 +121,9 @@ def doQueryMeta(argv, bobRoot):
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description="""Query meta information of packages.""")
     parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=False,
-        help="Enable sandboxing")
-    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
-        help="Enable slim sandboxing")
-    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
-        help="Enable development sandboxing")
-    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
-        help="Enable strict sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
-        help="Disable sandboxing")
+    addStandardArgs(parser)
     args = parser.parse_args(argv)
 
     defines = processDefines(args.defines)
@@ -196,26 +168,12 @@ are used:
 """)
     parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
 
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
     parser.add_argument('-f', default=[], action='append', dest="formats",
         help="Output format for scm (syntax: scm=format). Can be specified multiple times.")
     parser.add_argument('--default', default="", help='Default for missing attributes (default: "")')
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=False,
-        help="Enable sandboxing")
-    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
-        help="Enable slim sandboxing")
-    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
-        help="Enable development sandboxing")
-    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
-        help="Enable strict sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
-        help="Disable sandboxing")
+    addStandardArgs(parser)
 
     formats = {
         'git' : "git {package} {dir} {url} {branch}",
@@ -269,21 +227,7 @@ def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
         description="Query recipe and class files of package.")
     parser.add_argument('packages', nargs='+', help="(Sub-)packages to query")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=False,
-        help="Enable sandboxing")
-    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
-        help="Enable slim sandboxing")
-    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
-        help="Enable development sandboxing")
-    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
-        help="Enable strict sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
-        help="Disable sandboxing")
+    addStandardArgs(parser)
 
     args = parser.parse_args(argv)
 
@@ -343,22 +287,7 @@ project root directory at PROJECT.
 
 def doLsRecipes(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob ls-recipes", description="List all known recipes.")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
-
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=False,
-        help="Enable sandboxing")
-    group.add_argument('--slim-sandbox', action='store_false', dest='sandbox',
-        help="Enable slim sandboxing")
-    group.add_argument('--dev-sandbox', action='store_true', dest='sandbox',
-        help="Enable development sandboxing")
-    group.add_argument('--strict-sandbox', action='store_true', dest='sandbox',
-        help="Enable strict sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
-        help="Disable sandboxing (default)")
+    addStandardArgs(parser)
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--all', action='store_const', dest='mode', const='all', default='all',

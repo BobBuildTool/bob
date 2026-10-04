@@ -6,32 +6,34 @@ cleanup
 if is_win32 ; then
 	skip
 fi
-# Test that all commands working on packages accect arguments which can influence the
-# package stack. These are -D and -c at the moment.
 
-cmds=$(python3 -c "import sys,os
-sys.path.append(os.path.join(os.getcwd(), '..', '..', 'pym'))
-from bob.scripts import availableCommands
-for cmd, (hl, func, help) in sorted(availableCommands.items()):
-    print(cmd)")
+# Test that all commands working on packages accept arguments which can influence the
+# package stack. These are -D, -c and the sandbox modes at the moment.
+SANDBOX_MODES=( "" --sandbox --slim-sandbox --dev-sandbox --strict-sandbox --no-sandbox )
+COMMANDS=( build clean dev graph ls ls-recipes project query-meta query-path
+           query-recipe query-scm show status )
 
-echo "$cmds"
-for c in $cmds; do
-	case "$c" in
-		archive | init | jenkins | layers | help | _*)
-			;;
+test_command()
+{
+	case "$1" in
 		clean | ls-recipes)
-			run_bob $c -DBAR=1 -c testconfig
+			run_bob "$@" -DBAR=1 -c testconfig
 			;;
 		project)
-			run_bob project -DBAR=1 -c testconfig qt-creator root --kit=none
+			run_bob "$@" -DBAR=1 -c testconfig qt-creator root --kit=none
 			;;
 		graph)
-			run_bob $c -DBAR=1 -c testconfig -t dot root
-			run_bob $c -DBAR=1 -c testconfig -t d3 -o d3.showScm=true root
+			run_bob "$@" -DBAR=1 -c testconfig -t dot root $2
+			run_bob "$@" -DBAR=1 -c testconfig -t d3 -o d3.showScm=true root
 			;;
 		*)
-			run_bob $c -DBAR=1 -c testconfig root
+			run_bob "$@" -DBAR=1 -c testconfig root
 			;;
 	esac
+}
+
+for CMD in "${COMMANDS[@]}"; do
+	for SBX in "${SANDBOX_MODES[@]}" ; do
+		test_command "$CMD" $SBX
+	done
 done

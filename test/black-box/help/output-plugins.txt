@@ -1,0 +1,6 @@
+The following plugin defined commands are available:
+
+  another-command Command with a rather long name
+  bare            
+  hello           Example plugin command
+  nohelp          
