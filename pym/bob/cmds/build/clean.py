@@ -10,7 +10,7 @@ from ...share import getShare
 from ...state import BobState
 from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT, Warn
 from ...utils import removePath
-from ..helpers import processDefines
+from ..helpers import processDefines, addStandardArgs
 import argparse
 import os
 
@@ -116,10 +116,6 @@ would get removed without actually deleting that already.
     group.add_argument('--shared', action='store_const', const='shared', dest='mode',
         help="Clean shared package repository")
 
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="Don't delete, just print what would be deleted")
     parser.add_argument('-f', '--force', default=False, action='store_true',
@@ -131,11 +127,7 @@ would get removed without actually deleting that already.
     parser.add_argument('--used', default=False, action='store_true',
         help="Also remove used shared packages if quota is exceeded")
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', default=None,
-        help="Enable sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox',
-        help="Disable sandboxing")
+    addStandardArgs(parser, None)
 
     parser.add_argument('-v', '--verbose', default=False, action='store_true',
         help="Print what is done")

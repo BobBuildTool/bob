@@ -15,9 +15,10 @@ Synopsis
 
 ::
 
-    bob clean [-h] [--develop | --release | --attic | --shared]
-              [-c CONFIGFILE] [-D DEFINES] [--dry-run] [-f] [-s]
-              [--all-unused] [--used] [--sandbox | --no-sandbox] [-v]
+    bob clean [-h] [--develop | --release | --attic | --shared] [--dry-run]
+              [-f] [-s] [--all-unused] [--used] [-D DEFINES]
+              [-c CONFIGFILE] [--sandbox | --slim-sandbox | --dev-sandbox |
+              --strict-sandbox | --no-sandbox] [-v]
 
 
 Description
@@ -68,6 +69,12 @@ Options
 ``--attic``
     Remove attic directories.
 
+``--dev-sandbox``
+    Enable development sandboxing.
+
+``--no-sandbox``
+    Disable sandboxing
+
 ``--shared``
     Delete packages from shared location.
 
@@ -96,6 +103,15 @@ Options
        You should double check with ``--dry-run`` that no unintended workspaces
        are actually deleted. While Bob can check SCMs that it knows it cannot
        detect all modifications, e.g. changes to extracted tar files.
+
+``--sandbox``
+    Enable partial sandboxing.
+
+``--slim-sandbox``
+    Enable slim sandboxing.
+
+``--strict-sandbox``
+    Enable strict sandboxing.
 
 ``--used``
     If a package is still used by a project on the machine it is not deleted by
