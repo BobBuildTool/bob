@@ -4094,19 +4094,19 @@ class RecipeSet:
 
     def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="", command=None):
         try:
-            self.__parseConfigs(platform, recipesRoot, command)
+            self.__parseConfigs(platform, recipesRoot, command, True)
             self.__parseRecipes(envOverrides)
         finally:
             self.__cache.close()
 
-    def parseConfigs(self, platform=getPlatformString(), recipesRoot="", command=None):
-        self.__cache.open()
+    def parseConfigs(self, platform=getPlatformString(), recipesRoot="", command=None,
+                     requireRecipes=True):
         try:
-            self.__parseConfigs(platform, recipesRoot, command)
+            self.__parseConfigs(platform, recipesRoot, command, requireRecipes)
         finally:
             self.__cache.close()
 
-    def __parseConfigs(self, platform, recipesRoot, command):
+    def __parseConfigs(self, platform, recipesRoot, command, requireRecipes):
         if platform not in ('cygwin', 'darwin', 'linux', 'msys', 'win32'):
             raise ParseError("Invalid platform: " + platform)
         self.__platform = platform
@@ -4125,7 +4125,10 @@ class RecipeSet:
                 raise ParseError("Broken project link: " + str(e))
         recipesDir = os.path.join(recipesRoot, "recipes")
         if not os.path.isdir(recipesDir):
-            raise ParseError("No recipes directory found in " + recipesDir)
+            if requireRecipes:
+                raise ParseError("No recipes directory found in " + recipesDir)
+            else:
+                return
         self.__projectRoot = recipesRoot or os.getcwd()
 
         # We know we are in a project directory. Open or create the Yaml cache.
