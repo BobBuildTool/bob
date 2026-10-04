@@ -40,8 +40,7 @@ been executed or does not exist), the line is omitted.
     parser.add_argument('--fail', action="store_true",
         help="Return a non-zero error code in case of errors")
 
-    addStandardArgs(parser)
-    parser.set_defaults(sandbox=None)
+    addStandardArgs(parser, None)
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--develop', action='store_true',  dest='dev', help="Use developer mode", default=True)
@@ -49,7 +48,7 @@ been executed or does not exist), the line is omitted.
 
     # Parse args
     args = parser.parse_args(argv)
-    if args.sandbox == None:
+    if args.sandbox is None:
         args.sandbox = not args.dev
 
     defines = processDefines(args.defines)
