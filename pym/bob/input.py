@@ -1648,12 +1648,12 @@ class CorePackageInternal(CoreItem):
 corePackageInternal = CorePackageInternal()
 
 class CorePackage:
-    __slots__ = ("recipe", "internalRef", "directDepSteps", "indirectDepSteps",
+    __slots__ = ("recipe", "internalRef", "directDepSteps", "injectedDepSteps",
         "states", "tools", "sandbox", "interpreters", "checkoutStep", "buildStep", "packageStep",
         "pkgId", "metaEnv", "packageName", "isShared", "name")
 
     def __init__(self, recipe, tools, diffTools, sandbox, diffSandbox, interpreters, diffInterpreters,
-                 directDepSteps, indirectDepSteps, states, pkgId, metaEnv,
+                 directDepSteps, injectedDepSteps, states, pkgId, metaEnv,
                  packageName, isShared):
         self.recipe = recipe
         self.tools = tools
@@ -1661,7 +1661,7 @@ class CorePackage:
         self.interpreters = interpreters
         self.internalRef = CoreRef(corePackageInternal, [], diffTools, diffSandbox, diffInterpreters)
         self.directDepSteps = directDepSteps
-        self.indirectDepSteps = indirectDepSteps
+        self.injectedDepSteps = injectedDepSteps
         self.states = states
         self.pkgId = pkgId
         self.metaEnv = metaEnv
@@ -1806,7 +1806,7 @@ class Package(object):
                             self.__inputInterpreters, self.__pathsConfig, refCache)
                     for d in self.__corePackage.directDepSteps ]
 
-    def getIndirectDepSteps(self):
+    def getInjectedDepSteps(self):
         """Return list of the package steps of the injected dependencies.
 
         Injected dependencies are dependencies that were provided by upstream
@@ -1815,7 +1815,18 @@ class Package(object):
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
                             self.__inputInterpreters, self.__pathsConfig, refCache)
-                    for d in self.__corePackage.indirectDepSteps ]
+                    for d in self.__corePackage.injectedDepSteps ]
+
+    def getIndirectDepSteps(self):
+        """Return list of the package steps of the injected dependencies.
+
+        .. deprecated:: 1.3
+           Use :meth:`bob.input.Package.getInjectedDepSteps` instead.
+        """
+        import warnings
+        warnings.warn("getIndirectDepSteps is deprecated. Use getInjectedDepSteps instead.",
+                      DeprecationWarning, stacklevel=2)
+        return self.getInjectedDepSteps()
 
     def getAllDepSteps(self):
         """Return list of all dependencies of the package.
@@ -1825,7 +1836,7 @@ class Package(object):
         interpreter) are included too.
         """
         allDeps = set(self.getDirectDepSteps())
-        allDeps |= set(self.getIndirectDepSteps())
+        allDeps |= set(self.getInjectedDepSteps())
         if self.__sandbox and self.__sandbox.isEnabled():
             allDeps.add(self.__sandbox.getStep())
         for i in self.getPackageStep().getTools().values(): allDeps.add(i.getStep())
@@ -2694,7 +2705,7 @@ class Recipe(object):
         # traverse dependencies
         subTreePackages = set()
         directPackages = []
-        indirectPackages = []
+        injectedPackages = []
         provideDeps = UniquePackageList(stack.getNameStack(), self.__raiseIncompatibleProvided)
         maybeProvideDeps = []
         checkoutDeps = []
@@ -2814,7 +2825,7 @@ class Recipe(object):
                     s.onSkip(depCoreStep.corePackage.states[n])
                     if dep.provideGlobal: depStates[n].onSkip(depCoreStep.corePackage.states[n])
             if dep.useDeps:
-                indirectPackages.extend(
+                injectedPackages.extend(
                     CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
                     for d in depCoreStep.providedDeps)
             if dep.useBuildResult and depTrack.useResultOnce():
@@ -2876,8 +2887,8 @@ class Recipe(object):
 
         # Filter injected packages and add to result list if necessary. Most
         # likely there are many duplicates that are dropped.
-        tmp = indirectPackages
-        indirectPackages = []
+        tmp = injectedPackages
+        injectedPackages = []
         for depRef in tmp:
             depCoreStep = depRef.refGetDestination()
             name = depCoreStep.corePackage.name
@@ -2886,7 +2897,7 @@ class Recipe(object):
                 thisDeps[name] = depTrack = DepTracker(depRef, None)
 
             if depTrack.prime():
-                indirectPackages.append(depRef)
+                injectedPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
                 self.__raiseIncompatibleProvided(name,
                     stack.getNameStack() + depRef.refGetStack(),
@@ -3010,7 +3021,7 @@ class Recipe(object):
         # touchedTools = tools.touchedKeys()
         # diffTools = { n : t for n,t in diffTools.items() if n in touchedTools }
         p = CorePackage(self, toolsDetached, diffTools, sandbox, diffSandbox,
-                interpreters, diffInterpreters, directPackages, indirectPackages,
+                interpreters, diffInterpreters, directPackages, injectedPackages,
                 states, uidGen(), metaEnv, packageName, isShared)
 
         # optional checkout step

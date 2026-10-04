@@ -102,7 +102,7 @@ class LocationPath(BaseASTNode):
     def __repr__(self):
         return "LocationPath({})".format(self.__path)
 
-    def __findIntermediateNodes(self, old, new, queryIndirect):
+    def __findIntermediateNodes(self, old, new, queryInjected):
         """Find nodes that are on on any path between 'old' and 'new'"""
 
         visited = set()
@@ -117,7 +117,7 @@ class LocationPath(BaseASTNode):
             else:
                 stack = stack + [node]
                 for i in node.values():
-                    if queryIndirect or i.direct:
+                    if queryInjected or i.direct:
                         traverse(i.node, stack)
                 visited.add(node)
 
@@ -247,14 +247,14 @@ class LocationStep(BaseASTNode):
     def __repr__(self):
         return "LocationStep({}@{}[{}])".format(self.__axis, self.__test, self.__pred)
 
-    def __evalAxisChild(self, nodes, queryIndirect):
+    def __evalAxisChild(self, nodes, queryInjected):
         """Find nodes in the 'child' axis."""
         ret = set()
         for i in nodes:
-            ret.update(c.node for c in i.values() if (queryIndirect or c.direct))
+            ret.update(c.node for c in i.values() if (queryInjected or c.direct))
         return ret
 
-    def __evalAxisDescendant(self, nodes, queryIndirect):
+    def __evalAxisDescendant(self, nodes, queryInjected):
         """Find nodes in the 'descendant' axis."""
         ret = set()
         todo = nodes
@@ -262,25 +262,25 @@ class LocationStep(BaseASTNode):
             childs = set()
             for i in todo:
                 childs.update(c.node for c in i.values()
-                              if (queryIndirect or c.direct))
+                              if (queryInjected or c.direct))
             todo = childs - ret
             ret.update(childs)
         return ret
 
-    def __evalAxisParent(self, nodes, queryIndirect):
+    def __evalAxisParent(self, nodes, queryInjected):
         """Find nodes in the 'parent' axis."""
         ret = set()
         for i in nodes:
-            ret.update(i.parents(queryIndirect))
+            ret.update(i.parents(queryInjected))
         return ret
 
-    def __evalAxisAncestor(self, nodes, queryIndirect):
+    def __evalAxisAncestor(self, nodes, queryInjected):
         """Find nodes in the 'ancestor' axis."""
         ret = set()
         todo = nodes
         while todo:
             parents = set()
-            for i in todo: parents.update(i.parents(queryIndirect))
+            for i in todo: parents.update(i.parents(queryInjected))
             todo = parents - ret
             ret.update(parents)
         return ret
@@ -652,9 +652,9 @@ class PkgGraphNode:
         return iter( (name, PkgGraphEdge(self.__db, child))
                      for name, child in self.__childs.items() )
 
-    def parents(self, queryIndirect):
+    def parents(self, queryInjected):
         return iter( PkgGraphNode(self.__db, p) for (p, d) in self.__parents.items()
-                     if (queryIndirect or d) )
+                     if (queryInjected or d) )
 
     def allNodes(self):
         self.__db.execute("SELECT key FROM graph")
@@ -686,7 +686,7 @@ class PkgGraphNode:
                 subPkgId = PkgGraphNode.__buildGraph(nodes, subCorePkg, subPkgStack, key, True)
                 childs[subCorePkg.name] = (subPkgId, True, "")
             prefixLen = len(stack)
-            for subRef in corePkg.indirectDepSteps:
+            for subRef in corePkg.injectedDepSteps:
                 subCorePkg = subRef.refGetDestination().corePackage
                 subPkgStack = "/".join([stack] + subRef.refGetStack())
                 subPkgName = subCorePkg.name
@@ -718,7 +718,7 @@ class GraphPackageIterator:
 
     def __iter__(self):
         stack = [ (self.__graphRoot, chain(self.__pkgRoot.getDirectDepSteps(),
-                                           self.__pkgRoot.getIndirectDepSteps())) ]
+                                           self.__pkgRoot.getInjectedDepSteps())) ]
         yield (self.__graphRoot, self.__pkgRoot)
         done = set([self.__graphRoot.key()])
 
@@ -730,7 +730,7 @@ class GraphPackageIterator:
                     done.add(childNode.key())
                     yield (childNode, childPkg)
                     stack.append( (childNode, chain(childPkg.getDirectDepSteps(),
-                                                    childPkg.getIndirectDepSteps())) )
+                                                    childPkg.getInjectedDepSteps())) )
             except StopIteration:
                 stack.pop()
 
@@ -858,7 +858,7 @@ class PackageSet:
         if not queryAll: valid.discard(node)
         nextPackages = { s.getPackage().getName() : s.getPackage()
             for s in pkg.getDirectDepSteps() }
-        for s in pkg.getIndirectDepSteps():
+        for s in pkg.getInjectedDepSteps():
             p = s.getPackage()
             nextPackages.setdefault(p.getName(), p)
 
@@ -964,7 +964,7 @@ class PackageSet:
         for step in steps:
             nextPackages = { s.getPackage().getName() : s.getPackage()
                 for s in thisPackage.getDirectDepSteps() }
-            for s in thisPackage.getIndirectDepSteps():
+            for s in thisPackage.getInjectedDepSteps():
                 p = s.getPackage()
                 nextPackages.setdefault(p.getName(), p)
             if step not in nextPackages:
