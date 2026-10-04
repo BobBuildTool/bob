@@ -3094,7 +3094,7 @@ class Recipe(object):
                 p = reusableCorePackage
             self.__corePackagesByMatch.insert(0, PackageMatcher(
                 reusableCorePackage, inputEnv, inputTools, inputStates,
-                inputSandbox, subTreePackages, packageName, interpreters))
+                inputSandbox, subTreePackages, packageName, inputInterpreters))
         elif packageCoreStep.getResultId() != reusedCorePackage.getCorePackageStep().getResultId():
             raise AssertionError("Wrong reusage for " + "/".join(stack.getNameStack()))
         else:
