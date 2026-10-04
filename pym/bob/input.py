@@ -4093,7 +4093,6 @@ class RecipeSet:
         return self.__cache.loadYaml(path, schema, default, preValidate)
 
     def parse(self, envOverrides={}, platform=getPlatformString(), recipesRoot="", command=None):
-        self.__cache.open()
         try:
             self.__parseConfigs(platform, recipesRoot, command)
             self.__parseRecipes(envOverrides)
@@ -4128,6 +4127,9 @@ class RecipeSet:
         if not os.path.isdir(recipesDir):
             raise ParseError("No recipes directory found in " + recipesDir)
         self.__projectRoot = recipesRoot or os.getcwd()
+
+        # We know we are in a project directory. Open or create the Yaml cache.
+        self.__cache.open()
 
         # global user config(s)
         if not DEBUG['ngd']:
@@ -4676,6 +4678,9 @@ class YamlCache:
 
     YamlSafeLoader.add_constructor(u'!expr', __if_expression_constructor)
 
+    def __init__(self):
+        self.__con = None
+
     def open(self):
         try:
             self.__con = sqlite3.connect(".bob-cache.sqlite3", isolation_level=None)
@@ -4701,6 +4706,9 @@ class YamlCache:
         self.__files = {}
 
     def close(self):
+        if self.__con is None:
+            return
+
         try:
             self.__cur.execute("END")
             self.__cur.close()
@@ -4714,6 +4722,7 @@ class YamlCache:
             h.update(name.encode('utf8'))
             h.update(data)
         self.__digest = h.digest()
+        self.__con = None
 
     def getDigest(self):
         return self.__digest
