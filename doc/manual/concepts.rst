@@ -27,8 +27,9 @@ with downstream and upstream recipes:
 There are four kinds of objects that are exchanged between recipes: results,
 dependencies, environment variables and tools. Results (shown as black arrows)
 are always propagated downstream. These are the actual build artifacts that are
-created. Dependencies (upstream recipes) may be propagated downstream which is
-not shown in the picture. Environment variables are key-value-pairs of
+created. Dependencies (upstream recipes) may be provided to downstream recipes
+where they become injected dependencies. This is not shown in the picture.
+Environment variables are key-value-pairs of
 strings. They are passed as shell variables to the individual build steps.
 Tools are scripts or executables that are needed to produce the build result,
 e.g. compilers, image generators or post processing scripts. Consuming recipes

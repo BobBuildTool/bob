@@ -103,7 +103,7 @@ def checkoutBuildOnlyState(checkoutStep, inputHashes):
 
     The assumption is that we can run updates as long as all local SCMs stayed
     the same. As this is just for build-only builds, we can assume that
-    dependencies have been setup correctly (direct deps, tools).
+    dependencies have been setup correctly (immediate deps, tools).
 
     Because of the fixImportScmVariant bug, we include the directory too. This
     should not have been necessary otherwise. Needs to return a tuple because

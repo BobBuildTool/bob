@@ -69,11 +69,11 @@ def doLS(argv, bobRoot):
     parser.add_argument('package', type=str, nargs='?', default="",
                         help="Sub-package to start listing from")
     parser.add_argument('-a', '--all', default=False, action='store_true',
-                        help="Show indirect dependencies too")
+                        help="Show injected dependencies too")
     parser.add_argument('-A', '--alternates', default=False, action='store_true',
                         help="Show all alternate paths to identical packages too")
     parser.add_argument('-o', '--origin', default=False, action='store_true',
-                        help="Show origin of indirect dependencies")
+                        help="Show origin of injected dependencies")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
     parser.add_argument('-u', '--unsorted', default=False, action='store_true',

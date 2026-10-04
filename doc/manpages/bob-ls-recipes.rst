@@ -72,4 +72,4 @@ Options
 
 ``--used``
     List all used recipes. These are recipes that are referenced directly or
-    indirectly by a root package.
+    transitively by a root package.

@@ -695,8 +695,8 @@ class PkgGraphNode:
                 childs[subPkgName] = ( subPkgId, False,
                     ".." + subPkgStack[prefixLen:] )
         elif parent is not None:
-            # Direct dependencies are traversed first. Thus we don't need to
-            # worry that a parent is flipping between direct and indirect.
+            # Declared dependencies are traversed first. Thus we don't need to
+            # worry that a parent is flipping between declared and injected.
             parents = entry[1]
             if parent not in parents:
                 parents[parent] = directParent

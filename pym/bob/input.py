@@ -1319,8 +1319,8 @@ class Step:
     def getAllDepSteps(self):
         """Get all dependent steps of this Step.
 
-        This includes the direct input to the Step as well as indirect inputs
-        such as the used tools, the sandbox and the interpreter.
+        This includes the arguments of the Step as well as the packages of the
+        used tools, the sandbox and the interpreter.
         """
         sandbox = self.getSandbox()
         interpreter = self.getInterpreter()
@@ -1795,11 +1795,11 @@ class Package(object):
         return self.__corePackage.recipe
 
     def getDirectDepSteps(self):
-        """Return list of the package steps of the direct dependencies.
+        """Return list of the package steps of the declared dependencies.
 
-        Direct dependencies are the ones that are named explicitly in the
-        ``depends`` section of the recipe. The order of the items is
-        preserved from the recipe.
+        Declared (or direct) dependencies are the ones that are named
+        explicitly in the ``depends`` section of the recipe. The order of the
+        items is preserved from the recipe.
         """
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
@@ -1807,10 +1807,10 @@ class Package(object):
                     for d in self.__corePackage.directDepSteps ]
 
     def getIndirectDepSteps(self):
-        """Return list of indirect dependencies of the package.
+        """Return list of the package steps of the injected dependencies.
 
-        Indirect dependencies are dependencies that were provided by downstream
-        recipes. They are not directly named in the recipe.
+        Injected dependencies are dependencies that were provided by upstream
+        recipes through ``provideDeps``. They are not named in the recipe.
         """
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
@@ -1820,8 +1820,9 @@ class Package(object):
     def getAllDepSteps(self):
         """Return list of all dependencies of the package.
 
-        This list includes all direct and indirect dependencies. Additionally
-        the used sandbox, tools and interpreter are included too.
+        This list includes all immediate (declared and injected) dependencies.
+        Additionally ambient dependencies (the used sandbox, tools and
+        interpreter) are included too.
         """
         allDeps = set(self.getDirectDepSteps())
         allDeps |= set(self.getIndirectDepSteps())
@@ -2873,7 +2874,7 @@ class Recipe(object):
                 provideDeps.extend([CoreRef(d, depStackAdd, origDepDiffTools, origDepDiffSandbox, origDepDiffInterpreters)
                     for d in depRef.refGetDestination().providedDeps])
 
-        # Filter indirect packages and add to result list if necessary. Most
+        # Filter injected packages and add to result list if necessary. Most
         # likely there are many duplicates that are dropped.
         tmp = indirectPackages
         indirectPackages = []
@@ -3069,7 +3070,7 @@ class Recipe(object):
         packageCoreStep.providedTools = { name : tool.prepare(packageCoreStep, env)
             for (name, tool) in self.__provideTools.items() }
 
-        # provide deps (direct and indirect deps)
+        # provide deps (named in provideDeps and their provided deps)
         packageCoreStep.providedDeps = provideDeps.result()
 
         # provide Sandbox

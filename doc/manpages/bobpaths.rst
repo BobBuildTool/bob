@@ -30,7 +30,9 @@ Examples:
 When Bob parses the recipes he builds an internal package graph. The general
 dependency structure is derived from the recipes. Depending on the actual
 content one or more packages are generated from a recipe. The Bob queries are
-working on the package graph.
+working on the package graph. Ambient dependencies (tools, sandbox and
+interpreters) that a package inherits from its downstream recipes are not part
+of its children in the package graph.
 
 The primary constructs of Bob paths are the location path and predicate
 expressions. Both are evaluated with respect to a context which consists of:
@@ -100,11 +102,11 @@ examples for the full syntax:
 * ``child@*["${LICENSE}" == "GPLv2"]`` selects all children of the context package
   that are licensed as GPLv2
 * ``child@lib*[child@libc]`` selects the children starting with ``lib`` of the
-  context package that have a ``libc`` child (i.e. that have a dependency to
-  ``libc``)
+  context package that have a ``libc`` child (i.e. that have a declared or
+  injected dependency to ``libc``)
 * ``descendant-or-self@lib*["${LICENSE}" == "GPLv2" && child@libc]`` selects
   the context package or any of it descendants that start with ``lib`` which
-  are licensed as GPLv2 and have a direct dependency to ``libc``
+  are licensed as GPLv2 and have a declared or injected dependency to ``libc``
 
 There are two kinds of location path: relative location paths and absolute
 location paths.
@@ -140,14 +142,18 @@ Axis specifier
     The following axis are available:
 
     * the ``self`` axis contains just the context package itself,
-    * the ``child`` axis contains all children of the context package,
+    * the ``child`` axis contains all children of the context package (i.e.
+      its declared and injected dependencies),
     * the ``direct-child`` axis contains the direct children of the context
-      package (i.e. without provided dependencies),
+      package (i.e. only its declared dependencies without injected
+      dependencies),
     * the ``descendant`` axis contains all descendants of the context package;
-      a descendant is a child or a child of a child and so on,
+      a descendant is a child or a child of a child and so on (i.e. its
+      transitive dependencies following declared and injected dependencies),
     * the ``direct-descendant`` axis contains the direct descendants of the
       context package; a direct descendant is a direct child or a direct child
-      of a direct child and so on,
+      of a direct child and so on (i.e. its transitive dependencies following
+      only declared dependencies),
     * the ``descendant-or-self`` axis contains the context package and the
       descendants of the context package
     * the ``direct-descendant-or-self`` axis contains the context package and
@@ -281,7 +287,8 @@ See the following examples for some complex expressions:
 * ``"${FOO}" == "bar"`` selects packages which use variable ``FOO`` an where
   the value is ``bar``
 * ``!match("${LICENSE}", "GPL") && *[ match("${LICENSE}", "GPL") ]`` selects
-  packages that are *not* GPL-licensed and depend on a GPL-licensed package
+  packages that are *not* GPL-licensed and have a declared or injected
+  dependency to a GPL-licensed package
 
 .. _manpage-bobpaths-aliases:
 

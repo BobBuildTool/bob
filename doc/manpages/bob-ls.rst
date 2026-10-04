@@ -30,14 +30,17 @@ package path selects the virtual root package too but does not list aliases as
 it is a absolute location path. See :ref:`bobpaths(7) <manpage-bobpaths>` for
 how to specify packages and how aliases are handled.
 
-By default only the direct dependencies of the package are displayed. By adding
-``-a`` the indirect dependencies (i.e. dependencies collected from
-:ref:`provideDeps <configuration-recipes-providedeps>`) are displayed too. To
-see the relative path from where the indirect dependencies were inherited add
-``-o``.
+By default only the declared dependencies of the package are displayed. By
+adding ``-a`` the injected dependencies (i.e. dependencies provided by its
+declared dependencies through :ref:`provideDeps
+<configuration-recipes-providedeps>`) are displayed too. To see the relative
+path from where the injected dependencies originate add ``-o``. See
+:ref:`configuration-principle-dependencies` for the definition of these terms.
 
 Without any further options only the first level of dependencies is listed.
-Adding ``-r`` shows a graphical tree of all transitive dependencies too. To get
+Adding ``-r`` shows a graphical tree of all transitive dependencies too.
+Recursion follows the same dependencies that are displayed, i.e. only declared
+dependencies unless ``-a`` is given. To get
 a list of all transitive dependencies instead, specify ``-p``. This will print
 each package on a separate line with the full package path. The aliases listed
 below the virtual root package are not recursively traversed as they can
@@ -59,7 +62,7 @@ Options
 -------
 
 ``-a, --all``
-    Show indirect dependencies too. By default only direct dependencies (i.e.
+    Show injected dependencies too. By default only declared dependencies (i.e.
     dependencies explicitly specified in the recipe) are displayed.
 
 ``-A, --alternates``
@@ -87,7 +90,7 @@ Options
     Disable sandboxing
 
 ``-o, --origin``
-    Show origin of indirect dependencies. This is printed as relative path to
+    Show origin of injected dependencies. This is printed as relative path to
     the current package.
 
 ``-p, --prefixed``
