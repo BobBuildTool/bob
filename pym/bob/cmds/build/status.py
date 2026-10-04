@@ -10,7 +10,7 @@ from ...state import BobState
 from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT, SKIPPED, \
     IMPORTANT, NORMAL, INFO, DEBUG, TRACE, HEADLINE
 from ...utils import joinLines
-from ..helpers import processDefines
+from ..helpers import processDefines, addStandardArgs
 from textwrap import indent
 import argparse
 import os
@@ -232,20 +232,12 @@ def doStatus(argv, bobRoot):
     group.add_argument('--develop', action='store_true',  dest='develop', help="Use developer mode", default=True)
     group.add_argument('--release', action='store_false', dest='develop', help="Use release mode")
 
-    parser.add_argument('-c', dest="configFile", default=[], action='append',
-        help="Use config File")
-    parser.add_argument('-D', default=[], action='append', dest="defines",
-        help="Override default environment variable")
-
     parser.add_argument('--attic', action='store_true',
         help="Additionally look in/for attic directories")
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--sandbox', action='store_true', help="Enable sandboxing")
-    group.add_argument('--no-sandbox', action='store_false', dest='sandbox', help="Disable sandboxing")
-    parser.set_defaults(sandbox=None)
+    addStandardArgs(parser, None)
 
     parser.add_argument('--show-clean', action='store_true',
         help="Show SCM status even if checkout is unmodified")
@@ -255,7 +247,7 @@ def doStatus(argv, bobRoot):
         help="Increase verbosity (may be specified multiple times)")
     args = parser.parse_args(argv)
 
-    if args.sandbox == None:
+    if args.sandbox is None:
         args.sandbox = not args.develop
 
     defines = processDefines(args.defines)
