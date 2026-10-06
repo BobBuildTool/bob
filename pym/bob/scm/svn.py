@@ -7,6 +7,7 @@ from ..errors import BuildError
 from ..stringparser import IfExpression
 from ..utils import joinLines, check_output
 from .scm import Scm, ScmAudit, ScmTaint, ScmStatus
+from .patch import PatchScm
 from shlex import quote
 from textwrap import indent
 import os, os.path
@@ -29,6 +30,7 @@ class SvnScm(Scm):
     DEFAULTS = {
         **__DEFAULTS,
         schema.Optional('dir') : str,
+        schema.Optional('patches') : PatchScm.PATCHES_SHEMA,
     }
 
     SCHEMA = schema.Schema({
@@ -190,7 +192,9 @@ class SvnAudit(ScmAudit):
         'repository' : {
             'root' : str,
             'uuid' : str
-        }
+        },
+        schema.Optional('patches') : [dict],
+        schema.Optional('patchFingerprint') : str,
     })
 
     async def _scanDir(self, workspace, dir, extra):

@@ -1038,6 +1038,41 @@ can use :ref:`bobpaths_string_literals` and :ref:`bobpaths_string_function_calls
 to express a condition (see :ref:`configuration-principle-booleans`). The SCM
 will only be considered if the condition passes.
 
+patches
+^^^^^^^
+
+All checkout SCMs may declare an ordered ``patches`` list.  Bob applies these
+recipe-relative unified diffs after obtaining the SCM and before running the
+``checkoutScript``.  This makes the patch content part of the checkout
+identity, so changing a patch invalidates dependent artifacts.
+
+Each item names either one ``file``, a non-recursive ``files`` glob, or a
+simple quilt-style ``series`` file; blank lines and comments in a series are
+ignored.  Glob matches are applied in lexicographic order and an unmatched
+glob is an error.  ``strip`` defaults to 1::
+
+    patches:
+      - file: patches/0001-fix-build.patch
+      - files: patches/foo*.patch
+      - series: patches/series
+        strip: 1
+
+Bob applies text unified diffs itself, with exact context. It tries each hunk
+at its declared location first; otherwise, it accepts exactly one full-context
+match within 100 lines and reports the offset. It rejects unsupported patch
+formats (including binary, rename, and mode-only patches) and patch files
+outside the recipe directory. Patches are confined to the SCM's ``dir``; they
+cannot be used to modify another checkout.
+
+When changing a declared patch's ``strip`` level, Bob uses the new level while
+reversing the persisted old patch content during an inline checkout update.
+If an overlay application failed, changing its contents retries the corrected
+overlay against the verified retained base checkout. Bob prepares the entire
+overlay before writing files and restores originals if a write fails. Failed
+checkout state without a verified base is moved to the attic before obtaining
+a fresh checkout. Creation patches cannot overwrite existing files, and patch
+targets must not traverse symlinks.
+
 Each SCM supports a number of specific attributes. See the description of each
 SCM below for the details. Additionally, the following synthetic attributes
 exist. They are generated internally and cannot be set in the recipe. They are

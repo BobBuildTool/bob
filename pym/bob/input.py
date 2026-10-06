@@ -7,7 +7,7 @@ from . import BOB_VERSION, BOB_INPUT_HASH, DEBUG
 from .errors import ParseError, BobError
 from .languages import getLanguage, ScriptLanguage, BashLanguage, PwshLanguage, PythonLanguage
 from .pathspec import PackageSet
-from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, ScmOverride, \
+from .scm import CvsScm, GitScm, ImportScm, SvnScm, UrlScm, PatchScm, ScmOverride, \
     auditFromDir, auditFromProperties, getScm, SYNTHETIC_SCM_PROPS
 from .state import BobState
 from .stringparser import checkGlobList, Env, DEFAULT_STRING_FUNS, IfExpression, \
@@ -1488,7 +1488,15 @@ class CoreCheckoutStep(CoreStep):
         return [s.getProperties(False) for s in self.scmList]
 
     def getJenkinsPreRunCmds(self):
-        return [ s.getProperties(True) for s in self.scmList if not s.hasJenkinsPlugin() ]
+        ret = []
+        for scm in self.scmList:
+            if not scm.hasJenkinsPlugin():
+                ret.append(scm.getProperties(True))
+            else:
+                props = scm.getJenkinsPreRunProperties()
+                if props is not None:
+                    ret.append(props)
+        return ret
 
     def getSetupScript(self):
         return self.corePackage.recipe.checkoutSetupScript
@@ -2396,6 +2404,9 @@ class Recipe(object):
         for scm in self.__checkoutSCMs:
             scm["__source"] = sourceName
             scm["recipe"] = sourceFile
+            if scm.get("patches"):
+                PatchScm.trackPatchFiles(sourceFile, scm["patches"],
+                                         recipeSet.loadBinary)
         self.__checkoutAsserts = recipe.get("checkoutAssert", [])
         i = 0
         for a in self.__checkoutAsserts:
@@ -4834,4 +4845,3 @@ class PackageUnpickler(pickle.Unpickler):
             return getattr(self.__plugins[module], name)
         else:
             return super().find_class(module, name)
-
