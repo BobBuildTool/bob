@@ -35,6 +35,7 @@ class FakeSpec:
             mainScript="",
             updateScript="",
             interpreterPath=None,
+            windowsPowerShellExecutable="powershell",
             args=[],
             scriptHint=None,
             fingerprintScript="",

@@ -3649,6 +3649,7 @@ class RecipeSet:
         schema.Optional('scriptLanguage',
                         default=ScriptLanguage.BASH) : schema.And(schema.Or("bash", "PowerShell", "python"),
                                                                   schema.Use(ScriptLanguage)),
+        schema.Optional('windowsPowerShellExecutable') : str,
     }
 
     MIRRORS_SCHEMA = ScmValidator({
@@ -3751,6 +3752,7 @@ class RecipeSet:
         self.__fallbackMirrors = []
         self.__inheritAppend = []
         self.__inheritPrepend = []
+        self.__windowsPowerShellExecutable = "powershell"
 
         def appendArchive(x): self.__archive.extend(x)
         def prependArchive(x): self.__archive[0:0] = x
@@ -4388,6 +4390,10 @@ class RecipeSet:
         for l in config.get("layers", []):
             allLayers.extend(self.__parseLayer(l.getName(), allLayerSpecs, maxVer, recipesRoot, layer))
 
+        # The PowerShell executable on Windows is a project wide setting.
+        self.__windowsPowerShellExecutable = config.get(
+            "windowsPowerShellExecutable", self.__windowsPowerShellExecutable)
+
         # Load plugins and re-create schemas as new keys may have been added
         self.__loadPlugins(rootDir, layer, config.get("plugins", []))
         self.__createSchemas()
@@ -4689,6 +4695,9 @@ class RecipeSet:
 
     def getFallbackMirrors(self):
         return self.__fallbackMirrors
+
+    def getWindowsPowerShellExecutable(self):
+        return self.__windowsPowerShellExecutable
 
 
 class YamlCache:

@@ -563,6 +563,15 @@ class PwshLanguage:
         return "\n".join(ret)
 
     @staticmethod
+    def __interpreter(spec):
+        if spec.interpreterPath:
+            return os.path.abspath(spec.interpreterPath)
+        elif isWindows():
+            return spec.windowsPowerShellExecutable
+        else:
+            return "pwsh"
+
+    @staticmethod
     def __scriptFilePaths(spec, tmpDir):
         if spec.fatSandbox:
             execScriptFile = "/.script.ps1"
@@ -579,7 +588,7 @@ class PwshLanguage:
             f.write(PwshLanguage.__formatProlog(spec, tmpDir))
             f.write(PwshLanguage.__formatSetup(spec))
 
-        interpreter = spec.interpreterPath and os.path.abspath(spec.interpreterPath) or ("powershell" if isWindows() else "pwsh")
+        interpreter = PwshLanguage.__interpreter(spec)
         args = [interpreter, "-ExecutionPolicy", "Bypass", "-NoExit", "-File",
             PwshLanguage.__munge(execScriptFile)]
         args.extend(PwshLanguage.__munge(os.path.abspath(a)) for a in spec.args)
@@ -592,7 +601,7 @@ class PwshLanguage:
         with open(realScriptFile, "w") as f:
             f.write(PwshLanguage.__formatScript(spec, script, tmpDir, trace))
 
-        interpreter = spec.interpreterPath and os.path.abspath(spec.interpreterPath) or ("powershell" if isWindows() else "pwsh")
+        interpreter = PwshLanguage.__interpreter(spec)
         args = [interpreter, "-ExecutionPolicy", "Bypass", "-File",
                 PwshLanguage.__munge(execScriptFile)]
         args.extend(PwshLanguage.__munge(os.path.abspath(a)) for a in spec.args)
@@ -626,7 +635,7 @@ class PwshLanguage:
 
     @staticmethod
     def setupFingerprint(spec, env, trace):
-        interpreter = spec.interpreterPath and os.path.abspath(spec.interpreterPath) or ("powershell" if isWindows() else "pwsh")
+        interpreter = PwshLanguage.__interpreter(spec)
         env["BOB_CWD"] = PwshLanguage.__munge(env["BOB_CWD"])
         return [interpreter, "-c", spec.fingerprintScript]
 
@@ -803,7 +812,8 @@ class StepSpec:
     def fromStep(cls, step, envFile=None, envWhiteList=[], logFile=None, isJenkins=False,
                  scriptHint=None, slimSandbox=False):
         self = cls()
-        scriptLanguage = step.getPackage().getRecipe().scriptLanguage
+        recipe = step.getPackage().getRecipe()
+        scriptLanguage = recipe.scriptLanguage
         self.__data = d = {
             'envFile' : envFile,
             'envWhiteList' : sorted(envWhiteList),
@@ -813,6 +823,7 @@ class StepSpec:
             'slimSandbox' : slimSandbox,
             'vsn' : asHexStr(BOB_INPUT_HASH),
             'language' : scriptLanguage.index.value,
+            'windowsPowerShellExecutable' : recipe.getRecipeSet().getWindowsPowerShellExecutable(),
             'env' : dict(step.getEnv()),
             'paths' : step.getPaths(),
             'libraryPaths' : step.getLibraryPaths(),
@@ -947,6 +958,10 @@ class StepSpec:
     @property
     def interpreterPath(self):
         return self.__data.get('interpreterPath')
+
+    @property
+    def windowsPowerShellExecutable(self):
+        return self.__data['windowsPowerShellExecutable']
 
     @property
     def sandboxRootWorkspace(self):
