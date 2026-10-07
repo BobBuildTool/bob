@@ -27,7 +27,7 @@ List package dependencies. The optional ``package`` argument specifies what
 package(s) should be listed. If no package is specified the virtual root
 package is used, thus printing all top level packages and aliases. The ``/``
 package path selects the virtual root package too but does not list aliases as
-it is a absolute location path. See :ref:`bobpaths(7) <manpage-bobpaths>` for
+it is an absolute location path. See :ref:`bobpaths(7) <manpage-bobpaths>` for
 how to specify packages and how aliases are handled.
 
 By default only the declared dependencies of the package are displayed. By
@@ -55,7 +55,7 @@ cannot be used in conjunction with the ``-p`` option and ignores further ``-a``,
 ``-o`` and ``-r`` options.
 
 To see *every* package selected by the query, add ``-A``. This will print all
-alternate paths to identical packages. This affects only the ``d`` and ``-p``
+alternate paths to identical packages. This affects only the ``-d`` and ``-p``
 options, because the path leading to the selected packages is significant.
 
 Options

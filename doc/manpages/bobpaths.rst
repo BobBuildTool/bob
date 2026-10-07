@@ -55,7 +55,7 @@ stays constant throughout the whole evaluation.
 
 A path is parsed by first dividing the character string into tokens and then
 parsing the resulting sequence of tokens. Whitespaces are ignored between
-tokens and may be freely injected. Some tokes (e.g. ``*``,  ``[`` or ``]``)
+tokens and may be freely injected. Some tokens (e.g. ``*``,  ``[`` or ``]``)
 collide with special characters of the shell. Care should be taken to correctly
 quote or escape these characters when invoking Bob from the command line.
 
@@ -86,7 +86,7 @@ All examples above are abbreviations of the verbose syntax. See the following
 examples for the full syntax:
 
 * ``child@foo`` selects the ``foo`` child package of the context package
-* ``chils@f*`` selects all children of the context package starting with ``f``
+* ``child@f*`` selects all children of the context package starting with ``f``
 * ``/child@foo/child@bar`` selects the ``bar`` child of the ``foo`` top level
   package
 * ``descendant@foo`` selects the ``foo`` descendants of the context package
@@ -105,7 +105,7 @@ examples for the full syntax:
   context package that have a ``libc`` child (i.e. that have a declared or
   injected dependency to ``libc``)
 * ``descendant-or-self@lib*["${LICENSE}" == "GPLv2" && child@libc]`` selects
-  the context package or any of it descendants that start with ``lib`` which
+  the context package or any of its descendants that start with ``lib`` which
   are licensed as GPLv2 and have a declared or injected dependency to ``libc``
 
 There are two kinds of location path: relative location paths and absolute
@@ -139,7 +139,7 @@ Location steps
     The syntax for a location step is ``axis@name[predicate]``.
 
 Axis specifier
-    The following axis are available:
+    The following axes are available:
 
     * the ``self`` axis contains just the context package itself,
     * the ``child`` axis contains all children of the context package (i.e.
@@ -253,7 +253,7 @@ String literals
 String function calls
 ~~~~~~~~~~~~~~~~~~~~~
     String functions may be called directly without relying on string
-    substitution.  The general syntax is the funcion name, an opening
+    substitution.  The general syntax is the function name, an opening
     parenthesis, zero or more arguments separated by comma and a closing
     parenthesis.
 
@@ -284,7 +284,7 @@ Operator Associativity Operand type       Meaning
 
 See the following examples for some complex expressions:
 
-* ``"${FOO}" == "bar"`` selects packages which use variable ``FOO`` an where
+* ``"${FOO}" == "bar"`` selects packages which use variable ``FOO`` and where
   the value is ``bar``
 * ``!match("${LICENSE}", "GPL") && *[ match("${LICENSE}", "GPL") ]`` selects
   packages that are *not* GPL-licensed and have a declared or injected
@@ -309,7 +309,7 @@ Example definitions::
       allTests: "//*-unittest"
       myAppDeps: "myApp/*"
 
-Given the definitions above the following substations will be performed:
+Given the definitions above the following substitutions will be performed:
 
 ======================= ===========================
 Query                   Substituted query
