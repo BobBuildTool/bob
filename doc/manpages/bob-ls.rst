@@ -40,9 +40,9 @@ path from where the injected dependencies originate add ``-o``. See
 Without any further options only the first level of dependencies is listed.
 Adding ``-r`` shows a graphical tree of all transitive dependencies too.
 Recursion follows the same dependencies that are displayed, i.e. only declared
-dependencies unless ``-a`` is given. To get
-a list of all transitive dependencies instead, specify ``-p``. This will print
-each package on a separate line with the full package path. The aliases listed
+dependencies unless ``-a`` is given. Adding ``-p`` prints each package on a
+separate line with the full package path instead of the tree. Combined with
+``-r`` this lists all transitive dependencies. The aliases listed
 below the virtual root package are not recursively traversed as they can
 involve arbitrarily complex queries. If you want to recursively list the
 dependencies of an alias you have to specify it explicitly as ``package``
@@ -94,8 +94,8 @@ Options
     the current package.
 
 ``-p, --prefixed``
-    Prints the full path prefix for each package. Without this option a
-    graphical tree of the dependencies is displayed.
+    Prints the full path prefix for each package. Without this option, a
+    graphical tree of the dependencies is displayed when ``-r`` is given.
 
 ``-r, --recursive``
     Recursively display dependencies
