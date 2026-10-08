@@ -457,8 +457,11 @@ class CheckoutAssert:
         self.__source = spec['__source']
         self.__file = spec['file']
         self.__digestSHA1 = spec['digestSHA1']
-        self.__start = int(spec.get('start', 1))
-        self.__end = int(spec.get('end', 0xffffffff))
+        try:
+            self.__start = int(spec.get('start', 1))
+            self.__end = int(spec.get('end', 0xffffffff))
+        except ValueError as e:
+            raise ParseError("checkoutAssert: invalid start/end: " + str(e))
         if self.__start < 1:
             raise ParseError("CheckoutAssert: First line must be greater than zero")
         if self.__end < 1:
