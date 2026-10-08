@@ -1,0 +1,12 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+scriptLanguage: python
+
+buildScript: |
+    print("build ok")
+packageScript: |
+    print("package ok")

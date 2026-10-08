@@ -1,0 +1,12 @@
+root: True
+
+depends:
+    - name: sandbox
+      use: [sandbox]
+
+scriptLanguage: PowerShell
+
+buildScript: |
+    Write-Host "build ok"
+packageScript: |
+    Write-Host "package ok"

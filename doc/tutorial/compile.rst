@@ -69,7 +69,11 @@ directories:
 * ``{checkout,build,package}.sh``: A wrapper script that executes this specific
   step. Running the script will execute this particular step again. If you call
   the script with ``shell`` as first argument a new shell is spawned with
-  exactly the same environment as the step script would find.
+  exactly the same environment as the step script would find. Alternatively you
+  can run a single command in that same environment without entering an
+  interactive shell by calling the script with ``exec`` followed by the
+  command, e.g. ``./build.sh exec "make -j4"``. Passing several commands runs
+  them one after another and stops at the first one that fails.
 * ``script``: The actual script that was computed from the recipe and the
   inherited classes. This is not directly executable because it expects the
   right environment and arguments.
@@ -161,6 +165,12 @@ Now make and save your changes. Then rebuild the kernel::
 
     $ make -j $(nproc) bzImage
     $ exit
+
+.. tip::
+   For plain commands like the ``make`` call above you do not need to open an
+   interactive shell at all. The same could have been achieved with::
+
+       $ ./dev/build/linux-image/1/build.sh exec -E "make -j $(nproc) bzImage"
 
 If you know how grab the kernel image directly out of the build tree and test
 it. Alternatively you can rebuild the top-level package. ::

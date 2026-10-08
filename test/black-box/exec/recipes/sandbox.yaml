@@ -1,0 +1,16 @@
+# Full host mount so that host interpreters (python3, pwsh, ...) are
+# available inside the sandbox image.
+provideSandbox:
+    paths: ["/usr/local/bin", "/usr/local/sbin", "/usr/bin", "/usr/sbin",
+            "/bin", "/sbin"]
+    mount:
+        - /bin
+        - /etc
+        - /lib
+        - /opt
+        - /run
+        - /usr
+        - /var
+
+        - ["/lib32", "/lib32", [nofail]]
+        - ["/lib64", "/lib64", [nofail]]
