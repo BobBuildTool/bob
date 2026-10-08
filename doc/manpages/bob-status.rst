@@ -63,10 +63,10 @@ Options
     Disable sandboxing
 
 ``-r, --recursive``
-    Recursively display dependencies. Only direct dependencies are considered,
-    i.e. packages that are named in the ``depends`` section of the recipe.
-    Consumed tool- and sandbox- packages that were forwarded are thus not
-    visited.
+    Recursively display dependencies. Only declared dependencies are
+    considered, i.e. packages that are named in the ``depends`` section of the
+    recipe. Injected dependencies as well as ambient tool-, sandbox- and
+    interpreter-packages are thus not visited.
 
 ``--release``
     Use release mode.

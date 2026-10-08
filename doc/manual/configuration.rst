@@ -165,6 +165,43 @@ information with one of the ``provide*`` keywords and the downstream recipe must
 consume it by adding the relevant item to the ``use`` attribute of the
 dependency.
 
+.. _configuration-principle-dependencies:
+
+Dependency terminology
+~~~~~~~~~~~~~~~~~~~~~~
+
+A recipe depends on *upstream* recipes and is itself consumed by *downstream*
+recipes. Depending on how a package became a dependency of another package, the
+following terms are used throughout the documentation:
+
+Declared dependencies
+    The dependencies that are explicitly named in the
+    :ref:`configuration-recipes-depends` section of a recipe. They are also
+    called *direct* dependencies.
+
+Provided dependencies
+    The dependencies that a recipe offers to its downstream recipes by listing
+    them in :ref:`configuration-recipes-providedeps`. The term always refers to
+    the providing side.
+
+Injected dependencies
+    The dependencies that a recipe receives from its declared dependencies
+    because they were provided by them. They are added to the dependency list
+    of the receiving recipe without being named there. This can be controlled
+    by the ``deps`` value of the ``use`` attribute of the dependency.
+
+Ambient dependencies
+    The tools, sandbox and interpreters that a recipe inherits from its
+    downstream recipes (see the ``forward`` and ``inherit`` attributes of
+    :ref:`configuration-recipes-depends`). They are not part of the dependency
+    list of the recipe. Tools, sandbox and interpreters that a recipe picks up
+    from one of its own dependencies are not ambient.
+
+Transitive dependencies
+    All packages that are reachable by recursively following the dependencies
+    of a package. Which kinds of dependencies are followed depends on the
+    context and is stated where relevant.
+
 Step execution
 ~~~~~~~~~~~~~~
 
@@ -257,7 +294,7 @@ means a variable consumed through checkoutVars is also set during the build and
 package steps. Likewise, a variable consumed by buildVars is set in the package
 step too. The rationale is that all three steps form a small pipeline. If a
 step depends on a certain variable then the result of the following step is
-already indirectly dependent on this variable. Thus it can be set during the
+already transitively dependent on this variable. Thus it can be set during the
 following step anyway.
 
 A recipe might optionally offer some variables to the downstream recipe with a
@@ -485,7 +522,7 @@ what part of the host is used by the recipe.
 The impact of the host that is declared by a fingerprint script applies only to
 the result of a recipe. Specifically, it does not apply to the implied
 *behaviour* of any provided tools. This means that when using a tool from
-another recipe that is directly or indirectly affected by a fingerprint, the
+another recipe that is directly or transitively affected by a fingerprint, the
 using recipe is not affected. The rationale for this exception of transitivity
 is that it typically does not matter *where* a tool is built but how it
 *behaves*.
@@ -636,10 +673,14 @@ automatically:
 * ``BOB_CWD``: Environment variable holding the working directory of the
   current script as absolute path.
 * ``BOB_ALL_PATHS``: An associative array that holds the paths to the results
-  of all dependencies indexed by the package name. This also includes indirect
-  dependencies such as consumed tools or the sandbox.
-* ``BOB_DEP_PATHS``: An associative array of all direct dependencies. This
-  array comes in handy if you want to refer to a dependency by name (e.g.
+  of all :term:`declared <Declared dependency>`, :term:`injected <Injected
+  dependency>` and :term:`ambient dependencies <Ambient dependency>` indexed by
+  the package name. This also includes the packages of the consumed tools, the
+  sandbox and the interpreter.
+* ``BOB_DEP_PATHS``: An associative array of all :term:`declared <Declared
+  dependency>` and :term:`injected dependencies <Injected dependency>`, (see
+  :ref:`configuration-principle-dependencies`). This array comes in handy if
+  you want to refer to a dependency by name (e.g.
   ``${BOB_DEP_PATHS[libfoo-dev]}``) instead of the position (e.g. ``$2``).
 * ``BOB_TOOL_PATHS``: An associative array that holds the execution paths to
   consumed tools indexed by the package name. All these paths are in ``$PATH``
@@ -740,8 +781,8 @@ script also renders the checkout indeterministic by default -- see
 Type: List of strings or tool dictionaries
 
 This is a list of tools that should be added to ``$PATH`` during the execution
-of the respective checkout/build/package script. A tool denotes a folder in an
-(indirect) dependency. A tool might declare some library paths that are then
+of the respective checkout/build/package script. A tool denotes a folder in the
+result of another package. A tool might declare some library paths that are then
 added to ``$LD_LIBRARY_PATH``.  The order of tools in ``$PATH`` and
 ``$LD_LIBRARY_PATH``  is unspecified.  It is assumed that each tool provides a
 separate set of executables so that the order of their inclusion does not
@@ -769,7 +810,7 @@ tool consumed through checkoutTools is also available during the build and
 package steps. Likewise a tool consumed by buildTools is available in the
 package step too. The rationale is that all three steps form a small pipeline.
 If a step depends on a certain tool then the result of the following step is
-already indirectly dependent on this tool. Thus it can be available during the
+already transitively dependent on this tool. Thus it can be available during the
 following step anyway.
 
 {checkout,build,package}ToolsWeak
@@ -814,7 +855,7 @@ means a variable consumed through checkoutVars is also set during the build
 and package steps. Likewise, a variable consumed by buildVars is set in the
 package step too. The rationale is that all three steps form a small pipeline.
 If a step depends on a certain variable then the result of the following step
-is already indirectly dependent on this variable. Thus it can be set during the
+is already transitively dependent on this variable. Thus it can be set during the
 following step anyway.
 
 The following variables are populated internally by Bob and might be added to
@@ -875,7 +916,7 @@ means a variable consumed through checkoutVarsWeak is also set during the build
 and package steps. Likewise, a variable consumed by buildVarsWeak is set in the
 package step too. The rationale is that all three steps form a small pipeline.
 If a step depends on a certain variable then the result of the following step
-is already indirectly dependent on this variable. Thus it can be set during the
+is already transitively dependent on this variable. Thus it can be set during the
 following step anyway.
 
 .. _configuration-recipes-netAccess:
@@ -1424,7 +1465,7 @@ settings from the current entry. See the following example for both formats::
 In the first and second case only the package is named, meaning the build
 result of recipe *foo* resp. *bar* is fed as ``$2`` and ``$3`` to the build
 script. Any provided dependencies of these packages
-(:ref:`configuration-recipes-providedeps`) will be implicitly added to the
+(:ref:`configuration-recipes-providedeps`) will be injected into the
 dependency list too.
 
 In the third case a recipe named *toolchain* is required but instead of using
@@ -1461,7 +1502,7 @@ The following settings are supported:
 |             |                 | The following values are allowed:                   |
 |             |                 |                                                     |
 |             |                 | * ``deps``: provided dependencies of the recipe.    |
-|             |                 |   These dependencies will be added at the end of    |
+|             |                 |   These dependencies will be injected at the end of |
 |             |                 |   the dependency list unless the dependency is      |
 |             |                 |   already on the list.                              |
 |             |                 | * ``environment``: exported environment variables   |
@@ -1544,8 +1585,9 @@ The following settings are supported:
 
 Each package in the dependency list must have a unique name. By default, the
 name of the required recipe is used. This ensures that each dependency is named
-only once. Also, provided dependencies from dependencies are merged based on
-the package name (see :ref:`configuration-recipes-providedeps`).
+only once. Also, :term:`injected dependencies <Injected dependency>` are merged
+with the :term:`declared dependencies <Declared dependency>` based on the
+package name (see :ref:`configuration-recipes-providedeps`).
 
 Sometimes it is necessary to depend on the same recipe more than once because
 multiple variants of the same recipe are required. In this case, alias names
@@ -1964,9 +2006,11 @@ names of the dependencies string substitution is also applied to ``provideDeps``
 
 Provided dependencies are subsequently injected into the dependency list of the
 downstream recipe that has a dependency to this one (if ``deps`` is included in
-the ``use`` attribute of the dependency, which is the default). This works in a
-transitive fashion too, that is provided dependencies of an upstream recipe
-are forwarded to the downstream recipe too.
+the ``use`` attribute of the dependency, which is the default). From the
+perspective of the downstream recipe these are *injected dependencies* (see
+:ref:`configuration-principle-dependencies`). This works in a transitive
+fashion too, that is, the provided dependencies of a provided dependency are
+injected into the downstream recipe too.
 
 Example::
 
@@ -1979,9 +2023,9 @@ Example::
 
    provideDeps: [ "*-dev" ]
 
-Bob will make sure that the forwarded dependencies are compatible in the
-injected recipe. That is, any duplicates through injected dependencies must
-result in the same package being used.
+Bob will make sure that the :term:`injected dependencies <Injected dependency>`
+are compatible in the receiving recipe. That is, any duplicates through
+declared and injected dependencies must result in the same package being used.
 
 .. _configuration-recipes-provideTools:
 

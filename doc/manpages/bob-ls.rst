@@ -27,19 +27,22 @@ List package dependencies. The optional ``package`` argument specifies what
 package(s) should be listed. If no package is specified the virtual root
 package is used, thus printing all top level packages and aliases. The ``/``
 package path selects the virtual root package too but does not list aliases as
-it is a absolute location path. See :ref:`bobpaths(7) <manpage-bobpaths>` for
+it is an absolute location path. See :ref:`bobpaths(7) <manpage-bobpaths>` for
 how to specify packages and how aliases are handled.
 
-By default only the direct dependencies of the package are displayed. By adding
-``-a`` the indirect dependencies (i.e. dependencies collected from
-:ref:`provideDeps <configuration-recipes-providedeps>`) are displayed too. To
-see the relative path from where the indirect dependencies were inherited add
-``-o``.
+By default only the declared dependencies of the package are displayed. By
+adding ``-a`` the injected dependencies (i.e. dependencies provided by its
+declared dependencies through :ref:`provideDeps
+<configuration-recipes-providedeps>`) are displayed too. To see the relative
+path from where the injected dependencies originate add ``-o``. See
+:ref:`configuration-principle-dependencies` for the definition of these terms.
 
 Without any further options only the first level of dependencies is listed.
-Adding ``-r`` shows a graphical tree of all transitive dependencies too. To get
-a list of all transitive dependencies instead, specify ``-p``. This will print
-each package on a separate line with the full package path. The aliases listed
+Adding ``-r`` shows a graphical tree of all transitive dependencies too.
+Recursion follows the same dependencies that are displayed, i.e. only declared
+dependencies unless ``-a`` is given. Adding ``-p`` prints each package on a
+separate line with the full package path instead of the tree. Combined with
+``-r`` this lists all transitive dependencies. The aliases listed
 below the virtual root package are not recursively traversed as they can
 involve arbitrarily complex queries. If you want to recursively list the
 dependencies of an alias you have to specify it explicitly as ``package``
@@ -52,14 +55,14 @@ cannot be used in conjunction with the ``-p`` option and ignores further ``-a``,
 ``-o`` and ``-r`` options.
 
 To see *every* package selected by the query, add ``-A``. This will print all
-alternate paths to identical packages. This affects only the ``d`` and ``-p``
+alternate paths to identical packages. This affects only the ``-d`` and ``-p``
 options, because the path leading to the selected packages is significant.
 
 Options
 -------
 
 ``-a, --all``
-    Show indirect dependencies too. By default only direct dependencies (i.e.
+    Show injected dependencies too. By default only declared dependencies (i.e.
     dependencies explicitly specified in the recipe) are displayed.
 
 ``-A, --alternates``
@@ -87,12 +90,12 @@ Options
     Disable sandboxing
 
 ``-o, --origin``
-    Show origin of indirect dependencies. This is printed as relative path to
+    Show origin of injected dependencies. This is printed as relative path to
     the current package.
 
 ``-p, --prefixed``
-    Prints the full path prefix for each package. Without this option a
-    graphical tree of the dependencies is displayed.
+    Prints the full path prefix for each package. Without this option, a
+    graphical tree of the dependencies is displayed when ``-r`` is given.
 
 ``-r, --recursive``
     Recursively display dependencies

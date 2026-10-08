@@ -30,7 +30,9 @@ Examples:
 When Bob parses the recipes he builds an internal package graph. The general
 dependency structure is derived from the recipes. Depending on the actual
 content one or more packages are generated from a recipe. The Bob queries are
-working on the package graph.
+working on the package graph. Ambient dependencies (tools, sandbox and
+interpreters) that a package inherits from its downstream recipes are not part
+of its children in the package graph.
 
 The primary constructs of Bob paths are the location path and predicate
 expressions. Both are evaluated with respect to a context which consists of:
@@ -53,7 +55,7 @@ stays constant throughout the whole evaluation.
 
 A path is parsed by first dividing the character string into tokens and then
 parsing the resulting sequence of tokens. Whitespaces are ignored between
-tokens and may be freely injected. Some tokes (e.g. ``*``,  ``[`` or ``]``)
+tokens and may be freely injected. Some tokens (e.g. ``*``,  ``[`` or ``]``)
 collide with special characters of the shell. Care should be taken to correctly
 quote or escape these characters when invoking Bob from the command line.
 
@@ -84,7 +86,7 @@ All examples above are abbreviations of the verbose syntax. See the following
 examples for the full syntax:
 
 * ``child@foo`` selects the ``foo`` child package of the context package
-* ``chils@f*`` selects all children of the context package starting with ``f``
+* ``child@f*`` selects all children of the context package starting with ``f``
 * ``/child@foo/child@bar`` selects the ``bar`` child of the ``foo`` top level
   package
 * ``descendant@foo`` selects the ``foo`` descendants of the context package
@@ -100,11 +102,11 @@ examples for the full syntax:
 * ``child@*["${LICENSE}" == "GPLv2"]`` selects all children of the context package
   that are licensed as GPLv2
 * ``child@lib*[child@libc]`` selects the children starting with ``lib`` of the
-  context package that have a ``libc`` child (i.e. that have a dependency to
-  ``libc``)
+  context package that have a ``libc`` child (i.e. that have a declared or
+  injected dependency to ``libc``)
 * ``descendant-or-self@lib*["${LICENSE}" == "GPLv2" && child@libc]`` selects
-  the context package or any of it descendants that start with ``lib`` which
-  are licensed as GPLv2 and have a direct dependency to ``libc``
+  the context package or any of its descendants that start with ``lib`` which
+  are licensed as GPLv2 and have a declared or injected dependency to ``libc``
 
 There are two kinds of location path: relative location paths and absolute
 location paths.
@@ -137,17 +139,21 @@ Location steps
     The syntax for a location step is ``axis@name[predicate]``.
 
 Axis specifier
-    The following axis are available:
+    The following axes are available:
 
     * the ``self`` axis contains just the context package itself,
-    * the ``child`` axis contains all children of the context package,
+    * the ``child`` axis contains all children of the context package (i.e.
+      its declared and injected dependencies),
     * the ``direct-child`` axis contains the direct children of the context
-      package (i.e. without provided dependencies),
+      package (i.e. only its declared dependencies without injected
+      dependencies),
     * the ``descendant`` axis contains all descendants of the context package;
-      a descendant is a child or a child of a child and so on,
+      a descendant is a child or a child of a child and so on (i.e. its
+      transitive dependencies following declared and injected dependencies),
     * the ``direct-descendant`` axis contains the direct descendants of the
       context package; a direct descendant is a direct child or a direct child
-      of a direct child and so on,
+      of a direct child and so on (i.e. its transitive dependencies following
+      only declared dependencies),
     * the ``descendant-or-self`` axis contains the context package and the
       descendants of the context package
     * the ``direct-descendant-or-self`` axis contains the context package and
@@ -247,7 +253,7 @@ String literals
 String function calls
 ~~~~~~~~~~~~~~~~~~~~~
     String functions may be called directly without relying on string
-    substitution.  The general syntax is the funcion name, an opening
+    substitution.  The general syntax is the function name, an opening
     parenthesis, zero or more arguments separated by comma and a closing
     parenthesis.
 
@@ -278,10 +284,11 @@ Operator Associativity Operand type       Meaning
 
 See the following examples for some complex expressions:
 
-* ``"${FOO}" == "bar"`` selects packages which use variable ``FOO`` an where
+* ``"${FOO}" == "bar"`` selects packages which use variable ``FOO`` and where
   the value is ``bar``
 * ``!match("${LICENSE}", "GPL") && *[ match("${LICENSE}", "GPL") ]`` selects
-  packages that are *not* GPL-licensed and depend on a GPL-licensed package
+  packages that are *not* GPL-licensed and have a declared or injected
+  dependency to a GPL-licensed package
 
 .. _manpage-bobpaths-aliases:
 
@@ -302,7 +309,7 @@ Example definitions::
       allTests: "//*-unittest"
       myAppDeps: "myApp/*"
 
-Given the definitions above the following substations will be performed:
+Given the definitions above the following substitutions will be performed:
 
 ======================= ===========================
 Query                   Substituted query

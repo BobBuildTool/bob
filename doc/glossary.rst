@@ -36,3 +36,37 @@ Glossary
    Package-Id
         Describes *how* a :term:`Package` is built. Identical to the
         :term:`Variant-Id` of the package :term:`Step`.
+
+   Upstream
+        Relative direction in the dependency graph towards the dependencies of
+        a recipe. The dependencies of a recipe are its upstream recipes.
+
+   Downstream
+        Relative direction in the dependency graph towards the consumers of a
+        recipe. The recipes that depend on a recipe are its downstream recipes.
+
+   Declared dependency
+        A dependency that is explicitly named in the
+        :ref:`configuration-recipes-depends` section of a recipe. Also called
+        *direct* dependency. See :ref:`configuration-principle-dependencies`.
+
+   Provided dependency
+        A dependency that a recipe offers to its :term:`downstream <Downstream>`
+        recipes by listing it in :ref:`configuration-recipes-providedeps`.
+        Always refers to the providing side. See
+        :ref:`configuration-principle-dependencies`.
+
+   Injected dependency
+        A dependency that a recipe receives because it was provided by one of
+        its :term:`declared dependencies <Declared dependency>`. It is not named
+        in the receiving recipe. See
+        :ref:`configuration-principle-dependencies`.
+
+   Ambient dependency
+        A tool, sandbox or interpreter that a recipe inherits from its
+        :term:`downstream <Downstream>` recipes. See
+        :ref:`configuration-principle-dependencies`.
+
+   Transitive dependency
+        A package that is reachable by recursively following the dependencies
+        of a package. See :ref:`configuration-principle-dependencies`.
