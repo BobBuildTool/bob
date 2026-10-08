@@ -601,7 +601,7 @@ class Invoker:
                     realScriptFile, execScriptFile, callArgs = self.__spec.language.setupUpdate(
                         self.__spec, tmpDir, self.__preserveEnv, self.__trace)
                 else:
-                    assert False, "not reached"
+                    raise AssertionError("not reached")
 
                 cmdArgs, env = self.__wrapSandbox(realScriptFile, execScriptFile, callArgs, tmpDir)
 
@@ -630,7 +630,7 @@ class Invoker:
                             self.error(a.getSource(), "failed")
                             raise
                 else:
-                    assert False, "not reached"
+                    raise AssertionError("not reached")
 
             # everything went well
             ret = 0
