@@ -69,7 +69,9 @@ def getScm(spec, overrides=[], recipeSet=None):
             recipeSet and recipeSet.getPolicy('fixImportScmVariant'),
             recipeSet and recipeSet.getProjectRoot())
     elif scm == "svn":
-        return SvnScm(spec, overrides)
+        return SvnScm(spec, overrides,
+            recipeSet.getPreMirrors() if recipeSet else [],
+            recipeSet.getFallbackMirrors() if recipeSet else [])
     elif scm == "cvs":
         return CvsScm(spec, overrides)
     elif scm == "url":
