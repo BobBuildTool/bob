@@ -99,6 +99,7 @@ jobs:
 
             - name: Run unit tests
               run: |
+                Set-MpPreference -DisableRealtimeMonitoring $true
                 git config --global init.defaultBranch master # keep the old name
                 git config --global protocol.file.allow always # roll back CVE-2022-39253
                 $env:PATH = "$env:PATH;C:\msys64\usr\bin"

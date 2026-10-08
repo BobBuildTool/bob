@@ -5,6 +5,7 @@
 
 from tempfile import TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import patch
 import hashlib
 import os
 import sys
@@ -35,6 +36,7 @@ class FakeSpec:
             mainScript="",
             updateScript="",
             interpreterPath=None,
+            windowsPowerShellExecutable="powershell",
             args=[],
             scriptHint=None,
             fingerprintScript="",
@@ -350,6 +352,43 @@ class TestPwshLanguage(TestCase):
                          interpreterPath="my/pwsh")
         args = PwshLanguage.setupFingerprint(spec, {"BOB_CWD": "/x"}, False)
         self.assertEqual(args[0], os.path.abspath("my/pwsh"))
+
+    @patch("bob.languages.isWindows", lambda: True)
+    def testWindowsExecutable(self):
+        """The configured PowerShell executable is used on Windows"""
+        spec = FakeSpec(mainScript="true", fingerprintScript="Write-Output fp",
+                        windowsPowerShellExecutable="pwsh.exe")
+        with TemporaryDirectory() as tmp:
+            _, _, args = PwshLanguage.setupCall(spec, tmp, False, False)
+            self.assertEqual(args[0], "pwsh.exe")
+            _, _, args = PwshLanguage.setupUpdate(spec, tmp, False, False)
+            self.assertEqual(args[0], "pwsh.exe")
+            _, _, args = PwshLanguage.setupShell(spec, tmp, False)
+            self.assertEqual(args[0], "pwsh.exe")
+        args = PwshLanguage.setupFingerprint(spec, {"BOB_CWD": "/x"}, False)
+        self.assertEqual(args[0], "pwsh.exe")
+
+    @patch("bob.languages.isWindows", lambda: False)
+    def testWindowsExecutableIgnoredOnPosix(self):
+        """The Windows PowerShell executable is not used on other systems"""
+        spec = FakeSpec(mainScript="true", fingerprintScript="Write-Output fp",
+                        windowsPowerShellExecutable="foo.exe")
+        with TemporaryDirectory() as tmp:
+            _, _, args = PwshLanguage.setupCall(spec, tmp, False, False)
+            self.assertEqual(args[0], "pwsh")
+            _, _, args = PwshLanguage.setupShell(spec, tmp, False)
+            self.assertEqual(args[0], "pwsh")
+        args = PwshLanguage.setupFingerprint(spec, {"BOB_CWD": "/x"}, False)
+        self.assertEqual(args[0], "pwsh")
+
+    @patch("bob.languages.isWindows", lambda: True)
+    def testWindowsExecutableOverriddenByInterpreter(self):
+        """A provided interpreter takes precedence over the configured executable"""
+        spec = FakeSpec(mainScript="true", interpreterPath="my/pwsh",
+                        windowsPowerShellExecutable="pwsh.exe")
+        with TemporaryDirectory() as tmp:
+            _, _, args = PwshLanguage.setupCall(spec, tmp, False, False)
+            self.assertEqual(args[0], os.path.abspath("my/pwsh"))
 
 
 class TestPythonLanguage(TestCase):

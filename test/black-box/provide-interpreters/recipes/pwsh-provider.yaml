@@ -5,7 +5,7 @@ packageScript: |
     @ECHO OFF
     SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
     set CANARY=interposer
-    "$(cygpath -w "$(which powershell)")" %*
+    "$(cygpath -w "$(which pwsh)")" %*
     EOF
     else
         cat >pwsh.cmd <<EOF

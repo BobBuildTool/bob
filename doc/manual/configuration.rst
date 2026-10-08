@@ -2593,11 +2593,35 @@ Might be overrided on a case-by-case basis in a class or recipe with
 :ref:`configuration-recipes-scriptLanguage`.  Depending on the chosen language
 Bob will either invoke ``bash``, ``pwsh``/``powershell`` or ``python`` as
 script interpreter. In either case the command must be present in
-``$PATH``/``%PATH%``.
+``$PATH``/``%PATH%``. The PowerShell executable on Windows can be configured
+with :ref:`configuration-config-windowsPowerShellExecutable`.
 
 .. important::
    Each layer configures the default language individually. That is, layers
    with higher precedence will not override the setting of layers with lower
+   precedence.
+
+.. _configuration-config-windowsPowerShellExecutable:
+
+windowsPowerShellExecutable
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type: String
+
+Defines the executable that is used to run PowerShell scripts on Windows.
+Defaults to ``powershell`` (Windows PowerShell 5.1) for backwards
+compatibility. To use PowerShell 7 or later instead, set it to ``pwsh``::
+
+    windowsPowerShellExecutable: pwsh
+
+The executable must be present in ``%PATH%``. The setting is ignored on all
+other platforms where ``pwsh`` is always used. It is also not used if the
+recipe uses a PowerShell interpreter that is provided by another recipe (see
+:ref:`configuration-recipes-provideInterpreters`).
+
+.. important::
+   This is a project wide setting. Layers with higher precedence can override
+   this setting from lower layers. The root project has the highest
    precedence.
 
 .. _configuration-config-usr:

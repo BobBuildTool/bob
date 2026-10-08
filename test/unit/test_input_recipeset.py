@@ -12,6 +12,7 @@ import yaml
 
 from bob import DEBUG
 from bob.input import RecipeSet, YamlCache, LayersConfig
+from bob.languages import StepSpec
 from bob.errors import ParseError, BobError
 from bob.scm import ScmOverride
 from bob.utils import runInEventLoop
@@ -3363,3 +3364,80 @@ class TestProvideInterpreters(RecipesTmp, TestCase):
         self.assertIsNotNone(root.getPackageStep().getInterpreter())
         self.assertEqual("bin/bash", root.getBuildStep().getInterpreter().getPath())
         self.assertEqual("bin/bash", root.getPackageStep().getInterpreter().getPath())
+
+
+class TestWindowsPowerShellExecutable(RecipesTmp, TestCase):
+    """Test windowsPowerShellExecutable config.yaml setting"""
+
+    def setUp(self):
+        super().setUp()
+        self.writeRecipe("root", """\
+            root: True
+            depends: [lib]
+            buildScript: "true"
+            packageScript: "true"
+            """)
+        self.writeRecipe("lib", """\
+            packageScript: "true"
+            """)
+
+    def parse(self):
+        recipes = RecipeSet()
+        recipes.parse({})
+        return recipes
+
+    def testDefault(self):
+        """The default is powershell for backwards compatibility"""
+        self.assertEqual(self.parse().getWindowsPowerShellExecutable(),
+                         "powershell")
+
+    def testCustom(self):
+        """A custom executable can be configured"""
+        self.writeConfig({ "windowsPowerShellExecutable" : "pwsh.exe" })
+        self.assertEqual(self.parse().getWindowsPowerShellExecutable(),
+                         "pwsh.exe")
+
+    def testInvalidType(self):
+        """Only strings are accepted"""
+        self.writeConfig({ "windowsPowerShellExecutable" : 42 })
+        with self.assertRaises(ParseError):
+            self.parse()
+
+    def testRootProjectDetermines(self):
+        """The root project overrides setting of any layers"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.24",
+            "layers" : [ "l1" ],
+            "windowsPowerShellExecutable" : "pwsh.exe",
+        })
+        self.writeConfig({
+            "bobMinimumVersion" : "0.24",
+            "windowsPowerShellExecutable" : "foo.exe",
+        }, layer=["l1"])
+        self.assertEqual(self.parse().getWindowsPowerShellExecutable(),
+                         "pwsh.exe")
+
+    def testLayer(self):
+        """Layers cannot change the setting"""
+        self.writeConfig({
+            "bobMinimumVersion" : "0.24",
+            "layers" : [ "l1" ],
+        })
+        self.writeConfig({
+            "bobMinimumVersion" : "0.24",
+            "windowsPowerShellExecutable" : "foo.exe",
+        }, layer=["l1"])
+        self.assertEqual(self.parse().getWindowsPowerShellExecutable(),
+                         "foo.exe")
+
+    def testStepSpec(self):
+        """The setting is passed to the step spec via the IR"""
+        self.writeConfig({ "windowsPowerShellExecutable" : "pwsh.exe" })
+        packages = self.generate()
+        step = packages.walkPackagePath("root/lib").getPackageStep()
+        irStep = MockIRStep.fromStep(step, MockIR)
+        self.assertEqual(irStep.getPackage().getRecipe().getRecipeSet()
+                            .getWindowsPowerShellExecutable(),
+                         "pwsh.exe")
+        spec = StepSpec.fromStep(irStep)
+        self.assertEqual(spec.windowsPowerShellExecutable, "pwsh.exe")

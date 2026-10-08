@@ -609,6 +609,7 @@ class RecipeSetIR:
         self.__data['projectRoot'] = recipeSet.getProjectRoot()
         self.__data['preMirrors'] = recipeSet.getPreMirrors()
         self.__data['fallbackMirrors'] = recipeSet.getFallbackMirrors()
+        self.__data['windowsPowerShellExecutable'] = recipeSet.getWindowsPowerShellExecutable()
         return self
 
     @classmethod
@@ -637,3 +638,6 @@ class RecipeSetIR:
 
     def getFallbackMirrors(self):
         return self.__data['fallbackMirrors']
+
+    def getWindowsPowerShellExecutable(self):
+        return self.__data['windowsPowerShellExecutable']
