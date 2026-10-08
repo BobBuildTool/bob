@@ -1,0 +1,8 @@
+root: True
+
+checkoutSCM:
+    scm: url
+    url: "https://${HOST}/path/file.tgz"
+
+packageScript: |
+    true
