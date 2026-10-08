@@ -1,0 +1,191 @@
+Bob 1.3 Release Notes
+=====================
+
+Changes made since Bob 1.2 include the following.
+
+New features
+------------
+
+Recipes
+~~~~~~~
+
+* Added Python as a script language.
+
+  Next to bash and PowerShell, recipes can now be written in Python. The
+  ``Python`` suffix selects a Python script (e.g. ``buildScriptPython``) and
+  :ref:`configuration-recipes-scriptLanguage` accepts ``python`` as value.
+  Outside of a sandbox, the interpreter that runs Bob is used. Inside a
+  sandbox, a ``python`` executable must be found in ``$PATH``. In any case,
+  the interpreter is started such that user installed modules are ignored.
+  Any additional modules must be supplied by the recipes.
+
+  See :ref:`configuration-recipes-scripts` and :pull:`423`.
+
+* Recipes can provide the interpreter of a script language.
+
+  Using :ref:`configuration-recipes-provideInterpreters`, a recipe can provide
+  the interpreter for one or more of the scripting languages that are
+  supported by Bob. Previously, the interpreter had to be installed on the
+  host or in the sandbox. This removes yet another host dependency. See the
+  new :doc:`../tutorial/provide-interpreter` tutorial for an example.
+
+  See :pull:`423`.
+
+* Added support for finalize scripts.
+
+  Sometimes it is necessary to execute scripts of classes after the main
+  recipe script has run. The new :ref:`configuration-recipes-finalize` keys
+  (e.g. ``buildFinalize``) are executed after the main scripts of the recipe
+  and all classes, in *reverse* order of inheritance.
+
+  See :pull:`687`.
+
+config.yaml
+~~~~~~~~~~~
+
+* Added the :ref:`configuration-config-inheritAppend` and
+  :ref:`configuration-config-inheritPrepend` keys.
+
+  They define classes that are implicitly inherited by all recipes of a
+  project. This allows to provide variables, scripts or other resources to
+  all recipes without modifying each of them. (:pull:`423`)
+
+* Added the :ref:`configuration-config-windowsPowerShellExecutable` setting.
+
+  Historically, Bob has used ``powershell.exe`` (Windows PowerShell 5) on
+  Windows while all other platforms use ``pwsh`` (PowerShell 7). This is now
+  configurable on Windows. The default stays ``powershell`` for backwards
+  compatibility. (:pull:`719`)
+
+* Bob gained a ``gitea`` :ref:`archive backend <configuration-config-archive>`.
+
+  The backend stores binary artifacts in a `Gitea generic package registry
+  <https://docs.gitea.com/usage/packages/generic>`_. It is configured with the
+  server ``url``, the registry ``owner`` and the generic ``package`` name. The
+  managed archive operations of :ref:`manpage-archive` are supported, too.
+
+  See :pull:`705`.
+
+User configuration (default.yaml)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added support for SVN :ref:`mirrors <configuration-config-mirrors>`.
+
+  Like for URL SCMs, mirrors can now be configured for SVN SCMs. Mirrors are
+  only tried during the initial checkout of a working copy. Uploading to a SVN
+  mirror is not supported. Bob cannot verify that the mirror holds the same
+  content as the primary URL and has to assume that this is the case.
+
+  See :issue:`703` and :pull:`714`.
+
+* :ref:`configuration-config-scmOverrides` can optionally apply string
+  substitution to ``replace`` actions.
+
+  If the new ``substituteReplace`` property of an override is set to true,
+  the ``pattern`` and ``replacement`` of the ``replace`` action are subject to
+  :ref:`configuration-principle-subst`. It is disabled by default because it
+  could break existing overrides. (:issue:`675`, :pull:`720`)
+
+Bob build/dev
+~~~~~~~~~~~~~
+
+* The ``{checkout,build,package}.sh`` wrapper scripts gained an ``exec`` mode.
+
+  Instead of spawning an interactive shell, one or more commands can be run
+  directly in the same environment as the step script, e.g.
+  ``./build.sh exec "make -j4"``. Multiple commands are executed one after
+  another and execution stops at the first failing command.
+
+  See :pull:`716`.
+
+* Overhauled the parallel build TUI.
+
+  Instead of showing a fixed list of job slots, the currently running jobs are
+  shown in a box together with their running time or, after they have
+  finished, how long they took. A histogram shows the recent job utilization.
+  The improved TUI handles any number of jobs, so the dedicated TUI for many
+  parallel jobs has been removed (see below). Additionally, the full package
+  path is printed directly before the error output of a failed package.
+
+  See :pull:`712`.
+
+Bob help
+~~~~~~~~
+
+* ``bob help`` gained the ``-a``/``--all`` option to also list commands
+  provided by plugins. (:pull:`702`)
+
+Plugins
+~~~~~~~
+
+* Plugins can define new Bob commands.
+
+  Plugins can register additional top-level ``bob <name>`` commands that
+  receive the parsed package graph. Unlike project generators, they are not
+  intended to build anything but to work on the package graph directly. Bob
+  handles the standard options like ``-D``, ``-c`` and the sandbox modes. See
+  :ref:`extending-commands` and the example in ``contrib/``.
+
+  See :pull:`702`.
+
+Improvements
+------------
+
+* The dependency terminology was unified throughout the documentation.
+
+  The new :ref:`configuration-principle-dependencies` section and the
+  :doc:`../glossary` define terms like *declared*, *provided*, *injected* and
+  *ambient* dependencies. The documentation of :ref:`manpage-bob-ls` and
+  :ref:`manpage-bobpaths` was corrected accordingly. (:issue:`651`,
+  :pull:`718`)
+
+* Added new tutorials about :doc:`cross compiling projects
+  <../tutorial/create>` and :doc:`alias packages
+  <../tutorial/virtual-packages>`. (:pull:`423`)
+* :ref:`manpage-bob-status` and :ref:`manpage-clean` now accept all standard
+  options, especially the sandbox options, like the other build commands.
+  (:pull:`702`)
+* Improved validation error messages of settings and plugin properties.
+  Plugins may now throw ``schema.SchemaError`` exceptions in their
+  ``validate()`` function. (:issue:`696`, :pull:`697`)
+* The output of internally captured commands is only shown if the command is
+  traced. Previously, Bob could show seemingly random output of Bob-internal
+  commands. (:issue:`699`, :pull:`701`)
+* The terminal is properly restored when Bob is suspended with Ctrl+Z.
+  (:pull:`694`)
+* The sandbox shows a more useful error message if the command cannot be
+  executed. (:pull:`423`)
+* Improved recipe parsing and package graph generation performance.
+  (:pull:`715`)
+* Improved the :ref:`recommended mirror configuration
+  <installation-recommended-config>` in the documentation. (:pull:`707`)
+* The HTTP archive backend handles short reads and its retry logic was fixed
+  to also cover directory creation. (:pull:`709`)
+
+Backwards incompatible changes
+------------------------------
+
+* The ``parallelTUIThreshold`` user configuration setting has been removed
+  together with the dedicated TUI for many parallel jobs. The setting is
+  still accepted but ignored. (:pull:`712`)
+* ``bob <unknown-command>`` now parses the project configuration and loads
+  plugins before reporting an unknown command because plugins may define
+  additional commands. Consequently, any ``config.yaml`` parsing error will
+  be reported first. (:pull:`702`)
+* The ``Package.getIndirectDepSteps()`` plugin API method has been renamed to
+  :meth:`bob.input.Package.getInjectedDepSteps`. The old name is kept as a
+  deprecated alias. (:pull:`718`)
+
+Bug fixes
+---------
+
+* Fixed a crash when setting HTTP headers via
+  :ref:`configuration-config-scmOverrides`. (:pull:`704`)
+* URL credentials of binary archives are not leaked in user visible messages
+  any more. Passwords that contain an unencoded ``@`` are now handled
+  correctly. (:pull:`706`)
+* Fixed parsing errors with pyparsing 3.3.3. (:pull:`711`)
+* Fixed ``bob init`` and builds in separate build directories for projects
+  that mix managed and unmanaged layers. (:issue:`708`, :pull:`710`)
+* Show a proper parse error instead of crashing if the start or end line of a
+  ``checkoutAssert`` is not a number.
