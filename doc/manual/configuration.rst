@@ -3263,12 +3263,29 @@ If an override is matching, the actions are then applied in the following order:
  * ``replace``: Performs a substitution based on regular expressions. This
    section can hold any number of attributes with a ``pattern`` and a
    ``replacement``. Each occurrence of ``pattern`` is replaced by
-   ``replacement``.
+   ``replacement``. The optional boolean ``substituteReplace`` (default:
+   false) controls whether ``pattern`` and ``replacement`` are subject to
+   string substitution.
 
 The ``match``, ``del`` and ``set`` values are mangled through
-:ref:`configuration-principle-subst`. Mangling is performed during calculation
-of the affected package so that the full environment of this package is
-available for substitution.
+:ref:`configuration-principle-subst`. The ``pattern`` and ``replacement`` of a
+``replace`` entry are only substituted if ``substituteReplace`` is set to true.
+Mangling is performed during calculation of the affected package so that the
+full environment of this package is available for substitution.
+
+.. note:: String substitution treats ``$`` and ``\`` specially. With
+   ``substituteReplace`` enabled, a literal ``$`` in the ``pattern`` (e.g. the
+   regular expression end-of-string anchor) must be written as ``\$`` and a
+   literal backslash (e.g. the ``\.`` escape in the ``pattern`` or the ``\1``
+   back-reference in the ``replacement``) as ``\\``. Be aware that YAML double
+   quoted strings interpret backslashes themselves, so prefer single quoted
+   strings::
+
+       replace:
+         url:
+           pattern: '^${OLD_HOST}/(.*)\\.tgz\$'
+           replacement: '${NEW_HOST}/\\1.tar.gz'
+           substituteReplace: True
 
 When an override is applied, the ``overridden`` property of the SCM is set to
 true. This property can be used with the ``matchScm`` function in package

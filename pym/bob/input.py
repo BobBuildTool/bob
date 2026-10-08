@@ -3618,7 +3618,8 @@ class RecipeSet:
             schema.Optional('replace') : schema.Schema({
                 str : schema.Schema({
                     'pattern' : str,
-                    'replacement' : str
+                    'replacement' : str,
+                    schema.Optional('substituteReplace') : bool,
                 })
             })
         }]),
@@ -3863,7 +3864,8 @@ class RecipeSet:
                     schema.Optional('replace') : schema.Schema({
                         str : schema.Schema({
                             'pattern' : str,
-                            'replacement' : str
+                            'replacement' : str,
+                            schema.Optional('substituteReplace') : bool,
                         })
                     })
                 }]),

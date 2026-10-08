@@ -92,6 +92,63 @@ class TestScmOverride(TestCase):
             'branch' : "develop"
         })
 
+        # no string substitution without substituteReplace
+        o = ScmOverride({
+            'replace' : {
+                'url' : {
+                    'pattern'     : "^git@([^:]+):",
+                    'replacement' : "https://\\1/${PREFIX}/"
+                }
+            }
+        })
+        match, scm = o.mangle(self.scm, Env({"PREFIX" : "mirror"}))
+        self.assertTrue(match)
+        self.assertEqual(scm['url'], "https://git.com/${PREFIX}/foo/bar.git")
+
+        # regex anchor works verbatim by default
+        o = ScmOverride({
+            'replace' : {
+                'url' : {
+                    'pattern'     : "\\.git$",
+                    'replacement' : ".hg"
+                }
+            }
+        })
+        match, scm = o.mangle(self.scm, Env())
+        self.assertEqual(scm['url'], "git@git.com:foo/bar.hg")
+
+    def testReplaceSubstitute(self):
+        """Test string substitution with substituteReplace enabled"""
+        o = ScmOverride({
+            'replace' : {
+                'url' : {
+                    'pattern'     : "@${OLD}:",
+                    'substituteReplace' : True,
+                    'replacement' : "@${NEW}:"
+                }
+            }
+        })
+        e = Env({"OLD" : "git.com", "NEW" : "acme.test"})
+        match, scm = o.mangle(self.scm, e)
+        self.assertEqual(scm, {
+            'scm' : "git",
+            'url' : "git@acme.test:foo/bar.git",
+            'branch' : "develop"
+        })
+
+        # literal '$' and '\' must be escaped in the pattern
+        o = ScmOverride({
+            'replace' : {
+                'url' : {
+                    'pattern'     : "^git@([^:]+):(.*)\\\\.git\\$",
+                    'substituteReplace' : True,
+                    'replacement' : "https://\\\\1/${PREFIX}/\\\\2.${EXT}"
+                }
+            }
+        })
+        match, scm = o.mangle(self.scm, Env({"PREFIX" : "mirror", "EXT" : "hg"}))
+        self.assertEqual(scm['url'], "https://git.com/mirror/foo/bar.hg")
+
     def testReplaceInvalid(self):
         """Test that invalid regexes are handled gracefully"""
         with self.assertRaises(ParseError):

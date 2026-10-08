@@ -32,27 +32,17 @@ class ScmOverride:
         self.__del = override.get("del", [])
         self.__set = override.get("set", {})
         self.__if = override.get("if", None)
-        self.__replaceRaw = override.get("replace", {})
-        self.__init()
-
-    def __init(self):
-        try:
-            self.__replace = { key : (re.compile(subst["pattern"]), subst["replacement"])
-                for (key, subst) in self.__replaceRaw.items() }
-        except re.error as e:
-            raise ParseError("Invalid scmOverrides replace pattern: '{}': {}"
-                .format(e.pattern, str(e)))
+        self.__replace = override.get("replace", {})
 
     def __getstate__(self):
         # We don't persis the if-condition because it has already been
         # evaluated after the initial SCM instance was created. It's also not
         # json-serializable becuase of the IfExpression object.
-        return (self.__match, self.__del, self.__set, self.__replaceRaw)
+        return (self.__match, self.__del, self.__set, self.__replace)
 
     def __setstate__(self, s):
-        (self.__match, self.__del, self.__set, self.__replaceRaw) = s
+        (self.__match, self.__del, self.__set, self.__replace) = s
         self.__if = None
-        self.__init()
 
     def __doesMatch(self, scm, env):
         if self.__if is not None and not env.evaluate(self.__if, "scmOverride::if"): return False
@@ -68,7 +58,7 @@ class ScmOverride:
 
     def __hash__(self):
         return hash((_freezeValue(self.__match), frozenset(self.__del),
-            _freezeValue(self.__set), frozenset(self.__replace.items())))
+            _freezeValue(self.__set), _freezeValue(self.__replace)))
 
     def __eq__(self, other):
         return ((self.__match, self.__del, self.__set, self.__replace) ==
@@ -80,21 +70,33 @@ class ScmOverride:
             k : env.substitute(v, "scmOverrides::set: "+k) if isinstance(v, str) else v
             for (k,v) in self.__set.items()
         }
-        return rm, set
+        replace = {}
+        for (key, subst) in self.__replace.items():
+            pattern = subst["pattern"]
+            replacement = subst["replacement"]
+            if subst.get("substituteReplace", False):
+                pattern = env.substitute(pattern, "scmOverrides::replace: "+key+": pattern")
+                replacement = env.substitute(replacement, "scmOverrides::replace: "+key+": replacement")
+            try:
+                replace[key] = (re.compile(pattern), replacement)
+            except re.error as e:
+                raise ParseError("Invalid scmOverrides replace pattern: '{}': {}"
+                    .format(e.pattern, str(e)))
+        return rm, set, replace
 
     def mangle(self, scm, env):
         ret = False
         if self.__doesMatch(scm, env):
-            rm, set = self.__applyEnv(env)
+            rm, set, replace = self.__applyEnv(env)
 
             ret = True
             scm = scm.copy()
             for d in rm:
                 if d in scm: del scm[d]
             scm.update(set)
-            for (key, (pat, repl)) in self.__replace.items():
+            for (key, (pat, repl)) in replace.items():
                 if key in scm:
-                    scm[key] = re.sub(pat, repl, scm[key])
+                    scm[key] = pat.sub(repl, scm[key])
         return ret, scm
 
     def __str__(self):
@@ -103,7 +105,7 @@ class ScmOverride:
         if self.__match: spec['match'] = self.__match
         if self.__del: spec['del'] = self.__del
         if self.__set: spec['set'] = self.__set
-        if self.__replaceRaw: spec['replace'] = self.__replaceRaw
+        if self.__replace: spec['replace'] = self.__replace
         return yaml.dump(spec, default_flow_style=False).rstrip()
 
 

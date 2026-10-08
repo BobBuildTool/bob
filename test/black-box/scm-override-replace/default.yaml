@@ -1,0 +1,22 @@
+# 'pattern' and 'replacement' are string substituted only if
+# 'substituteReplace' is enabled. Note: in substituted strings a literal '$'
+# (regex anchor) must be escaped as '\$' and a literal backslash (regex escape,
+# back-reference) as '\\'. Use YAML single quotes so that YAML does not
+# interpret the backslashes itself.
+scmOverrides:
+    -
+      match:
+          scm: url
+      replace:
+          url:
+            pattern: '^https://${OLD_HOST}/(.*)\\.tgz\$'
+            replacement: 'https://${NEW_HOST}/\\1.tar.gz'
+            substituteReplace: True
+    -
+      match:
+          scm: url
+          url: "https://unrelated.example.com/*"
+      replace:
+          url:
+            pattern: '\.tgz$'
+            replacement: '.${EXT}'
