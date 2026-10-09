@@ -1834,7 +1834,7 @@ class Package(object):
     def getAllDepSteps(self):
         """Return list of all dependencies of the package.
 
-        This list includes all immediate (declared and injected) dependencies.
+        This list includes all declared and injected dependencies.
         Additionally ambient dependencies (the used sandbox, tools and
         interpreter) are included too.
         """
