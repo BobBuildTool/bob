@@ -308,14 +308,14 @@ class StepIR(AbstractIR):
     def getScmDirectories(self):
         return { d : (bytes.fromhex(h), p) for (d, (h, p)) in self.__data['scmDirectories'].items() }
 
-    def mayUpdate(self, inputChanged, oldHash, rehash):
+    async def mayUpdate(self, inputChanged, oldHash, rehash):
         if any((s.isLocal() and not s.isDeterministic()) for s in self.getScmList()):
             return True
         if not self.getUpdateScript():
             return False
         if not self.isUpdateDeterministic() or inputChanged:
             return True
-        return rehash() != oldHash
+        return await rehash() != oldHash
 
     async def getDigestCoro(self, calculate, hasher=DigestHasher,
                             fingerprint=None, platform=b'', relaxTools=False):
