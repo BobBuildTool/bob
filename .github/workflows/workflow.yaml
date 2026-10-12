@@ -37,7 +37,7 @@ jobs:
               run: |
                 python -m pip install --upgrade pip
                 python -m pip install --upgrade setuptools
-                pip install PyYAML coverage schema python-magic pyparsing sphinx wheel
+                pip install PyYAML coverage schema python-magic pyparsing sphinx wheel build
                 sudo apt-get update
                 sudo apt-get install cvs subversion
 
@@ -50,7 +50,9 @@ jobs:
 
             - name: Build Python package
               run: |
-                python3 setup.py bdist_wheel --plat-name manylinux1_x86_64
+                python3 -m build --wheel -C--build-option=--plat-name=manylinux1_x86_64
+                # make sure setuptools-scm did run
+                test -f pym/bob/version.py
 
             - name: Upload coverage to Codecov
               uses: codecov/codecov-action@v4
@@ -127,11 +129,13 @@ jobs:
               run: |
                 python -m pip install --upgrade pip
                 python -m pip install --upgrade setuptools
-                pip install PyYAML schema python-magic pyparsing sphinx wheel
+                pip install PyYAML schema python-magic pyparsing sphinx wheel build
 
             - name: Build Python package
               run: |
-                python3 setup.py sdist
+                python3 -m build --sdist
+                # make sure setuptools-scm did run
+                test -f pym/bob/version.py
 
             - name: Store the source distribution
               uses: actions/upload-artifact@v4
