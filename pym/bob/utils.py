@@ -597,6 +597,14 @@ class DirHasher:
         return m.digest()
 
     def hashDirectory(self, path):
+        path = os.fsencode(path)
+        try:
+            # The size of the top directory is accounted too
+            s = os.stat(path)
+            if stat.S_ISDIR(s.st_mode): self.size += s.st_size
+        except OSError:
+            pass # will be reported by __hashDir
+
         self.__index.open()
         try:
             return self.__hashDir(os.fsencode(path))
