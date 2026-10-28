@@ -433,7 +433,9 @@ class DirHasher:
         def open(self):
             self.__inPos = 0
             self.__inPosOld = 0
+            self.__inFile = None
             self.__outFile = None
+            self.__writeFailed = False
             self.__current = DirHasher.FileIndex.Stat()
             try:
                 if os.path.exists(self.__cachePath):
@@ -453,17 +455,33 @@ class DirHasher:
                     self.__inFile = None
                     self.__mismatch = True
             except OSError as e:
-                raise BuildError("Error opening hash cache: " + str(e))
-
-        def close(self):
-            try:
+                logging.getLogger(__name__).warning("Cannot open hash cache: %s", str(e))
                 if self.__inFile:
                     self.__inFile.close()
-                if self.__outFile:
+                self.__inFile = None
+                self.__mismatch = True
+
+        def close(self):
+            if self.__inFile:
+                self.__inFile.close()
+            if self.__outFile:
+                try:
                     self.__outFile.close()
                     replacePath(self.__outFile.name, self.__cachePath)
-            except OSError as e:
-                raise BuildError("Error closing hash cache: " + str(e))
+                except OSError as e:
+                    self.__abortWrite(e)
+
+        def __abortWrite(self, err):
+            """Give up writing the cache. The old cache is kept untouched."""
+            logging.getLogger(__name__).warning("Cannot write hash cache: %s", str(err))
+            self.__writeFailed = True
+            if self.__outFile:
+                try:
+                    self.__outFile.close()
+                    os.unlink(self.__outFile.name)
+                except OSError:
+                    pass
+                self.__outFile = None
 
         def __readEntry(self):
             if not self.__inFile: return False
@@ -477,8 +495,10 @@ class DirHasher:
             self.__inPos += DirHasher.FileIndex.CACHE_ENTRY_SIZE + nameLen
             return True
 
-        def __writeEntry(self, name, st, digest):
-            if not self.__outFile:
+        def __startWrite(self):
+            """Start the new index. All entries before __current are kept."""
+            if self.__outFile or self.__writeFailed: return
+            try:
                 self.__outFile = NamedTemporaryFile(mode="wb", dir=self.__cacheDir, delete=False)
                 if self.__inFile:
                     pos = self.__inFile.tell()
@@ -487,10 +507,19 @@ class DirHasher:
                     self.__inFile.seek(pos)
                 else:
                     self.__outFile.write(DirHasher.FileIndex.SIGNATURE)
-            self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, st.st_ctime_ns,
-                st.st_mtime_ns, st.st_dev, maskIno(st.st_ino), st.st_mode, st.st_size,
-                digest, len(name)))
-            self.__outFile.write(name)
+            except OSError as e:
+                self.__abortWrite(e)
+
+        def __writeEntry(self, name, st, digest):
+            self.__startWrite()
+            if not self.__outFile: return
+            try:
+                self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, st.st_ctime_ns,
+                    st.st_mtime_ns, st.st_dev, maskIno(st.st_ino), st.st_mode, st.st_size,
+                    digest, len(name)))
+                self.__outFile.write(name)
+            except OSError as e:
+                self.__abortWrite(e)
 
         def __match(self, name, st):
             while self.__current.name < name:
