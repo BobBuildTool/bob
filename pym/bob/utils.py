@@ -588,7 +588,7 @@ class DirHasher:
 
         entries = sorted(entries, key=lambda x: x[1])
         dirList = [
-            (struct.pack("=L", s.st_mode) + self.__hashEntry(prefix, e, s) + f)
+            (struct.pack("<L", s.st_mode) + self.__hashEntry(prefix, e, s) + f)
             for (e, f, s) in entries
         ]
         dirBlob = b"".join(dirList)
