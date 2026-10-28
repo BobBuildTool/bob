@@ -7,7 +7,6 @@ from . import BOB_VERSION, _enableDebug, DEBUG
 from .errors import BobError
 from .state import finalize
 from .tty import colorize, Unbuffered, setColorMode, cleanup
-from .utils import asHexStr, hashPath, getPlatformTag, EventLoopWrapper
 import argparse
 import logging
 import sys
