@@ -444,6 +444,7 @@ class DirHasher:
             self.__outFile = None
             self.__writeFailed = False
             self.__current = DirHasher.FileIndex.Stat()
+            self.__consumed = False
             self.__changeTimeLimit = self.__calcChangeTimeLimit()
             try:
                 if os.path.exists(self.__cachePath):
@@ -458,15 +459,18 @@ class DirHasher:
                             "Wrong signature at '%s': %s", self.__cachePath, sig)
                         self.__inFile.close()
                         self.__inFile = None
+                        self.__current = None
                         self.__mismatch = True
                 else:
                     self.__inFile = None
+                    self.__current = None
                     self.__mismatch = True
             except OSError as e:
                 logging.getLogger(__name__).warning("Cannot open hash cache: %s", str(e))
                 if self.__inFile:
                     self.__inFile.close()
                 self.__inFile = None
+                self.__current = None
                 self.__mismatch = True
 
         def close(self):
@@ -509,16 +513,22 @@ class DirHasher:
                 self.__outFile = None
 
         def __readEntry(self):
-            if not self.__inFile: return False
+            """Read the next entry into __current.
+
+            Sets __current to None at the end of the index. In any case
+            __inPosOld is the end of all previous entries.
+            """
+            self.__inPosOld = self.__inPos
             raw = self.__inFile.read(DirHasher.FileIndex.CACHE_ENTRY_SIZE)
-            if len(raw) < DirHasher.FileIndex.CACHE_ENTRY_SIZE: return False
+            if len(raw) < DirHasher.FileIndex.CACHE_ENTRY_SIZE:
+                self.__current = None
+                return
             e = self.__current
             (e.ctime, e.mtime, e.dev, e.ino, e.mode, e.size, e.digest,
                 nameLen) = struct.unpack(DirHasher.FileIndex.CACHE_ENTRY_FMT, raw)
             e.name = self.__inFile.read(nameLen)
-            self.__inPosOld = self.__inPos
             self.__inPos += DirHasher.FileIndex.CACHE_ENTRY_SIZE + nameLen
-            return True
+            self.__consumed = False
 
         def __startWrite(self):
             """Start the new index. All entries before __current are kept."""
@@ -551,10 +561,17 @@ class DirHasher:
                 self.__abortWrite(e)
 
         def __match(self, name, st):
-            while self.__current.name < name:
-                if not self.__readEntry(): break
+            while (self.__current is not None) and (self.__consumed or
+                                                    self.__current.name < name):
+                if not self.__consumed and not self.__mismatch:
+                    # Stale entry of a removed file. Drop it from the index.
+                    self.__mismatch = True
+                    self.__startWrite()
+                self.__readEntry()
             e = self.__current
-            res = ((e.name == name) and (e.ctime == st.st_ctime_ns) and
+            if (e is None) or (e.name != name): return False
+            self.__consumed = True
+            res = ((e.ctime == st.st_ctime_ns) and
                 (e.mtime == st.st_mtime_ns) and (e.dev == st.st_dev) and
                 (e.ino == maskIno(st.st_ino)) and (e.mode == st.st_mode) and
                 (e.size == st.st_size))
