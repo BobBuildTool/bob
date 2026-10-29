@@ -227,9 +227,10 @@ if [[ -n $RUN_COVERAGE ]] ; then
     fi
 fi
 
-# Make sure sandbox helper is updated
-$RUN_PYTHON3 -c "from bob.develop.make import makeSandboxHelper
+# Make sure sandbox helper and native extensions are updated
+$RUN_PYTHON3 -c "from bob.develop.make import makeSandboxHelper, makeDirHasher
 makeSandboxHelper()
+makeDirHasher()
 "
 
 # execute everything if nothing was specified

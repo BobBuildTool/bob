@@ -276,6 +276,13 @@ def bob(bobRoot = None):
                     print("bob -C: unable to change directory:", str(e), file=sys.stderr)
                     return 1
 
+        # Make sure native extension is updated
+        try:
+            from .develop.make import makeDirHasher
+            makeDirHasher()
+        except ImportError:
+            pass
+
         if args.command in availableCommands:
             cmd = availableCommands[args.command][1]
             if DEBUG['prof']:

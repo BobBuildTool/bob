@@ -6,7 +6,7 @@
 import os
 import sys
 
-__all__ = ('makeSandboxHelper', 'makeManpages')
+__all__ = ('makeSandboxHelper', 'makeManpages', 'makeDirHasher')
 
 def findYoungestInDir(path, exclude):
     ret = 0
@@ -52,6 +52,29 @@ def makeSandboxHelper():
             os.rename(tmp, resultPath)
 
     return resultPath
+
+def makeDirHasher():
+    # Linux only so far
+    if sys.platform == "win32":
+        return
+
+    import sysconfig
+    bobRoot = getBobRoot()
+    resultPath = os.path.join(bobRoot, "pym", "bob",
+                              "_dirhasher" + sysconfig.get_config_var("EXT_SUFFIX"))
+    inputPath = os.path.join(bobRoot, "src", "dirhasher")
+    resultDate = findYoungest(resultPath)
+    inputDate = findYoungest(inputPath)
+    if inputDate > resultDate:
+        import shutil
+        if shutil.which("cargo") is None:
+            return
+
+        import subprocess
+        print("Build", resultPath, "...", file=sys.stderr)
+        subprocess.run(["cargo", "build", "--release"], cwd=inputPath, check=True)
+        shutil.copy(os.path.join(inputPath, "target", "release", "lib_dirhasher.so"), resultPath+".new")
+        os.rename(resultPath+".new", resultPath)
 
 def makeManpages():
     bobRoot = getBobRoot()
