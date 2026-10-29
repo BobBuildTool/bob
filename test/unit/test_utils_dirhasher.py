@@ -4,13 +4,30 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from unittest import TestCase
+from unittest import TestCase, skipIf
 from unittest.mock import MagicMock, mock_open, patch
 import binascii
 
 import os
 import sys
-from bob.utils import hashFile, hashDirectory, binStat
+from bob.utils import hashFile, binStat, DirHasher
+
+try:
+    from bob._dirhasher import hash_directory_with_size, hash_path
+    def rustHashDirectory(path, index=None, ignoreDirs=None):
+        return hash_directory_with_size(path, index, ignoreDirs)[0]
+    def rustHashPath(path, index=None, ignoreDirs=None):
+        return hash_path(path, index, ignoreDirs)
+except ImportError:
+    rustHashDirectory = None
+    rustHashPath = None
+
+def pyHashDirectory(path, index=None, ignoreDirs=None):
+    return DirHasher(index, ignoreDirs).hashDirectory(path)[0]
+
+def pyHashPath(path, index=None, ignoreDirs=None):
+    return DirHasher(index, ignoreDirs).hashPath(path)
+
 
 class TestHashFile(TestCase):
     def testBigFile(self):
@@ -41,7 +58,7 @@ def makeOsScandir(entries):
     m.return_value = OsScandirList(entries)
     return m
 
-class TestHashDir(TestCase):
+class CommonHashDirTests:
     def setUp(self):
         self.umask = os.umask(0o022)
 
@@ -60,7 +77,7 @@ class TestHashDir(TestCase):
             with open(os.path.join(tmp, "dir", "file"), 'wb') as f:
                 f.write(b'abc')
 
-            sum1 = hashDirectory(tmp)
+            sum1 = self.hashDirectory(tmp)
             self.assertEqual(len(sum1), 20)
             # Result depends on path separator character ('/' vs. '\')
             if sys.platform == "win32":
@@ -69,7 +86,7 @@ class TestHashDir(TestCase):
             else:
                 self.assertEqual(sum1, binascii.unhexlify(
                     "640f516de78fba0b6d2ddde4451000f142d06b0d"))
-            sum2 = hashDirectory(tmp)
+            sum2 = self.hashDirectory(tmp)
             self.assertEqual(sum1, sum2)
 
     def testRenameDirectory(self):
@@ -80,9 +97,9 @@ class TestHashDir(TestCase):
             with open(os.path.join(tmp, "dir", "file"), 'wb') as f:
                 f.write(b'abc')
 
-            sum1 = hashDirectory(tmp)
+            sum1 = self.hashDirectory(tmp)
             os.rename(os.path.join(tmp, "dir"), os.path.join(tmp, "foo"))
-            sum2 = hashDirectory(tmp)
+            sum2 = self.hashDirectory(tmp)
             self.assertNotEqual(sum1, sum2)
 
     def testRenameFile(self):
@@ -92,9 +109,9 @@ class TestHashDir(TestCase):
             with open(os.path.join(tmp, "foo"), 'wb') as f:
                 f.write(b'abc')
 
-            sum1 = hashDirectory(tmp)
+            sum1 = self.hashDirectory(tmp)
             os.rename(os.path.join(tmp, "foo"), os.path.join(tmp, "bar"))
-            sum2 = hashDirectory(tmp)
+            sum2 = self.hashDirectory(tmp)
             self.assertNotEqual(sum1, sum2)
 
     def testRewriteFile(self):
@@ -105,19 +122,24 @@ class TestHashDir(TestCase):
             with TemporaryDirectory() as tmp:
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'abc')
-                sum1 = hashDirectory(tmp, index)
+                sum1 = self.hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
                     self.assertEqual(f.read(4), b'BOB2')
 
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'qwer')
-                sum2 = hashDirectory(tmp, index)
+                sum2 = self.hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
                     self.assertEqual(f.read(4), b'BOB2')
 
                 self.assertNotEqual(sum1, sum2)
+
+
+class TestHashDirPython(CommonHashDirTests, TestCase):
+    hashDirectory = staticmethod(pyHashDirectory)
+    hashPath = staticmethod(pyHashPath)
 
     def testBigIno(self):
         """Test that index handles big inode numbers as found on Windows"""
@@ -148,7 +170,7 @@ class TestHashDir(TestCase):
                     f.write(b'abc')
 
                 with patch('os.scandir', entries):
-                    hashDirectory(tmp, index)
+                    self.hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
                     self.assertEqual(f.read(4), b'BOB2')
@@ -182,7 +204,7 @@ class TestHashDir(TestCase):
                     pass
 
                 with patch('os.scandir', entries):
-                    h = hashDirectory(tmp, index)
+                    h = self.hashDirectory(tmp, index)
                 with patch('os.stat', mock_lstat):
                     b = binStat("whatever")
 
@@ -215,7 +237,7 @@ class TestHashDir(TestCase):
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
             with patch('os.scandir', entries):
-                h = hashDirectory("whatever", index)
+                h = self.hashDirectory("whatever", index)
 
         self.assertEqual(h, b'\xe8\x8e\xad\x9bv\xcbt\xc4\xcd\xa7x\xdb\xde\x96\xab@\x18\xb1\xdcX')
 
@@ -245,7 +267,12 @@ class TestHashDir(TestCase):
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
             with patch('os.scandir', entries):
-                h = hashDirectory("whatever", index)
+                h = self.hashDirectory("whatever", index)
 
         self.assertEqual(h, b"\x9b\x98~\xa5\xd5\xc4\x1e\xe29'\x8d\x1e\xe1\x12\xdd\xf4\xa51\xf5d")
+
+@skipIf(rustHashDirectory is None, "rust DirHasher implementation not available")
+class TestHashDirRust(CommonHashDirTests, TestCase):
+    hashDirectory = staticmethod(rustHashDirectory)
+    hashPath = staticmethod(rustHashPath)
 

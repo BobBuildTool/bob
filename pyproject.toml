@@ -1,7 +1,13 @@
 [build-system]
-requires = ["setuptools >= 40.0", "setuptools-scm", "Sphinx"]
+requires = ["setuptools >= 40.0", "setuptools-scm", "Sphinx", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 write_to = "pym/bob/version.py"
 local_scheme = "no-local-version"
+
+[[tool.setuptools-rust.ext-modules]]
+# See https://setuptools-rust.readthedocs.io/en/latest/reference.html
+path = "src/dirhasher/Cargo.toml"
+target = "bob._dirhasher"
+optional = true
