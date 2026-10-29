@@ -5,7 +5,7 @@
 
 from .errors import BuildError, ParseError
 from binascii import hexlify
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
 import collections.abc
 import hashlib
 import logging
@@ -253,8 +253,15 @@ if os.name == 'posix':
         __isWindows = True
     else:
         __isWindows = False
+
+    def getChangeTime(st):
+        return st.st_ctime_ns
 else:
     __isWindows = True
+
+    def getChangeTime(st):
+        # The st_ctime field is the creation time on Windows
+        return st.st_mtime_ns
 
 def _replacePathWin32(src, dst):
     # Workaround for spurious PermissionError's on Windows.
@@ -437,6 +444,7 @@ class DirHasher:
             self.__outFile = None
             self.__writeFailed = False
             self.__current = DirHasher.FileIndex.Stat()
+            self.__changeTimeLimit = self.__calcChangeTimeLimit()
             try:
                 if os.path.exists(self.__cachePath):
                     self.__inFile = open(self.__cachePath, "rb")
@@ -470,6 +478,23 @@ class DirHasher:
                     replacePath(self.__outFile.name, self.__cachePath)
                 except OSError as e:
                     self.__abortWrite(e)
+
+        def __calcChangeTimeLimit(self):
+            """Determine the current time of the file system clock.
+
+            File time stamps have a limited granularity. A file that is
+            modified again in the same clock tick after it was hashed would
+            keep its stat data. Such "racily clean" entries must not be
+            trusted. Any file whose change-time is not older than the current file
+            system time is thus not recorded in the index. Creating a file gets
+            us the current time in the right granularity, even on network file
+            systems where the clock of the server is used.
+            """
+            try:
+                with TemporaryFile(dir=self.__cacheDir or ".") as f:
+                    return getChangeTime(os.fstat(f.fileno()))
+            except OSError:
+                return -(2**63)
 
         def __abortWrite(self, err):
             """Give up writing the cache. The old cache is kept untouched."""
@@ -513,6 +538,10 @@ class DirHasher:
         def __writeEntry(self, name, st, digest):
             self.__startWrite()
             if not self.__outFile: return
+            # Entries that are of the same age than the current file system
+            # time must be dropped. Changes in the same "file system tick"
+            # cannot be distinguished.
+            if getChangeTime(st) >= self.__changeTimeLimit: return
             try:
                 self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, st.st_ctime_ns,
                     st.st_mtime_ns, st.st_dev, maskIno(st.st_ino), st.st_mode, st.st_size,
