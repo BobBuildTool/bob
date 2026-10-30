@@ -761,6 +761,87 @@ class TestMirrors(UrlScmTest, TestCase):
             self.assertExists(mirrorPath)
             self.assertContent(mirrorPath)
 
+    def testHttpMirrorUploadError(self):
+        """A failed upload to a HTTP mirror fails the build"""
+        with tempfile.TemporaryDirectory() as mirror:
+            with HttpServerMock(mirror, noResponse=True) as srv:
+                scm = self.createUrlScm(
+                    { "digestSHA1" : self.urlSha1 },
+                    fallbackMirrors = [{
+                        "scm" : "url",
+                        "url" : r".*/(.*)",
+                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "upload" : True,
+                    }]
+                )
+                with TemporaryWorkspace() as workspace:
+                    with self.assertRaises(InvocationError):
+                        self.invokeScm(workspace, scm)
+
+    def testHttpMirrorUploadIgnoreErrors(self):
+        """A failed upload to a HTTP mirror can be ignored"""
+        with tempfile.TemporaryDirectory() as mirror:
+            mirrorPath = os.path.join(mirror, self.fn)
+            with HttpServerMock(mirror, noResponse=True) as srv:
+                scm = self.createUrlScm(
+                    { "digestSHA1" : self.urlSha1 },
+                    fallbackMirrors = [{
+                        "scm" : "url",
+                        "url" : r".*/(.*)",
+                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "upload" : True,
+                        "ignoreUploadErrors" : True,
+                    }]
+                )
+                with TemporaryWorkspace() as workspace:
+                    self.invokeScm(workspace, scm)
+                    self.assertContent(os.path.join(workspace, self.fn))
+
+                self.assertEqual(1, srv.putRequests)
+
+            self.assertNotExists(mirrorPath)
+
+    def testFileMirrorUploadError(self):
+        """A failed upload to a local mirror fails the build"""
+        with tempfile.TemporaryDirectory() as mirror:
+            # Parent "directory" is a file -> upload must fail
+            blocker = os.path.join(mirror, "blocker")
+            with open(blocker, "w") as f:
+                pass
+            scm = self.createUrlScm(
+                { "digestSHA1" : self.urlSha1 },
+                fallbackMirrors = [{
+                    "scm" : "url",
+                    "url" : r".*/(.*)",
+                    "mirror" : escapeMirrorFileName(blocker) + r"/\1",
+                    "upload" : True,
+                }]
+            )
+            with TemporaryWorkspace() as workspace:
+                with self.assertRaises(InvocationError):
+                    self.invokeScm(workspace, scm)
+
+    def testFileMirrorUploadIgnoreErrors(self):
+        """A failed upload to a local mirror can be ignored"""
+        with tempfile.TemporaryDirectory() as mirror:
+            # Parent "directory" is a file -> upload must fail
+            blocker = os.path.join(mirror, "blocker")
+            with open(blocker, "w") as f:
+                pass
+            scm = self.createUrlScm(
+                { "digestSHA1" : self.urlSha1 },
+                fallbackMirrors = [{
+                    "scm" : "url",
+                    "url" : r".*/(.*)",
+                    "mirror" : escapeMirrorFileName(blocker) + r"/\1",
+                    "upload" : True,
+                    "ignoreUploadErrors" : True,
+                }]
+            )
+            with TemporaryWorkspace() as workspace:
+                self.invokeScm(workspace, scm)
+                self.assertContent(os.path.join(workspace, self.fn))
+
     def testHttpMirrorUploadCredentials(self):
         """A HTTP mirror with credentials in the URL is filled"""
         with tempfile.TemporaryDirectory() as mirror:
