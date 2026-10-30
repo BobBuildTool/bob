@@ -18,6 +18,9 @@ class WebdavNotFoundError(WebdavError):
 class WebdavAlreadyExistsError(WebdavError):
     pass
 
+class WebdavNotModifiedError(WebdavError):
+    pass
+
 
 def getNetLoc(url):
     """Get the network location of a parsed URL without the credentials.
@@ -120,11 +123,15 @@ class WebDav:
 
         return False
 
-    def openDownload(self, path, offset=None, length=None, query=None):
-        return self.__retry(lambda: self.__openDownload(path, offset, length, query))
+    def openDownload(self, path, offset=None, length=None, query=None,
+                     headers=None):
+        return self.__retry(lambda: self.__openDownload(path, offset, length,
+                                                        query, headers))
 
-    def __openDownload(self, path, offset, length, query):
+    def __openDownload(self, path, offset, length, query, extraHeaders=None):
         headers = self._getHeaders()
+        if extraHeaders is not None:
+            headers.update(extraHeaders)
         if offset is not None and length is not None:
             headers.update({'Range': 'bytes={}-{}'.format(offset, offset + length - 1)})
 
@@ -136,6 +143,9 @@ class WebDav:
             e.fp.read()
             if e.status == 404:
                 raise WebdavNotFoundError()
+            elif e.status == 304:
+                # Only possible if the caller passed "If-Modified-Since"
+                raise WebdavNotModifiedError()
             else:
                 raise WebdavError("{} {}".format(e.status, e.reason))
         except (http.client.HTTPException, OSError) as e:

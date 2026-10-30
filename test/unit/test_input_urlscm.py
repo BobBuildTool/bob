@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from shlex import quote
+from urllib.parse import quote as urlquote
 from unittest import TestCase, skipIf
 from unittest.mock import MagicMock, patch
 import asyncio
@@ -35,6 +36,14 @@ def makeFileUrl(fn):
 
 def escapeMirrorFileName(fn):
     return os.path.abspath(fn).replace('\\', '\\\\')
+
+# Use reserved characters in the password to verify the proper escaping.
+USERNAME = "bob"
+PASSWORD = "p@ss:w/rd"
+
+def makeHttpUrl(port, path, username=USERNAME, password=PASSWORD):
+    return "http://{}:{}@localhost:{}/{}".format(urlquote(username, safe=''),
+        urlquote(password, safe=''), port, path)
 
 class DummyPackage:
     def getName(self):
@@ -363,6 +372,26 @@ class TestDownloads(UrlScmTest, TestCase):
 
             with self.assertRaises(InvocationError):
                 self.invokeScm(workspace, scm, executor=concurrent.futures.ThreadPoolExecutor())
+
+    def testDownloadCredentials(self):
+        """Download with HTTP basic authentication credentials in the URL"""
+        with HttpServerMock(self.dir, username=USERNAME, password=PASSWORD) as srv:
+            scm = self.createUrlScm({
+                "url" : makeHttpUrl(srv.port, "test.txt"),
+            })
+            with TemporaryWorkspace() as workspace:
+                self.invokeScm(workspace, scm)
+                self.assertContent(os.path.join(workspace, "test.txt"))
+
+    def testDownloadWrongCredentials(self):
+        """Download with wrong credentials fails"""
+        with HttpServerMock(self.dir, username=USERNAME, password=PASSWORD) as srv:
+            scm = self.createUrlScm({
+                "url" : makeHttpUrl(srv.port, "test.txt", password="wrong"),
+            })
+            with TemporaryWorkspace() as workspace:
+                with self.assertRaises(InvocationError):
+                    self.invokeScm(workspace, scm)
 
             self.assertEqual(srv.getRequests, 1, "URL SCM does not retry on disk full errors")
 
@@ -707,6 +736,157 @@ class TestMirrors(UrlScmTest, TestCase):
 
             self.assertExists(mirrorPath)
             self.assertContent(mirrorPath)
+
+    def testHttpMirrorUploadSubdir(self):
+        """Missing parent directories on a HTTP mirror are created"""
+        with tempfile.TemporaryDirectory() as mirror:
+            mirrorPath = os.path.join(mirror, "sub", "dir", self.fn)
+            self.assertNotExists(mirrorPath)
+
+            with HttpServerMock(mirror) as srv:
+                scm = self.createUrlScm(
+                    { "digestSHA1" : self.urlSha1 },
+                    fallbackMirrors = [{
+                        "scm" : "url",
+                        "url" : r".*/(.*)",
+                        "mirror" : r"http://localhost:{}/sub/dir/\1".format(srv.port),
+                        "upload" : True,
+                    }]
+                )
+                with TemporaryWorkspace() as workspace:
+                    self.invokeScm(workspace, scm)
+
+                self.assertEqual(1, srv.putRequests)
+
+            self.assertExists(mirrorPath)
+            self.assertContent(mirrorPath)
+
+    def testHttpMirrorUploadError(self):
+        """A failed upload to a HTTP mirror fails the build"""
+        with tempfile.TemporaryDirectory() as mirror:
+            with HttpServerMock(mirror, noResponse=True) as srv:
+                scm = self.createUrlScm(
+                    { "digestSHA1" : self.urlSha1 },
+                    fallbackMirrors = [{
+                        "scm" : "url",
+                        "url" : r".*/(.*)",
+                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "upload" : True,
+                    }]
+                )
+                with TemporaryWorkspace() as workspace:
+                    with self.assertRaises(InvocationError):
+                        self.invokeScm(workspace, scm)
+
+    def testHttpMirrorUploadIgnoreErrors(self):
+        """A failed upload to a HTTP mirror can be ignored"""
+        with tempfile.TemporaryDirectory() as mirror:
+            mirrorPath = os.path.join(mirror, self.fn)
+            with HttpServerMock(mirror, noResponse=True) as srv:
+                scm = self.createUrlScm(
+                    { "digestSHA1" : self.urlSha1 },
+                    fallbackMirrors = [{
+                        "scm" : "url",
+                        "url" : r".*/(.*)",
+                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "upload" : True,
+                        "ignoreUploadErrors" : True,
+                    }]
+                )
+                with TemporaryWorkspace() as workspace:
+                    self.invokeScm(workspace, scm)
+                    self.assertContent(os.path.join(workspace, self.fn))
+
+                self.assertEqual(1, srv.putRequests)
+
+            self.assertNotExists(mirrorPath)
+
+    def testFileMirrorUploadError(self):
+        """A failed upload to a local mirror fails the build"""
+        with tempfile.TemporaryDirectory() as mirror:
+            # Parent "directory" is a file -> upload must fail
+            blocker = os.path.join(mirror, "blocker")
+            with open(blocker, "w") as f:
+                pass
+            scm = self.createUrlScm(
+                { "digestSHA1" : self.urlSha1 },
+                fallbackMirrors = [{
+                    "scm" : "url",
+                    "url" : r".*/(.*)",
+                    "mirror" : escapeMirrorFileName(blocker) + r"/\1",
+                    "upload" : True,
+                }]
+            )
+            with TemporaryWorkspace() as workspace:
+                with self.assertRaises(InvocationError):
+                    self.invokeScm(workspace, scm)
+
+    def testFileMirrorUploadIgnoreErrors(self):
+        """A failed upload to a local mirror can be ignored"""
+        with tempfile.TemporaryDirectory() as mirror:
+            # Parent "directory" is a file -> upload must fail
+            blocker = os.path.join(mirror, "blocker")
+            with open(blocker, "w") as f:
+                pass
+            scm = self.createUrlScm(
+                { "digestSHA1" : self.urlSha1 },
+                fallbackMirrors = [{
+                    "scm" : "url",
+                    "url" : r".*/(.*)",
+                    "mirror" : escapeMirrorFileName(blocker) + r"/\1",
+                    "upload" : True,
+                    "ignoreUploadErrors" : True,
+                }]
+            )
+            with TemporaryWorkspace() as workspace:
+                self.invokeScm(workspace, scm)
+                self.assertContent(os.path.join(workspace, self.fn))
+
+    def testHttpMirrorUploadCredentials(self):
+        """A HTTP mirror with credentials in the URL is filled"""
+        with tempfile.TemporaryDirectory() as mirror:
+            mirrorPath = os.path.join(mirror, self.fn)
+            self.assertNotExists(mirrorPath)
+
+            with HttpServerMock(mirror, username=USERNAME, password=PASSWORD) as srv:
+                scm = self.createUrlScm(
+                    { "digestSHA1" : self.urlSha1 },
+                    fallbackMirrors = [{
+                        "scm" : "url",
+                        "url" : r".*/(.*)",
+                        "mirror" : makeHttpUrl(srv.port, r"\1"),
+                        "upload" : True,
+                    }]
+                )
+                with TemporaryWorkspace() as workspace:
+                    self.invokeScm(workspace, scm)
+
+                self.assertEqual(1, srv.headRequests)
+                self.assertEqual(1, srv.putRequests)
+
+            self.assertExists(mirrorPath)
+            self.assertContent(mirrorPath)
+
+    def testHttpMirrorUploadWrongCredentials(self):
+        """Uploading to a HTTP mirror with wrong credentials fails"""
+        with tempfile.TemporaryDirectory() as mirror:
+            mirrorPath = os.path.join(mirror, self.fn)
+
+            with HttpServerMock(mirror, username=USERNAME, password=PASSWORD) as srv:
+                scm = self.createUrlScm(
+                    { "digestSHA1" : self.urlSha1 },
+                    fallbackMirrors = [{
+                        "scm" : "url",
+                        "url" : r".*/(.*)",
+                        "mirror" : makeHttpUrl(srv.port, r"\1", password="wrong"),
+                        "upload" : True,
+                    }]
+                )
+                with TemporaryWorkspace() as workspace:
+                    with self.assertRaises(InvocationError):
+                        self.invokeScm(workspace, scm)
+
+            self.assertNotExists(mirrorPath)
 
     def testHttpMirrorNoReplaceExisting(self):
         """Existing files on an HTTP mirror are not replaced"""

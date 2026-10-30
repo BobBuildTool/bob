@@ -6,8 +6,9 @@
 from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile, removeUserFromUrl, sslNoVerifyContext, \
-        replacePath
+from ..utils import asHexStr, hashFile, removeUserFromUrl, replacePath
+from ..webdav import WebDav, WebdavError, WebdavAlreadyExistsError, \
+        WebdavNotFoundError, WebdavNotModifiedError
 from .scm import Scm, ScmAudit
 from http.client import HTTPException
 from abc import abstractmethod
@@ -22,12 +23,10 @@ import re
 import schema
 import shutil
 import signal
-import ssl
 import stat
 import sys
 import tempfile
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -335,6 +334,7 @@ class UrlScm(Scm):
         'url' : re.compile,
         'mirror' : str,
         schema.Optional('upload') : bool,
+        schema.Optional('ignoreUploadErrors') : bool,
     })
 
     EXTENSIONS = [
@@ -404,8 +404,10 @@ class UrlScm(Scm):
         self.__fallbackMirrors = fallbackMirrors
         self.__preMirrorsUrls = spec.get("preMirrors")
         self.__preMirrorsUpload = spec.get("__preMirrorsUpload")
+        self.__preMirrorsIgnoreUploadErrors = spec.get("__preMirrorsIgnoreUploadErrors")
         self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
         self.__fallbackMirrorsUpload = spec.get("__fallbackMirrorsUpload")
+        self.__fallbackMirrorsIgnoreUploadErrors = spec.get("__fallbackMirrorsIgnoreUploadErrors")
         self.__fileMode = spec.get("fileMode", 0o600 if defaultFileMode else None)
         self.__separateDownload = spec.get("__separateDownload", separateDownload)
         self.__headers = spec.get("headers", {})
@@ -432,7 +434,9 @@ class UrlScm(Scm):
         if not pretty:
             ret.update({
                 '__preMirrorsUpload' : self.__getPreMirrorsUpload(),
+                '__preMirrorsIgnoreUploadErrors' : self.__getPreMirrorsIgnoreUploadErrors(),
                 '__fallbackMirrorsUpload' : self.__getFallbackMirrorsUpload(),
+                '__fallbackMirrorsIgnoreUploadErrors' : self.__getFallbackMirrorsIgnoreUploadErrors(),
                 '__separateDownload': self.__separateDownload,
             })
 
@@ -446,7 +450,8 @@ class UrlScm(Scm):
         if not self.isDeterministic():
             return []
 
-        return [ (re.sub(m['url'], m['mirror'], self.__url), m.get('upload', False))
+        return [ (re.sub(m['url'], m['mirror'], self.__url), m.get('upload', False),
+                  m.get('ignoreUploadErrors', False))
                  for m in mirrors
                  if m['scm'] == 'url' and re.match(m['url'], self.__url) ]
 
@@ -462,6 +467,12 @@ class UrlScm(Scm):
             ret = self.__preMirrorsUpload = [ m[1] for m in self.__applyMirrors(self.__preMirrors) ]
         return ret
 
+    def __getPreMirrorsIgnoreUploadErrors(self):
+        ret = self.__preMirrorsIgnoreUploadErrors
+        if ret is None:
+            ret = self.__preMirrorsIgnoreUploadErrors = [ m[2] for m in self.__applyMirrors(self.__preMirrors) ]
+        return ret
+
     def __getFallbackMirrorsUrls(self):
         ret = self.__fallbackMirrorsUrls
         if ret is None:
@@ -474,32 +485,49 @@ class UrlScm(Scm):
             ret = self.__fallbackMirrorsUpload = [ m[1] for m in self.__applyMirrors(self.__fallbackMirrors) ]
         return ret
 
+    def __getFallbackMirrorsIgnoreUploadErrors(self):
+        ret = self.__fallbackMirrorsIgnoreUploadErrors
+        if ret is None:
+            ret = self.__fallbackMirrorsIgnoreUploadErrors = [ m[2] for m in self.__applyMirrors(self.__fallbackMirrors) ]
+        return ret
+
     def _getCandidateUrls(self, invoker):
-        ret = list(zip(self.__getPreMirrorsUrls(), self.__getPreMirrorsUpload())) + \
-              [(self.__url, False)] + \
-              list(zip(self.__getFallbackMirrorsUrls(), self.__getFallbackMirrorsUpload()))
+        ret = list(zip(self.__getPreMirrorsUrls(), self.__getPreMirrorsUpload(),
+                       self.__getPreMirrorsIgnoreUploadErrors())) + \
+              [(self.__url, False, False)] + \
+              list(zip(self.__getFallbackMirrorsUrls(), self.__getFallbackMirrorsUpload(),
+                       self.__getFallbackMirrorsIgnoreUploadErrors()))
         try:
-            return [ (parseUrl(url), upload) for (url, upload) in ret ]
+            return [ (parseUrl(url), upload, ignoreUploadErrors)
+                     for (url, upload, ignoreUploadErrors) in ret ]
         except ValueError as e:
             invoker.fail(str(e))
 
-    def _download(self, url, destination, mode):
+    def __openHttpDownload(self, url, destination):
         headers = {}
-        headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
         headers.update(self.__headers)
-        context = None if self.__sslVerify else sslNoVerifyContext()
-        if os.path.isfile(destination) and (url.scheme in ["http", "https"]):
+        if os.path.isfile(destination):
             # Try to avoid download if possible
             headers["If-Modified-Since"] = time2HTTPDate(os.stat(destination).st_mtime)
+        return WebDav(url, self.__sslVerify).openDownload("", headers=headers)
 
+    def __openFtpDownload(self, url):
+        req = urllib.request.Request(url=url.geturl())
+        return urllib.request.urlopen(req)
+
+    def _download(self, url, destination, mode):
         tmpFileName = None
-        req = urllib.request.Request(url=url.geturl(), headers=headers)
         try:
             # Set default signal handler so that KeyboardInterrupt is raised.
             # Needed to gracefully handle ctrl+c.
             signal.signal(signal.SIGINT, signal.default_int_handler)
 
-            with contextlib.closing(urllib.request.urlopen(req, context=context)) as rsp:
+            if url.scheme in ["http", "https"]:
+                rsp = self.__openHttpDownload(url, destination)
+            else:
+                rsp = self.__openFtpDownload(url)
+
+            with contextlib.closing(rsp):
                 with tempfile.NamedTemporaryFile(dir=os.path.dirname(destination), delete=False) as f:
                     tmpFileName = f.name
                     read = 0
@@ -521,12 +549,13 @@ class UrlScm(Scm):
                 replacePath(tmpFileName, destination)
                 tmpFileName = None
 
-        except urllib.error.HTTPError as e:
-            if e.code != 304:
-                return False, "HTTP error {}: {}".format(e.code, e.reason), False
-            else:
-                # HTTP 304 Not modifed -> local file up-to-date
-                return False, None, False
+        except WebdavNotModifiedError:
+            # HTTP 304 Not modifed -> local file up-to-date
+            return False, None, False
+        except WebdavNotFoundError:
+            return False, "HTTP error 404: Not Found", False
+        except WebdavError as e:
+            return False, "Failed to download: " + str(e), False
         except HTTPException as e:
             return False, "HTTP error: " + str(e), False
         except OSError as e:
@@ -589,10 +618,10 @@ class UrlScm(Scm):
             invoker.fail("Unsupported URL scheme: " + url.scheme)
 
     def _upload(self, source, url):
-        headers = {}
-        headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
-        context = None if self.__sslVerify else sslNoVerifyContext()
-
+        # Address the file relative to the server root. Otherwise the parent
+        # directories could not be created.
+        path = url.path
+        webdav = WebDav(url._replace(path=""), self.__sslVerify)
         try:
             # Set default signal handler so that KeyboardInterrupt is raised.
             # Needed to gracefully handle ctrl+c.
@@ -600,26 +629,30 @@ class UrlScm(Scm):
 
             # First check if the file already exists. Only upload if there is a
             # reason to do so.
-            req = urllib.request.Request(url=url.geturl(), method='HEAD', headers=headers)
-            try:
-                with urllib.request.urlopen(req, context=context) as rsp:
-                    return None
-            except urllib.error.HTTPError as e:
-                if e.code != 404:
-                    return "{}: HTTP error {}: {}".format(url.geturl(), e.code, e.reason)
+            if webdav.exists(path):
+                return None
 
-            # Ok, HEAD returned a 404. Proceed with upload...
+            # Quoting RFC 4918:
+            #
+            #   A PUT that would result in the creation of a resource without an
+            #   appropriately scoped parent collection MUST fail with a 409
+            #   (Conflict).
+            #
+            # Thus make sure the parent directories exist.
+            (dirs, _, _) = path.strip("/").rpartition("/")
+            if dirs:
+                webdav.mkdir(dirs)
+
             with open(source, "rb") as f:
-                headers["Content-Length"] = f.seek(0, os.SEEK_END)
-                f.seek(0)
-                req = urllib.request.Request(url=url.geturl(), method='PUT', data=f, headers=headers)
-                with urllib.request.urlopen(req, context=context):
-                    pass
+                webdav.upload(path, f, False)
 
-        except urllib.error.URLError as e:
-            return "{}: {}".format(url.geturl(), e.reason)
-        except HTTPException as e:
-            return "{}: HTTP error: {}".format(url.geturl(), str(e))
+        except WebdavAlreadyExistsError:
+            # Lost the race with a concurrent upload. Never mind...
+            pass
+        except WebdavError as e:
+            return "{}: HTTP error: {}".format(webdav.getRequestURL(path), str(e))
+        except OSError as e:
+            return "{}: {}".format(source, str(e))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
@@ -627,7 +660,15 @@ class UrlScm(Scm):
 
         return None
 
-    async def _put(self, invoker, source, url):
+    async def _put(self, invoker, source, url, ignoreErrors):
+        err = await self.__put(invoker, source, url)
+        if err:
+            if ignoreErrors:
+                invoker.warn("Ignoring upload error:", err)
+            else:
+                invoker.fail(err)
+
+    async def __put(self, invoker, source, url):
         if url.scheme in ['', 'file']:
             # Verify that host name is empty or "localhost"
             if url.netloc not in ['', 'localhost']:
@@ -635,16 +676,19 @@ class UrlScm(Scm):
             # Local files: copy only if newer (u), target never is a directory
             # (T). Move atomically to let concurrent other Bob instances see
             # only fully files.
-            if isYounger(source, url.path):
-                if os.path.isdir(url.path):
-                    invoker.fail("Destination", url.path, "is an existing directory!")
-                invoker.trace("<cp>", source, url.path)
-                destDir = os.path.dirname(url.path)
-                os.makedirs(destDir, exist_ok=True)
-                with tempfile.TemporaryDirectory(dir=destDir) as tmpDir:
-                    tmpFileName = os.path.join(tmpDir, os.path.basename(url.path))
-                    shutil.copy2(source, tmpFileName)
-                    os.replace(tmpFileName, url.path)
+            try:
+                if isYounger(source, url.path):
+                    if os.path.isdir(url.path):
+                        return "Destination {} is an existing directory!".format(url.path)
+                    invoker.trace("<cp>", source, url.path)
+                    destDir = os.path.dirname(url.path)
+                    os.makedirs(destDir, exist_ok=True)
+                    with tempfile.TemporaryDirectory(dir=destDir) as tmpDir:
+                        tmpFileName = os.path.join(tmpDir, os.path.basename(url.path))
+                        shutil.copy2(source, tmpFileName)
+                        os.replace(tmpFileName, url.path)
+            except OSError as e:
+                return "Failed to copy: " + str(e)
         elif url.scheme in ["http", "https"]:
             retries = self.__retries
             while True:
@@ -653,7 +697,7 @@ class UrlScm(Scm):
                     err = await invoker.runInExecutor(UrlScm._upload, self, source, url)
                     if err:
                         if retries == 0:
-                            invoker.fail(err)
+                            return err
                     else:
                         break
                 except (concurrent.futures.CancelledError,
@@ -663,6 +707,8 @@ class UrlScm(Scm):
                 await asyncio.sleep(3)
         else:
             invoker.fail("Upload not supported for URL scheme: " + url.scheme)
+
+        return None
 
     def canSwitch(self, oldScm):
         diff = self._diffSpec(oldScm)
@@ -674,7 +720,8 @@ class UrlScm(Scm):
 
         # Filter irrelevant properties
         diff -= { "sslVerify", "retries", 'preMirrors', '__preMirrorsUpload',
-                  'fallbackMirrors', '__fallbackMirrorsUpload' }
+                  '__preMirrorsIgnoreUploadErrors', 'fallbackMirrors',
+                  '__fallbackMirrorsUpload', '__fallbackMirrorsIgnoreUploadErrors' }
 
         # As long as the SCM is deterministic and the hashes have not changed,
         # the concrete URL is irrelevant.
@@ -723,7 +770,7 @@ class UrlScm(Scm):
                 # behaviour. This must apply to fetches from local mirrors too.
                 mode = 0o600
             err = None
-            for url, upload in urls:
+            for url, _, _ in urls:
                 if err:
                     # Output previously failed download attempt as warning
                     invoker.warn(err)
@@ -756,9 +803,9 @@ class UrlScm(Scm):
         # Upload to mirrors that requested it. This is only done for stable
         # files, though.
         if downloaded:
-            for url, upload in urls:
+            for url, upload, ignoreUploadErrors in urls:
                 if upload:
-                    await self._put(invoker, destination, url)
+                    await self._put(invoker, destination, url, ignoreUploadErrors)
 
         # Run optional extractors
         if extractor is not None:

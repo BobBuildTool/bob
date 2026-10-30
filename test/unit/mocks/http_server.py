@@ -2,11 +2,25 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread, Lock
 from xml.etree.ElementTree import Element, SubElement, tostring
+import base64
 import os, time
 
 def createHttpHandler(repoPath, args):
 
     class Handler(BaseHTTPRequestHandler):
+        def checkAuth(self):
+            if args.get('auth') is None:
+                return True
+            if self.headers.get('Authorization') == args['auth']:
+                return True
+            # Drain request body to not upset the client
+            length = int(self.headers.get('Content-Length', 0))
+            if length: self.rfile.read(length)
+            self.send_response(401, "Unauthorized")
+            self.send_header("WWW-Authenticate", 'Basic realm="default"')
+            self.end_headers()
+            return False
+
         def addProps(self, path, response):
             # trying to create basic props
             href = SubElement(response, 'D:href')
@@ -71,6 +85,7 @@ def createHttpHandler(repoPath, args):
 
         def do_HEAD(self):
             self.stats.headRequests += 1
+            if not self.checkAuth(): return
             if args.get('retryHead') and args.get('retries') > 0:
                 self.send_error(500, "internal error (retries={})".format(args['retries']))
                 args['retries'] = args.get('retries') - 1
@@ -80,6 +95,7 @@ def createHttpHandler(repoPath, args):
 
         def do_GET(self):
             self.stats.getRequests += 1
+            if not self.checkAuth(): return
             if args.get('noResponse'):
                 self.log_error("GET: noResponse: drop connection!")
                 self.close_connection = True
@@ -105,6 +121,7 @@ def createHttpHandler(repoPath, args):
 
         def do_PUT(self):
             self.stats.putRequests += 1
+            if not self.checkAuth(): return
             if args.get('noResponse'):
                 self.log_error("PUT: noResponse: drop connection!")
                 self.close_connection = True
@@ -119,15 +136,22 @@ def createHttpHandler(repoPath, args):
                 self.end_headers()
                 return
 
-            os.makedirs(os.path.dirname(path), exist_ok=True)
             length = int(self.headers['Content-Length'])
+            data = self.rfile.read(length)
+            # RFC 4918: missing parent collection must fail with 409
+            if not os.path.isdir(os.path.dirname(path)):
+                self.send_response(409)
+                self.end_headers()
+                return
+
             with open(path, "wb") as f:
-                f.write(self.rfile.read(length))
+                f.write(data)
             self.send_response(200)
             self.end_headers()
 
         def do_DELETE(self):
             self.stats.deleteRequests += 1
+            if not self.checkAuth(): return
             if args.get('noResponse'):
                 self.log_error("PUT: noResponse: drop connection!")
                 self.close_connection = True
@@ -147,6 +171,7 @@ def createHttpHandler(repoPath, args):
 
         def do_MKCOL(self):
             self.stats.mkcolRequests += 1
+            if not self.checkAuth(): return
             if args.get('noResponse'):
                 self.log_error("PUT: noResponse: drop connection!")
                 self.close_connection = True
@@ -175,6 +200,7 @@ def createHttpHandler(repoPath, args):
 
         def do_PROPFIND(self):
             self.stats.propfindRequests += 1
+            if not self.checkAuth(): return
             if args.get('noResponse'):
                 self.log_error("PUT: noResponse: drop connection!")
                 self.close_connection = True
@@ -214,11 +240,17 @@ class HttpServerStats:
         self.propfindRequests = 0
 
 class HttpServerMock():
-    def __init__(self, repoPath, noResponse=False, retries=0, retryHead=False):
+    def __init__(self, repoPath, noResponse=False, retries=0, retryHead=False,
+                 username=None, password=None):
         if not repoPath.endswith(os.sep):
             repoPath += os.sep
+        auth = None
+        if username is not None:
+            auth = 'Basic ' + base64.b64encode(
+                (username+":"+password).encode("utf-8")).decode("ascii")
         self.handler = createHttpHandler(repoPath,
-            {'noResponse' : noResponse, 'retries' : retries, 'retryHead' : retryHead})
+            {'noResponse' : noResponse, 'retries' : retries, 'retryHead' : retryHead,
+             'auth' : auth})
         self.server = HTTPServer(('localhost', 0), self.handler)
 
     def __enter__(self):
