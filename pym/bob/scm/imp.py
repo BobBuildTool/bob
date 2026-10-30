@@ -8,6 +8,7 @@ from ..stringparser import IfExpression
 from ..tty import stepAction, INFO, TRACE
 from ..utils import asHexStr, hashDirectory, emptyDirectory, tarfileOpen
 from .scm import Scm, ScmAudit
+from .patch import PatchScm
 import base64
 import io
 import os, os.path
@@ -115,6 +116,7 @@ class ImportScm(Scm):
 
     DEFAULTS = {
         schema.Optional('dir') : str,
+        schema.Optional('patches') : PatchScm.PATCHES_SHEMA,
         schema.Optional('prune') : bool,
         schema.Optional('recipeRelative') : bool,
     }
@@ -122,6 +124,8 @@ class ImportScm(Scm):
     __SCHEMA = {
         'scm' : 'import',
         'url' : str,
+        schema.Optional('patches') : [dict],
+        schema.Optional('patchFingerprint') : str,
         schema.Optional('if') : schema.Or(str, IfExpression),
     }
 

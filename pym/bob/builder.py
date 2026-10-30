@@ -11,6 +11,8 @@ from .input import RecipeSet
 from .invoker import Invoker, InvocationMode, JobserverConfig
 from .languages import StepSpec
 from .scm import getScm
+from .scm.patch import PatchApplyError
+from .scm.scm import overlayFingerprint
 from .state import BobState
 from .stringparser import Env
 from .tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit, \
@@ -70,9 +72,15 @@ class HashOnce:
 
 CHECKOUT_STATE_VARIANT_ID = None    # Key in checkout directory state for step variant-id
 CHECKOUT_STATE_BUILD_ONLY = 1       # Key for checkout state of build-only builds
+CHECKOUT_STATE_PATCH_OVERLAYS = 2   # Managed patch overlay metadata
+CHECKOUT_STATE_PATCH_OVERLAY_FAILED = 3 # Failed overlay switch; attic next run
+CHECKOUT_STATE_PATCH_BASES = 4     # Verified base fingerprints after failed apply
 
 # Keys in checkout getDirectoryState that are not directories
-CHECKOUT_NON_DIR_KEYS = {CHECKOUT_STATE_VARIANT_ID, CHECKOUT_STATE_BUILD_ONLY}
+CHECKOUT_NON_DIR_KEYS = {CHECKOUT_STATE_VARIANT_ID, CHECKOUT_STATE_BUILD_ONLY,
+                         CHECKOUT_STATE_PATCH_OVERLAYS,
+                         CHECKOUT_STATE_PATCH_OVERLAY_FAILED,
+                         CHECKOUT_STATE_PATCH_BASES}
 
 def compareDirectoryState(left, right):
     """Compare two directory states while ignoring the SCM specs.
@@ -86,8 +94,9 @@ def compareDirectoryState(left, right):
     only relevant for build-only builds that have their dedicated functions
     below.
     """
-    left  = { d : v[0] for d, v in left.items()  if d != CHECKOUT_STATE_BUILD_ONLY }
-    right = { d : v[0] for d, v in right.items() if d != CHECKOUT_STATE_BUILD_ONLY }
+    ignored = CHECKOUT_NON_DIR_KEYS - {CHECKOUT_STATE_VARIANT_ID}
+    left  = { d : v[0] for d, v in left.items()  if d not in ignored }
+    right = { d : v[0] for d, v in right.items() if d not in ignored }
     return left == right
 
 def checkoutsFromState(state):
@@ -1226,10 +1235,14 @@ cd {ROOT}
 
             if self.__cleanCheckout:
                 # check state of SCMs and invalidate if the directory is dirty
+                overlayState = oldCheckoutState.get(CHECKOUT_STATE_PATCH_OVERLAYS, {})
                 for (scmDir, (scmDigest, scmSpec)) in checkoutsFromState(oldCheckoutState):
                     if scmDigest != checkoutState.get(scmDir, (None, None))[0]: continue
                     if not os.path.exists(os.path.join(prettySrcPath, scmDir)): continue
-                    if scmMap[scmDir].status(checkoutStep.getWorkspacePath()).dirty:
+                    scm = scmMap[scmDir]
+                    status = scm.statusWithOverlay(checkoutStep.getWorkspacePath(),
+                                                   overlayState.get(scmDir))
+                    if status.dirty:
                         # Invalidate scmDigest to forcibly move it away in the loop below.
                         # Do not use None here to distinguish it from a non-existent directory.
                         oldCheckoutState[scmDir] = (False, scmSpec)
@@ -1244,6 +1257,8 @@ cd {ROOT}
                 checkoutReason = "indeterministic"
             elif not compareDirectoryState(checkoutState, oldCheckoutState):
                 checkoutReason = "recipe changed"
+            elif oldCheckoutState.get(CHECKOUT_STATE_PATCH_OVERLAY_FAILED):
+                checkoutReason = "failed patch overlay"
             elif (checkoutInputHashes != BobState().getInputHashes(prettySrcPath)):
                 checkoutReason = "dependency changed"
             elif (checkoutStep.getMainScript() or checkoutStep.getPostRunCmds()) \
@@ -1256,6 +1271,8 @@ cd {ROOT}
                 # checkoutsFromState() to return the directories in a top-down
                 # order.
                 atticPaths = AtticTracker()
+                failedOverlays = oldCheckoutState.get(CHECKOUT_STATE_PATCH_OVERLAY_FAILED, [])
+                failedBases = oldCheckoutState.get(CHECKOUT_STATE_PATCH_BASES, {})
                 for (scmDir, (scmDigest, scmSpec)) in checkoutsFromState(oldCheckoutState):
                     scmPath = os.path.normpath(os.path.join(prettySrcPath, scmDir))
                     if atticPaths.affected(scmPath):
@@ -1267,20 +1284,40 @@ cd {ROOT}
                             BobState().setAtticDirectoryState(atticPath, scmSpec)
                         del oldCheckoutState[scmDir]
                         BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
-                    elif scmDigest != checkoutState.get(scmDir, (None, None))[0]:
-                        canSwitch = (scmDir in scmMap) and scmDigest and \
+                    elif (scmDigest != checkoutState.get(scmDir, (None, None))[0] or
+                          scmDir in failedOverlays):
+                        retryFailedOverlay = (scmDir in failedOverlays and
+                                              scmDigest != checkoutState.get(scmDir, (None, None))[0] and
+                                              scmDir in failedBases and os.path.exists(scmPath) and
+                                              overlayFingerprint(scmPath) == failedBases[scmDir])
+                        canSwitch = (scmDir not in failedOverlays or retryFailedOverlay) and \
+                                     (scmDir in scmMap) and scmDigest and \
                                      scmSpec is not None and \
-                                     scmMap[scmDir].canSwitch(getScm(scmSpec)) and \
+                                     scmMap[scmDir].canSwitch(getScm({**scmSpec,
+                                         '__patchOverlay': oldCheckoutState.get(CHECKOUT_STATE_PATCH_OVERLAYS, {}).get(scmDir),
+                                         '__patchOverlayFailed': scmDir in failedOverlays,
+                                         '__patchOverlayBase': failedBases.get(scmDir)})) and \
                                      os.path.exists(scmPath)
                         didSwitch = False
                         if canSwitch:
                             didSwitch = await self.__runScmSwitch(checkoutStep,
-                                scmPath, scmMap[scmDir], scmSpec)
+                                scmPath, scmMap[scmDir], {**scmSpec,
+                                    '__patchOverlay': oldCheckoutState.get(CHECKOUT_STATE_PATCH_OVERLAYS, {}).get(scmDir),
+                                    '__patchOverlayFailed': scmDir in failedOverlays,
+                                    '__patchOverlayBase': failedBases.get(scmDir)})
 
                         if didSwitch:
                             oldCheckoutState[scmDir] = checkoutState[scmDir]
                             BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
                             continue
+
+                        if canSwitch and scmMap[scmDir].getOverlayState() is not None:
+                            failedOverlays = sorted(set(failedOverlays) | {scmDir})
+                            oldCheckoutState[CHECKOUT_STATE_PATCH_OVERLAY_FAILED] = failedOverlays
+                            oldCheckoutState.get(CHECKOUT_STATE_PATCH_BASES, {}).pop(scmDir, None)
+                            BobState().setDirectoryState(prettySrcPath, oldCheckoutState)
+                            raise BuildError("Managed patch overlay switch failed; checkout left in place. "
+                                "Run again to move it to the attic.")
 
                         if os.path.exists(scmPath):
                             if not self.__attic:
@@ -1329,13 +1366,35 @@ cd {ROOT}
                     oldCheckoutHash = datetime.datetime.now()
                     BobState().setResultHash(prettySrcPath, oldCheckoutHash)
 
-                with stepExec(checkoutStep, "CHECKOUT",
-                              "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
-                    await self._runShell(checkoutStep, "checkout", a, created)
+                try:
+                    with stepExec(checkoutStep, "CHECKOUT",
+                                  "{} ({}) {}".format(prettySrcPath, checkoutReason, overridesString)) as a:
+                        await self._runShell(checkoutStep, "checkout", a, created)
+                except BobError as e:
+                    # Only a transactional apply failure establishes a base
+                    # for an inline retry. Other failures require an attic
+                    # move before trying a fresh checkout.
+                    failed = sorted(s.getDirectory() for s in scmList
+                                    if s.getOverlayState() is not None)
+                    if failed:
+                        checkoutState[CHECKOUT_STATE_PATCH_OVERLAY_FAILED] = failed
+                        if isinstance(e, PatchApplyError) and e.baseFingerprint is not None:
+                            checkoutState[CHECKOUT_STATE_PATCH_BASES] = {
+                                e.directory: e.baseFingerprint}
+                        # A failed script has no successful recipe variant.
+                        checkoutState.pop(CHECKOUT_STATE_VARIANT_ID, None)
+                        BobState().setDirectoryState(prettySrcPath, checkoutState)
+                    raise
                 self.__statistic.checkouts += 1
                 checkoutExecuted = True
                 currentResultHash.invalidate() # force recalculation
                 # reflect new checkout state
+                overlays = {s.getDirectory(): {
+                    'manifest': s.getOverlayState(),
+                    'fingerprint': overlayFingerprint(os.path.join(prettySrcPath, s.getDirectory()))
+                } for s in scmList if s.getOverlayState() is not None}
+                if overlays:
+                    checkoutState[CHECKOUT_STATE_PATCH_OVERLAYS] = overlays
                 BobState().setDirectoryState(prettySrcPath, checkoutState)
                 BobState().setInputHashes(prettySrcPath, checkoutInputHashes)
                 BobState().setVariantId(prettySrcPath, await self.__getIncrementalVariantId(checkoutStep))
