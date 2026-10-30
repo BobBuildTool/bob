@@ -18,6 +18,9 @@ class WebdavNotFoundError(WebdavError):
 class WebdavAlreadyExistsError(WebdavError):
     pass
 
+class WebdavNotModifiedError(WebdavError):
+    pass
+
 
 def getNetLoc(url):
     """Get the network location of a parsed URL without the credentials.
@@ -140,6 +143,9 @@ class WebDav:
             e.fp.read()
             if e.status == 404:
                 raise WebdavNotFoundError()
+            elif e.status == 304:
+                # Only possible if the caller passed "If-Modified-Since"
+                raise WebdavNotModifiedError()
             else:
                 raise WebdavError("{} {}".format(e.status, e.reason))
         except (http.client.HTTPException, OSError) as e:
