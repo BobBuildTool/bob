@@ -136,10 +136,16 @@ def createHttpHandler(repoPath, args):
                 self.end_headers()
                 return
 
-            os.makedirs(os.path.dirname(path), exist_ok=True)
             length = int(self.headers['Content-Length'])
+            data = self.rfile.read(length)
+            # RFC 4918: missing parent collection must fail with 409
+            if not os.path.isdir(os.path.dirname(path)):
+                self.send_response(409)
+                self.end_headers()
+                return
+
             with open(path, "wb") as f:
-                f.write(self.rfile.read(length))
+                f.write(data)
             self.send_response(200)
             self.end_headers()
 

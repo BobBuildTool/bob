@@ -737,6 +737,30 @@ class TestMirrors(UrlScmTest, TestCase):
             self.assertExists(mirrorPath)
             self.assertContent(mirrorPath)
 
+    def testHttpMirrorUploadSubdir(self):
+        """Missing parent directories on a HTTP mirror are created"""
+        with tempfile.TemporaryDirectory() as mirror:
+            mirrorPath = os.path.join(mirror, "sub", "dir", self.fn)
+            self.assertNotExists(mirrorPath)
+
+            with HttpServerMock(mirror) as srv:
+                scm = self.createUrlScm(
+                    { "digestSHA1" : self.urlSha1 },
+                    fallbackMirrors = [{
+                        "scm" : "url",
+                        "url" : r".*/(.*)",
+                        "mirror" : r"http://localhost:{}/sub/dir/\1".format(srv.port),
+                        "upload" : True,
+                    }]
+                )
+                with TemporaryWorkspace() as workspace:
+                    self.invokeScm(workspace, scm)
+
+                self.assertEqual(1, srv.putRequests)
+
+            self.assertExists(mirrorPath)
+            self.assertContent(mirrorPath)
+
     def testHttpMirrorUploadCredentials(self):
         """A HTTP mirror with credentials in the URL is filled"""
         with tempfile.TemporaryDirectory() as mirror:
