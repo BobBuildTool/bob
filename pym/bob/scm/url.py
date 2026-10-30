@@ -597,7 +597,10 @@ class UrlScm(Scm):
             invoker.fail("Unsupported URL scheme: " + url.scheme)
 
     def _upload(self, source, url):
-        webdav = WebDav(url, self.__sslVerify)
+        # Address the file relative to the server root. Otherwise the parent
+        # directories could not be created.
+        path = url.path
+        webdav = WebDav(url._replace(path=""), self.__sslVerify)
         try:
             # Set default signal handler so that KeyboardInterrupt is raised.
             # Needed to gracefully handle ctrl+c.
@@ -605,17 +608,28 @@ class UrlScm(Scm):
 
             # First check if the file already exists. Only upload if there is a
             # reason to do so.
-            if webdav.exists(""):
+            if webdav.exists(path):
                 return None
 
+            # Quoting RFC 4918:
+            #
+            #   A PUT that would result in the creation of a resource without an
+            #   appropriately scoped parent collection MUST fail with a 409
+            #   (Conflict).
+            #
+            # Thus make sure the parent directories exist.
+            (dirs, _, _) = path.strip("/").rpartition("/")
+            if dirs:
+                webdav.mkdir(dirs)
+
             with open(source, "rb") as f:
-                webdav.upload("", f, False)
+                webdav.upload(path, f, False)
 
         except WebdavAlreadyExistsError:
             # Lost the race with a concurrent upload. Never mind...
             pass
         except WebdavError as e:
-            return "{}: HTTP error: {}".format(webdav.getRequestURL(""), str(e))
+            return "{}: HTTP error: {}".format(webdav.getRequestURL(path), str(e))
         except OSError as e:
             return "{}: {}".format(source, str(e))
         finally:
