@@ -334,6 +334,7 @@ class UrlScm(Scm):
         'url' : re.compile,
         'mirror' : str,
         schema.Optional('upload') : bool,
+        schema.Optional('ignoreUploadErrors') : bool,
     })
 
     EXTENSIONS = [
@@ -403,8 +404,10 @@ class UrlScm(Scm):
         self.__fallbackMirrors = fallbackMirrors
         self.__preMirrorsUrls = spec.get("preMirrors")
         self.__preMirrorsUpload = spec.get("__preMirrorsUpload")
+        self.__preMirrorsIgnoreUploadErrors = spec.get("__preMirrorsIgnoreUploadErrors")
         self.__fallbackMirrorsUrls = spec.get("fallbackMirrors")
         self.__fallbackMirrorsUpload = spec.get("__fallbackMirrorsUpload")
+        self.__fallbackMirrorsIgnoreUploadErrors = spec.get("__fallbackMirrorsIgnoreUploadErrors")
         self.__fileMode = spec.get("fileMode", 0o600 if defaultFileMode else None)
         self.__separateDownload = spec.get("__separateDownload", separateDownload)
         self.__headers = spec.get("headers", {})
@@ -431,7 +434,9 @@ class UrlScm(Scm):
         if not pretty:
             ret.update({
                 '__preMirrorsUpload' : self.__getPreMirrorsUpload(),
+                '__preMirrorsIgnoreUploadErrors' : self.__getPreMirrorsIgnoreUploadErrors(),
                 '__fallbackMirrorsUpload' : self.__getFallbackMirrorsUpload(),
+                '__fallbackMirrorsIgnoreUploadErrors' : self.__getFallbackMirrorsIgnoreUploadErrors(),
                 '__separateDownload': self.__separateDownload,
             })
 
@@ -445,7 +450,8 @@ class UrlScm(Scm):
         if not self.isDeterministic():
             return []
 
-        return [ (re.sub(m['url'], m['mirror'], self.__url), m.get('upload', False))
+        return [ (re.sub(m['url'], m['mirror'], self.__url), m.get('upload', False),
+                  m.get('ignoreUploadErrors', False))
                  for m in mirrors
                  if m['scm'] == 'url' and re.match(m['url'], self.__url) ]
 
@@ -461,6 +467,12 @@ class UrlScm(Scm):
             ret = self.__preMirrorsUpload = [ m[1] for m in self.__applyMirrors(self.__preMirrors) ]
         return ret
 
+    def __getPreMirrorsIgnoreUploadErrors(self):
+        ret = self.__preMirrorsIgnoreUploadErrors
+        if ret is None:
+            ret = self.__preMirrorsIgnoreUploadErrors = [ m[2] for m in self.__applyMirrors(self.__preMirrors) ]
+        return ret
+
     def __getFallbackMirrorsUrls(self):
         ret = self.__fallbackMirrorsUrls
         if ret is None:
@@ -473,12 +485,21 @@ class UrlScm(Scm):
             ret = self.__fallbackMirrorsUpload = [ m[1] for m in self.__applyMirrors(self.__fallbackMirrors) ]
         return ret
 
+    def __getFallbackMirrorsIgnoreUploadErrors(self):
+        ret = self.__fallbackMirrorsIgnoreUploadErrors
+        if ret is None:
+            ret = self.__fallbackMirrorsIgnoreUploadErrors = [ m[2] for m in self.__applyMirrors(self.__fallbackMirrors) ]
+        return ret
+
     def _getCandidateUrls(self, invoker):
-        ret = list(zip(self.__getPreMirrorsUrls(), self.__getPreMirrorsUpload())) + \
-              [(self.__url, False)] + \
-              list(zip(self.__getFallbackMirrorsUrls(), self.__getFallbackMirrorsUpload()))
+        ret = list(zip(self.__getPreMirrorsUrls(), self.__getPreMirrorsUpload(),
+                       self.__getPreMirrorsIgnoreUploadErrors())) + \
+              [(self.__url, False, False)] + \
+              list(zip(self.__getFallbackMirrorsUrls(), self.__getFallbackMirrorsUpload(),
+                       self.__getFallbackMirrorsIgnoreUploadErrors()))
         try:
-            return [ (parseUrl(url), upload) for (url, upload) in ret ]
+            return [ (parseUrl(url), upload, ignoreUploadErrors)
+                     for (url, upload, ignoreUploadErrors) in ret ]
         except ValueError as e:
             invoker.fail(str(e))
 
@@ -639,7 +660,15 @@ class UrlScm(Scm):
 
         return None
 
-    async def _put(self, invoker, source, url):
+    async def _put(self, invoker, source, url, ignoreErrors):
+        err = await self.__put(invoker, source, url)
+        if err:
+            if ignoreErrors:
+                invoker.warn("Ignoring upload error:", err)
+            else:
+                invoker.fail(err)
+
+    async def __put(self, invoker, source, url):
         if url.scheme in ['', 'file']:
             # Verify that host name is empty or "localhost"
             if url.netloc not in ['', 'localhost']:
@@ -647,16 +676,19 @@ class UrlScm(Scm):
             # Local files: copy only if newer (u), target never is a directory
             # (T). Move atomically to let concurrent other Bob instances see
             # only fully files.
-            if isYounger(source, url.path):
-                if os.path.isdir(url.path):
-                    invoker.fail("Destination", url.path, "is an existing directory!")
-                invoker.trace("<cp>", source, url.path)
-                destDir = os.path.dirname(url.path)
-                os.makedirs(destDir, exist_ok=True)
-                with tempfile.TemporaryDirectory(dir=destDir) as tmpDir:
-                    tmpFileName = os.path.join(tmpDir, os.path.basename(url.path))
-                    shutil.copy2(source, tmpFileName)
-                    os.replace(tmpFileName, url.path)
+            try:
+                if isYounger(source, url.path):
+                    if os.path.isdir(url.path):
+                        return "Destination {} is an existing directory!".format(url.path)
+                    invoker.trace("<cp>", source, url.path)
+                    destDir = os.path.dirname(url.path)
+                    os.makedirs(destDir, exist_ok=True)
+                    with tempfile.TemporaryDirectory(dir=destDir) as tmpDir:
+                        tmpFileName = os.path.join(tmpDir, os.path.basename(url.path))
+                        shutil.copy2(source, tmpFileName)
+                        os.replace(tmpFileName, url.path)
+            except OSError as e:
+                return "Failed to copy: " + str(e)
         elif url.scheme in ["http", "https"]:
             retries = self.__retries
             while True:
@@ -665,7 +697,7 @@ class UrlScm(Scm):
                     err = await invoker.runInExecutor(UrlScm._upload, self, source, url)
                     if err:
                         if retries == 0:
-                            invoker.fail(err)
+                            return err
                     else:
                         break
                 except (concurrent.futures.CancelledError,
@@ -675,6 +707,8 @@ class UrlScm(Scm):
                 await asyncio.sleep(3)
         else:
             invoker.fail("Upload not supported for URL scheme: " + url.scheme)
+
+        return None
 
     def canSwitch(self, oldScm):
         diff = self._diffSpec(oldScm)
@@ -686,7 +720,8 @@ class UrlScm(Scm):
 
         # Filter irrelevant properties
         diff -= { "sslVerify", "retries", 'preMirrors', '__preMirrorsUpload',
-                  'fallbackMirrors', '__fallbackMirrorsUpload' }
+                  '__preMirrorsIgnoreUploadErrors', 'fallbackMirrors',
+                  '__fallbackMirrorsUpload', '__fallbackMirrorsIgnoreUploadErrors' }
 
         # As long as the SCM is deterministic and the hashes have not changed,
         # the concrete URL is irrelevant.
@@ -735,7 +770,7 @@ class UrlScm(Scm):
                 # behaviour. This must apply to fetches from local mirrors too.
                 mode = 0o600
             err = None
-            for url, upload in urls:
+            for url, _, _ in urls:
                 if err:
                     # Output previously failed download attempt as warning
                     invoker.warn(err)
@@ -768,9 +803,9 @@ class UrlScm(Scm):
         # Upload to mirrors that requested it. This is only done for stable
         # files, though.
         if downloaded:
-            for url, upload in urls:
+            for url, upload, ignoreUploadErrors in urls:
                 if upload:
-                    await self._put(invoker, destination, url)
+                    await self._put(invoker, destination, url, ignoreUploadErrors)
 
         # Run optional extractors
         if extractor is not None:

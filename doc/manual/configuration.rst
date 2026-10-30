@@ -3102,10 +3102,12 @@ interoperability between projects, layers and the local user configuration.
 
 Each mirror entry specifies the SCM type (``scm``), a regular expression to
 match the URL (``url``) and a replacement URL (``mirror``). Optionally, for
-the URL SCM it is possible to upload to the mirror (``upload``). Currently
-the URL and SVN SCMs are supported for mirrors. For the SVN SCM, mirrors are
-only tried during the initial checkout of a working copy. Uploading to a SVN
-mirror is not supported.
+the URL SCM it is possible to upload to the mirror (``upload``). By default, a
+failed upload fails the build. Set ``ignoreUploadErrors`` to ``True`` to only
+print a warning instead, e.g. if the mirror is not always reachable or writable.
+Currently the URL and SVN SCMs are supported for mirrors. For the SVN SCM,
+mirrors are only tried during the initial checkout of a working copy. Uploading
+to a SVN mirror is not supported.
 
 .. attention::
    Bob assumes that SVN mirrors hold the same content as the primary URL. This
