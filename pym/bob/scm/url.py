@@ -6,8 +6,9 @@
 from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile, removeUserFromUrl, sslNoVerifyContext, \
-        replacePath
+from ..utils import asHexStr, hashFile, removeUserFromUrl, replacePath
+from ..webdav import WebDav, WebdavError, WebdavAlreadyExistsError, \
+        WebdavNotFoundError, WebdavNotModifiedError
 from .scm import Scm, ScmAudit
 from http.client import HTTPException
 from abc import abstractmethod
@@ -22,12 +23,10 @@ import re
 import schema
 import shutil
 import signal
-import ssl
 import stat
 import sys
 import tempfile
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -483,23 +482,31 @@ class UrlScm(Scm):
         except ValueError as e:
             invoker.fail(str(e))
 
-    def _download(self, url, destination, mode):
+    def __openHttpDownload(self, url, destination):
         headers = {}
-        headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
         headers.update(self.__headers)
-        context = None if self.__sslVerify else sslNoVerifyContext()
-        if os.path.isfile(destination) and (url.scheme in ["http", "https"]):
+        if os.path.isfile(destination):
             # Try to avoid download if possible
             headers["If-Modified-Since"] = time2HTTPDate(os.stat(destination).st_mtime)
+        return WebDav(url, self.__sslVerify).openDownload("", headers=headers)
 
+    def __openFtpDownload(self, url):
+        req = urllib.request.Request(url=url.geturl())
+        return urllib.request.urlopen(req)
+
+    def _download(self, url, destination, mode):
         tmpFileName = None
-        req = urllib.request.Request(url=url.geturl(), headers=headers)
         try:
             # Set default signal handler so that KeyboardInterrupt is raised.
             # Needed to gracefully handle ctrl+c.
             signal.signal(signal.SIGINT, signal.default_int_handler)
 
-            with contextlib.closing(urllib.request.urlopen(req, context=context)) as rsp:
+            if url.scheme in ["http", "https"]:
+                rsp = self.__openHttpDownload(url, destination)
+            else:
+                rsp = self.__openFtpDownload(url)
+
+            with contextlib.closing(rsp):
                 with tempfile.NamedTemporaryFile(dir=os.path.dirname(destination), delete=False) as f:
                     tmpFileName = f.name
                     read = 0
@@ -521,12 +528,13 @@ class UrlScm(Scm):
                 replacePath(tmpFileName, destination)
                 tmpFileName = None
 
-        except urllib.error.HTTPError as e:
-            if e.code != 304:
-                return False, "HTTP error {}: {}".format(e.code, e.reason), False
-            else:
-                # HTTP 304 Not modifed -> local file up-to-date
-                return False, None, False
+        except WebdavNotModifiedError:
+            # HTTP 304 Not modifed -> local file up-to-date
+            return False, None, False
+        except WebdavNotFoundError:
+            return False, "HTTP error 404: Not Found", False
+        except WebdavError as e:
+            return False, "Failed to download: " + str(e), False
         except HTTPException as e:
             return False, "HTTP error: " + str(e), False
         except OSError as e:
@@ -589,10 +597,7 @@ class UrlScm(Scm):
             invoker.fail("Unsupported URL scheme: " + url.scheme)
 
     def _upload(self, source, url):
-        headers = {}
-        headers["User-Agent"] = "BobBuildTool/{}".format(BOB_VERSION)
-        context = None if self.__sslVerify else sslNoVerifyContext()
-
+        webdav = WebDav(url, self.__sslVerify)
         try:
             # Set default signal handler so that KeyboardInterrupt is raised.
             # Needed to gracefully handle ctrl+c.
@@ -600,26 +605,19 @@ class UrlScm(Scm):
 
             # First check if the file already exists. Only upload if there is a
             # reason to do so.
-            req = urllib.request.Request(url=url.geturl(), method='HEAD', headers=headers)
-            try:
-                with urllib.request.urlopen(req, context=context) as rsp:
-                    return None
-            except urllib.error.HTTPError as e:
-                if e.code != 404:
-                    return "{}: HTTP error {}: {}".format(url.geturl(), e.code, e.reason)
+            if webdav.exists(""):
+                return None
 
-            # Ok, HEAD returned a 404. Proceed with upload...
             with open(source, "rb") as f:
-                headers["Content-Length"] = f.seek(0, os.SEEK_END)
-                f.seek(0)
-                req = urllib.request.Request(url=url.geturl(), method='PUT', data=f, headers=headers)
-                with urllib.request.urlopen(req, context=context):
-                    pass
+                webdav.upload("", f, False)
 
-        except urllib.error.URLError as e:
-            return "{}: {}".format(url.geturl(), e.reason)
-        except HTTPException as e:
-            return "{}: HTTP error: {}".format(url.geturl(), str(e))
+        except WebdavAlreadyExistsError:
+            # Lost the race with a concurrent upload. Never mind...
+            pass
+        except WebdavError as e:
+            return "{}: HTTP error: {}".format(webdav.getRequestURL(""), str(e))
+        except OSError as e:
+            return "{}: {}".format(source, str(e))
         finally:
             # Restore signals to default so that Ctrl+C kills process. Needed
             # to prevent ugly backtraces when user presses ctrl+c.
