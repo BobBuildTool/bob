@@ -120,11 +120,15 @@ class WebDav:
 
         return False
 
-    def openDownload(self, path, offset=None, length=None, query=None):
-        return self.__retry(lambda: self.__openDownload(path, offset, length, query))
+    def openDownload(self, path, offset=None, length=None, query=None,
+                     headers=None):
+        return self.__retry(lambda: self.__openDownload(path, offset, length,
+                                                        query, headers))
 
-    def __openDownload(self, path, offset, length, query):
+    def __openDownload(self, path, offset, length, query, extraHeaders=None):
         headers = self._getHeaders()
+        if extraHeaders is not None:
+            headers.update(extraHeaders)
         if offset is not None and length is not None:
             headers.update({'Range': 'bytes={}-{}'.format(offset, offset + length - 1)})
 
