@@ -5,7 +5,7 @@
 
 from .errors import BuildError, ParseError
 from binascii import hexlify
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
 import collections.abc
 import hashlib
 import logging
@@ -253,8 +253,15 @@ if os.name == 'posix':
         __isWindows = True
     else:
         __isWindows = False
+
+    def getChangeTime(st):
+        return st.st_ctime_ns
 else:
     __isWindows = True
+
+    def getChangeTime(st):
+        # The st_ctime field is the creation time on Windows
+        return st.st_mtime_ns
 
 def _replacePathWin32(src, dst):
     # Workaround for spurious PermissionError's on Windows.
@@ -433,8 +440,12 @@ class DirHasher:
         def open(self):
             self.__inPos = 0
             self.__inPosOld = 0
+            self.__inFile = None
             self.__outFile = None
+            self.__writeFailed = False
             self.__current = DirHasher.FileIndex.Stat()
+            self.__consumed = False
+            self.__changeTimeLimit = self.__calcChangeTimeLimit()
             try:
                 if os.path.exists(self.__cachePath):
                     self.__inFile = open(self.__cachePath, "rb")
@@ -448,37 +459,81 @@ class DirHasher:
                             "Wrong signature at '%s': %s", self.__cachePath, sig)
                         self.__inFile.close()
                         self.__inFile = None
+                        self.__current = None
                         self.__mismatch = True
                 else:
                     self.__inFile = None
+                    self.__current = None
                     self.__mismatch = True
             except OSError as e:
-                raise BuildError("Error opening hash cache: " + str(e))
-
-        def close(self):
-            try:
+                logging.getLogger(__name__).warning("Cannot open hash cache: %s", str(e))
                 if self.__inFile:
                     self.__inFile.close()
-                if self.__outFile:
+                self.__inFile = None
+                self.__current = None
+                self.__mismatch = True
+
+        def close(self):
+            if self.__inFile:
+                self.__inFile.close()
+            if self.__outFile:
+                try:
                     self.__outFile.close()
                     replacePath(self.__outFile.name, self.__cachePath)
-            except OSError as e:
-                raise BuildError("Error closing hash cache: " + str(e))
+                except OSError as e:
+                    self.__abortWrite(e)
+
+        def __calcChangeTimeLimit(self):
+            """Determine the current time of the file system clock.
+
+            File time stamps have a limited granularity. A file that is
+            modified again in the same clock tick after it was hashed would
+            keep its stat data. Such "racily clean" entries must not be
+            trusted. Any file whose change-time is not older than the current file
+            system time is thus not recorded in the index. Creating a file gets
+            us the current time in the right granularity, even on network file
+            systems where the clock of the server is used.
+            """
+            try:
+                with TemporaryFile(dir=self.__cacheDir or ".") as f:
+                    return getChangeTime(os.fstat(f.fileno()))
+            except OSError:
+                return -(2**63)
+
+        def __abortWrite(self, err):
+            """Give up writing the cache. The old cache is kept untouched."""
+            logging.getLogger(__name__).warning("Cannot write hash cache: %s", str(err))
+            self.__writeFailed = True
+            if self.__outFile:
+                try:
+                    self.__outFile.close()
+                    os.unlink(self.__outFile.name)
+                except OSError:
+                    pass
+                self.__outFile = None
 
         def __readEntry(self):
-            if not self.__inFile: return False
+            """Read the next entry into __current.
+
+            Sets __current to None at the end of the index. In any case
+            __inPosOld is the end of all previous entries.
+            """
+            self.__inPosOld = self.__inPos
             raw = self.__inFile.read(DirHasher.FileIndex.CACHE_ENTRY_SIZE)
-            if len(raw) < DirHasher.FileIndex.CACHE_ENTRY_SIZE: return False
+            if len(raw) < DirHasher.FileIndex.CACHE_ENTRY_SIZE:
+                self.__current = None
+                return
             e = self.__current
             (e.ctime, e.mtime, e.dev, e.ino, e.mode, e.size, e.digest,
                 nameLen) = struct.unpack(DirHasher.FileIndex.CACHE_ENTRY_FMT, raw)
             e.name = self.__inFile.read(nameLen)
-            self.__inPosOld = self.__inPos
             self.__inPos += DirHasher.FileIndex.CACHE_ENTRY_SIZE + nameLen
-            return True
+            self.__consumed = False
 
-        def __writeEntry(self, name, st, digest):
-            if not self.__outFile:
+        def __startWrite(self):
+            """Start the new index. All entries before __current are kept."""
+            if self.__outFile or self.__writeFailed: return
+            try:
                 self.__outFile = NamedTemporaryFile(mode="wb", dir=self.__cacheDir, delete=False)
                 if self.__inFile:
                     pos = self.__inFile.tell()
@@ -487,16 +542,36 @@ class DirHasher:
                     self.__inFile.seek(pos)
                 else:
                     self.__outFile.write(DirHasher.FileIndex.SIGNATURE)
-            self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, st.st_ctime_ns,
-                st.st_mtime_ns, st.st_dev, maskIno(st.st_ino), st.st_mode, st.st_size,
-                digest, len(name)))
-            self.__outFile.write(name)
+            except OSError as e:
+                self.__abortWrite(e)
+
+        def __writeEntry(self, name, st, digest):
+            self.__startWrite()
+            if not self.__outFile: return
+            # Entries that are of the same age than the current file system
+            # time must be dropped. Changes in the same "file system tick"
+            # cannot be distinguished.
+            if getChangeTime(st) >= self.__changeTimeLimit: return
+            try:
+                self.__outFile.write(struct.pack(DirHasher.FileIndex.CACHE_ENTRY_FMT, st.st_ctime_ns,
+                    st.st_mtime_ns, st.st_dev, maskIno(st.st_ino), st.st_mode, st.st_size,
+                    digest, len(name)))
+                self.__outFile.write(name)
+            except OSError as e:
+                self.__abortWrite(e)
 
         def __match(self, name, st):
-            while self.__current.name < name:
-                if not self.__readEntry(): break
+            while (self.__current is not None) and (self.__consumed or
+                                                    self.__current.name < name):
+                if not self.__consumed and not self.__mismatch:
+                    # Stale entry of a removed file. Drop it from the index.
+                    self.__mismatch = True
+                    self.__startWrite()
+                self.__readEntry()
             e = self.__current
-            res = ((e.name == name) and (e.ctime == st.st_ctime_ns) and
+            if (e is None) or (e.name != name): return False
+            self.__consumed = True
+            res = ((e.ctime == st.st_ctime_ns) and
                 (e.mtime == st.st_mtime_ns) and (e.dev == st.st_dev) and
                 (e.ino == maskIno(st.st_ino)) and (e.mode == st.st_mode) and
                 (e.size == st.st_size))
@@ -588,7 +663,7 @@ class DirHasher:
 
         entries = sorted(entries, key=lambda x: x[1])
         dirList = [
-            (struct.pack("=L", s.st_mode) + self.__hashEntry(prefix, e, s) + f)
+            (struct.pack("<L", s.st_mode) + self.__hashEntry(prefix, e, s) + f)
             for (e, f, s) in entries
         ]
         dirBlob = b"".join(dirList)
@@ -597,9 +672,17 @@ class DirHasher:
         return m.digest()
 
     def hashDirectory(self, path):
+        path = os.fsencode(path)
+        try:
+            # The size of the top directory is accounted too
+            s = os.stat(path)
+            if stat.S_ISDIR(s.st_mode): self.size += s.st_size
+        except OSError:
+            pass # will be reported by __hashDir
+
         self.__index.open()
         try:
-            return self.__hashDir(os.fsencode(path))
+            return (self.__hashDir(path), self.size)
         finally:
             self.__index.close()
 
@@ -618,17 +701,34 @@ class DirHasher:
             self.__index.close()
 
 
+def _hashDirWithSize(path, index, ignoreDirs):
+    global _hashDirWithSize
+    try:
+        from ._dirhasher import hash_directory_with_size
+        _hashDirWithSize = hash_directory_with_size
+    except ImportError:
+        _hashDirWithSize = lambda path, index, ignoreDirs: DirHasher(index, ignoreDirs).hashDirectory(path)
+
+    return _hashDirWithSize(path, index, ignoreDirs)
+
+def _hashPath(path, index, ignoreDirs):
+    global _hashPath
+    try:
+        from ._dirhasher import hash_path
+        _hashPath = hash_path
+    except ImportError:
+        _hashPath = lambda path, index, ignoreDirs: DirHasher(index, ignoreDirs).hashPath(path)
+
+    return _hashPath(path, index, ignoreDirs)
+
 def hashDirectory(path, index=None, ignoreDirs=None):
-    return DirHasher(index, ignoreDirs).hashDirectory(path)
+    return _hashDirWithSize(path, index, ignoreDirs)[0]
 
 def hashDirectoryWithSize(path, index=None, ignoreDirs=None):
-    h = DirHasher(index, ignoreDirs)
-    retHash = h.hashDirectory(path)
-    retSize = h.size
-    return retHash, retSize
+    return _hashDirWithSize(path, index, ignoreDirs)
 
 def hashPath(path, index=None, ignoreDirs=None):
-    return DirHasher(index, ignoreDirs).hashPath(path)
+    return _hashPath(path, index, ignoreDirs)
 
 def binStat(path):
     st = os.stat(path)

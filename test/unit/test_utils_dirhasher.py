@@ -4,13 +4,32 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from unittest import TestCase
+from unittest import TestCase, skipIf
 from unittest.mock import MagicMock, mock_open, patch
 import binascii
+import hashlib
 
 import os
 import sys
-from bob.utils import hashFile, hashDirectory, binStat
+import time
+from bob.utils import hashFile, binStat, DirHasher
+
+try:
+    from bob._dirhasher import hash_directory_with_size, hash_path
+    def rustHashDirectory(path, index=None, ignoreDirs=None):
+        return hash_directory_with_size(path, index, ignoreDirs)[0]
+    def rustHashPath(path, index=None, ignoreDirs=None):
+        return hash_path(path, index, ignoreDirs)
+except ImportError:
+    rustHashDirectory = None
+    rustHashPath = None
+
+def pyHashDirectory(path, index=None, ignoreDirs=None):
+    return DirHasher(index, ignoreDirs).hashDirectory(path)[0]
+
+def pyHashPath(path, index=None, ignoreDirs=None):
+    return DirHasher(index, ignoreDirs).hashPath(path)
+
 
 class TestHashFile(TestCase):
     def testBigFile(self):
@@ -41,7 +60,7 @@ def makeOsScandir(entries):
     m.return_value = OsScandirList(entries)
     return m
 
-class TestHashDir(TestCase):
+class CommonHashDirTests:
     def setUp(self):
         self.umask = os.umask(0o022)
 
@@ -60,7 +79,7 @@ class TestHashDir(TestCase):
             with open(os.path.join(tmp, "dir", "file"), 'wb') as f:
                 f.write(b'abc')
 
-            sum1 = hashDirectory(tmp)
+            sum1 = self.hashDirectory(tmp)
             self.assertEqual(len(sum1), 20)
             # Result depends on path separator character ('/' vs. '\')
             if sys.platform == "win32":
@@ -69,7 +88,7 @@ class TestHashDir(TestCase):
             else:
                 self.assertEqual(sum1, binascii.unhexlify(
                     "640f516de78fba0b6d2ddde4451000f142d06b0d"))
-            sum2 = hashDirectory(tmp)
+            sum2 = self.hashDirectory(tmp)
             self.assertEqual(sum1, sum2)
 
     def testRenameDirectory(self):
@@ -80,9 +99,9 @@ class TestHashDir(TestCase):
             with open(os.path.join(tmp, "dir", "file"), 'wb') as f:
                 f.write(b'abc')
 
-            sum1 = hashDirectory(tmp)
+            sum1 = self.hashDirectory(tmp)
             os.rename(os.path.join(tmp, "dir"), os.path.join(tmp, "foo"))
-            sum2 = hashDirectory(tmp)
+            sum2 = self.hashDirectory(tmp)
             self.assertNotEqual(sum1, sum2)
 
     def testRenameFile(self):
@@ -92,9 +111,9 @@ class TestHashDir(TestCase):
             with open(os.path.join(tmp, "foo"), 'wb') as f:
                 f.write(b'abc')
 
-            sum1 = hashDirectory(tmp)
+            sum1 = self.hashDirectory(tmp)
             os.rename(os.path.join(tmp, "foo"), os.path.join(tmp, "bar"))
-            sum2 = hashDirectory(tmp)
+            sum2 = self.hashDirectory(tmp)
             self.assertNotEqual(sum1, sum2)
 
     def testRewriteFile(self):
@@ -105,19 +124,70 @@ class TestHashDir(TestCase):
             with TemporaryDirectory() as tmp:
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'abc')
-                sum1 = hashDirectory(tmp, index)
+                sum1 = self.hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
                     self.assertEqual(f.read(4), b'BOB2')
 
                 with open(os.path.join(tmp, "foo"), 'wb') as f:
                     f.write(b'qwer')
-                sum2 = hashDirectory(tmp, index)
+                sum2 = self.hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
                     self.assertEqual(f.read(4), b'BOB2')
 
                 self.assertNotEqual(sum1, sum2)
+
+    def testMissingIndexDir(self):
+        """Index in non-existing directory just issues a warning"""
+        with TemporaryDirectory() as tmp:
+            index = os.path.join(tmp, "missing", "index.bin")
+            with open(os.path.join(tmp, "file"), "wb") as f:
+                f.write(b'abc')
+            with self.assertLogs(level='WARNING') as cm:
+                self.assertEqual(self.hashDirectory(tmp, index),
+                                 b'\x039\xa9+\xebb\xaf\xbe\x11>@\xf7\xeeMl}\xb6\xd0\x9a\x90')
+            self.assertTrue(cm.records[0].getMessage().startswith("Cannot write hash cache:"))
+
+    def testBadIndex(self):
+        """A corrupted index is ignored"""
+        with TemporaryDirectory() as tmp:
+            index = os.path.join(tmp, "index.bin")
+            with open(index, "wb") as f:
+                f.write(b'garbage')
+
+            ws = os.path.join(tmp, "dir")
+            os.mkdir(ws)
+            with open(os.path.join(ws, "file"), 'wb') as f:
+                f.write(b'abc')
+
+            self.assertEqual(self.hashDirectory(ws, index),
+                             b'\x039\xa9+\xebb\xaf\xbe\x11>@\xf7\xeeMl}\xb6\xd0\x9a\x90')
+
+            with open(index, "rb") as f:
+                self.assertEqual(f.read(4), b'BOB2')
+
+    def testHashPath(self):
+        """Files, symlinks and missing paths can be hashed directly"""
+        with TemporaryDirectory() as tmp:
+            fn = os.path.join(tmp, "file")
+            with open(fn, "wb") as f:
+                f.write(b'abc')
+            os.symlink("file", os.path.join(tmp, "link"))
+            self.assertEqual(self.hashPath(fn), binascii.unhexlify(
+                "a9993e364706816aba3e25717850c26c9cd0d89d"))
+            self.assertEqual(self.hashPath(os.path.join(tmp, "link")),
+                hashlib.sha1(b'file').digest())
+            self.assertEqual(self.hashPath(tmp), self.hashDirectory(tmp))
+            with self.assertLogs(level='WARNING') as cm:
+                self.assertEqual(self.hashPath(os.path.join(tmp, "nx")), b'')
+            self.assertTrue(cm.records[0].getMessage().startswith("Cannot stat '"))
+
+
+
+class TestHashDirPython(CommonHashDirTests, TestCase):
+    hashDirectory = staticmethod(pyHashDirectory)
+    hashPath = staticmethod(pyHashPath)
 
     def testBigIno(self):
         """Test that index handles big inode numbers as found on Windows"""
@@ -148,7 +218,7 @@ class TestHashDir(TestCase):
                     f.write(b'abc')
 
                 with patch('os.scandir', entries):
-                    hashDirectory(tmp, index)
+                    self.hashDirectory(tmp, index)
 
                 with open(index, "rb") as f:
                     self.assertEqual(f.read(4), b'BOB2')
@@ -182,7 +252,7 @@ class TestHashDir(TestCase):
                     pass
 
                 with patch('os.scandir', entries):
-                    h = hashDirectory(tmp, index)
+                    h = self.hashDirectory(tmp, index)
                 with patch('os.stat', mock_lstat):
                     b = binStat("whatever")
 
@@ -215,7 +285,7 @@ class TestHashDir(TestCase):
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
             with patch('os.scandir', entries):
-                h = hashDirectory("whatever", index)
+                h = self.hashDirectory("whatever", index)
 
         self.assertEqual(h, b'\xe8\x8e\xad\x9bv\xcbt\xc4\xcd\xa7x\xdb\xde\x96\xab@\x18\xb1\xdcX')
 
@@ -245,7 +315,139 @@ class TestHashDir(TestCase):
         with TemporaryDirectory() as indexDir:
             index = os.path.join(indexDir, "index.bin")
             with patch('os.scandir', entries):
-                h = hashDirectory("whatever", index)
+                h = self.hashDirectory("whatever", index)
 
         self.assertEqual(h, b"\x9b\x98~\xa5\xd5\xc4\x1e\xe29'\x8d\x1e\xe1\x12\xdd\xf4\xa51\xf5d")
+
+@skipIf(rustHashDirectory is None, "rust DirHasher implementation not available")
+class TestHashDirRust(CommonHashDirTests, TestCase):
+    hashDirectory = staticmethod(rustHashDirectory)
+    hashPath = staticmethod(rustHashPath)
+
+@skipIf(rustHashDirectory is None, "rust DirHasher implementation not available")
+class TestHashDirCompat(TestCase):
+    """Compare rust implementation against Python implementation"""
+
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = root = os.path.join(self.tmp.name, "root")
+        def mk(path, content=b''):
+            path = os.path.join(root, path)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(content)
+        # Names that exercise the sort order of files vs. directories
+        mk("a-b", b'1')
+        mk("a/x", b'2')
+        mk("a0", b'3')
+        os.chmod(os.path.join(root, "a0"), 0o755)
+        mk("a.c/y", b'4')
+        mk("big", os.urandom(1024*1024+17))
+        mk("sub/deep/er/file", b'deep')
+        mk("sub/BaseDirList.txt", b'ignored')
+        mk(".git/config", b'ignored')
+        mk("ign/file", b'ignored by option')
+        mk("sub/ign/file", b'ignored by option')
+        mk(os.fsdecode(b"\xe4\xf6\xfc-latin1"), b'5')
+        mk("Umlaut-\u00e4\u00f6\u00fc", b'6')
+        os.mkdir(os.path.join(root, "empty"))
+        os.symlink("a/x", os.path.join(root, "link"))
+        os.symlink("dangling", os.path.join(root, "sub", "dangling"))
+        os.symlink("sub", os.path.join(root, "dirlink"))
+        os.mkfifo(os.path.join(root, "fifo"))
+
+    def check(self, isDir, path, index=False, ignoreDirs=None):
+        results = []
+        impls = ["py", "rust"]
+        funs = [pyHashDirectory, rustHashDirectory] if isDir else [pyHashPath, rustHashPath]
+        for name, func in zip(impls, funs):
+            indexPath = os.path.join(self.tmp.name, name + ".bin") if index else None
+            results.append(func(path, indexPath, ignoreDirs))
+            results.append(func(path, indexPath, ignoreDirs)) # run again with index cache
+        self.assertEqual(results[0], results[1])
+        self.assertEqual(results[0], results[2])
+        self.assertEqual(results[0], results[3])
+        return results[0]
+
+    def testHashDirectory(self):
+        d1 = self.check(True, self.root)
+        d2 = self.check(True, self.root, ignoreDirs=["ign"])
+        self.assertNotEqual(d1, d2)
+        self.check(True, os.path.join(self.root, "dirlink"))
+        self.check(True, os.path.join(self.root, "sub"))
+
+    def testManyFiles(self):
+        """Enough files to keep all threads busy and to prefetch files"""
+        for i in range(500):
+            d = os.path.join(self.root, "many", str(i % 7))
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, str(i)), "wb") as f:
+                f.write(os.urandom(i * 97))
+        self.check("hashDirectory", self.root)
+        self.check("hashDirectory", self.root, True)
+
+    def waitClockTick(self):
+        """Wait until the file system clock has advanced.
+
+        Files that are not older than the file system time are "racily clean"
+        and are not recorded in the index. Make sure all files are old enough
+        so that the index content is deterministic.
+        """
+        def ctime():
+            with NamedTemporaryFile(dir=self.tmp.name) as f:
+                return os.fstat(f.fileno()).st_ctime_ns
+        start = ctime()
+        while ctime() <= start:
+            time.sleep(0.001)
+
+    def testHashDirectoryIndex(self):
+        self.waitClockTick()
+        d1 = self.check(True, self.root, True)
+        self.assertEqual(d1, self.check(True, self.root))
+        with open(os.path.join(self.tmp.name, "py.bin"), "rb") as f:
+            pyIndex = f.read()
+        with open(os.path.join(self.tmp.name, "rust.bin"), "rb") as f:
+            rustIndex = f.read()
+        self.assertEqual(pyIndex, rustIndex)
+
+    def checkIndexUpdate(self):
+        """Hash once with each implementation and compare the updated indices.
+
+        A second run would fix up a wrongly updated index. Hence each
+        implementation is invoked just once.
+        """
+        pyIndex = os.path.join(self.tmp.name, "py.bin")
+        rustIndex = os.path.join(self.tmp.name, "rust.bin")
+        self.assertEqual(pyHashDirectory(self.root, pyIndex),
+                         rustHashDirectory(self.root, rustIndex))
+        with open(pyIndex, "rb") as f:
+            pyIndex = f.read()
+        with open(rustIndex, "rb") as f:
+            rustIndex = f.read()
+        self.assertEqual(pyIndex, rustIndex)
+        return pyIndex
+
+    def testHashDirectoryIndexUpdate(self):
+        """Removed and added files update the index identically"""
+        self.waitClockTick()
+        i1 = self.checkIndexUpdate()
+
+        # Entries of removed files are dropped
+        os.unlink(os.path.join(self.root, "a-b"))
+        i2 = self.checkIndexUpdate()
+        self.assertNotIn(b"a-b", i2)
+
+        # Appending after the last entry keeps all other entries
+        with open(os.path.join(self.root, os.fsdecode(b"\xff-end")), "wb") as f:
+            f.write(b'end')
+        self.waitClockTick()
+        i3 = self.checkIndexUpdate()
+        self.assertTrue(i3.startswith(i2))
+        self.assertIn(b"\xff-end", i3)
+
+    def testHashPath(self):
+        for p in ("big", "link", "fifo", "sub", "dirlink", "sub/dangling"):
+            self.check(False, os.path.join(self.root, p))
+            self.check(False, os.path.join(self.root, p), True)
 

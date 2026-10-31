@@ -7,7 +7,6 @@ from . import BOB_VERSION, _enableDebug, DEBUG
 from .errors import BobError
 from .state import finalize
 from .tty import colorize, Unbuffered, setColorMode, cleanup
-from .utils import asHexStr, hashPath, getPlatformTag, EventLoopWrapper
 import argparse
 import logging
 import sys
@@ -276,6 +275,13 @@ def bob(bobRoot = None):
                 except OSError as e:
                     print("bob -C: unable to change directory:", str(e), file=sys.stderr)
                     return 1
+
+        # Make sure native extension is updated
+        try:
+            from .develop.make import makeDirHasher
+            makeDirHasher()
+        except ImportError:
+            pass
 
         if args.command in availableCommands:
             cmd = availableCommands[args.command][1]
