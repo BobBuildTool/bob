@@ -9,6 +9,28 @@ from setuptools.dist import Distribution
 import os
 import sys
 
+MANPAGES = [
+    ("bob", 1),
+    ("bob-archive", 1),
+    ("bob-build", 1),
+    ("bob-clean", 1),
+    ("bob-dev", 1),
+    ("bob-graph", 1),
+    ("bob-init", 1),
+    ("bob-jenkins", 1),
+    ("bob-layers", 1),
+    ("bob-ls", 1),
+    ("bob-ls-recipes", 1),
+    ("bob-project", 1),
+    ("bob-query-meta", 1),
+    ("bob-query-path", 1),
+    ("bob-query-recipe", 1),
+    ("bob-query-scm", 1),
+    ("bob-show", 1),
+    ("bob-status", 1),
+    ("bobpaths", 7),
+]
+
 
 # Simple override of Distribution that forces "Root-Is-Purelib: false" on Linux
 # because of the statically linked bob-namespace-sandbox applet. Use the
@@ -76,29 +98,13 @@ data_files = []
 # Sphinx manpages and bash completion do not work on Windows
 if sys.platform != 'win32':
     data_files.extend([
-        ('share/man/man1', [
-            'doc/_build/man/bob.1',
-            'doc/_build/man/bob-archive.1',
-            'doc/_build/man/bob-build.1',
-            'doc/_build/man/bob-clean.1',
-            'doc/_build/man/bob-dev.1',
-            'doc/_build/man/bob-graph.1',
-            'doc/_build/man/bob-init.1',
-            'doc/_build/man/bob-jenkins.1',
-            'doc/_build/man/bob-layers.1',
-            'doc/_build/man/bob-ls.1',
-            'doc/_build/man/bob-ls-recipes.1',
-            'doc/_build/man/bob-project.1',
-            'doc/_build/man/bob-query-meta.1',
-            'doc/_build/man/bob-query-path.1',
-            'doc/_build/man/bob-query-recipe.1',
-            'doc/_build/man/bob-query-scm.1',
-            'doc/_build/man/bob-show.1',
-            'doc/_build/man/bob-status.1',
-        ]),
-        ('share/man/man7', [
-            'doc/_build/man/bobpaths.7',
-        ]),
+        ('share/man/man' + str(section), [
+            'doc/_build/man/{}.{}'.format(name, section)
+            for name, sec in MANPAGES if sec == section
+        ])
+        for section in sorted(set(sec for _, sec in MANPAGES))
+    ])
+    data_files.extend([
         ('share/bash-completion/completions', [
             'contrib/bash-completion/bob'
         ]),
