@@ -9,3 +9,6 @@ __pycache__/
 /dist/
 /htmlcov
 /pym/bob/version.py
+/pym/bob/*.pyd
+/pym/bob/*.so
+/src/dirhasher/target/

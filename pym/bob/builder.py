@@ -52,18 +52,19 @@ async def gatherTasks(tasks):
     await asyncio.wait(tasks)
     return [ t.result() for t in tasks ]
 
-def hashWorkspace(step):
+async def hashWorkspace(step):
+    loop = asyncio.get_event_loop()
+    cachePath = os.path.join(os.path.dirname(step.getWorkspacePath()), "cache.bin")
     # Cache is also used by share module
-    return hashDirectory(step.getStoragePath(),
-        os.path.join(os.path.dirname(step.getWorkspacePath()), "cache.bin"))
+    return await loop.run_in_executor(None, hashDirectory, step.getStoragePath(), cachePath)
 
 class HashOnce:
     def __init__(self, step):
         self.step = step
         self.result = None
-    def hashWorkspace(self):
+    async def hashWorkspace(self):
         if self.result is None:
-            self.result = hashWorkspace(self.step)
+            self.result = await hashWorkspace(self.step)
         return self.result
     def invalidate(self):
         self.result = None
@@ -1202,7 +1203,7 @@ cd {ROOT}
         if self.__buildOnly and (BobState().getResultHash(prettySrcPath) is not None):
             inputChanged = checkoutBuildOnlyStateChanged(checkoutState, oldCheckoutState)
             rehash = currentResultHash.hashWorkspace
-            if checkoutStep.mayUpdate(inputChanged, BobState().getResultHash(prettySrcPath), rehash):
+            if await checkoutStep.mayUpdate(inputChanged, BobState().getResultHash(prettySrcPath), rehash):
                 if checkoutBuildOnlyStateCompatible(checkoutState, oldCheckoutState):
                     with stepExec(checkoutStep, "UPDATE",
                                   "{} {}".format(prettySrcPath, overridesString)) as a:
@@ -1247,7 +1248,7 @@ cd {ROOT}
             elif (checkoutInputHashes != BobState().getInputHashes(prettySrcPath)):
                 checkoutReason = "dependency changed"
             elif (checkoutStep.getMainScript() or checkoutStep.getPostRunCmds()) \
-                 and (oldResultHash != currentResultHash.hashWorkspace()):
+                 and (oldResultHash != await currentResultHash.hashWorkspace()):
                 checkoutReason = "workspace changed"
 
             if checkoutReason:
@@ -1345,7 +1346,7 @@ cd {ROOT}
 
         # We always have to rehash the directory as the user might have
         # changed the source code manually.
-        checkoutHash = currentResultHash.hashWorkspace()
+        checkoutHash = await currentResultHash.hashWorkspace()
 
         # Generate audit trail before setResultHash() to force re-generation if
         # the audit trail fails.
@@ -1413,7 +1414,7 @@ cd {ROOT}
             # We always rehash the directory in development mode as the
             # user might have compiled the package manually.
             if not self.__cleanBuild:
-                BobState().setResultHash(prettyBuildPath, hashWorkspace(buildStep))
+                BobState().setResultHash(prettyBuildPath, await hashWorkspace(buildStep))
         else:
             with stepExec(buildStep, "BUILD", prettyBuildPath, (ALWAYS, NORMAL)) as fullAction:
                 # Squash state because running the step will change the
@@ -1425,7 +1426,7 @@ cd {ROOT}
                 with stepExec(buildStep, "BUILD", prettyBuildPath, INFO) as buildAction:
                     visibleAction = fullAction if fullAction.visible else buildAction
                     await self._runShell(buildStep, "build", visibleAction, created, self.__cleanBuild)
-                buildHash = hashWorkspace(buildStep)
+                buildHash = await hashWorkspace(buildStep)
                 await self._generateAudit(buildStep, depth, buildHash, buildBuildId)
             BobState().setResultHash(prettyBuildPath, buildHash)
             BobState().setVariantId(prettyBuildPath, buildDigest[0])
@@ -1626,7 +1627,7 @@ cd {ROOT}
 
                 # Verify integrity of downloaded package to protect against
                 # data corruption.
-                packageHash = hashWorkspace(packageStep)
+                packageHash = await hashWorkspace(packageStep)
                 if Audit.fromFile(audit).getArtifact().getResultHash() != packageHash:
                     raise BuildError("Corrupt downloaded artifact! Extracted content hash does not match audit trail.")
 
@@ -1686,7 +1687,7 @@ cd {ROOT}
                 with stepExec(packageStep, "PACKAGE", prettyPackagePath, INFO) as packageAction:
                     visibleAction = fullAction if fullAction.visible else packageAction
                     await self._runShell(packageStep, "package", visibleAction, True)
-                packageHash = hashWorkspace(packageStep)
+                packageHash = await hashWorkspace(packageStep)
                 packageDigest = await self.__getIncrementalVariantId(packageStep)
                 workspaceChanged = True
                 self.__statistic.packagesBuilt += 1
