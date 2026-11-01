@@ -86,7 +86,7 @@ def makeManpages():
     if inputDate > resultDate:
         import subprocess
         print("Build manpages in", resultPath, "...", file=sys.stderr)
-        subprocess.run(["sphinx-build", "-b", "man", ".", "_build/man"],
+        subprocess.run(["sphinx-build", "-q", "-b", "man", ".", "_build/man"],
             cwd=inputPath)
 
     return resultPath
