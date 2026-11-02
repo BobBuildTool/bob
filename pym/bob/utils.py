@@ -870,6 +870,11 @@ def _tarExtractFilter(member, path):
     path = os.path.realpath(path)
     name = member.name
 
+    # In case Bob runs as root, device nodes would allow writing anywhere (e.g.
+    # a block device followed by a regular file of the same name).
+    if member.ischr() or member.isblk():
+        raise BuildError(f"Refusing to extract special file '{name}'.")
+
     # Strip absolute path names (GNU tar default)
     if name.startswith(('/', os.sep)):
         name = name.lstrip('/' + os.sep)
