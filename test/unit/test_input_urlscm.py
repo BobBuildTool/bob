@@ -16,7 +16,9 @@ import subprocess
 import shutil
 import tempfile
 import hashlib
+import io
 import sys
+import tarfile
 
 from mocks.http_server import HttpServerMock
 
@@ -477,6 +479,35 @@ class TestGzipExtraction(UrlScmExecutor, TestCase):
             self.invokeScm(workspace, scm)
             self.assertNotExists(os.path.join(workspace, "src"))
             self.assertExists(os.path.join(workspace, "test.txt"))
+
+    @patch("bob.scm.url.isWin32", True)
+    def testTarGzNative(self):
+        """Python tarfile extraction as used on Windows"""
+        scm = self.createUrlScm({
+            "url" : self.tarGzFile,
+            "digestSHA1" : self.tarGzDigestSha1,
+        })
+        with TemporaryWorkspace() as workspace:
+            self.invokeScm(workspace, scm)
+            self.assertExists(os.path.join(workspace, "src", "test.txt"))
+
+    @patch("bob.scm.url.isWin32", True)
+    def testTarNativeFilter(self):
+        """Python tarfile extraction applies Bob's extraction filter"""
+        with tempfile.TemporaryDirectory() as tmp:
+            evil = os.path.join(tmp, "evil.tar")
+            with tarfile.open(evil, "w") as tar:
+                data = b"PWNED"
+                ti = tarfile.TarInfo("../escaped.txt")
+                ti.size = len(data)
+                tar.addfile(ti, io.BytesIO(data))
+            scm = self.createUrlScm({ "url" : evil })
+            with TemporaryWorkspace() as workspace:
+                with self.assertRaises(InvocationError) as cm:
+                    self.invokeScm(workspace, scm)
+                self.assertIn("outside of destination", cm.exception.what)
+                self.assertNotExists(os.path.join(workspace, "..", "escaped.txt"))
+                self.assertNotExists(os.path.join(workspace, ".evil.tar.extracted"))
 
     def testTarGzNoExtract(self):
         scm = self.createUrlScm({
