@@ -924,9 +924,25 @@ def _tarExtractFilter(member, path):
 
     return member
 
-def tarfileOpen(*args, **kwargs):
+def tarfileOpen(name=None, mode='r', *args, **kwargs):
     import tarfile
-    ret = tarfile.open(*args, **kwargs)
-    # Set a sensible extraction filter, used by Python 3.12 and later...
+
+    if mode.startswith('r'):
+        # The checks below rely on realpath() failing on any error other than a
+        # missing path component. With strict=False, errors (e.g. ENAMETOOLONG,
+        # ELOOP) are silently ignored and the returned path might not match
+        # what the kernel resolves (CVE-2025-4517). Python versions lacking
+        # ALLOW_MISSING are affected by this CVE and cannot extract safely.
+        if not hasattr(os.path, "ALLOW_MISSING"):
+            raise BuildError("Refusing to extract tar file: Python version is too old to do this safely.",
+                             help="Update Python to a release with the CVE-2025-4517 fix (os.path.ALLOW_MISSING).")
+
+        # To safely extract tar file, we need an extraction_filter. Refuse to
+        # work on unpatched Python versions.
+        if not hasattr(tarfile, 'data_filter'):
+            raise BuildError("Refusing to extract tar file: Python version is too old to do this safely.",
+                             help="Update Python to a release where TarFile.extraction_filter has been implemented.")
+
+    ret = tarfile.open(name, mode, *args, **kwargs)
     ret.extraction_filter = _tarExtractFilter
     return ret
