@@ -6,7 +6,8 @@
 from .. import BOB_VERSION
 from ..errors import BuildError, ParseError
 from ..stringparser import IfExpression
-from ..utils import asHexStr, hashFile, removeUserFromUrl, replacePath
+from ..utils import asHexStr, hashFile, removeUserFromUrl, replacePath, \
+    tarfileOpen
 from ..webdav import WebDav, WebdavError, WebdavAlreadyExistsError, \
         WebdavNotFoundError, WebdavNotModifiedError
 from .scm import Scm, ScmAudit
@@ -174,8 +175,12 @@ class Extractor():
         canary = os.path.join(destDir, "."+destFile+".extracted")
         if dirCreated or isYounger(destination, canary):
             for cmd in cmds:
-                if shutil.which(cmd[0]) is None: continue
-                if stdout:
+                if callable(cmd):
+                    # Native extraction in Python
+                    await cmd(invoker)
+                elif shutil.which(cmd[0]) is None:
+                    continue
+                elif stdout:
                     # Extracts to stdout. We must open the destination only
                     # after we have confirmed that we run the extractor!
                     # Otherwise we truncate the file.
@@ -205,11 +210,38 @@ class Extractor():
 class TarExtractor(Extractor):
     SUPPORT_STRIP = True
 
+    @staticmethod
+    def _extractTarfile(src, dst):
+        """Extract tar file with Bob's extraction filter.
+
+        Runs in the invoker executor, i.e. probably in a different process.
+        Returns an error message or None on success.
+        """
+        import tarfile
+        try:
+            with tarfileOpen(src) as tar:
+                tar.extractall(dst)
+        except BuildError as e:
+            return e.slogan
+        except (tarfile.TarError, OSError, EOFError) as e:
+            return "Error extracting '{}': {}".format(src, str(e))
+        return None
+
+    async def _extractNative(self, invoker):
+        src = self.getCompressedFilePath(invoker)
+        dst = invoker.joinPath(self.dir)
+        invoker.trace("<tarfile>", "-e", src, dst)
+        err = await invoker.runInExecutor(TarExtractor._extractTarfile, src, dst)
+        if err:
+            invoker.fail(err)
+
     async def extract(self, invoker, dirCreated):
         cmds = []
         compressedFilePath = self.getCompressedFilePath(invoker)
         if isWin32 and self.strip == 0:
-            cmds.append(["python", "-m", "tarfile", "-e", compressedFilePath])
+            # Do not use "python -m tarfile" because it does not apply our
+            # extraction filter. It might not even be the same interpreter.
+            cmds.append(self._extractNative)
 
         cmd = ["tar", "-x", "--no-same-owner", "--no-same-permissions",
                    "-f", compressedFilePath]
