@@ -957,10 +957,43 @@ def _tarExtractFilter(member, path):
     if os.path.isabs(name):
         raise BuildError(f"Refusing to extract absolute path '{name}' from tar file.")
 
+    # We don't expect any internal '..' names. Simply always normalize the
+    # path. Without this step, tarfile could create intermediate directories
+    # outside the destination.
+    if '..' in name:
+        name = os.path.normpath(name)
+        member = member.replace(name=name, deep=False)
+
     # Ensure we stay in the destination
-    full_name = os.path.realpath(os.path.join(path, name))
-    if os.path.commonpath([full_name, path]) != path:
-        raise BuildError(f"Refusing to extract '{name}' from tar file. File is outside of destination directory.")
+    target = os.path.join(path, name.rstrip('/' + os.sep))
+    if member.islnk() or member.issym():
+        # Links replace the directory entry itself. Check where the entry is
+        # located, not where it points to. This also prevents replacing `path`
+        # itself with a link (CVE-2026-7774), which would change its meaning.
+        parent, base = os.path.split(target)
+        parent = os.path.realpath(parent, strict=os.path.ALLOW_MISSING)
+        if base in ('', os.curdir, os.pardir) or \
+           os.path.commonpath([parent, path]) != path:
+            raise BuildError(f"Refusing to extract '{name}': path is outside of destination directory.")
+    else:
+        full_name = os.path.realpath(target, strict=os.path.ALLOW_MISSING)
+        if os.path.commonpath([full_name, path]) != path:
+            raise BuildError(f"Refusing to extract '{name}': path is outside of destination directory.")
+
+    # Hard links must only reference other archive members. The link target
+    # must not be normalized lexically! The kernel resolves '..' *after*
+    # following symlinks (e.g. "symlink/../file") -> use realpath().
+    #
+    # As far as Bob is concerned, symlinks can point outside of the workspace
+    # because that is not unusual as build result. Our realpath() checks above
+    # will catch later attempts to write through absolute symlinks.
+    if member.islnk():
+        if os.path.isabs(member.linkname):
+            raise BuildError(f"Refusing to extract '{name}': absolute link target")
+        linkname = os.path.realpath(os.path.join(path, member.linkname),
+                                    strict=os.path.ALLOW_MISSING)
+        if os.path.commonpath([linkname, path]) != path:
+            raise BuildError(f"Refusing to extract '{name}': hard link points outside of destination directory.")
 
     return member
 
