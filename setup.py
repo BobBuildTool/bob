@@ -78,7 +78,7 @@ class BuildManpages(Command):
         pass
 
     def run(self):
-        self.spawn(["sphinx-build", "-b", "man", "doc", "doc/_build/man"])
+        self.spawn([sys.executable, "-m", "sphinx", "-b", "man", "doc", "doc/_build/man"])
 
 # Additional command to build the manpages as plain text. They are installed as
 # package data and used by "bob help" if no "man" is available (e.g. on
@@ -94,7 +94,7 @@ class BuildHelpText(Command):
         self.set_undefined_options('build', ('build_lib', 'build_lib'))
 
     def run(self):
-        self.spawn(["sphinx-build", "-b", "text", "doc", "doc/_build/text"])
+        self.spawn([sys.executable, "-m", "sphinx", "-b", "text", "doc", "doc/_build/text"])
         dest = os.path.join(self.build_lib, "bob", "_man")
         self.mkpath(dest)
         for name, _ in MANPAGES:

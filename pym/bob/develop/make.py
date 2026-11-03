@@ -77,6 +77,15 @@ def makeDirHasher():
         shutil.copy(os.path.join(inputPath, "target", "release", cargoName), resultPath+".new")
         os.replace(resultPath+".new", resultPath)
 
+def getSphinxBuild():
+    # Prefer the sphinx module of the current interpreter. The sphinx-build
+    # script is not necessarily in $PATH, e.g. on Windows.
+    import importlib.util
+    if importlib.util.find_spec("sphinx") is not None:
+        return [sys.executable, "-m", "sphinx"]
+    else:
+        return ["sphinx-build"]
+
 def makeDoc(builder, what):
     bobRoot = getBobRoot()
     resultPath = os.path.join(bobRoot, "doc", "_build", builder)
@@ -86,7 +95,7 @@ def makeDoc(builder, what):
     if inputDate > resultDate:
         import subprocess
         print("Build", what, "in", resultPath, "...", file=sys.stderr)
-        subprocess.run(["sphinx-build", "-q", "-b", builder, ".",
+        subprocess.run(getSphinxBuild() + ["-q", "-b", builder, ".",
                         os.path.join("_build", builder)],
             cwd=inputPath)
 
