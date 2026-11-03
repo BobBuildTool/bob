@@ -6,7 +6,7 @@
 import os
 import sys
 
-__all__ = ('makeSandboxHelper', 'makeManpages', 'makeDirHasher')
+__all__ = ('makeSandboxHelper', 'makeManpages', 'makeHelpText', 'makeDirHasher')
 
 def findYoungestInDir(path, exclude):
     ret = 0
@@ -77,19 +77,26 @@ def makeDirHasher():
         shutil.copy(os.path.join(inputPath, "target", "release", cargoName), resultPath+".new")
         os.replace(resultPath+".new", resultPath)
 
-def makeManpages():
+def makeDoc(builder, what):
     bobRoot = getBobRoot()
-    resultPath = os.path.join(bobRoot, "doc", "_build", "man")
+    resultPath = os.path.join(bobRoot, "doc", "_build", builder)
     inputPath = os.path.join(bobRoot, "doc")
     resultDate = findYoungest(resultPath)
     inputDate = findYoungest(inputPath, exclude={'_build'})
     if inputDate > resultDate:
         import subprocess
-        print("Build manpages in", resultPath, "...", file=sys.stderr)
-        subprocess.run(["sphinx-build", "-q", "-b", "man", ".", "_build/man"],
+        print("Build", what, "in", resultPath, "...", file=sys.stderr)
+        subprocess.run(["sphinx-build", "-q", "-b", builder, ".",
+                        os.path.join("_build", builder)],
             cwd=inputPath)
 
     return resultPath
+
+def makeManpages():
+    return makeDoc("man", "manpages")
+
+def makeHelpText():
+    return os.path.join(makeDoc("text", "help pages"), "manpages")
 
 if __name__ == "__main__":
     makeSandboxHelper()

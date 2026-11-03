@@ -80,18 +80,41 @@ class BuildManpages(Command):
     def run(self):
         self.spawn(["sphinx-build", "-b", "man", "doc", "doc/_build/man"])
 
+# Additional command to build the manpages as plain text. They are installed as
+# package data and used by "bob help" if no "man" is available (e.g. on
+# Windows).
+class BuildHelpText(Command):
+    description = "Build plain text help pages"
+    user_options = []
+
+    def initialize_options(self):
+        self.build_lib = None
+
+    def finalize_options(self):
+        self.set_undefined_options('build', ('build_lib', 'build_lib'))
+
+    def run(self):
+        self.spawn(["sphinx-build", "-b", "text", "doc", "doc/_build/text"])
+        dest = os.path.join(self.build_lib, "bob", "_man")
+        self.mkpath(dest)
+        for name, _ in MANPAGES:
+            self.copy_file(os.path.join("doc", "_build", "text", "manpages", name + ".txt"),
+                           dest)
+
 # Wrapper around build command to force automatic execution of the
 # documentation and applet builds.
 class build(build_orig):
     sub_commands = [
         ('build_apps', BuildApps.enabled ),
         ('build_man', BuildManpages.enabled ),
+        ('build_help', None ),
     ] + build_orig.sub_commands
 
 cmdclass = {
     'build' : build,
     'build_apps': BuildApps,
     'build_man' : BuildManpages,
+    'build_help' : BuildHelpText,
 }
 data_files = []
 
