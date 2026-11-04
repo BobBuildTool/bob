@@ -619,7 +619,7 @@ class TestHttpArchive(BaseTester, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.httpd = socketserver.ThreadingTCPServer(("localhost", 0), createHttpHandler(self.repo.name))
+        self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0), createHttpHandler(self.repo.name))
         self.ip, self.port = self.httpd.server_address
         self.server = threading.Thread(target=self.httpd.serve_forever)
         self.server.daemon = True
@@ -667,7 +667,7 @@ class TestHttpBasicAuthArchive(BaseTester, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.httpd = socketserver.ThreadingTCPServer(("localhost", 0),
+        self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createHttpHandler(self.repo.name, self.USERNAME, self.PASSWORD))
         self.ip, self.port = self.httpd.server_address
         self.server = threading.Thread(target=self.httpd.serve_forever)
@@ -1008,7 +1008,7 @@ class TestGiteaArchive(BaseTester, TestCase):
     def setUp(self):
         super().setUp()
         self.args = {"retries": 0}
-        self.httpd = socketserver.ThreadingTCPServer(("localhost", 0),
+        self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createGiteaHandler(self.repo.name, self.args))
         self.ip, self.port = self.httpd.server_address
         self.server = threading.Thread(target=self.httpd.serve_forever)
@@ -1078,7 +1078,7 @@ class TestGiteaAuthArchive(BaseTester, TestCase):
         self.args = {"retries": 0}
         expectedAuth = "Basic " + base64.b64encode(
             (self.USER + ":" + self.TOKEN).encode("utf-8")).decode("ascii")
-        self.httpd = socketserver.ThreadingTCPServer(("localhost", 0),
+        self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createGiteaHandler(self.repo.name, self.args, expectedAuth))
         self.ip, self.port = self.httpd.server_address
         self.server = threading.Thread(target=self.httpd.serve_forever)
@@ -1153,7 +1153,7 @@ class TestGiteaArchiveRetries(Base, TestCase):
 
     def _startServer(self, retries):
         args = {"retries": retries}
-        httpd = socketserver.ThreadingTCPServer(("localhost", 0),
+        httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createGiteaHandler(self.repo.name, args))
         thread = threading.Thread(target=httpd.serve_forever)
         thread.daemon = True
@@ -1203,7 +1203,7 @@ class TestGiteaManagedArchive(Base, TestCase):
     def setUp(self):
         super().setUp()
         self.args = {"retries": 0}
-        self.httpd = socketserver.ThreadingTCPServer(("localhost", 0),
+        self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createGiteaHandler(self.repo.name, self.args))
         self.addCleanup(self.httpd.server_close)
         self.addCleanup(self.httpd.shutdown)
@@ -1337,7 +1337,7 @@ class TestGiteaArchiveErrors(Base, TestCase):
 
     def _archive(self, responses):
         self.responses = responses
-        self.httpd = socketserver.ThreadingTCPServer(("localhost", 0),
+        self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createGiteaStatusHandler(responses))
         self.addCleanup(self.httpd.server_close)
         self.addCleanup(self.httpd.shutdown)

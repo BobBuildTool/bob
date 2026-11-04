@@ -251,7 +251,7 @@ class HttpServerMock():
         self.handler = createHttpHandler(repoPath,
             {'noResponse' : noResponse, 'retries' : retries, 'retryHead' : retryHead,
              'auth' : auth})
-        self.server = HTTPServer(('localhost', 0), self.handler)
+        self.server = HTTPServer(('127.0.0.1', 0), self.handler)
 
     def __enter__(self):
         self.thread = Thread(target=self.server.serve_forever, kwargs={'poll_interval' : 0.1})

@@ -295,7 +295,7 @@ class JenkinsSharedPackage(JenkinsTests, TestCase):
             """)
 
         self.executeBobJenkinsCmd("set-options test -p test-")
-        self.executeBobJenkinsCmd("add try http://localhost:{} -r root -p try-"
+        self.executeBobJenkinsCmd("add try http://127.0.0.1:{} -r root -p try-"
                                     .format(self.jenkinsMock.getServerPort()))
 
         self.executeBobJenkinsCmd("push test")
