@@ -33,6 +33,7 @@ run_test()
 	set -o pipefail
 	local ret LOGFILE=$(mktemp)
 	local test_name="${1#*:}"
+	local start=$SECONDS
 
 	{
 		echo "======================================================================"
@@ -45,13 +46,13 @@ run_test()
 			pushd unit > /dev/null
 			[[ "${VERBOSE+true}" ]] || echo -n "  [unit]        $test_name ... "
 			if $RUN_PYTHON3_COV -m unittest -v $test_name 2>&1 | tee -a "$LOGFILE" | print_verbose ; then
-				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok" || echo "ok"
+				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok ($((SECONDS-start))s)" || echo "ok ($((SECONDS-start))s)"
 				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
-				echo "$test_name: finished: FAIL"
+				echo "$test_name: finished: FAIL ($((SECONDS-start))s)"
 				ret=1
 			else
-				echo "FAIL (log follows...)"
+				echo "FAIL ($((SECONDS-start))s, log follows...)"
 				ret=1
 				cat -n "$LOGFILE"
 			fi
@@ -69,15 +70,15 @@ run_test()
 
 			ret=$?
 			if [[ $ret -eq 0 ]] ; then
-				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok" || echo "ok"
+				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok ($((SECONDS-start))s)" || echo "ok ($((SECONDS-start))s)"
 			elif [[ $ret -eq 240 ]] ; then
-				[[ "${VERBOSE+true}" ]] && echo "$test_name: finished: skipped" || echo "skipped"
+				[[ "${VERBOSE+true}" ]] && echo "$test_name: finished: skipped ($((SECONDS-start))s)" || echo "skipped ($((SECONDS-start))s)"
 				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
-				echo "$test_name: finished: FAIL (exit $ret)"
+				echo "$test_name: finished: FAIL (exit $ret, $((SECONDS-start))s)"
 				ret=1
 			else
-				echo "FAIL (exit $ret, log follows...)"
+				echo "FAIL (exit $ret, $((SECONDS-start))s, log follows...)"
 				cat -n "$LOGFILE"
 				ret=1
 			fi
@@ -87,13 +88,13 @@ run_test()
 			pushd integration/$test_name > /dev/null
 			[[ "${VERBOSE+true}" ]] || echo -n "  [integration] $test_name ... "
 			if $RUN_PYTHON3 run.py 2>&1 | tee -a "$LOGFILE" | print_verbose ; then
-				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok" || echo "ok"
+				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok ($((SECONDS-start))s)" || echo "ok ($((SECONDS-start))s)"
 				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
-				echo "$test_name: finished: FAIL"
+				echo "$test_name: finished: FAIL ($((SECONDS-start))s)"
 				ret=1
 			else
-				echo "FAIL (log follows...)"
+				echo "FAIL ($((SECONDS-start))s, log follows...)"
 				ret=1
 				cat -n "$LOGFILE"
 			fi
@@ -248,8 +249,18 @@ pushd test > /dev/null
 # Make sure sandbox helper and native extensions are updated
 $RUN_PYTHON3_COV -m bob.develop.make
 
-# gather tests
+# Gather tests. The integration tests are the slowest ones. Start them first
+# so that they do not delay the end of a parallel test run.
 RUN_TEST_NAMES=( )
+if [[ -n "$RUN_INTEGRATION_PAT" ]] ; then
+	pushd integration > /dev/null
+	for i in * ; do
+		if [[ -d $i && -e "$i/run.py" && "$i" == $RUN_INTEGRATION_PAT ]] ; then
+			RUN_TEST_NAMES+=( "integration:$i" )
+		fi
+	done
+	popd > /dev/null
+fi
 if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 	pushd unit > /dev/null
 	for i in test_*.py ; do
@@ -264,15 +275,6 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 	for i in * ; do
 		if [[ -d $i && -e "$i/run.sh" && "$i" == $RUN_BLACKBOX_PAT ]] ; then
 			RUN_TEST_NAMES+=( "black-box:$i" )
-		fi
-	done
-	popd > /dev/null
-fi
-if [[ -n "$RUN_INTEGRATION_PAT" ]] ; then
-	pushd integration > /dev/null
-	for i in * ; do
-		if [[ -d $i && -e "$i/run.py" && "$i" == $RUN_INTEGRATION_PAT ]] ; then
-			RUN_TEST_NAMES+=( "integration:$i" )
 		fi
 	done
 	popd > /dev/null
