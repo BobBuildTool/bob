@@ -7,7 +7,6 @@ import json
 import os.path
 import re
 import shutil
-import socket
 import subprocess
 import tempfile
 import shlex
@@ -350,7 +349,6 @@ class Job:
             shutil.copy(os.path.join(workspace, i), archive)
 
 class StoppableHttpServer (HTTPServer):
-    address_family = socket.AF_INET6
     def __init__(self, address, handler):
         super().__init__(address, handler)
         self.__mutex = RLock()
@@ -448,7 +446,7 @@ class StoppableHttpServer (HTTPServer):
             "NODE_NAME" : "built-in",
             "NODE_LABELS" : "",
             "JENKINS_HOME" : self.__home,
-            "JENKINS_URL" : "http://localhost:{}/".format(self.server_address[1]),
+            "JENKINS_URL" : "http://127.0.0.1:{}/".format(self.server_address[1]),
         })
 
         # First get order of jobs
@@ -542,7 +540,7 @@ class StoppableHttpServer (HTTPServer):
 class JenkinsMock():
 
     def start_mock_server(self):
-        self.mock_server = StoppableHttpServer(('localhost', 0), MockServerRequestHandler)
+        self.mock_server = StoppableHttpServer(('127.0.0.1', 0), MockServerRequestHandler)
         self.mock_server_thread = Thread(target=self.mock_server.serve)
         self.mock_server_thread.start()
 
@@ -586,5 +584,5 @@ class JenkinsMock():
         return self.mock_server.getJobs()
 
 if __name__ == '__main__':
-    server = StoppableHttpServer(('localhost', 8000), MockServerRequestHandler)
+    server = StoppableHttpServer(('127.0.0.1', 8000), MockServerRequestHandler)
     server.serve()

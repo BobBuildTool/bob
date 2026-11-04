@@ -35,7 +35,7 @@ class TestWebdav(TestCase):
         mock = HttpServerMock(self.srvdir, **kwargs)
         srv = mock.__enter__()
         self.addCleanup(mock.__exit__, None, None, None)
-        return WebDav(urlparse("http://localhost:{}/repo/".format(srv.port)),
+        return WebDav(urlparse("http://127.0.0.1:{}/repo/".format(srv.port)),
                       retries=clientRetries)
 
     def _serverPath(self, path):

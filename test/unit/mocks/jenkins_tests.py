@@ -58,7 +58,7 @@ class JenkinsTests():
                                           "backend" : "file",
                                           "path" : self.archive.name }})
         self.writeConfig({ "bobMinimumVersion" : "0.20" })
-        self.executeBobJenkinsCmd("add test http://localhost:{} -r root"
+        self.executeBobJenkinsCmd("add test http://127.0.0.1:{} -r root"
                                     .format(self.jenkinsMock.getServerPort()))
 
     def tearDown(self):

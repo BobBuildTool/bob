@@ -42,7 +42,7 @@ USERNAME = "bob"
 PASSWORD = "p@ss:w/rd"
 
 def makeHttpUrl(port, path, username=USERNAME, password=PASSWORD):
-    return "http://{}:{}@localhost:{}/{}".format(urlquote(username, safe=''),
+    return "http://{}:{}@127.0.0.1:{}/{}".format(urlquote(username, safe=''),
         urlquote(password, safe=''), port, path)
 
 class DummyPackage:
@@ -283,7 +283,7 @@ class TestDownloads(UrlScmTest, TestCase):
         """Simple download via HTTP"""
         with HttpServerMock(self.dir) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(srv.port),
+                "url" : "http://127.0.0.1:{}/test.txt".format(srv.port),
             })
             with TemporaryWorkspace() as workspace:
                 self.invokeScm(workspace, scm)
@@ -295,7 +295,7 @@ class TestDownloads(UrlScmTest, TestCase):
         """Download existing file again. Should not transfer the file again"""
         with HttpServerMock(self.dir) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(srv.port),
+                "url" : "http://127.0.0.1:{}/test.txt".format(srv.port),
             })
             with TemporaryWorkspace() as workspace:
                 fn = os.path.join(workspace, "test.txt")
@@ -315,7 +315,7 @@ class TestDownloads(UrlScmTest, TestCase):
         """Test HTTP retry"""
         with HttpServerMock(self.dir, retries=1) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(srv.port),
+                "url" : "http://127.0.0.1:{}/test.txt".format(srv.port),
                 "retries" : 2
             })
             with TemporaryWorkspace() as workspace:
@@ -326,7 +326,7 @@ class TestDownloads(UrlScmTest, TestCase):
         """Test HTTP retry"""
         with HttpServerMock(self.dir, retries=2) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(srv.port),
+                "url" : "http://127.0.0.1:{}/test.txt".format(srv.port),
                 "retries" : 1
             })
             with TemporaryWorkspace() as workspace:
@@ -338,7 +338,7 @@ class TestDownloads(UrlScmTest, TestCase):
         """Try to download an invalid file -> 404"""
         with HttpServerMock(self.dir) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/invalid.txt".format(srv.port),
+                "url" : "http://127.0.0.1:{}/invalid.txt".format(srv.port),
             })
             with TemporaryWorkspace() as workspace:
                 with self.assertRaises(InvocationError):
@@ -348,7 +348,7 @@ class TestDownloads(UrlScmTest, TestCase):
         """Remote server does not send a response."""
         with HttpServerMock(self.dir, noResponse=True) as srv:
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(srv.port),
+                "url" : "http://127.0.0.1:{}/test.txt".format(srv.port),
             })
             with TemporaryWorkspace() as workspace:
                 with self.assertRaises(InvocationError):
@@ -366,7 +366,7 @@ class TestDownloads(UrlScmTest, TestCase):
               TemporaryWorkspace()      as workspace,
               patch('tempfile.NamedTemporaryFile', ntf)):
             scm = self.createUrlScm({
-                "url" : "http://localhost:{}/test.txt".format(srv.port),
+                "url" : "http://127.0.0.1:{}/test.txt".format(srv.port),
                 "retries" : 3
             })
 
@@ -561,7 +561,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     preMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/\1".format(srv.port),
                     }]
                 )
                 with TemporaryWorkspace() as workspace:
@@ -579,7 +579,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     preMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/\1".format(srv.port),
                         "upload" : True,
                     }]
                 )
@@ -642,7 +642,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     preMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/\1".format(srv.port),
                     }]
                 )
                 with TemporaryWorkspace() as workspace:
@@ -666,12 +666,12 @@ class TestMirrors(UrlScmTest, TestCase):
                             {
                                 'scm' : 'url',
                                 'url' : r".*/(.*)",
-                                'mirror' : r"http://localhost:{}/\1".format(m1.port),
+                                'mirror' : r"http://127.0.0.1:{}/\1".format(m1.port),
                             },
                             {
                                 'scm' : 'url',
                                 'url' : r".*/(.*)",
-                                'mirror' : r"http://localhost:{}/\1".format(m2.port),
+                                'mirror' : r"http://127.0.0.1:{}/\1".format(m2.port),
                                 'upload' : True,
                             }
                         ],
@@ -700,7 +700,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     preMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/\1".format(srv.port),
                         "upload" : True,
                     }]
                 )
@@ -725,7 +725,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     fallbackMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/\1".format(srv.port),
                         "upload" : True,
                     }]
                 )
@@ -749,7 +749,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     fallbackMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/sub/dir/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/sub/dir/\1".format(srv.port),
                         "upload" : True,
                     }]
                 )
@@ -770,7 +770,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     fallbackMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/\1".format(srv.port),
                         "upload" : True,
                     }]
                 )
@@ -788,7 +788,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     fallbackMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/\1".format(srv.port),
                         "upload" : True,
                         "ignoreUploadErrors" : True,
                     }]
@@ -899,7 +899,7 @@ class TestMirrors(UrlScmTest, TestCase):
                     fallbackMirrors = [{
                         "scm" : "url",
                         "url" : r".*/(.*)",
-                        "mirror" : r"http://localhost:{}/\1".format(srv.port),
+                        "mirror" : r"http://127.0.0.1:{}/\1".format(srv.port),
                         "upload" : True,
                     }]
                 )
