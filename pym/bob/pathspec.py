@@ -579,7 +579,12 @@ class PkgGraphNode:
     @classmethod
     def init(cls, cacheName, cacheKey, rootGenerator):
         try:
-            db = sqlite3.connect(cacheName, isolation_level=None).cursor()
+            con = sqlite3.connect(cacheName, isolation_level=None)
+        except sqlite3.Error as e:
+            raise BobError("Cannot save internal state: " + str(e))
+
+        try:
+            db = con.cursor()
             db.execute("CREATE TABLE IF NOT EXISTS meta(key PRIMARY KEY, value)")
             db.execute("CREATE TABLE IF NOT EXISTS graph(key PRIMARY KEY, node)")
 
@@ -608,7 +613,11 @@ class PkgGraphNode:
             return cls(db, root)
 
         except sqlite3.Error as e:
+            con.close()
             raise BobError("Cannot save internal state: " + str(e))
+        except:
+            con.close()
+            raise
 
     def close(self):
         self.__db.close()
@@ -891,6 +900,13 @@ class PackageSet:
         if self.__graph is not None:
             self.__graph.close()
             self.__graph = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
 
     def getAliases(self):
         """Get all defined path aliases.

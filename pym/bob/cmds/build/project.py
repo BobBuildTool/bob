@@ -123,21 +123,22 @@ def doProject(argv, bobRoot):
             parser.error("--jobs argument must be greater than zero!")
         extra.extend(['-j', str(args.jobs)])
 
-    if generator.get('query'):
-        package = packages.queryPackagePath(args.package)
-    else:
-        package = packages.walkPackagePath(args.package)
-        print(">>", colorize("/".join(package.getStack()), "32;1"))
+    with packages:
+        if generator.get('query'):
+            package = packages.queryPackagePath(args.package)
+        else:
+            package = packages.walkPackagePath(args.package)
+            print(">>", colorize("/".join(package.getStack()), "32;1"))
 
-    # execute a bob dev with the extra arguments to build all executables.
-    # This makes it possible for the plugin to collect them and generate some runTargets.
-    if args.execute_prebuild:
-        devArgs = extra.copy()
-        if args.resume: devArgs.append('--resume')
-        if args.execute_buildonly: devArgs.append('-b')
-        devArgs.append(args.package)
-        doDevelop(devArgs, bobRoot)
+        # execute a bob dev with the extra arguments to build all executables.
+        # This makes it possible for the plugin to collect them and generate some runTargets.
+        if args.execute_prebuild:
+            devArgs = extra.copy()
+            if args.resume: devArgs.append('--resume')
+            if args.execute_buildonly: devArgs.append('-b')
+            devArgs.append(args.package)
+            doDevelop(devArgs, bobRoot)
 
-    print(colorize("   PROJECT   {} ({})".format(args.package, args.projectGenerator), "32"))
-    generator.get('func')(package, args.args, extra, bobRoot)
+        print(colorize("   PROJECT   {} ({})".format(args.package, args.projectGenerator), "32"))
+        generator.get('func')(package, args.args, extra, bobRoot)
 

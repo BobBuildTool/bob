@@ -563,14 +563,15 @@ def doGraph(argv, bobRoot):
     if not os.path.exists(destination):
         os.makedirs(destination)
 
-    for p in args.packages:
-        # convert the package-query into a valid file name
-        filename = args.filename if args.filename else "".join([c for c in p if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+    with packages:
+        for p in args.packages:
+            # convert the package-query into a valid file name
+            filename = args.filename if args.filename else "".join([c for c in p if c.isalpha() or c.isdigit() or c==' ']).rstrip()
 
-        print(">>", colorize(p, "32;1"))
-        print(colorize("   GRAPH   {} ({})".format(p, args.type), "32"))
+            print(">>", colorize(p, "32;1"))
+            print(colorize("   GRAPH   {} ({})".format(p, args.type), "32"))
 
-        if args.type == 'd3':
-            makeD3Graph(recipes, packages, p, os.path.join(destination, filename), options, excludes, highlights, args.max_depth)
-        elif args.type == 'dot':
-            makeDotGraph(packages, p, os.path.join(destination, filename), excludes, highlights, args.max_depth)
+            if args.type == 'd3':
+                makeD3Graph(recipes, packages, p, os.path.join(destination, filename), options, excludes, highlights, args.max_depth)
+            elif args.type == 'dot':
+                makeDotGraph(packages, p, os.path.join(destination, filename), excludes, highlights, args.max_depth)

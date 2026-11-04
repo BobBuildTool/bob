@@ -776,7 +776,8 @@ def genJenkinsJobs(recipes, jenkins):
         config.sandbox.stablePaths)
     nameCalculator = JobNameCalculator(config.prefix)
     rootPackages = []
-    for r in config.roots: rootPackages.extend(packages.queryPackagePath(r))
+    with packages:
+        for r in config.roots: rootPackages.extend(packages.queryPackagePath(r))
     for root in rootPackages:
         nameCalculator.addPackage(root)
     nameCalculator.isolate(config.jobsIsolate)
@@ -785,8 +786,6 @@ def genJenkinsJobs(recipes, jenkins):
         rootJenkinsJob = _genJenkinsJobs(root.getPackageStep(), jobs, nameCalculator,
                 config.upload, config.download, set(), set(), config.shortdescription)
         rootJenkinsJob.makeRoot()
-
-    packages.close()
 
     # Add reverse dependencies
     for (name, job) in jobs.items():

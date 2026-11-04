@@ -343,13 +343,14 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         backlog = []
         providedBacklog = []
         results = []
-        for p in args.packages:
-            for package in packages.queryPackagePath(p):
-                packageStep = package.getPackageStep()
-                backlog.append(packageStep)
-                # automatically include provided deps when exporting
-                build_provided = (args.destination and args.build_provided == None) or args.build_provided
-                if build_provided: providedBacklog.extend(packageStep._getProvidedDeps())
+        with packages:
+            for p in args.packages:
+                for package in packages.queryPackagePath(p):
+                    packageStep = package.getPackageStep()
+                    backlog.append(packageStep)
+                    # automatically include provided deps when exporting
+                    build_provided = (args.destination and args.build_provided == None) or args.build_provided
+                    if build_provided: providedBacklog.extend(packageStep._getProvidedDeps())
 
         if sandboxMode.mode != "no":
             Invoker.ensureSandboxUsable()

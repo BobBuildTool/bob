@@ -282,14 +282,15 @@ def doStatus(argv, bobRoot):
     # if their directories do not exist anymore.
     BobState().setAsynchronous()
     try:
-        printer = Printer(args.recursive, args.verbose, args.show_clean,
-            args.show_overrides, args.attic)
-        if args.packages:
-            for p in args.packages:
-                for package in packages.queryPackagePath(p):
-                    printer.showPackage(package)
-        else:
-            printer.showAllDirs(args.attic)
+        with packages:
+            printer = Printer(args.recursive, args.verbose, args.show_clean,
+                args.show_overrides, args.attic)
+            if args.packages:
+                for p in args.packages:
+                    for package in packages.queryPackagePath(p):
+                        printer.showPackage(package)
+            else:
+                printer.showAllDirs(args.attic)
     finally:
         BobState().setSynchronous()
 

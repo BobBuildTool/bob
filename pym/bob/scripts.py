@@ -132,7 +132,8 @@ def __runPluginCommand(command, argv, bobRoot):
     entry = recipes.getCommands().get(command)
 
     packages = recipes.generatePackages(lambda s, m: "unused", args.sandbox)
-    ret = entry['func'](packages, remainder, bobRoot)
+    with packages:
+        ret = entry['func'](packages, remainder, bobRoot)
     return ret if ret is not None else 0
 
 availableCommands = {
