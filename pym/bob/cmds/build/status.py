@@ -12,6 +12,7 @@ from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT, SKIPPED, \
 from ...utils import joinLines
 from ..helpers import processDefines, addStandardArgs
 from textwrap import indent
+from contextlib import nullcontext
 import argparse
 import os
 
@@ -271,7 +272,6 @@ def doStatus(argv, bobRoot):
     nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
 
     packages = recipes.generatePackages(nameFormatter, args.sandbox)
-    if args.develop: developPersister.prime(packages)
 
     # Dummy query of attic directories. Will warn if project directory was
     # created before Bob 0.15 where they were not tracked!
@@ -282,7 +282,7 @@ def doStatus(argv, bobRoot):
     # if their directories do not exist anymore.
     BobState().setAsynchronous()
     try:
-        with packages:
+        with packages, (developPersister.prime(packages) if args.develop else nullcontext()):
             printer = Printer(args.recursive, args.verbose, args.show_clean,
                 args.show_overrides, args.attic)
             if args.packages:

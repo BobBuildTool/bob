@@ -11,6 +11,7 @@ from ...state import BobState
 from ...tty import colorize, ERROR, WARNING, EXECUTED, DEFAULT, Warn
 from ...utils import removePath
 from ..helpers import processDefines, addStandardArgs
+from contextlib import nullcontext
 import argparse
 import os
 
@@ -173,29 +174,28 @@ would get removed without actually deleting that already.
             nameFormatter = LocalBuilder.releaseNameInterrogator
         nameFormatter = LocalBuilder.makeRunnable(nameFormatter)
         packages = recipes.generatePackages(nameFormatter, args.sandbox)
-        if develop: developPersister.prime(packages)
+        with (developPersister.prime(packages) if develop else nullcontext()):
+            if args.mode == 'release':
+                # collect all used paths
+                usedPaths = collectPaths(packages.getRootPackage())
 
-        if args.mode == 'release':
-            # collect all used paths
-            usedPaths = collectPaths(packages.getRootPackage())
+                # get all known release paths
+                allPaths = [ (os.path.join(dir, "workspace"), isSourceDir)
+                    for (dir, isSourceDir) in BobState().getAllNameDirectores() ]
+            elif args.mode == 'develop':
+                # collect all used paths
+                usedPaths = collectPaths(packages.getRootPackage())
 
-            # get all known release paths
-            allPaths = [ (os.path.join(dir, "workspace"), isSourceDir)
-                for (dir, isSourceDir) in BobState().getAllNameDirectores() ]
-        elif args.mode == 'develop':
-            # collect all used paths
-            usedPaths = collectPaths(packages.getRootPackage())
-
-            # Determinte all known develop paths. Bob does not directly store
-            # this information.  We start with all known directories and
-            # subtract the release paths. Source workspaces are detected by
-            # their state being a dict (instead of a bytes object).
-            releasePaths = set(os.path.join(dir, "workspace")
-                for (dir, isSourceDir) in BobState().getAllNameDirectores())
-            allPaths = [
-                (dir, isinstance(BobState().getDirectoryState(dir, False), dict))
-                for dir in BobState().getDirectories()
-                if dir not in releasePaths ]
+                # Determinte all known develop paths. Bob does not directly store
+                # this information.  We start with all known directories and
+                # subtract the release paths. Source workspaces are detected by
+                # their state being a dict (instead of a bytes object).
+                releasePaths = set(os.path.join(dir, "workspace")
+                    for (dir, isSourceDir) in BobState().getAllNameDirectores())
+                allPaths = [
+                    (dir, isinstance(BobState().getDirectoryState(dir, False), dict))
+                    for dir in BobState().getDirectories()
+                    if dir not in releasePaths ]
 
         # Source workspace policy
         if args.src:

@@ -78,7 +78,6 @@ def doProject(argv, bobRoot):
     sandboxMode = SandboxMode(args.sandbox)
     packages = recipes.generatePackages(nameFormatter, sandboxMode.sandboxEnabled,
                                         sandboxMode.stablePaths)
-    developPersister.prime(packages)
 
     generators = defaultGenerators.copy()
     generators.update(recipes.getProjectGenerators())
@@ -123,7 +122,7 @@ def doProject(argv, bobRoot):
             parser.error("--jobs argument must be greater than zero!")
         extra.extend(['-j', str(args.jobs)])
 
-    with packages:
+    with packages, developPersister.prime(packages):
         if generator.get('query'):
             package = packages.queryPackagePath(args.package)
         else:

@@ -15,6 +15,7 @@ from ...share import getShare
 from ...tty import setVerbosity, setTui, Warn
 from ...utils import copyTree, EventLoopWrapper, SandboxMode
 from ..helpers import processDefines
+from contextlib import nullcontext
 import argparse
 import datetime
 import re
@@ -313,77 +314,76 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
         sandboxMode = SandboxMode(args.sandbox)
         packages = recipes.generatePackages(nameFormatter, sandboxMode.sandboxEnabled,
                                             sandboxMode.stablePaths)
-        if develop: developPersister.prime(packages)
+        with (developPersister.prime(packages) if develop else nullcontext()):
+            verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
+            setVerbosity(verbosity)
+            builder = LocalBuilder(verbosity, args.force,
+                                   args.no_deps, True if args.build_mode == 'build-only' else False,
+                                   args.preserve_env, envWhiteList, bobRoot, args.clean,
+                                   args.no_logfiles)
 
-        verbosity = cfg.get('verbosity', 0) + args.verbose - args.quiet
-        setVerbosity(verbosity)
-        builder = LocalBuilder(verbosity, args.force,
-                               args.no_deps, True if args.build_mode == 'build-only' else False,
-                               args.preserve_env, envWhiteList, bobRoot, args.clean,
-                               args.no_logfiles)
+            builder.setExecutor(executor)
+            builder.setArchiveHandler(getArchiver(recipes))
+            builder.setLocalUploadMode(args.upload)
+            builder.setLocalDownloadMode(args.download)
+            builder.setLocalDownloadLayerMode(args.download_layer)
+            builder.setCleanCheckout(args.clean_checkout)
+            builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
+            builder.setLinkDependencies(args.link_deps)
+            builder.setJobserverConfig(jobserverCfg)
+            builder.setKeepGoing(args.keep_going)
+            builder.setAudit(args.audit)
+            builder.setAuditMeta(meta)
+            builder.setShareHandler(getShare(recipes.getShareConfig()))
+            builder.setShareMode(args.shared, args.install)
+            builder.setAtticEnable(args.attic)
+            builder.setSlimSandbox(sandboxMode.slimSandbox)
+            if args.resume: builder.loadBuildState()
 
-        builder.setExecutor(executor)
-        builder.setArchiveHandler(getArchiver(recipes))
-        builder.setLocalUploadMode(args.upload)
-        builder.setLocalDownloadMode(args.download)
-        builder.setLocalDownloadLayerMode(args.download_layer)
-        builder.setCleanCheckout(args.clean_checkout)
-        builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
-        builder.setLinkDependencies(args.link_deps)
-        builder.setJobserverConfig(jobserverCfg)
-        builder.setKeepGoing(args.keep_going)
-        builder.setAudit(args.audit)
-        builder.setAuditMeta(meta)
-        builder.setShareHandler(getShare(recipes.getShareConfig()))
-        builder.setShareMode(args.shared, args.install)
-        builder.setAtticEnable(args.attic)
-        builder.setSlimSandbox(sandboxMode.slimSandbox)
-        if args.resume: builder.loadBuildState()
+            backlog = []
+            providedBacklog = []
+            results = []
+            with packages:
+                for p in args.packages:
+                    for package in packages.queryPackagePath(p):
+                        packageStep = package.getPackageStep()
+                        backlog.append(packageStep)
+                        # automatically include provided deps when exporting
+                        build_provided = (args.destination and args.build_provided == None) or args.build_provided
+                        if build_provided: providedBacklog.extend(packageStep._getProvidedDeps())
 
-        backlog = []
-        providedBacklog = []
-        results = []
-        with packages:
-            for p in args.packages:
-                for package in packages.queryPackagePath(p):
-                    packageStep = package.getPackageStep()
-                    backlog.append(packageStep)
-                    # automatically include provided deps when exporting
-                    build_provided = (args.destination and args.build_provided == None) or args.build_provided
-                    if build_provided: providedBacklog.extend(packageStep._getProvidedDeps())
+            if sandboxMode.mode != "no":
+                Invoker.ensureSandboxUsable()
 
-        if sandboxMode.mode != "no":
-            Invoker.ensureSandboxUsable()
-
-        success = runHook(recipes, 'preBuildHook',
-            ["/".join(p.getPackage().getStack()) for p in backlog])
-        if not success:
-            raise BuildError("preBuildHook failed!",
-                help="A preBuildHook is set but it returned with a non-zero status.")
-        success = False
-        if jobserverCfg.jobs() > 1:
-            setTui(jobserverCfg.jobs(), loop)
-            builder.enableBufferedIO()
-        try:
-            builder.cook([ExecutableStep.fromStep(b, LazyIR) for b in backlog],
-                         True if args.build_mode == 'checkout-only' else False,
-                         loop)
-            for p in backlog:
-                resultPath = p.getWorkspacePath()
-                if resultPath not in results:
-                    results.append(resultPath)
-            builder.cook([ExecutableStep.fromStep(b, LazyIR) for b in providedBacklog],
-                         True if args.build_mode == 'checkout-only' else False,
-                         loop, 1)
-            for p in providedBacklog:
-                resultPath = p.getWorkspacePath()
-                if resultPath not in results:
-                    results.append(resultPath)
-            success = True
-        finally:
-            if jobserverCfg.jobs() > 1: setTui(1, None)
-            builder.saveBuildState()
-            runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
+            success = runHook(recipes, 'preBuildHook',
+                ["/".join(p.getPackage().getStack()) for p in backlog])
+            if not success:
+                raise BuildError("preBuildHook failed!",
+                    help="A preBuildHook is set but it returned with a non-zero status.")
+            success = False
+            if jobserverCfg.jobs() > 1:
+                setTui(jobserverCfg.jobs(), loop)
+                builder.enableBufferedIO()
+            try:
+                builder.cook([ExecutableStep.fromStep(b, LazyIR) for b in backlog],
+                             True if args.build_mode == 'checkout-only' else False,
+                             loop)
+                for p in backlog:
+                    resultPath = p.getWorkspacePath()
+                    if resultPath not in results:
+                        results.append(resultPath)
+                builder.cook([ExecutableStep.fromStep(b, LazyIR) for b in providedBacklog],
+                             True if args.build_mode == 'checkout-only' else False,
+                             loop, 1)
+                for p in providedBacklog:
+                    resultPath = p.getWorkspacePath()
+                    if resultPath not in results:
+                        results.append(resultPath)
+                success = True
+            finally:
+                if jobserverCfg.jobs() > 1: setTui(1, None)
+                builder.saveBuildState()
+                runHook(recipes, 'postBuildHook', ["success" if success else "fail"] + results)
 
     # tell the user
     if results:
