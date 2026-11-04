@@ -248,8 +248,18 @@ pushd test > /dev/null
 # Make sure sandbox helper and native extensions are updated
 $RUN_PYTHON3_COV -m bob.develop.make
 
-# gather tests
+# Gather tests. The integration tests are the slowest ones. Start them first
+# so that they do not delay the end of a parallel test run.
 RUN_TEST_NAMES=( )
+if [[ -n "$RUN_INTEGRATION_PAT" ]] ; then
+	pushd integration > /dev/null
+	for i in * ; do
+		if [[ -d $i && -e "$i/run.py" && "$i" == $RUN_INTEGRATION_PAT ]] ; then
+			RUN_TEST_NAMES+=( "integration:$i" )
+		fi
+	done
+	popd > /dev/null
+fi
 if [[ -n "$RUN_UNITTEST_PAT" ]] ; then
 	pushd unit > /dev/null
 	for i in test_*.py ; do
@@ -264,15 +274,6 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 	for i in * ; do
 		if [[ -d $i && -e "$i/run.sh" && "$i" == $RUN_BLACKBOX_PAT ]] ; then
 			RUN_TEST_NAMES+=( "black-box:$i" )
-		fi
-	done
-	popd > /dev/null
-fi
-if [[ -n "$RUN_INTEGRATION_PAT" ]] ; then
-	pushd integration > /dev/null
-	for i in * ; do
-		if [[ -d $i && -e "$i/run.py" && "$i" == $RUN_INTEGRATION_PAT ]] ; then
-			RUN_TEST_NAMES+=( "integration:$i" )
 		fi
 	done
 	popd > /dev/null
