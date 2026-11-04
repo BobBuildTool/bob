@@ -20,16 +20,16 @@ TEST_PATH2="dir2"
 class TestWebdav(TestCase):
 
     def setUp(self):
-        self.__repodir = TemporaryDirectory()
-        self.srvdir = self.__repodir.name
+        # Use addCleanup() to remove the directory. Cleanups run in LIFO
+        # order, so all mock servers are shut down before the directory is
+        # removed.
+        repodir = TemporaryDirectory()
+        self.addCleanup(repodir.cleanup)
+        self.srvdir = repodir.name
         self.clntdir = os.path.join(self.srvdir, "repo")
         os.mkdir(self.clntdir)
         self.webdav = self._startWebdav()
         super().setUp()
-
-    def tearDown(self):
-        self.__repodir.cleanup()
-        super().tearDown()
 
     def _startWebdav(self, clientRetries=0, **kwargs):
         mock = HttpServerMock(self.srvdir, **kwargs)
