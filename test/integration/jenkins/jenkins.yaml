@@ -1,5 +1,5 @@
 jenkins:
-  quietPeriod: 1
+  quietPeriod: 0
 
   disabledAdministrativeMonitors:
     - hudson.model.UpdateCenter$CoreUpdateMonitor
