@@ -347,6 +347,8 @@ with tempfile.TemporaryDirectory() as jenkinsHome, \
             "-Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true",
             "-Dcasc.jenkins.config=" + os.path.abspath("jenkins.yaml"),
             "-Djava.io.tmpdir=" + tempfile.gettempdir(),
+            "-Dhudson.model.UpdateCenter.never=true",
+            "-Dhudson.model.DownloadService.never=true",
             "-jar", jenkins,
             "--enable-future-java" ],
             env=env)
