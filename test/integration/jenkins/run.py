@@ -332,7 +332,11 @@ if any(not os.path.exists(os.path.join(plugins, i+".jpi")) for i in PLUGINS):
                     check=True)
 
 # Run Jenkins and execute tests
-with tempfile.TemporaryDirectory() as jenkinsHome:
+with tempfile.TemporaryDirectory() as jenkinsHome, \
+     tempfile.TemporaryDirectory() as configHome:
+    # Isolate Bob from the user configuration. Inherited by Jenkins too.
+    os.environ["XDG_CONFIG_HOME"] = configHome
+
     # copy plugins from cache
     shutil.copytree(plugins, os.path.join(jenkinsHome, "plugins"))
     try:
