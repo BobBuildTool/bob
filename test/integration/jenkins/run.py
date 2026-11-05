@@ -18,6 +18,8 @@ import urllib.request
 import urllib.response
 import xml.etree.ElementTree
 
+POLL_INTERVAL = 0.2
+
 if sys.platform == "win32":
     bob = ["cmd", "/C", "bob"]
 else:
@@ -83,20 +85,18 @@ class JenkinsConnection:
             return q['computer'][0]['idle']
 
     def drainBuildQueue(self):
-        for i in range(120):
-            time.sleep(1)
+        deadline = time.monotonic() + 120
+        while True:
             q = self.getBuildQueue()
             if q is None:
                 print("[TEST]:", "Jenkins down!")
                 sys.exit(2)
-            if len(q) > 0:
-                continue
-            if not self.getIdleStatus():
-                continue
-            break
-        else:
-            print("[TEST]:", "Timeout waiting for build queue to drain!")
-            sys.exit(2)
+            if len(q) == 0 and self.getIdleStatus():
+                break
+            if time.monotonic() > deadline:
+                print("[TEST]:", "Timeout waiting for build queue to drain!")
+                sys.exit(2)
+            time.sleep(POLL_INTERVAL)
 
     def getLastBuildStatus(self, job, minNumber=1):
         """Wait for the last build of job to finish.
@@ -104,17 +104,19 @@ class JenkinsConnection:
         The build number must be at least minNumber. This makes sure that a
         build is waited for that might not even be queued yet.
         """
-        status = { 'number' : 0, 'result' : None }
-        i = 30
-        while (status['number'] < minNumber or status['result'] is None) and i > 0:
-            time.sleep(1)
+        deadline = time.monotonic() + 60
+        while True:
             try:
                 with self._send("GET", "job/" + job + "/lastBuild/api/json") as r:
                     status = json.loads(r.read())
+                if status['number'] >= minNumber and status['result'] is not None:
+                    return status
             except urllib.error.HTTPError as e:
                 if e.code != 404: raise # no build yet
-            i -= 1
-        return status
+            if time.monotonic() > deadline:
+                print("[TEST]:", "Timeout waiting for build of", job)
+                sys.exit(2)
+            time.sleep(POLL_INTERVAL)
 
     def getLastBuildResult(self, job, fn):
         status = self.getLastBuildStatus(job)
@@ -363,8 +365,9 @@ with tempfile.TemporaryDirectory() as jenkinsHome, \
         print("[TEST]:", "Jenkins running as pid", jenkinsProc.pid, "in", jenkinsHome)
 
         print("[TEST]:", "Waiting for Jenkins to get ready...")
-        for i in range(120):
-            time.sleep(1)
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            time.sleep(POLL_INTERVAL)
             try:
                 jc = JenkinsConnection("http://localhost:8080/", "bob", "test")
                 if jc.getBuildQueue() == []: break
