@@ -342,6 +342,7 @@ with tempfile.TemporaryDirectory() as jenkinsHome:
             "-Djenkins.install.runSetupWizard=false",
             "-Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true",
             "-Dcasc.jenkins.config=" + os.path.abspath("jenkins.yaml"),
+            "-Djava.io.tmpdir=" + tempfile.gettempdir(),
             "-jar", jenkins,
             "--enable-future-java" ],
             env=env)
