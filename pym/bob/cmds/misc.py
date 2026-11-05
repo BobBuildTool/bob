@@ -93,20 +93,21 @@ def doLS(argv, bobRoot):
     recipes.parse(defines)
 
     packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
-    showAliases = packages.getAliases() if args.package == "" else []
+    with packages:
+        showAliases = packages.getAliases() if args.package == "" else []
 
-    printer = PackagePrinter(args.all, args.origin, args.recursive, args.unsorted)
-    showAlternates = args.alternates and (args.prefixed or args.direct)
-    for (stack, root) in packages.queryTreePath(args.package, showAlternates):
-        if args.prefixed:
-            printer.showPrefixed(root, showAliases, stack)
-        elif args.direct:
-            print("/".join(stack) if stack else "/")
-        elif args.recursive:
-            print("/".join(stack) if stack else "/")
-            printer.showTree(root)
-        else:
-            printer.showPrefixed(root, showAliases)
+        printer = PackagePrinter(args.all, args.origin, args.recursive, args.unsorted)
+        showAlternates = args.alternates and (args.prefixed or args.direct)
+        for (stack, root) in packages.queryTreePath(args.package, showAlternates):
+            if args.prefixed:
+                printer.showPrefixed(root, showAliases, stack)
+            elif args.direct:
+                print("/".join(stack) if stack else "/")
+            elif args.recursive:
+                print("/".join(stack) if stack else "/")
+                printer.showTree(root)
+            else:
+                printer.showPrefixed(root, showAliases)
 
 class Default(dict):
     def __init__(self, default, *args, **kwargs):
@@ -147,10 +148,11 @@ def doQueryMeta(argv, bobRoot):
             for ps in package.getDirectDepSteps():
                 showPackage(ps.getPackage(), recurse, done)
 
-    done = set()
-    for p in args.packages:
-        for package in packages.queryPackagePath(p):
-            showPackage(package, args.recursive, done)
+    with packages:
+        done = set()
+        for p in args.packages:
+            for package in packages.queryPackagePath(p):
+                showPackage(package, args.recursive, done)
 
 def doQuerySCM(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-scm",
@@ -217,11 +219,12 @@ are used:
             for ps in package.getDirectDepSteps():
                 showPackage(ps.getPackage(), recurse, done, donePackages)
 
-    done = set()
-    donePackages = set()
-    for p in args.packages:
-        for package in packages.queryPackagePath(p):
-            showPackage(package, args.recursive, done, donePackages)
+    with packages:
+        done = set()
+        donePackages = set()
+        for p in args.packages:
+            for package in packages.queryPackagePath(p):
+                showPackage(package, args.recursive, done, donePackages)
 
 def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
@@ -238,10 +241,11 @@ def doQueryRecipe(argv, bobRoot):
     recipes.parse(defines)
     packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
 
-    result = set()
-    for p in args.packages:
-        for package in packages.queryPackagePath(p):
-            result.update(package.getRecipe().getSources())
+    with packages:
+        result = set()
+        for p in args.packages:
+            for package in packages.queryPackagePath(p):
+                result.update(package.getRecipe().getSources())
 
     for fn in sorted(result):
         print(fn)
@@ -309,7 +313,8 @@ def doLsRecipes(argv, bobRoot):
 
     if args.mode in ('used', 'orphaned'):
         packages = recipes.generatePackages(lambda s,m: "unused", args.sandbox)
-        used = set(p.getName() for p in packages.queryPackagePath("//*"))
+        with packages:
+            used = set(p.getName() for p in packages.queryPackagePath("//*"))
 
     if args.mode in ('all', 'orphaned'):
         # filter virtual root recipe

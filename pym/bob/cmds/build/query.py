@@ -8,6 +8,7 @@ from ...errors import ParseError
 from ...input import RecipeSet
 from ..helpers import processDefines, addStandardArgs
 from string import Formatter
+from contextlib import nullcontext
 import argparse
 import os
 import sys
@@ -105,33 +106,33 @@ been executed or does not exist), the line is omitted.
 
     # Find roots
     packages = recipes.generatePackages(nameFormatter, args.sandbox)
-    if args.dev: developPersister.prime(packages)
 
     matched = False
     # Loop through packages
-    for p in args.packages:
-        # Format this package.
-        # Only show the package if all of the requested directory names are present
-        for package in packages.queryPackagePath(p):
-            matched = True
-            state = State()
-            for (text, var, spec, conversion) in Formatter().parse(args.f):
-                state.appendText(text)
-                if var is None:
-                    pass
-                elif var == 'name':
-                    state.appendText("/".join(package.getStack()))
-                elif var == 'src':
-                    state.appendStep(package.getCheckoutStep())
-                elif var == 'build':
-                    state.appendStep(package.getBuildStep())
-                elif var == 'dist':
-                    state.appendStep(package.getPackageStep())
-                else:
-                    raise ParseError("Unknown field '{" + var + "}'")
+    with packages, (developPersister.prime(packages) if args.dev else nullcontext()):
+        for p in args.packages:
+            # Format this package.
+            # Only show the package if all of the requested directory names are present
+            for package in packages.queryPackagePath(p):
+                matched = True
+                state = State()
+                for (text, var, spec, conversion) in Formatter().parse(args.f):
+                    state.appendText(text)
+                    if var is None:
+                        pass
+                    elif var == 'name':
+                        state.appendText("/".join(package.getStack()))
+                    elif var == 'src':
+                        state.appendStep(package.getCheckoutStep())
+                    elif var == 'build':
+                        state.appendStep(package.getBuildStep())
+                    elif var == 'dist':
+                        state.appendStep(package.getPackageStep())
+                    else:
+                        raise ParseError("Unknown field '{" + var + "}'")
 
-            # Show
-            state.print()
+                # Show
+                state.print()
 
     if not matched:
         if not args.quiet:

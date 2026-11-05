@@ -39,6 +39,7 @@ class DevelopDirOracle:
         self.__known = {}
         self.__visited = set()
         self.__ready = False
+        self.__db = None
 
     def __fmt(self, step, props):
         key = step.getPackage().getRecipe().getName().encode("utf8") + step.getVariantId()
@@ -144,8 +145,30 @@ class DevelopDirOracle:
             self.__openAndRefresh(packages.getCacheKey(),
                 packages.getRootPackage())
         except sqlite3.Error as e:
+            self.close()
             raise BobError("Cannot save directory mapping: " + str(e))
+        except:
+            self.close()
+            raise
         self.__ready = True
+        return self
+
+    def close(self):
+        """Close the database.
+
+        Must be called when the name formatter is not used anymore.
+        """
+        if self.__db is not None:
+            self.__db.close()
+            self.__db.connection.close()
+            self.__db = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
 
     def getFormatter(self):
         return self.__fmt

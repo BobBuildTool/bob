@@ -260,9 +260,10 @@ def doShow(argv, bobRoot):
         filt = lambda x, filt=filt: filterFields(filt(x), args.field)
 
     docs = []
-    for p in args.packages:
-        for package in packages.queryPackagePath(p):
-            docs.append(("/".join(package.getStack()), filt(dumpPackage(package))))
+    with packages:
+        for p in args.packages:
+            for package in packages.queryPackagePath(p):
+                docs.append(("/".join(package.getStack()), filt(dumpPackage(package))))
 
     if not docs:
         print("Your query matched no packets!", file=sys.stderr)
