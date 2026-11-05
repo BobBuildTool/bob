@@ -181,6 +181,7 @@ def prepare(d):
         print('bobMinimumVersion: "0.20"', file=f)
         if sys.platform == "win32":
             print('scriptLanguage: PowerShell', file=f)
+            print('windowsPowerShellExecutable: pwsh', file=f)
         else:
             print('scriptLanguage: bash', file=f)
 
