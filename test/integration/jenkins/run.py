@@ -296,9 +296,9 @@ TESTS = (
 ###############################################################################
 
 JENKINS_FILE = "jenkins.war"
-JENKINS_URL = "https://get.jenkins.io/war-stable/2.528.2/jenkins.war"
+JENKINS_URL = "https://get.jenkins.io/war-stable/2.580.2/jenkins.war"
 PLUGIN_MANAGER_FILE = "jenkins-plugin-manager.jar"
-PLUGIN_MANAGER_URL = "https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.12.3/jenkins-plugin-manager-2.12.3.jar"
+PLUGIN_MANAGER_URL = "https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.16.0/jenkins-plugin-manager-2.16.0.jar"
 
 PLUGINS = [
     # Required by Bob
