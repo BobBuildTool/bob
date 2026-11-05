@@ -98,13 +98,21 @@ class JenkinsConnection:
             print("[TEST]:", "Timeout waiting for build queue to drain!")
             sys.exit(2)
 
-    def getLastBuildStatus(self, job):
-        status = { 'result' : None }
+    def getLastBuildStatus(self, job, minNumber=1):
+        """Wait for the last build of job to finish.
+
+        The build number must be at least minNumber. This makes sure that a
+        build is waited for that might not even be queued yet.
+        """
+        status = { 'number' : 0, 'result' : None }
         i = 30
-        while status['result'] is None and i > 0:
+        while (status['number'] < minNumber or status['result'] is None) and i > 0:
             time.sleep(1)
-            with self._send("GET", "job/" + job + "/lastBuild/api/json") as r:
-                status = json.loads(r.read())
+            try:
+                with self._send("GET", "job/" + job + "/lastBuild/api/json") as r:
+                    status = json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                if e.code != 404: raise # no build yet
             i -= 1
         return status
 
@@ -210,7 +218,7 @@ def testGitModule(jc):
 
         jc.triggerScmPoll("testGitModule-root")
         jc.drainBuildQueue()
-        newStatus = jc.getLastBuildStatus("testGitModule-root")
+        newStatus = jc.getLastBuildStatus("testGitModule-root", status["number"] + 1)
         print(jc.getLastBuildLog("testGitModule-root"))
         assertEqual(newStatus["result"], "SUCCESS")
         assertNotEqual(status["number"], newStatus["number"])
@@ -249,7 +257,7 @@ def testSvnModule(jc):
 
         jc.triggerScmPoll("testSvnModule-root")
         jc.drainBuildQueue()
-        newStatus = jc.getLastBuildStatus("testSvnModule-root")
+        newStatus = jc.getLastBuildStatus("testSvnModule-root", status["number"] + 1)
         print(jc.getLastBuildLog("testSvnModule-root"))
         assertEqual(newStatus["result"], "SUCCESS")
         assertNotEqual(status["number"], newStatus["number"])
