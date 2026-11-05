@@ -86,6 +86,31 @@ class JenkinsConnection:
             q = json.loads(response.read())
             return q['computer'][0]['idle']
 
+    def dumpState(self):
+        """Print queued and running builds to diagnose a timeout."""
+        try:
+            for item in self.getBuildQueue():
+                print("[TEST]:", "Queued:", item.get('task', {}).get('name'),
+                      "-", item.get('why'))
+
+            tree = "currentExecutable[url,fullDisplayName]"
+            with self._send("GET", "computer/api/json?tree=computer[displayName,"
+                            "executors[{0}],oneOffExecutors[{0}]]".format(tree)) as r:
+                computers = json.loads(r.read())['computer']
+            for computer in computers:
+                for executor in computer['executors'] + computer['oneOffExecutors']:
+                    build = executor.get('currentExecutable')
+                    if build is None: continue
+                    print("[TEST]:", "Running on", computer['displayName'] + ":",
+                          build['fullDisplayName'])
+                    path = urllib.parse.urlsplit(build['url']).path.lstrip("/")
+                    with self._send("GET", path + "consoleText") as r:
+                        log = r.read().decode("utf-8", errors="replace").splitlines()
+                    for line in log[-200:]:
+                        print("[TEST]:", "  |", line)
+        except Exception as e:
+            print("[TEST]:", "Cannot dump Jenkins state:", e)
+
     def drainBuildQueue(self):
         deadline = time.monotonic() + 120
         while True:
@@ -97,6 +122,7 @@ class JenkinsConnection:
                 break
             if time.monotonic() > deadline:
                 print("[TEST]:", "Timeout waiting for build queue to drain!")
+                self.dumpState()
                 sys.exit(2)
             time.sleep(POLL_INTERVAL)
 
@@ -117,6 +143,7 @@ class JenkinsConnection:
                 if e.code != 404: raise # no build yet
             if time.monotonic() > deadline:
                 print("[TEST]:", "Timeout waiting for build of", job)
+                self.dumpState()
                 sys.exit(2)
             time.sleep(POLL_INTERVAL)
 
