@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 import base64
+import contextlib
 import http.cookiejar
 import json
 import os, os.path
 import pathlib
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -341,14 +343,62 @@ if any(not os.path.exists(os.path.join(plugins, i+".jpi")) for i in PLUGINS):
                     "--war", jenkins, "-d", plugins, "--plugins"] + PLUGINS,
                     check=True)
 
+@contextlib.contextmanager
+def tempDir():
+    """Temporary directory that does not fail the test if it cannot be removed.
+
+    On Windows, files are locked as long as they are open or are the working
+    directory of some process. Even after Jenkins and all its builds were
+    stopped, it might take a moment until the files can be removed. Retry for a
+    while and give up with a warning eventually. Otherwise the cleanup error
+    would mask the real test result.
+    """
+    d = tempfile.TemporaryDirectory()
+    try:
+        yield d.name
+    finally:
+        for i in range(10):
+            try:
+                d.cleanup()
+                break
+            except OSError as e:
+                err = e
+                time.sleep(0.5)
+        else:
+            print("[TEST]:", "Warning: cannot remove", d.name, ":", err)
+
+def stopJenkins(proc):
+    """Stop Jenkins including all processes of still running builds."""
+    if proc.poll() is None:
+        print("[TEST]:", "Shutting down Jenkins...")
+        if sys.platform == "win32":
+            # Terminating the Jenkins process does not kill its children on
+            # Windows. Kill the whole process tree instead.
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            os.killpg(proc.pid, signal.SIGTERM)
+        try:
+            proc.wait(10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+
+    # Make sure no build process survives Jenkins
+    if sys.platform != "win32":
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
 # Run Jenkins and execute tests
-with tempfile.TemporaryDirectory() as jenkinsHome, \
-     tempfile.TemporaryDirectory() as configHome:
+with tempDir() as jenkinsHome, tempDir() as configHome:
     # Isolate Bob from the user configuration. Inherited by Jenkins too.
     os.environ["XDG_CONFIG_HOME"] = configHome
 
     # copy plugins from cache
     shutil.copytree(plugins, os.path.join(jenkinsHome, "plugins"))
+    jenkinsProc = None
     try:
         env = os.environ.copy()
         env["JENKINS_HOME"] = os.path.abspath(jenkinsHome)
@@ -361,7 +411,7 @@ with tempfile.TemporaryDirectory() as jenkinsHome, \
             "-Dhudson.model.DownloadService.never=true",
             "-jar", jenkins,
             "--enable-future-java" ],
-            env=env)
+            env=env, start_new_session=(sys.platform != "win32"))
         print("[TEST]:", "Jenkins running as pid", jenkinsProc.pid, "in", jenkinsHome)
 
         print("[TEST]:", "Waiting for Jenkins to get ready...")
@@ -387,7 +437,5 @@ with tempfile.TemporaryDirectory() as jenkinsHome, \
             test(jc)
 
     finally:
-        if jenkinsProc.poll() is None:
-            print("[TEST]:", "Shutting down Jenkins...")
-            jenkinsProc.terminate()
-            jenkinsProc.wait(10)
+        if jenkinsProc is not None:
+            stopJenkins(jenkinsProc)
