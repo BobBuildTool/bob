@@ -595,7 +595,7 @@ class _BobState():
         ret = copy.deepcopy(self.__dirStates.get(path, {} if isSourceDir else None))
         if isSourceDir:
             # convert from old format if necessary
-            ret = { k : v if isinstance(v, tuple) else (v, None)
+            ret = { k : v if isinstance(k, int) or isinstance(v, tuple) else (v, None)
                 for k, v in ret.items() }
         return ret
 
@@ -788,4 +788,3 @@ def finalize():
     if _BobState.instance is not None:
         _BobState.instance.finalize()
         _BobState.instance = None
-
