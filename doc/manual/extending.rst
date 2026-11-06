@@ -173,12 +173,18 @@ additional keyword arguments. Currently the following additional kwargs are
 passed:
 
 * ``env``: dict of all available environment variables at the current context
+* ``recipeSet``: the :class:`bob.input.RecipeSet` of the project
 * ``recipe``: the current :class:`bob.input.Recipe`
 * ``sandbox``: ``True`` if a sandbox *image* is used. ``False`` if no sandbox image was
   configured or if it is disabled (e.g. ``--no-sandbox`` option was specified).
 * ``states``: a Mapping[str, :class:`bob.input.PluginState`] which holds the
   state of all *property state tracker* objects. See `Custom recipe properties`_
   below.
+
+Only ``env`` and ``recipeSet`` are passed everywhere. The other kwargs depend
+on the context of the substitution. They are missing in particular in the
+``environment`` section of ``default.yaml`` because it is calculated once for
+the whole project and not for a particular recipe.
 
 In the future additional keyword args may be added without notice. Such string
 functions should therefore have a catch-all ``**kwargs`` parameter. A sample implementation

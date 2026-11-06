@@ -2696,8 +2696,9 @@ class Recipe(object):
         interpreters = inputInterpreters.copy()
         inputEnv = inputEnv.derive()
         inputEnv.touchReset()
-        inputEnv.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-            "__tools" : tools, "states" : states })
+        inputEnv.setFunArgs({ "recipe" : self, "recipeSet" : self.__recipeSet,
+            "sandbox" : bool(sandbox) and sandboxEnabled, "__tools" : tools,
+            "states" : states })
         env = inputEnv.derive()
         for i in self.__varSelf:
             env.update(env.substituteCondDict(i, "environment"))
@@ -2725,8 +2726,9 @@ class Recipe(object):
         resolvedDeps = []
 
         for dep in self.__deps:
-            env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-                "__tools" : tools, "states" : states })
+            env.setFunArgs({ "recipe" : self, "recipeSet" : self.__recipeSet,
+                "sandbox" : bool(sandbox) and sandboxEnabled, "__tools" : tools,
+                "states" : states })
 
             skip = dep.condition and not all(env.evaluate(cond, "dependency "+dep.recipe)
                                                           for cond in dep.condition)
@@ -2911,8 +2913,9 @@ class Recipe(object):
 
         # Calculate used tools. They are conditional.
         toolsView = tools.inspect()
-        env.setFunArgs({ "recipe" : self, "sandbox" : bool(sandbox) and sandboxEnabled,
-            "__tools" : tools, "states" : states })
+        env.setFunArgs({ "recipe" : self, "recipeSet" : self.__recipeSet,
+            "sandbox" : bool(sandbox) and sandboxEnabled, "__tools" : tools,
+            "states" : states })
 
         toolDepCheckout = set(name for (name, cond) in self.__toolDepCheckout
                               if env.evaluate(cond, "checkoutTools"))
@@ -4253,9 +4256,11 @@ class RecipeSet:
         # calculate start environment
         osEnv = Env(os.environ)
         osEnv.setFuns(self.__stringFunctions)
+        osEnv.setFunArgs({ "recipeSet" : self })
         env = Env({ k : osEnv.substitute(v, k) for (k, v) in
             self.__defaultEnv.items() })
         env.setFuns(self.__stringFunctions)
+        env.setFunArgs({ "recipeSet" : self })
         env.update(envOverrides)
         env["BOB_HOST_PLATFORM"] = self.__platform
         self.__rootEnv = env
@@ -4266,8 +4271,8 @@ class RecipeSet:
         for recipe in self.__recipes.values():
             try:
                 recipeEnv = env.copy()
-                recipeEnv.setFunArgs({ "recipe" : recipe, "sandbox" : False,
-                    "__tools" : {}, "states" : states })
+                recipeEnv.setFunArgs({ "recipe" : recipe, "recipeSet" : self,
+                    "sandbox" : False, "__tools" : {}, "states" : states })
                 recipe.resolveClasses(recipeEnv)
             except ParseError as e:
                 e.pushFrame(recipe.getPackageName())
