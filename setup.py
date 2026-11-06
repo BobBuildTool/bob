@@ -9,6 +9,28 @@ from setuptools.dist import Distribution
 import os
 import sys
 
+MANPAGES = [
+    ("bob", 1),
+    ("bob-archive", 1),
+    ("bob-build", 1),
+    ("bob-clean", 1),
+    ("bob-dev", 1),
+    ("bob-graph", 1),
+    ("bob-init", 1),
+    ("bob-jenkins", 1),
+    ("bob-layers", 1),
+    ("bob-ls", 1),
+    ("bob-ls-recipes", 1),
+    ("bob-project", 1),
+    ("bob-query-meta", 1),
+    ("bob-query-path", 1),
+    ("bob-query-recipe", 1),
+    ("bob-query-scm", 1),
+    ("bob-show", 1),
+    ("bob-status", 1),
+    ("bobpaths", 7),
+]
+
 
 # Simple override of Distribution that forces "Root-Is-Purelib: false" on Linux
 # because of the statically linked bob-namespace-sandbox applet. Use the
@@ -56,7 +78,28 @@ class BuildManpages(Command):
         pass
 
     def run(self):
-        self.spawn(["sphinx-build", "-b", "man", "doc", "doc/_build/man"])
+        self.spawn([sys.executable, "-m", "sphinx", "-b", "man", "doc", "doc/_build/man"])
+
+# Additional command to build the manpages as plain text. They are installed as
+# package data and used by "bob help" if no "man" is available (e.g. on
+# Windows).
+class BuildHelpText(Command):
+    description = "Build plain text help pages"
+    user_options = []
+
+    def initialize_options(self):
+        self.build_lib = None
+
+    def finalize_options(self):
+        self.set_undefined_options('build', ('build_lib', 'build_lib'))
+
+    def run(self):
+        self.spawn([sys.executable, "-m", "sphinx", "-b", "text", "doc", "doc/_build/text"])
+        dest = os.path.join(self.build_lib, "bob", "_man")
+        self.mkpath(dest)
+        for name, _ in MANPAGES:
+            self.copy_file(os.path.join("doc", "_build", "text", "manpages", name + ".txt"),
+                           dest)
 
 # Wrapper around build command to force automatic execution of the
 # documentation and applet builds.
@@ -64,41 +107,27 @@ class build(build_orig):
     sub_commands = [
         ('build_apps', BuildApps.enabled ),
         ('build_man', BuildManpages.enabled ),
+        ('build_help', None ),
     ] + build_orig.sub_commands
 
 cmdclass = {
     'build' : build,
     'build_apps': BuildApps,
     'build_man' : BuildManpages,
+    'build_help' : BuildHelpText,
 }
 data_files = []
 
 # Sphinx manpages and bash completion do not work on Windows
 if sys.platform != 'win32':
     data_files.extend([
-        ('share/man/man1', [
-            'doc/_build/man/bob.1',
-            'doc/_build/man/bob-archive.1',
-            'doc/_build/man/bob-build.1',
-            'doc/_build/man/bob-clean.1',
-            'doc/_build/man/bob-dev.1',
-            'doc/_build/man/bob-graph.1',
-            'doc/_build/man/bob-init.1',
-            'doc/_build/man/bob-jenkins.1',
-            'doc/_build/man/bob-layers.1',
-            'doc/_build/man/bob-ls.1',
-            'doc/_build/man/bob-ls-recipes.1',
-            'doc/_build/man/bob-project.1',
-            'doc/_build/man/bob-query-meta.1',
-            'doc/_build/man/bob-query-path.1',
-            'doc/_build/man/bob-query-recipe.1',
-            'doc/_build/man/bob-query-scm.1',
-            'doc/_build/man/bob-show.1',
-            'doc/_build/man/bob-status.1',
-        ]),
-        ('share/man/man7', [
-            'doc/_build/man/bobpaths.7',
-        ]),
+        ('share/man/man' + str(section), [
+            'doc/_build/man/{}.{}'.format(name, section)
+            for name, sec in MANPAGES if sec == section
+        ])
+        for section in sorted(set(sec for _, sec in MANPAGES))
+    ])
+    data_files.extend([
         ('share/bash-completion/completions', [
             'contrib/bash-completion/bob'
         ]),

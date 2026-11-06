@@ -38,3 +38,9 @@ expect_equal "$(sed -n '/plugin defined commands/,$p' log-cmd.txt)" \
 run_bob init . build
 run_bob -C build help -a > log-cmd.txt
 sed -n '/plugin defined commands/,$p' log-cmd.txt | diff -u output-plugins.txt -
+
+# Help for a built-in command shows its manpage. Without "man" (e.g. on
+# Windows) the plain text version is displayed. Do not pipe directly into grep.
+# It could kill Bob with SIGPIPE and corrupt coverage data.
+run_bob help build > log-cmd.txt
+grep -q "Bob release mode build" log-cmd.txt
