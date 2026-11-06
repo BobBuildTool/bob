@@ -460,6 +460,7 @@ class StringLiteral(BaseASTNode):
             env.setFunArgs({
                 "package" : pkg,
                 "recipe" : pkg.getRecipe(),
+                "recipeSet" : pkg.getRecipe().getRecipeSet(),
                 "sandbox" : (pkg._getSandboxRaw() or sandboxSentinel).isEnabled(),
                 "__tools" : pkgStep.getTools(),
                 "states" : pkg.getPluginStates(),
