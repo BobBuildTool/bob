@@ -29,10 +29,16 @@ from bob.utils import asHexStr, runInEventLoop, getProcessPoolExecutor, isWindow
 # Do not wait between retries.
 noRetryDelay = patch.object(UrlScm, "RETRY_DELAY", 0)
 
+# Starting and stopping a process pool is expensive. Share it between all tests.
+processPool = None
+
 def setUpModule():
+    global processPool
     noRetryDelay.start()
+    processPool = getProcessPoolExecutor()
 
 def tearDownModule():
+    processPool.shutdown()
     noRetryDelay.stop()
 
 INVALID_FILE = "C:\\does\\not\\exist" if sys.platform == "win32" else "/does/not/exist/"
@@ -76,8 +82,11 @@ class TemporaryWorkspace:
 class UrlScmExecutor:
 
     def invokeScm(self, workspace, scm, switch=False, oldScm=None, workspaceCreated=False, executor=None):
-        if executor is None:
-            executor = getProcessPoolExecutor()
+        # An executor passed by the caller is shut down here. The shared process
+        # pool is shut down by tearDownModule().
+        ownExecutor = executor is not None
+        if not ownExecutor:
+            executor = processPool
         try:
             spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
             invoker = Invoker(spec, False, True, True, True, True, False,
@@ -87,7 +96,8 @@ class UrlScmExecutor:
             else:
                 runInEventLoop(scm.invoke(invoker, workspaceCreated))
         finally:
-            executor.shutdown()
+            if ownExecutor:
+                executor.shutdown()
 
     def createUrlScm(self, spec = {}, preMirrors=[], fallbackMirrors=[],
                      defaultFileMode=None, separateDownload=True):
