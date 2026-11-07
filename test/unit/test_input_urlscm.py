@@ -26,6 +26,15 @@ from bob.invoker import Invoker, InvocationError
 from bob.errors import ParseError, BuildError
 from bob.utils import asHexStr, runInEventLoop, getProcessPoolExecutor, isWindows
 
+# Do not wait between retries.
+noRetryDelay = patch.object(UrlScm, "RETRY_DELAY", 0)
+
+def setUpModule():
+    noRetryDelay.start()
+
+def tearDownModule():
+    noRetryDelay.stop()
+
 INVALID_FILE = "C:\\does\\not\\exist" if sys.platform == "win32" else "/does/not/exist/"
 
 def makeFileUrl(fn):
