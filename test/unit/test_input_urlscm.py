@@ -414,7 +414,7 @@ class TestDownloads(UrlScmTest, TestCase):
 
             self.assertEqual(srv.getRequests, 1, "URL SCM does not retry on disk full errors")
 
-class TestExtraction(TestCase):
+class TestGzipExtraction(UrlScmExecutor, TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -442,16 +442,6 @@ class TestExtraction(TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.__repodir.cleanup()
-
-    def invokeScm(self, workspace, scm):
-        executor = getProcessPoolExecutor()
-        try:
-            spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
-            invoker = Invoker(spec, False, True, True, True, True, False,
-                              executor=executor)
-            runInEventLoop(scm.invoke(invoker, False))
-        finally:
-            executor.shutdown()
 
     def createUrlScm(self, spec = {}):
         s = {
@@ -500,6 +490,7 @@ class TestExtraction(TestCase):
             self.assertNotExists(os.path.join(workspace, "src"))
             self.assertNotExists(os.path.join(workspace, "src", "test.txt"))
 
+    @skipIf(sys.platform == "win32", "gunzip missing on Windows")
     def testGz(self):
         scm = self.createUrlScm({
             "url" : self.gzFile,
@@ -510,6 +501,7 @@ class TestExtraction(TestCase):
             self.assertExists(os.path.join(workspace, "test.txt.gz"))
             self.assertExists(os.path.join(workspace, "test.txt"))
 
+    @skipIf(sys.platform == "win32", "gunzip missing on Windows")
     def testGzDoubleInvocation(self):
         """Invoking the SCM twice does not touch the extracted file"""
         scm = self.createUrlScm({
