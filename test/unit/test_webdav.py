@@ -2,10 +2,14 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from bob.webdav import WebDav, WebdavError, WebdavAlreadyExistsError, WebdavNotFoundError
+from bob.webdav import WebDav, WebdavError, WebdavAlreadyExistsError, WebdavNotFoundError, \
+    WebdavNotModifiedError, parseRetryAfter
+from email.utils import format_datetime
+from datetime import datetime, timedelta, timezone
 from mocks.http_server import HttpServerMock
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from unittest import TestCase
+from unittest.mock import patch
 from urllib.parse import urlparse
 import os
 import time
@@ -16,6 +20,15 @@ TEST_OUTPUT="testoutput"
 TEST_OUTPUT_SIZE=10
 TEST_PATH1="dir1"
 TEST_PATH2="dir2"
+
+# Do not wait between retries. The backoff itself has dedicated tests.
+noRetryDelay = patch.object(WebDav, "RETRY_DELAY", 0)
+
+def setUpModule():
+    noRetryDelay.start()
+
+def tearDownModule():
+    noRetryDelay.stop()
 
 class TestWebdav(TestCase):
 
@@ -32,11 +45,15 @@ class TestWebdav(TestCase):
         super().setUp()
 
     def _startWebdav(self, clientRetries=0, **kwargs):
+        return self._startWebdavWithStats(clientRetries, **kwargs)[0]
+
+    def _startWebdavWithStats(self, clientRetries=0, **kwargs):
         mock = HttpServerMock(self.srvdir, **kwargs)
         srv = mock.__enter__()
         self.addCleanup(mock.__exit__, None, None, None)
-        return WebDav(urlparse("http://127.0.0.1:{}/repo/".format(srv.port)),
-                      retries=clientRetries)
+        return (WebDav(urlparse("http://127.0.0.1:{}/repo/".format(srv.port)),
+                       retries=clientRetries),
+                srv)
 
     def _serverPath(self, path):
         return os.path.join(self.clntdir, path)
@@ -66,6 +83,16 @@ class TestWebdav(TestCase):
             self.webdav.upload(TEST_FILE, file, False)
             with self.assertRaises(WebdavAlreadyExistsError):
                 self.webdav.upload(TEST_FILE, file, False)
+
+    def testUploadAlreadyExistsNotRetried(self):
+        """A 412 is a definitive answer and is not retried"""
+        webdav, stats = self._startWebdavWithStats(clientRetries=2)
+        with NamedTemporaryFile() as file:
+            file.write(TEST_OUTPUT.encode('utf-8'))
+            webdav.upload(TEST_FILE, file, False)
+            with self.assertRaises(WebdavAlreadyExistsError):
+                webdav.upload(TEST_FILE, file, False)
+        self.assertEqual(stats.putRequests, 2)
 
     def testUploadOverwrite(self):
         """Uploading with overwrite replaces the existing content"""
@@ -172,12 +199,91 @@ class TestWebdav(TestCase):
         with self.assertRaises(WebdavError):
             webdav.download(TEST_FILE)
 
-    def testDownloadNotFoundSurvivesRetryBudget(self):
-        """A permanent 404 is retried like any other error, but the specific
-        WebdavNotFoundError is still raised once the budget is exhausted"""
-        webdav = self._startWebdav(clientRetries=2)
+    def testDownloadNotFoundNotRetried(self):
+        """A 404 is a definitive answer and is not retried"""
+        webdav, stats = self._startWebdavWithStats(clientRetries=2)
         with self.assertRaises(WebdavNotFoundError):
             webdav.download(TEST_FILE)
+        self.assertEqual(stats.getRequests, 1)
+
+    def testPermanentErrorNotRetried(self):
+        """Only transient server errors are retried. Other errors, like the
+        missing authentication here, are a definitive answer."""
+        webdav, stats = self._startWebdavWithStats(clientRetries=2,
+            username="user", password="pass")
+        with self.assertRaises(WebdavError) as cm:
+            webdav.download(TEST_FILE)
+        self.assertEqual(cm.exception.status, 401)
+        self.assertEqual(stats.getRequests, 1)
+
+    def testTransientErrorStatus(self):
+        """A transient server error carries its status code. Transport
+        errors have none."""
+        webdav = self._startWebdav(retries=1)
+        with self.assertRaises(WebdavError) as cm:
+            webdav.download(TEST_FILE)
+        self.assertEqual(cm.exception.status, 500)
+
+        webdav = self._startWebdav(noResponse=True)
+        with self.assertRaises(WebdavError) as cm:
+            webdav.download(TEST_FILE)
+        self.assertIsNone(cm.exception.status)
+
+    def testRetryBackoff(self):
+        """The delay between retries doubles with every attempt"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        with patch.object(WebDav, "RETRY_DELAY", 1.0), patch("bob.webdav.time") as t:
+            webdav = self._startWebdav(clientRetries=3, retries=3)
+            self.assertEqual(webdav.download(TEST_FILE).decode('utf-8'), TEST_OUTPUT)
+        self.assertEqual([ c.args for c in t.sleep.call_args_list ],
+                         [(1.0,), (2.0,), (4.0,)])
+
+    def testRetryBackoffCapped(self):
+        """The delay between retries is limited"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        with patch.object(WebDav, "RETRY_DELAY", 20.0), patch("bob.webdav.time") as t:
+            webdav = self._startWebdav(clientRetries=3, retries=3)
+            webdav.download(TEST_FILE)
+        self.assertEqual([ c.args for c in t.sleep.call_args_list ],
+                         [(20.0,), (30.0,), (30.0,)])
+
+    def testNoBackoffForPermanentError(self):
+        """Permanent errors fail immediately without waiting"""
+        with patch.object(WebDav, "RETRY_DELAY", 1.0), patch("bob.webdav.time") as t:
+            webdav = self._startWebdav(clientRetries=2, username="user",
+                                       password="pass")
+            with self.assertRaises(WebdavError):
+                webdav.download(TEST_FILE)
+        t.sleep.assert_not_called()
+
+    def testParseRetryAfter(self):
+        """The Retry-After header is either a number of seconds or a date"""
+        self.assertEqual(parseRetryAfter({"Retry-After": "120"}), 120.0)
+        self.assertEqual(parseRetryAfter({"Retry-After": " 5 "}), 5.0)
+        future = datetime.now(timezone.utc) + timedelta(seconds=60)
+        self.assertAlmostEqual(
+            parseRetryAfter({"Retry-After": format_datetime(future, usegmt=True)}),
+            60.0, delta=5.0)
+        past = datetime.now(timezone.utc) - timedelta(seconds=60)
+        self.assertEqual(
+            parseRetryAfter({"Retry-After": format_datetime(past, usegmt=True)}), 0.0)
+        self.assertIsNone(parseRetryAfter({"Retry-After": "-5"}))
+        self.assertIsNone(parseRetryAfter({"Retry-After": "soon"}))
+        self.assertIsNone(parseRetryAfter({"Retry-After": "\u00b2"}))
+        self.assertIsNone(parseRetryAfter({}))
+        self.assertIsNone(parseRetryAfter(None))
+
+    def testDownloadNotModifiedNotRetried(self):
+        """A 304 is a definitive answer and is not retried"""
+        with open(self._serverPath(TEST_FILE), 'w') as f:
+            f.write(TEST_OUTPUT)
+        webdav, stats = self._startWebdavWithStats(clientRetries=2)
+        with self.assertRaises(WebdavNotModifiedError):
+            webdav.openDownload(TEST_FILE, headers={
+                "If-Modified-Since" : "Thu, 01 Jan 1970 00:00:00 GMT"})
+        self.assertEqual(stats.getRequests, 1)
 
     def testExists(self):
         """exists() reports True for an existing file"""
