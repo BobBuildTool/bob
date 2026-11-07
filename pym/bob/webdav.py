@@ -1,9 +1,12 @@
 from . import BOB_VERSION
 from .errors import BuildError
 from .utils import sslNoVerifyContext
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import base64
 import sys
 import os
+import time
 import urllib.request
 from urllib.parse import unquote, urlsplit, urlunsplit
 from xml.etree.ElementTree import fromstring
@@ -14,11 +17,13 @@ class WebdavError(Exception):
 
     The ``status`` holds the HTTP status code of the server reply. It is
     ``None`` if the request failed on the transport level, e.g. because the
-    connection was refused or dropped.
+    connection was refused or dropped. The ``retryAfter`` holds the number of
+    seconds that the server asked to wait before trying again, if any.
     """
-    def __init__(self, *args, status=None):
+    def __init__(self, *args, status=None, retryAfter=None):
         super().__init__(*args)
         self.status = status
+        self.retryAfter = retryAfter
 
 class WebdavNotFoundError(WebdavError):
     pass
@@ -28,6 +33,33 @@ class WebdavAlreadyExistsError(WebdavError):
 
 class WebdavNotModifiedError(WebdavError):
     pass
+
+
+def parseRetryAfter(headers):
+    """Parse the "Retry-After" header of an HTTP reply.
+
+    Returns the number of seconds to wait or ``None`` if the header is missing
+    or malformed. The header is either a number of seconds or a date.
+    """
+    value = headers.get("Retry-After") if headers is not None else None
+    if value is None:
+        return None
+    value = value.strip()
+    if value.isascii() and value.isdigit():
+        return float(value)
+    try:
+        date = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if date.tzinfo is None:
+        date = date.replace(tzinfo=timezone.utc)
+    return max(0.0, (date - datetime.now(timezone.utc)).total_seconds())
+
+
+def httpError(msg, err):
+    """Create WebdavError from urllib.error.HTTPError"""
+    return WebdavError(msg, status=err.status,
+                       retryAfter=parseRetryAfter(err.headers))
 
 
 def getNetLoc(url):
@@ -69,21 +101,41 @@ class WebDav:
     # Gateway Timeout.
     TRANSIENT_STATUS = frozenset([408, 429, 500, 502, 503, 504])
 
+    # Delay in seconds before the first retry. It is doubled on every further
+    # retry, up to RETRY_MAX_DELAY. The server may request a different delay
+    # by the "Retry-After" header. If that exceeds RETRY_MAX_DELAY the server
+    # will not be available soon and the request fails immediately.
+    RETRY_DELAY = 1.0
+    RETRY_MAX_DELAY = 30.0
+
     def __init__(self, url, sslVerify=True, retries=0):
         self.__url = url
         self.__connection = None
         self.__sslVerify = sslVerify
         self.__retries = retries
+        # Captured as instance attribute to get them pickled together with the
+        # object when sent to the up-/download executor processes.
+        self.__retryDelay = self.RETRY_DELAY
+        self.__retryMaxDelay = self.RETRY_MAX_DELAY
 
     def __retry(self, request):
-        """Run a request, retrying transient transport errors."""
+        """Run a request, retrying transient errors with exponential backoff."""
         retries = self.__retries
+        delay = self.__retryDelay
         while True:
             try:
                 return request()
             except (WebdavError, OSError) as e:
                 if retries <= 0 or not self.__isTransient(e): raise
+                retryAfter = getattr(e, "retryAfter", None)
+                if retryAfter is not None:
+                    if retryAfter > self.__retryMaxDelay: raise
+                    wait = retryAfter
+                else:
+                    wait = min(delay, self.__retryMaxDelay)
+                    delay *= 2
                 retries -= 1
+                time.sleep(wait)
 
     @classmethod
     def __isTransient(cls, err):
@@ -142,8 +194,7 @@ class WebDav:
         except urllib.error.HTTPError as e:
             e.fp.read()
             if e.status != 404:
-                raise WebdavError("HEAD {} {}".format(e.status, e.reason),
-                                  status=e.status)
+                raise httpError("HEAD {} {}".format(e.status, e.reason), e)
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
@@ -173,8 +224,7 @@ class WebDav:
                 # Only possible if the caller passed "If-Modified-Since"
                 raise WebdavNotModifiedError(status=e.status)
             else:
-                raise WebdavError("{} {}".format(e.status, e.reason),
-                                  status=e.status)
+                raise httpError("{} {}".format(e.status, e.reason), e)
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
@@ -216,8 +266,7 @@ class WebDav:
                 # "If-None-Match" but refuse to overwrite an existing file with
                 # a conflict instead.
                 raise WebdavAlreadyExistsError(status=e.status)
-            raise WebdavError("PUT {} {}".format(e.status, e.reason),
-                              status=e.status)
+            raise httpError("PUT {} {}".format(e.status, e.reason), e)
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
@@ -250,6 +299,8 @@ class WebDav:
         except urllib.error.HTTPError as e:
             e.fp.read()
             status, reason = e.status, e.reason
+            if status not in [405, 409]:
+                raise httpError("MKCOL {} {}".format(status, reason), e)
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
@@ -284,8 +335,7 @@ class WebDav:
                     content = response.read()
             except urllib.error.HTTPError as e:
                 e.fp.read()
-                raise WebdavError("PROPFIND {} {}".format(e.status, e.reason),
-                                  status=e.status)
+                raise httpError("PROPFIND {} {}".format(e.status, e.reason), e)
             except (http.client.HTTPException, OSError) as e:
                 raise WebdavError(str(e))
             # get all dav responses from multistatusresponse
@@ -331,6 +381,8 @@ class WebDav:
             e.fp.read()
             status = e.status
             reason = e.reason
+            if status != 404:
+                raise httpError("DELETE {} {}".format(status, reason), e)
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
         if status not in [200, 204, 404]:

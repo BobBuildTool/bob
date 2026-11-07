@@ -29,8 +29,19 @@ from bob.archive import DummyArchive, HttpArchive, GiteaArchive, getArchiver, \
     ArtifactExistsError, ARTIFACT_SUFFIX
 from bob.errors import BobError, BuildError
 from bob.utils import runInEventLoop, getProcessPoolExecutor
-from bob.webdav import WebdavError, WebdavNotFoundError, WebdavAlreadyExistsError, \
+from bob.webdav import WebDav, WebdavError, WebdavNotFoundError, WebdavAlreadyExistsError, \
     getNetLoc
+
+
+# Do not wait between retries. The backoff itself has dedicated tests.
+noRetryDelay = patch.object(WebDav, "RETRY_DELAY", 0)
+
+def setUpModule():
+    noRetryDelay.start()
+
+def tearDownModule():
+    noRetryDelay.stop()
+
 
 DOWNLOAD_ARITFACT = b'\x00'*20
 NOT_EXISTS_ARTIFACT = b'\x01'*20
@@ -1301,8 +1312,9 @@ def createGiteaStatusHandler(responses, requests):
 
     ``responses`` maps the HTTP method ("HEAD"/"GET"/"PUT"/"DELETE") to a list
     of actions that are used for consecutive requests of this method. The last
-    action is repeated. An action is either ``("status", code)`` to return that
-    status code or ``("close",)`` to read the request and then drop the
+    action is repeated. An action is either ``("status", code[, headers])`` to
+    return that status code with optional extra headers or ``("close",)`` to
+    read the request and then drop the
     connection without any response (simulating a reverse-proxy or server that
     closes mid-upload). An unlisted method is answered with ``501`` so that an
     unexpected request cannot be mistaken for a missing file.
@@ -1329,6 +1341,8 @@ def createGiteaStatusHandler(responses, requests):
                 self.close_connection = True
                 return
             self.send_response(action[1])
+            for name, value in (action[2] if len(action) > 2 else {}).items():
+                self.send_header(name, value)
             self.send_header("Content-Length", "0")
             self.end_headers()
 
@@ -1499,6 +1513,30 @@ class TestGiteaArchiveErrors(TestCase):
                     self._upload(archive, False)
                 self.assertEqual(cm.exception.status, status)
                 self.assertRequests("HEAD")
+
+    def testRetryAfter(self):
+        # the server asks to wait a specific time instead of the backoff
+        archive = self._archive({"HEAD": [("status", 503, {"Retry-After": "5"}),
+                                          ("status", 404)],
+                                 "PUT": ("status", 201)},
+                                retries=1)
+        with patch("bob.webdav.time") as t:
+            self._upload(archive, False)
+        t.sleep.assert_called_once_with(5.0)
+        self.assertRequests("HEAD", "HEAD", "PUT")
+
+    def testRetryAfterTooLong(self):
+        # The server will not be back soon. Give up immediately instead of
+        # blocking the build.
+        archive = self._archive({"DELETE": [("status", 503, {"Retry-After": "3600"}),
+                                            ("status", 204)]},
+                                retries=1)
+        with patch("bob.webdav.time") as t:
+            with self.assertRaisesExactly(WebdavError, "DELETE 503") as cm:
+                self._upload(archive, True)
+        self.assertEqual(cm.exception.retryAfter, 3600.0)
+        t.sleep.assert_not_called()
+        self.assertRequests("DELETE")
 
     def testDownloadNotFoundNotRetried(self):
         archive = self._archive({"GET": ("status", 404)}, retries=1)
