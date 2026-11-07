@@ -237,12 +237,14 @@ class InternalJobServer:
         self.__jobs = jobs
         self.__tmp = tempfile.TemporaryDirectory()
         self.__path = os.path.join(self.__tmp.name, "bob-jobserver")
+        self.__rfd = self.__wfd = None
         try:
             os.mkfifo(self.__path)
             self.__rfd = os.open(self.__path, os.O_RDONLY | os.O_NONBLOCK)
             self.__wfd = os.open(self.__path, os.O_WRONLY)
             os.write(self.__wfd, bytes(jobs))
         except OSError as e:
+            self.shutdown()
             raise BuildError("Could not create job server FIFO: " + str(e))
 
     def getMakeFd(self):
@@ -259,8 +261,12 @@ class InternalJobServer:
             return JobserverConfig.fromFifo(self.__jobs, self.__path)
 
     def shutdown(self):
-        os.close(self.__wfd)
-        os.close(self.__rfd)
+        if self.__wfd is not None:
+            os.close(self.__wfd)
+            self.__wfd = None
+        if self.__rfd is not None:
+            os.close(self.__rfd)
+            self.__rfd = None
         self.__tmp.cleanup()
 
 class JobServerSemaphore:
