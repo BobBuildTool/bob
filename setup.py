@@ -158,7 +158,7 @@ setup(
     cmdclass = cmdclass,
 
     # Our runtime dependencies
-    python_requires = '>=3.9',
+    python_requires = '>=3.10',
     install_requires = [
         'PyYAML',
         'schema',
