@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from binascii import hexlify
+from contextlib import contextmanager
 from tempfile import NamedTemporaryFile, TemporaryDirectory, TemporaryFile
 from unittest import TestCase, skipIf
 from unittest.mock import patch
@@ -1295,14 +1296,19 @@ class TestGiteaManagedArchive(Base, TestCase):
             self._archive().listPackages(lambda bid, path, st: None)
 
 
-def createGiteaStatusHandler(responses):
+def createGiteaStatusHandler(responses, requests):
     """Mock Gitea registry that answers each HTTP method with a scripted result.
 
-    ``responses`` maps the HTTP method ("HEAD"/"GET"/"PUT"/"DELETE") to either
-    ``("status", code)`` to return that status code or ``("close",)`` to read
-    the request and then drop the connection without any response (simulating a
-    reverse-proxy or server that closes mid-upload). An unlisted method yields
-    ``404``.
+    ``responses`` maps the HTTP method ("HEAD"/"GET"/"PUT"/"DELETE") to a list
+    of actions that are used for consecutive requests of this method. The last
+    action is repeated. An action is either ``("status", code)`` to return that
+    status code or ``("close",)`` to read the request and then drop the
+    connection without any response (simulating a reverse-proxy or server that
+    closes mid-upload). An unlisted method is answered with ``501`` so that an
+    unexpected request cannot be mistaken for a missing file.
+
+    Every request is appended to ``requests`` as ``(method, path, headers,
+    body)``.
     """
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -1311,14 +1317,19 @@ def createGiteaStatusHandler(responses):
 
         def _handle(self):
             length = int(self.headers.get('Content-Length', 0) or 0)
-            if length:
-                self.rfile.read(length)
-            action = responses.get(self.command, ("status", 404))
+            body = self.rfile.read(length) if length else b""
+            num = sum(1 for r in requests if r[0] == self.command)
+            requests.append((self.command, self.path, self.headers, body))
+
+            actions = responses.get(self.command, [("status", 501)])
+            action = actions[min(num, len(actions)-1)]
             if action[0] == "close":
+                # Do not send anything. The connection is closed after the
+                # handler returns.
                 self.close_connection = True
-                self.wfile.close()
                 return
             self.send_response(action[1])
+            self.send_header("Content-Length", "0")
             self.end_headers()
 
         do_HEAD = _handle
@@ -1329,99 +1340,170 @@ def createGiteaStatusHandler(responses):
     return Handler
 
 
-class TestGiteaArchiveErrors(Base, TestCase):
+class TestGiteaArchiveErrors(TestCase):
     """Directly exercise the individual error-handling branches of the
-    GiteaArchive HTTP methods using a mock server with scripted responses."""
+    GiteaArchive HTTP methods using a mock server with scripted responses.
+
+    Each test asserts the exact exception type (the WebdavError subclasses are
+    handled differently by the archive) and the requests that reached the
+    server.
+    """
 
     BUILD_ID = bytes.fromhex("00112233445566778899aabbccddeeff00112233")
 
-    def _archive(self, responses):
-        self.responses = responses
-        self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
-            createGiteaStatusHandler(responses))
-        self.addCleanup(self.httpd.server_close)
-        self.addCleanup(self.httpd.shutdown)
-        thread = threading.Thread(target=self.httpd.serve_forever)
+    def _archive(self, responses, retries=0):
+        self.requests = []
+        responses = { method : (actions if isinstance(actions, list) else [actions])
+                      for method, actions in responses.items() }
+        httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
+            createGiteaStatusHandler(responses, self.requests))
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        thread = threading.Thread(target=httpd.serve_forever,
+                                  kwargs={"poll_interval": 0.05})
         thread.daemon = True
         thread.start()
-        port = self.httpd.server_address[1]
-        return GiteaArchive({"backend": "gitea", "owner": "o", "package": "p",
-            "retries": 0, "url": "http://127.0.0.1:{}".format(port)})
+        port = httpd.server_address[1]
+        archive = GiteaArchive({"backend": "gitea", "owner": "o", "package": "p",
+            "retries": retries, "url": "http://127.0.0.1:{}".format(port)})
+        self.path = "/" + archive._makePath(self.BUILD_ID, ".tgz")
+        return archive
 
-    def _upload(self, archive):
-        path = archive._makePath(self.BUILD_ID, ".tgz")
-        with TemporaryFile() as tmp:
-            tmp.write(b"DATA")
-            archive._putUploadFile(path, tmp, False)
+    def _upload(self, archive, overwrite):
+        with archive._openUploadFile(self.BUILD_ID, ".tgz", overwrite) as (name, fileobj):
+            self.assertIsNone(name)
+            fileobj.write(b"DATA")
+
+    def assertRequests(self, *methods):
+        self.assertEqual([ (method, path) for method, path, _, _ in self.requests ],
+                         [ (method, self.path) for method in methods ])
+
+    def assertPut(self, overwrite):
+        """Check the (single) PUT request of an upload."""
+        puts = [ r for r in self.requests if r[0] == "PUT" ]
+        self.assertEqual(len(puts), 1)
+        _, _, headers, body = puts[0]
+        self.assertEqual(body, b"DATA")
+        if overwrite:
+            self.assertIsNone(headers.get("If-None-Match"))
+        else:
+            self.assertEqual(headers.get("If-None-Match"), "*")
+
+    @contextmanager
+    def assertRaisesExactly(self, excType, msg=None):
+        with self.assertRaises(excType) as cm:
+            yield cm
+        self.assertIs(type(cm.exception), excType)
+        if msg is not None:
+            self.assertIn(msg, str(cm.exception))
 
     def testCanManageAndUri(self):
-        archive = self._archive({})
+        archive = GiteaArchive({"backend": "gitea", "owner": "o", "package": "p",
+            "url": "http://user:secret@example.com/gitea"})
         self.assertTrue(archive._canManage())
-        self.assertIn("127.0.0.1", archive.getArchiveUri())
+        self.assertEqual(archive.getArchiveUri(), "example.com/gitea")
 
     def testDownloadNotFound(self):
         archive = self._archive({"GET": ("status", 404)})
-        with self.assertRaises(WebdavNotFoundError):
+        with self.assertRaisesExactly(WebdavNotFoundError):
             archive._openDownloadFile(self.BUILD_ID, ".tgz")
+        self.assertRequests("GET")
 
     def testDownloadHttpError(self):
         archive = self._archive({"GET": ("status", 403)})
-        with self.assertRaises(WebdavError):
+        with self.assertRaisesExactly(WebdavError, "403"):
             archive._openDownloadFile(self.BUILD_ID, ".tgz")
+        self.assertRequests("GET")
+
+    def testUpload(self):
+        # HEAD preflight finds nothing -> conditional upload
+        archive = self._archive({"HEAD": ("status", 404), "PUT": ("status", 201)})
+        self._upload(archive, False)
+        self.assertRequests("HEAD", "PUT")
+        self.assertPut(False)
 
     def testExistsByHead(self):
         # the HEAD preflight finds the artifact -> no upload
         archive = self._archive({"HEAD": ("status", 200)})
-        with self.assertRaises(ArtifactExistsError):
-            archive._openUploadFile(self.BUILD_ID, ".tgz", False)
+        with self.assertRaisesExactly(ArtifactExistsError):
+            self._upload(archive, False)
+        self.assertRequests("HEAD")
 
     def testExistsHttpError(self):
-        # HEAD with an unexpected status
+        # HEAD with an unexpected status -> no upload
         archive = self._archive({"HEAD": ("status", 400)})
-        with self.assertRaises(WebdavError):
-            archive._openUploadFile(self.BUILD_ID, ".tgz", False)
+        with self.assertRaisesExactly(WebdavError, "HEAD 400"):
+            self._upload(archive, False)
+        self.assertRequests("HEAD")
 
     def testUploadConflict(self):
-        # HEAD says "missing" but the PUT hits a 409 race. Gitea refuses to
-        # overwrite an existing file with a conflict.
-        archive = self._archive({"PUT": ("status", 409)})
-        with self.assertRaises(WebdavAlreadyExistsError):
-            self._upload(archive)
+        # HEAD says "missing" but the PUT loses the race against a concurrent
+        # upload. Gitea ignores "If-None-Match" and refuses to overwrite the
+        # existing file with a conflict.
+        archive = self._archive({"HEAD": ("status", 404), "PUT": ("status", 409)})
+        with self.assertRaisesExactly(WebdavAlreadyExistsError):
+            self._upload(archive, False)
+        self.assertRequests("HEAD", "PUT")
 
     def testUploadPreconditionFailed(self):
-        archive = self._archive({"PUT": ("status", 412)})
-        with self.assertRaises(WebdavAlreadyExistsError):
-            self._upload(archive)
+        archive = self._archive({"HEAD": ("status", 404), "PUT": ("status", 412)})
+        with self.assertRaisesExactly(WebdavAlreadyExistsError):
+            self._upload(archive, False)
+        self.assertRequests("HEAD", "PUT")
 
     def testUploadHttpError(self):
-        archive = self._archive({"PUT": ("status", 400)})
-        with self.assertRaises(WebdavError):
-            self._upload(archive)
+        archive = self._archive({"HEAD": ("status", 404), "PUT": ("status", 400)})
+        with self.assertRaisesExactly(WebdavError, "PUT 400"):
+            self._upload(archive, False)
+        self.assertRequests("HEAD", "PUT")
 
     def testUploadUnexpectedStatus(self):
         # a 2xx status that is not one of the accepted success codes
-        archive = self._archive({"PUT": ("status", 205)})
-        with self.assertRaises(WebdavError):
-            self._upload(archive)
+        archive = self._archive({"HEAD": ("status", 404), "PUT": ("status", 205)})
+        with self.assertRaisesExactly(WebdavError, "PUT 205"):
+            self._upload(archive, False)
+        self.assertRequests("HEAD", "PUT")
 
     def testUploadConnectionClosed(self):
         # server drops the connection during upload
-        archive = self._archive({"PUT": ("close",)})
-        with self.assertRaises(WebdavError):
-            self._upload(archive)
+        archive = self._archive({"HEAD": ("status", 404), "PUT": ("close",)})
+        with self.assertRaisesExactly(WebdavError):
+            self._upload(archive, False)
+        self.assertRequests("HEAD", "PUT")
+
+    def testUploadRetry(self):
+        # a transient server error is retried
+        archive = self._archive({"HEAD": ("status", 404),
+                                 "PUT": [("status", 500), ("status", 201)]},
+                                retries=1)
+        self._upload(archive, False)
+        self.assertRequests("HEAD", "PUT", "PUT")
 
     def testOverwriteDeletesFirst(self):
-        # the file is removed before the upload because Gitea would refuse to
-        # overwrite it
-        archive = self._archive({"DELETE": ("status", 204)})
-        self.assertIsNotNone(archive._openUploadFile(self.BUILD_ID, ".tgz", True))
+        # The file is removed before the upload because Gitea would refuse to
+        # overwrite it. No HEAD preflight and an unconditional PUT.
+        archive = self._archive({"DELETE": ("status", 204), "PUT": ("status", 201)})
+        self._upload(archive, True)
+        self.assertRequests("DELETE", "PUT")
+        self.assertPut(True)
 
     def testOverwriteDeleteMissing(self):
         # nothing to delete is not an error
-        archive = self._archive({"DELETE": ("status", 404)})
-        self.assertIsNotNone(archive._openUploadFile(self.BUILD_ID, ".tgz", True))
+        archive = self._archive({"DELETE": ("status", 404), "PUT": ("status", 201)})
+        self._upload(archive, True)
+        self.assertRequests("DELETE", "PUT")
+        self.assertPut(True)
 
     def testOverwriteDeleteHttpError(self):
+        # a failed delete prevents the upload
         archive = self._archive({"DELETE": ("status", 400)})
-        with self.assertRaises(WebdavError):
-            archive._openUploadFile(self.BUILD_ID, ".tgz", True)
+        with self.assertRaisesExactly(WebdavError, "DELETE 400"):
+            self._upload(archive, True)
+        self.assertRequests("DELETE")
+
+    def testOverwriteConflict(self):
+        # A concurrent upload squeezed in between the DELETE and the PUT.
+        archive = self._archive({"DELETE": ("status", 204), "PUT": ("status", 409)})
+        with self.assertRaisesExactly(WebdavAlreadyExistsError):
+            self._upload(archive, True)
+        self.assertRequests("DELETE", "PUT")
