@@ -269,7 +269,7 @@ class WebDav:
         if not path.endswith("/"):
             path += "/"
         dir_infos = []
-        if self.exists(path):
+        if self.__exists(path):
             headers = self._getHeaders()
             # Depth: 1 - applies to the resource and the immediate children (infinity usually prohibited by server)
             headers.update({'Depth': '1'})
