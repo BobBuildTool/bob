@@ -22,6 +22,9 @@ class TestJobServer:
     def release(self):
         self.__jobServerSem.release()
 
+    def shutdown(self):
+        self.__jobServer.shutdown()
+
 # Migrate to unittest.IsolatedAsyncioTestCase starting with Python 3.8
 @skipIf(sys.platform == "win32", "Requires POSIX platform")
 class TestJobserverTest (TestCase):
@@ -30,21 +33,26 @@ class TestJobserverTest (TestCase):
 
     async def _testAcquire(self):
         t = TestJobServer()
+        try:
+            await t.testAcquire()
+            t.release()
 
-        await t.testAcquire()
-        t.release()
-
-        await t.testAcquire(2)
-        t.release()
-        t.release()
+            await t.testAcquire(2)
+            t.release()
+            t.release()
+        finally:
+            t.shutdown()
 
     def testReleaseToOften(self):
         runInEventLoop(self._testReleaseToOften())
 
     async def _testReleaseToOften(self):
         t = TestJobServer()
-        with self.assertRaises(ValueError):
-            t.release()
+        try:
+            with self.assertRaises(ValueError):
+                t.release()
+        finally:
+            t.shutdown()
 
 
 @skipIf(sys.platform == "win32", "Requires POSIX platform")

@@ -371,6 +371,39 @@ if any(not os.path.exists(os.path.join(plugins, i+".jpi")) for i in PLUGINS):
                     "--war", jenkins, "-d", plugins, "--plugins"] + PLUGINS,
                     check=True)
 
+def info(*args):
+    """Print a message during cleanup.
+
+    Must never fail. On Ctrl+C, the tee/sed of run-tests.sh are killed too and
+    any output raises a BrokenPipeError. This must not abort the cleanup.
+    """
+    try:
+        print("[TEST]:", *args, flush=True)
+    except OSError:
+        pass
+
+TERMINATION_SIGNALS = [ signal.SIGINT, signal.SIGTERM ]
+if sys.platform != "win32":
+    TERMINATION_SIGNALS.append(signal.SIGHUP)
+
+def ignoreTerminationSignals():
+    for sig in TERMINATION_SIGNALS:
+        signal.signal(sig, signal.SIG_IGN)
+
+def onTerminationSignal(signum, frame):
+    """Abort the tests but make sure that Jenkins is stopped.
+
+    The Jenkins server runs in its own session and is thus not hit by Ctrl+C.
+    By default, Python would just die on SIGTERM or SIGHUP and leave Jenkins
+    behind. Instead, raise an exception so that the cleanup code is executed.
+    Further signals are ignored so that the cleanup cannot be interrupted.
+    """
+    ignoreTerminationSignals()
+    if signum == signal.SIGINT:
+        raise KeyboardInterrupt()
+    else:
+        raise SystemExit(128 + signum)
+
 @contextlib.contextmanager
 def tempDir():
     """Temporary directory that does not fail the test if it cannot be removed.
@@ -393,12 +426,12 @@ def tempDir():
                 err = e
                 time.sleep(0.5)
         else:
-            print("[TEST]:", "Warning: cannot remove", d.name, ":", err)
+            info("Warning: cannot remove", d.name, ":", err)
 
 def stopJenkins(proc):
     """Stop Jenkins including all processes of still running builds."""
     if proc.poll() is None:
-        print("[TEST]:", "Shutting down Jenkins...")
+        info("Shutting down Jenkins...")
         if sys.platform == "win32":
             # Terminating the Jenkins process does not kill its children on
             # Windows. Kill the whole process tree instead.
@@ -420,6 +453,9 @@ def stopJenkins(proc):
             pass
 
 # Run Jenkins and execute tests
+for sig in TERMINATION_SIGNALS:
+    signal.signal(sig, onTerminationSignal)
+
 with tempDir() as jenkinsHome, tempDir() as configHome:
     # Isolate Bob from the user configuration. Inherited by Jenkins too.
     os.environ["XDG_CONFIG_HOME"] = configHome
@@ -465,5 +501,8 @@ with tempDir() as jenkinsHome, tempDir() as configHome:
             test(jc)
 
     finally:
+        # Do not let Ctrl+C or other signals interrupt the cleanup. Otherwise
+        # Jenkins might be left running.
+        ignoreTerminationSignals()
         if jenkinsProc is not None:
             stopJenkins(jenkinsProc)
