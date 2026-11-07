@@ -153,13 +153,6 @@ unset VERBOSE
 export PYTHONDEVMODE=1
 export PYTHONASYNCIODEBUG=1
 export PYTHONWARNINGS=error
-if [[ $($RUN_PYTHON3 --version) = "Python 3.9.7" ]] ; then
-	# Stupid workaround for https://bugs.python.org/issue45097
-	# Just ignore all deprecation warnings. To add insult to injury we
-	# can't just ignore anything caused by asyncio because the full pacakge
-	# name must be given in PYTHONWARNINGS.
-	PYTHONWARNINGS+=",ignore::DeprecationWarning"
-fi
 
 # option processing
 while getopts ":hb:c:i:j:u:v" opt; do

@@ -9,8 +9,8 @@ import sys
 if sys.version_info.major != 3:
     print("Bob requires Python 3")
     sys.exit(1)
-elif sys.version_info.minor < 9:
-    print("Bob requires at least Python 3.9")
+elif sys.version_info.minor < 10:
+    print("Bob requires at least Python 3.10")
     sys.exit(1)
 
 def getVersion():
