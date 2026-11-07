@@ -10,7 +10,15 @@ from xml.etree.ElementTree import fromstring
 import http.client
 
 class WebdavError(Exception):
-    pass
+    """Generic WebDAV/HTTP error.
+
+    The ``status`` holds the HTTP status code of the server reply. It is
+    ``None`` if the request failed on the transport level, e.g. because the
+    connection was refused or dropped.
+    """
+    def __init__(self, *args, status=None):
+        super().__init__(*args)
+        self.status = status
 
 class WebdavNotFoundError(WebdavError):
     pass
@@ -56,6 +64,11 @@ class WebDav:
             self.__data.extend(new_data)
             return self.__data
 
+    # HTTP status codes that are worth to be retried: Request Timeout, Too
+    # Many Requests, Internal Server Error, Bad Gateway, Service Unavailable,
+    # Gateway Timeout.
+    TRANSIENT_STATUS = frozenset([408, 429, 500, 502, 503, 504])
+
     def __init__(self, url, sslVerify=True, retries=0):
         self.__url = url
         self.__connection = None
@@ -69,8 +82,20 @@ class WebDav:
             try:
                 return request()
             except (WebdavError, OSError) as e:
-                if retries <= 0: raise
+                if retries <= 0 or not self.__isTransient(e): raise
                 retries -= 1
+
+    @classmethod
+    def __isTransient(cls, err):
+        """Is it worth to retry a request that failed with ``err``?
+
+        Transport errors are always retried. Of the HTTP errors only those
+        that indicate an overloaded or temporarily unavailable server are
+        retried. All other status codes are a definitive answer of the
+        server. Asking again would yield the same result.
+        """
+        status = getattr(err, "status", None)
+        return status is None or status in cls.TRANSIENT_STATUS
 
     def __createContext(self):
         # Create the SSL context on demand. Holding it as an attribute would
@@ -117,7 +142,8 @@ class WebDav:
         except urllib.error.HTTPError as e:
             e.fp.read()
             if e.status != 404:
-                raise WebdavError("HEAD {} {}".format(e.status, e.reason))
+                raise WebdavError("HEAD {} {}".format(e.status, e.reason),
+                                  status=e.status)
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
@@ -142,12 +168,13 @@ class WebDav:
         except urllib.error.HTTPError as e:
             e.fp.read()
             if e.status == 404:
-                raise WebdavNotFoundError()
+                raise WebdavNotFoundError(status=e.status)
             elif e.status == 304:
                 # Only possible if the caller passed "If-Modified-Since"
-                raise WebdavNotModifiedError()
+                raise WebdavNotModifiedError(status=e.status)
             else:
-                raise WebdavError("{} {}".format(e.status, e.reason))
+                raise WebdavError("{} {}".format(e.status, e.reason),
+                                  status=e.status)
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
@@ -177,18 +204,20 @@ class WebDav:
         try:
             with urllib.request.urlopen (req, context=self.__createContext()) as resp:
                 if resp.status not in [200, 201, 204]:
-                    raise WebdavError("PUT {} {}".format(resp.status, resp.reason))
+                    raise WebdavError("PUT {} {}".format(resp.status, resp.reason),
+                                      status=resp.status)
         except urllib.error.HTTPError as e:
             e.fp.read()
             if e.status == 412:
                 # precondition failed -> lost race with other upload
-                raise WebdavAlreadyExistsError()
+                raise WebdavAlreadyExistsError(status=e.status)
             if e.status == 409:
                 # Some servers (e.g. the Gitea package registry) do not honour
                 # "If-None-Match" but refuse to overwrite an existing file with
                 # a conflict instead.
-                raise WebdavAlreadyExistsError()
-            raise WebdavError("PUT {} {}".format(e.status, e.reason))
+                raise WebdavAlreadyExistsError(status=e.status)
+            raise WebdavError("PUT {} {}".format(e.status, e.reason),
+                              status=e.status)
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
 
@@ -203,7 +232,8 @@ class WebDav:
         # If the server does not support MKCOL we'd expect a 405 too and hope
         # for the best...
         if status not in [201, 405]:
-            raise WebdavError("MKCOL {} {}".format(status, reason))
+            raise WebdavError("MKCOL {} {}".format(status, reason),
+                              status=status)
 
     def __mkdir(self, path):
         # MKCOL resources must have a trailing slash because they are
@@ -224,10 +254,11 @@ class WebDav:
             raise WebdavError(str(e))
 
         # Only the status codes that mkdir() interprets itself are passed
-        # through. Everything else (e.g. a transient 500) is a plain error
-        # that must be retried instead of being handled as a valid result.
+        # through. Everything else is a plain error. A transient one (e.g.
+        # a 500) is retried instead of being handled as a valid result.
         if status not in [201, 405, 409]:
-            raise WebdavError("MKCOL {} {}".format(status, reason))
+            raise WebdavError("MKCOL {} {}".format(status, reason),
+                              status=status)
         return (status, reason)
 
     def listdir(self, path):
@@ -248,11 +279,13 @@ class WebDav:
             try:
                 with urllib.request.urlopen (req, context=self.__createContext()) as response:
                     if response.status not in [207]:
-                        raise WebdavError("PROPFIND {} {}".format(response.status, response.reason))
+                        raise WebdavError("PROPFIND {} {}".format(response.status, response.reason),
+                                          status=response.status)
                     content = response.read()
             except urllib.error.HTTPError as e:
                 e.fp.read()
-                raise WebdavError("PROPFIND {} {}".format(e.status, e.reason))
+                raise WebdavError("PROPFIND {} {}".format(e.status, e.reason),
+                                  status=e.status)
             except (http.client.HTTPException, OSError) as e:
                 raise WebdavError(str(e))
             # get all dav responses from multistatusresponse
@@ -301,4 +334,5 @@ class WebDav:
         except (http.client.HTTPException, OSError) as e:
             raise WebdavError(str(e))
         if status not in [200, 204, 404]:
-            raise WebdavError("DELETE {} {}".format(status, reason))
+            raise WebdavError("DELETE {} {}".format(status, reason),
+                              status=status)

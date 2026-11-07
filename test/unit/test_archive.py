@@ -1479,6 +1479,40 @@ class TestGiteaArchiveErrors(TestCase):
         self._upload(archive, False)
         self.assertRequests("HEAD", "PUT", "PUT")
 
+    def testTransientErrorsRetried(self):
+        # server overload or unavailable backend behind a proxy
+        for status in (408, 429, 500, 502, 503, 504):
+            with self.subTest(status=status):
+                archive = self._archive({"HEAD": [("status", status), ("status", 200)]},
+                                        retries=1)
+                with self.assertRaisesExactly(ArtifactExistsError):
+                    self._upload(archive, False)
+                self.assertRequests("HEAD", "HEAD")
+
+    def testPermanentErrorsNotRetried(self):
+        # the request itself is wrong or the server will never support it
+        for status in (400, 401, 403, 405, 410, 501):
+            with self.subTest(status=status):
+                archive = self._archive({"HEAD": [("status", status), ("status", 200)]},
+                                        retries=1)
+                with self.assertRaisesExactly(WebdavError, "HEAD {}".format(status)) as cm:
+                    self._upload(archive, False)
+                self.assertEqual(cm.exception.status, status)
+                self.assertRequests("HEAD")
+
+    def testDownloadNotFoundNotRetried(self):
+        archive = self._archive({"GET": ("status", 404)}, retries=1)
+        with self.assertRaisesExactly(WebdavNotFoundError):
+            archive._openDownloadFile(self.BUILD_ID, ".tgz")
+        self.assertRequests("GET")
+
+    def testUploadConflictNotRetried(self):
+        archive = self._archive({"HEAD": ("status", 404), "PUT": ("status", 409)},
+                                retries=1)
+        with self.assertRaisesExactly(WebdavAlreadyExistsError):
+            self._upload(archive, False)
+        self.assertRequests("HEAD", "PUT")
+
     def testOverwriteDeletesFirst(self):
         # The file is removed before the upload because Gitea would refuse to
         # overwrite it. No HEAD preflight and an unconditional PUT.
