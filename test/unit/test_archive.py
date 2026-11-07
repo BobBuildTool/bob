@@ -36,10 +36,16 @@ from bob.webdav import WebDav, WebdavError, WebdavNotFoundError, WebdavAlreadyEx
 # Do not wait between retries. The backoff itself has dedicated tests.
 noRetryDelay = patch.object(WebDav, "RETRY_DELAY", 0)
 
+# Starting and stopping a process pool is expensive. Share it between all tests.
+executor = None
+
 def setUpModule():
+    global executor
     noRetryDelay.start()
+    executor = getProcessPoolExecutor()
 
 def tearDownModule():
+    executor.shutdown()
     noRetryDelay.stop()
 
 
@@ -121,10 +127,9 @@ class Base:
     def setUp(self):
         # create repo
         self.repo = TemporaryDirectory()
-        self.executor = getProcessPoolExecutor()
+        self.executor = executor
 
     def tearDown(self):
-        self.executor.shutdown()
         self.repo.cleanup()
 
 class BaseTester(Base):
@@ -1373,8 +1378,7 @@ class TestGiteaArchiveErrors(TestCase):
             createGiteaStatusHandler(responses, self.requests))
         self.addCleanup(httpd.server_close)
         self.addCleanup(httpd.shutdown)
-        thread = threading.Thread(target=httpd.serve_forever,
-                                  kwargs={"poll_interval": 0.05})
+        thread = threading.Thread(target=httpd.serve_forever)
         thread.daemon = True
         thread.start()
         port = httpd.server_address[1]
