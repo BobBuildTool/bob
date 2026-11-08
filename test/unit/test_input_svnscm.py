@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-from bob.input import SvnScm
+from bob.scm import SvnScm
 from bob.invoker import Invoker, InvocationError
 from bob.utils import isMsys, runInEventLoop
 

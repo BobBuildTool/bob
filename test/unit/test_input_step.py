@@ -6,7 +6,9 @@
 from unittest import TestCase
 from unittest.mock import Mock
 
-from bob.input import Env, CoreCheckoutStep, CoreBuildStep, CorePackageStep, PathsConfig
+from bob.input.core import PathsConfig
+from bob.input.package import CoreCheckoutStep, CoreBuildStep, CorePackageStep
+from bob.stringparser import Env
 from bob.languages import BashLanguage
 
 class Empty:

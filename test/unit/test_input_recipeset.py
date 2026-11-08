@@ -11,7 +11,8 @@ import textwrap
 import yaml
 
 from bob import DEBUG
-from bob.input import RecipeSet, YamlCache, LayersConfig
+from bob.input.cache import YamlCache
+from bob.input.recipeset import RecipeSet, LayersConfig
 from bob.languages import StepSpec
 from bob.errors import ParseError, BobError
 from bob.scm import ScmOverride
@@ -2546,8 +2547,8 @@ class TestPlugins(RecipesTmp, TestCase):
         warnObjMock = MagicMock()
         warnClassMock = MagicMock(return_value=warnObjMock)
 
-        # Patch "Warn" class import at bob.input module
-        with patch('bob.input.Warn', warnClassMock):
+        # Patch "Warn" class import at bob.input.recipeset module
+        with patch('bob.input.recipeset.Warn', warnClassMock):
             p = self.generate().walkPackagePath("root")
 
         # The parser should warn about the "resubst" collision
