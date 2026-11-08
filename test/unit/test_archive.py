@@ -638,7 +638,8 @@ class TestHttpArchive(BaseTester, TestCase):
         super().setUp()
         self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0), createHttpHandler(self.repo.name))
         self.ip, self.port = self.httpd.server_address
-        self.server = threading.Thread(target=self.httpd.serve_forever)
+        self.server = threading.Thread(target=self.httpd.serve_forever,
+            kwargs={"poll_interval": 0.05})
         self.server.daemon = True
         self.server.start()
 
@@ -687,7 +688,8 @@ class TestHttpBasicAuthArchive(BaseTester, TestCase):
         self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createHttpHandler(self.repo.name, self.USERNAME, self.PASSWORD))
         self.ip, self.port = self.httpd.server_address
-        self.server = threading.Thread(target=self.httpd.serve_forever)
+        self.server = threading.Thread(target=self.httpd.serve_forever,
+            kwargs={"poll_interval": 0.05})
         self.server.daemon = True
         self.server.start()
 
@@ -1028,7 +1030,8 @@ class TestGiteaArchive(BaseTester, TestCase):
         self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createGiteaHandler(self.repo.name, self.args))
         self.ip, self.port = self.httpd.server_address
-        self.server = threading.Thread(target=self.httpd.serve_forever)
+        self.server = threading.Thread(target=self.httpd.serve_forever,
+            kwargs={"poll_interval": 0.05})
         self.server.daemon = True
         self.server.start()
 
@@ -1098,7 +1101,8 @@ class TestGiteaAuthArchive(BaseTester, TestCase):
         self.httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createGiteaHandler(self.repo.name, self.args, expectedAuth))
         self.ip, self.port = self.httpd.server_address
-        self.server = threading.Thread(target=self.httpd.serve_forever)
+        self.server = threading.Thread(target=self.httpd.serve_forever,
+            kwargs={"poll_interval": 0.05})
         self.server.daemon = True
         self.server.start()
 
@@ -1172,7 +1176,8 @@ class TestGiteaArchiveRetries(Base, TestCase):
         args = {"retries": retries}
         httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0),
             createGiteaHandler(self.repo.name, args))
-        thread = threading.Thread(target=httpd.serve_forever)
+        thread = threading.Thread(target=httpd.serve_forever,
+            kwargs={"poll_interval": 0.05})
         thread.daemon = True
         thread.start()
         return httpd, httpd.server_address[1]
@@ -1224,7 +1229,8 @@ class TestGiteaManagedArchive(Base, TestCase):
             createGiteaHandler(self.repo.name, self.args))
         self.addCleanup(self.httpd.server_close)
         self.addCleanup(self.httpd.shutdown)
-        thread = threading.Thread(target=self.httpd.serve_forever)
+        thread = threading.Thread(target=self.httpd.serve_forever,
+            kwargs={"poll_interval": 0.05})
         thread.daemon = True
         thread.start()
 
@@ -1378,7 +1384,8 @@ class TestGiteaArchiveErrors(TestCase):
             createGiteaStatusHandler(responses, self.requests))
         self.addCleanup(httpd.server_close)
         self.addCleanup(httpd.shutdown)
-        thread = threading.Thread(target=httpd.serve_forever)
+        thread = threading.Thread(target=httpd.serve_forever,
+                                  kwargs={"poll_interval": 0.05})
         thread.daemon = True
         thread.start()
         port = httpd.server_address[1]
