@@ -26,6 +26,21 @@ from bob.invoker import Invoker, InvocationError
 from bob.errors import ParseError, BuildError
 from bob.utils import asHexStr, runInEventLoop, getProcessPoolExecutor, isWindows
 
+# Do not wait between retries.
+noRetryDelay = patch.object(UrlScm, "RETRY_DELAY", 0)
+
+# Starting and stopping a process pool is expensive. Share it between all tests.
+processPool = None
+
+def setUpModule():
+    global processPool
+    noRetryDelay.start()
+    processPool = getProcessPoolExecutor()
+
+def tearDownModule():
+    processPool.shutdown()
+    noRetryDelay.stop()
+
 INVALID_FILE = "C:\\does\\not\\exist" if sys.platform == "win32" else "/does/not/exist/"
 
 def makeFileUrl(fn):
@@ -67,8 +82,11 @@ class TemporaryWorkspace:
 class UrlScmExecutor:
 
     def invokeScm(self, workspace, scm, switch=False, oldScm=None, workspaceCreated=False, executor=None):
-        if executor is None:
-            executor = getProcessPoolExecutor()
+        # An executor passed by the caller is shut down here. The shared process
+        # pool is shut down by tearDownModule().
+        ownExecutor = executor is not None
+        if not ownExecutor:
+            executor = processPool
         try:
             spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
             invoker = Invoker(spec, False, True, True, True, True, False,
@@ -78,7 +96,8 @@ class UrlScmExecutor:
             else:
                 runInEventLoop(scm.invoke(invoker, workspaceCreated))
         finally:
-            executor.shutdown()
+            if ownExecutor:
+                executor.shutdown()
 
     def createUrlScm(self, spec = {}, preMirrors=[], fallbackMirrors=[],
                      defaultFileMode=None, separateDownload=True):
@@ -395,7 +414,7 @@ class TestDownloads(UrlScmTest, TestCase):
 
             self.assertEqual(srv.getRequests, 1, "URL SCM does not retry on disk full errors")
 
-class TestExtraction(TestCase):
+class TestGzipExtraction(UrlScmExecutor, TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -423,16 +442,6 @@ class TestExtraction(TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.__repodir.cleanup()
-
-    def invokeScm(self, workspace, scm):
-        executor = getProcessPoolExecutor()
-        try:
-            spec = MagicMock(workspaceWorkspacePath=workspace, envWhiteList=set())
-            invoker = Invoker(spec, False, True, True, True, True, False,
-                              executor=executor)
-            runInEventLoop(scm.invoke(invoker, False))
-        finally:
-            executor.shutdown()
 
     def createUrlScm(self, spec = {}):
         s = {
@@ -481,6 +490,7 @@ class TestExtraction(TestCase):
             self.assertNotExists(os.path.join(workspace, "src"))
             self.assertNotExists(os.path.join(workspace, "src", "test.txt"))
 
+    @skipIf(sys.platform == "win32", "gunzip missing on Windows")
     def testGz(self):
         scm = self.createUrlScm({
             "url" : self.gzFile,
@@ -491,6 +501,7 @@ class TestExtraction(TestCase):
             self.assertExists(os.path.join(workspace, "test.txt.gz"))
             self.assertExists(os.path.join(workspace, "test.txt"))
 
+    @skipIf(sys.platform == "win32", "gunzip missing on Windows")
     def testGzDoubleInvocation(self):
         """Invoking the SCM twice does not touch the extracted file"""
         scm = self.createUrlScm({

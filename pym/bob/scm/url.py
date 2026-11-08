@@ -294,6 +294,9 @@ class SevenZipExtractor(Extractor):
 
 class UrlScm(Scm):
 
+    # Delay in seconds between download/upload retries.
+    RETRY_DELAY = 3
+
     __DEFAULTS = {
         schema.Optional('extract') : schema.Or(bool, str),
         schema.Optional('fileName') : str,
@@ -611,7 +614,7 @@ class UrlScm(Scm):
                         concurrent.futures.process.BrokenProcessPool):
                     invoker.fail("Download interrupted!")
                 retries -= 1
-                await asyncio.sleep(3)
+                await asyncio.sleep(self.RETRY_DELAY)
 
             return updated, None
         else:
@@ -704,7 +707,7 @@ class UrlScm(Scm):
                         concurrent.futures.process.BrokenProcessPool):
                     invoker.fail("Upload interrupted!")
                 retries -= 1
-                await asyncio.sleep(3)
+                await asyncio.sleep(self.RETRY_DELAY)
         else:
             invoker.fail("Upload not supported for URL scheme: " + url.scheme)
 
