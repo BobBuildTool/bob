@@ -7,7 +7,9 @@ from .invoker import CmdFailedError, InvocationError, Invoker
 from .scm import getScm, ScmOverride, ScmStatus, ScmTaint
 from .state import BobState
 from .stringparser import Env
-from .input import RecipeSet, Scm, YamlCache, LayersConfig
+from .input.cache import YamlCache
+from .input.checkout import Scm
+from .input.recipeset import RecipeSet, LayersConfig
 from .utils import INVALID_CHAR_TRANS, getPlatformString, getPlatformEnvWhiteList, compareVersion, joinLines
 from .tty import DEBUG, EXECUTED, INFO, NORMAL, IMPORTANT, SKIPPED, WARNING, log
 

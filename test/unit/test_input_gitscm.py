@@ -11,7 +11,7 @@ import os
 import subprocess
 import tempfile
 
-from bob.input import GitScm
+from bob.scm import GitScm
 from bob.invoker import Invoker, CmdFailedError, InvocationError
 from bob.errors import ParseError
 from bob.utils import asHexStr, runInEventLoop, getBashPath

@@ -9,7 +9,7 @@ import os.path
 import struct
 from abc import ABC, abstractmethod
 
-from .input import DigestHasher
+from .input.common import DigestHasher
 from .languages import getLanguage, ScriptLanguage
 from .scm import getScm, ScmOverride
 from .state import BobState
