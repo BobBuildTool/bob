@@ -130,14 +130,18 @@ def createHttpHandler(repoPath, args):
                 self.send_error(500, "internal error")
                 args['retries'] = args.get('retries') - 1
                 return
+
+            # Always consume the request body before answering! Windows sends a
+            # TCP RST on close if there is still data pending.
+            length = int(self.headers['Content-Length'])
+            data = self.rfile.read(length)
+
             path = repoPath + self.path
             if os.path.exists(path) and ("If-None-Match" in self.headers):
                 self.send_response(412)
                 self.end_headers()
                 return
 
-            length = int(self.headers['Content-Length'])
-            data = self.rfile.read(length)
             # RFC 4918: missing parent collection must fail with 409
             if not os.path.isdir(os.path.dirname(path)):
                 self.send_response(409)
