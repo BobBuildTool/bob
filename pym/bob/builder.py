@@ -947,6 +947,34 @@ cd {ROOT}
 
         return task
 
+    def __createUploadTask(self, step, buildId, audit):
+        """Upload package in the background.
+
+        The upload takes a job slot like any other step but does not block
+        the steps that depend on the package. All pending uploads are waited
+        for at the end of the build.
+        """
+        content = step.getStoragePath()
+
+        async def upload():
+            async with self.__runners:
+                await self.__archive.uploadPackage(step, buildId, audit,
+                    content, executor=self.__executor)
+
+        self.__tasksNum += 1
+        setProgress(self.__tasksDone, self.__tasksNum)
+
+        task = asyncio.get_event_loop().create_task(self.__taskWrapper(upload,
+            step=step, count=True))
+        self.__uploadTasks.add(task)
+
+    async def __waitUploads(self):
+        """Wait for all pending background uploads."""
+        while True:
+            pending = { t for t in self.__uploadTasks if not t.done() }
+            if not pending: break
+            await asyncio.wait(pending)
+
     async def __taskWrapper(self, coro, trackingKey=None, tracker=None,
                             fence=None, step=None, count=False):
         try:
@@ -995,25 +1023,32 @@ cd {ROOT}
             for i in asyncio.all_tasks(): i.cancel()
 
         async def dispatcher():
-            if self.__jobserverCfg.jobs() > 1:
-                packageJobs = [
-                    self.__createGenericTask(loop, lambda s=step: self._cookTask(s, checkoutOnly, depth))
-                    for step in steps ]
-                await gatherTasks(packageJobs)
-            else:
-                packageJobs = []
-                for step in steps:
-                    job = self.__createGenericTask(loop, lambda s=step: self._cookTask(s, checkoutOnly, depth))
-                    packageJobs.append(job)
-                    await asyncio.wait({job})
-                # retrieve results as last step to --keep-going
-                for job in packageJobs: job.result()
+            try:
+                if self.__jobserverCfg.jobs() > 1:
+                    packageJobs = [
+                        self.__createGenericTask(loop, lambda s=step: self._cookTask(s, checkoutOnly, depth))
+                        for step in steps ]
+                    await gatherTasks(packageJobs)
+                else:
+                    packageJobs = []
+                    for step in steps:
+                        job = self.__createGenericTask(loop, lambda s=step: self._cookTask(s, checkoutOnly, depth))
+                        packageJobs.append(job)
+                        await asyncio.wait({job})
+                    # retrieve results as last step to --keep-going
+                    for job in packageJobs: job.result()
+            finally:
+                # Let pending uploads finish, even if the build failed or is
+                # restarted. Otherwise successfully built packages would never
+                # be uploaded. Uploads are only cancelled by the user.
+                await self.__waitUploads()
 
         self.__restart = True
         while self.__restart:
             self.__running = True
             self.__restart = False
             self.__cookTasks = {}
+            self.__uploadTasks = set()
             self.__buildIdTasks = {}
             self.__fingerprintTasks = {}
             self.__allTasks = set()
@@ -1160,16 +1195,23 @@ cd {ROOT}
                                     depth, buildId)
                             self._setAlreadyRun(step, False, checkoutOnly)
 
-                # Upload package if it was built. On Jenkins we always upload
-                # because it is essential that the tgz/buildid exists.
-                if (built or step.JENKINS) and self.__archive.canUpload() and (depth <= self.__uploadDepth):
-                    await self.__archive.uploadPackage(step, buildId,
-                        audit, step.getStoragePath(), executor=self.__executor)
-
                 # If the package can be shared and was built/downloaded it must
-                # be moved to the final location.
+                # be moved to the final location. This must be done before the
+                # upload because the workspace might be moved away. The upload
+                # will then use the shared location.
                 if not shared and (downloaded or built):
-                    self._installSharedPackage(step, buildId)
+                    audit = self._installSharedPackage(step, buildId, audit)
+
+                # Upload package if it was built. On Jenkins we always upload
+                # because it is essential that the tgz/buildid exists. In
+                # parallel builds the upload is done in the background so that
+                # dependent steps are not blocked by it.
+                if (built or step.JENKINS) and self.__archive.canUpload() and (depth <= self.__uploadDepth):
+                    if self.__jobserverCfg.jobs() > 1:
+                        self.__createUploadTask(step, buildId, audit)
+                    else:
+                        await self.__archive.uploadPackage(step, buildId,
+                            audit, step.getStoragePath(), executor=self.__executor)
         except BuildError as e:
             e.setStack(step.getPackage().getStack())
             raise
@@ -1708,18 +1750,21 @@ cd {ROOT}
 
         return workspaceChanged, audit
 
-    def _installSharedPackage(self, packageStep, buildId):
+    def _installSharedPackage(self, packageStep, buildId, audit):
         """Try to install shared package
 
         If the package is shared we must copy or move it to the final location.
         This might fail if a concurrent build was faster on the same host. In
         this case we use what was created by the competing build (if the user
         allows using shared packages).
+
+        Returns the path to the audit trail of the package which may have
+        changed if the shared package is used.
         """
         if not self.__installSharedPackages:
-            return
+            return audit
         if not packageStep.isShared() or not self.__share.canInstall():
-            return
+            return audit
 
         prettyPackagePath = packageStep.getWorkspacePath()
 
@@ -1729,7 +1774,7 @@ cd {ROOT}
         if not os.path.exists(os.path.join(prettyPackagePath, "..", "audit.json.gz")):
             stepMessage(packageStep, "INSTALL", "skipped (no audit trail)",
                 SKIPPED, IMPORTANT)
-            return
+            return audit
 
         details = " to {}".format(self.__share.remoteName(buildId))
         with stepAction(packageStep, "INSTALL", prettyPackagePath, details=details) as a:
@@ -1757,6 +1802,9 @@ cd {ROOT}
             BobState().setInputHashes(prettyPackagePath,
                                       packageInputShared(buildId, sharedPath))
             BobState().setStoragePath(prettyPackagePath, sharedWorkspace)
+            audit = sharedAudit
+
+        return audit
 
     async def __queryLiveBuildId(self, step):
         """Predict live build-id of checkout step.
