@@ -965,3 +965,20 @@ def tarfileOpen(*args, **kwargs):
     # Set a sensible extraction filter, used by Python 3.12 and later...
     ret.extraction_filter = _tarExtractFilter
     return ret
+
+
+def dumpFlat(doc, prefix=""):
+    ret = []
+    if isinstance(doc, dict):
+        for k,v in sorted(doc.items()):
+            ret.extend(dumpFlat(v, prefix+"."+k if prefix else k))
+    elif isinstance(doc, list):
+        i = 0
+        for v in doc:
+            ret.extend(dumpFlat(v, "{}[{}]".format(prefix, i)))
+            i += 1
+    else:
+        doc = str(doc).replace('\n', '\\n')
+        ret = [ "{}={}".format(prefix, doc) ]
+
+    return ret
