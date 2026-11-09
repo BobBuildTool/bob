@@ -1,0 +1,9 @@
+root: True
+depends:
+    - dep
+
+buildVars: [MARKER]
+buildScript: |
+    touch "$MARKER"
+packageScript: |
+    echo root > result.txt
