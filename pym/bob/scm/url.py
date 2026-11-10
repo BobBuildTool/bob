@@ -10,6 +10,7 @@ from ..utils import asHexStr, hashFile, removeUserFromUrl, replacePath
 from ..webdav import WebDav, WebdavError, WebdavAlreadyExistsError, \
         WebdavNotFoundError, WebdavNotModifiedError
 from .scm import Scm, ScmAudit
+from .patch import PatchScm
 from http.client import HTTPException
 from abc import abstractmethod
 import asyncio
@@ -318,6 +319,7 @@ class UrlScm(Scm):
     DEFAULTS = {
         **__DEFAULTS,
         schema.Optional('dir') : str,
+        schema.Optional('patches') : PatchScm.PATCHES_SHEMA,
     }
 
     SCHEMA = schema.Schema({
@@ -837,6 +839,10 @@ class UrlScm(Scm):
     def getDirectory(self):
         return self.__dir
 
+    def getProtectedPaths(self):
+        # The retained download is the verified source used for re-extraction.
+        return [self.__fn]
+
     def isDeterministic(self):
         return (self.__digestSha1 is not None) or \
                (self.__digestSha256 is not None) or \
@@ -896,6 +902,8 @@ class UrlAudit(ScmAudit):
             'value' : str
         },
         schema.Optional('url') : str, # Added in Bob 0.16
+        schema.Optional('patches') : [dict],
+        schema.Optional('patchFingerprint') : str,
     })
 
     async def _scanDir(self, workspace, dir, extra):
