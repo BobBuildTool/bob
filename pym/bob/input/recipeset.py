@@ -1118,6 +1118,7 @@ class RecipeSet:
             schema.Optional('depends') : dependsClause,
             schema.Optional('environment') : VarDefineValidator("environment"),
             schema.Optional('inherit') : [str],
+            schema.Optional('localEnvironment') : VarDefineValidator("localEnvironment"),
             schema.Optional('privateEnvironment') : VarDefineValidator("privateEnvironment"),
             schema.Optional('metaEnvironment') : VarDefineValidator("metaEnvironment"),
             schema.Optional('provideDeps') : [str],

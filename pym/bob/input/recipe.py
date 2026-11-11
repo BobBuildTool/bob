@@ -335,6 +335,7 @@ class Recipe(object):
         self.__provideSandbox = recipe.get("provideSandbox")
         self.__provideInterpreters = recipe.get("provideInterpreters", {})
         self.__varSelf = recipe.get("environment", {})
+        self.__varLocal = recipe.get("localEnvironment", {})
         self.__varPrivate = recipe.get("privateEnvironment", {})
         self.__metaEnv = recipe.get("metaEnvironment", {})
         self.__checkoutAuditFiles = recipe.get("checkoutAuditFiles", {})
@@ -457,6 +458,7 @@ class Recipe(object):
 
         # prepare environment merge list
         self.__varSelf = [ self.__varSelf ] if self.__varSelf else []
+        self.__varLocal = [ self.__varLocal ] if self.__varLocal else []
         self.__varPrivate = [ self.__varPrivate ] if self.__varPrivate else []
 
         # first pass: calculate used scripting language
@@ -524,6 +526,7 @@ class Recipe(object):
             tmp.update(self.__provideInterpreters)
             self.__provideInterpreters = tmp
             if cls.__varSelf: self.__varSelf.insert(0, cls.__varSelf)
+            if cls.__varLocal: self.__varLocal.insert(0, cls.__varLocal)
             if cls.__varPrivate: self.__varPrivate.insert(0, cls.__varPrivate)
             self.__checkoutVars |= cls.__checkoutVars
             tmp = cls.__metaEnv.copy()
@@ -679,6 +682,12 @@ class Recipe(object):
         # update plugin states
         for s in states.values(): s.onEnter(env, self.__properties)
 
+        # Dependencies inherit the environment up to here. The local
+        # environment is only visible to the current recipe.
+        depEnv = env.derive()
+        for i in self.__varLocal:
+            env.update(env.substituteCondDict(i, "localEnvironment"))
+
         # traverse dependencies
         subTreePackages = set()
         directPackages = []
@@ -687,7 +696,6 @@ class Recipe(object):
         maybeProvideDeps = []
         checkoutDeps = []
         results = []
-        depEnv = env.derive()
         depTools = tools.derive()
         depSandbox = sandbox
         depInterpreters = interpreters.copy()
