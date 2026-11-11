@@ -263,11 +263,15 @@ A copy of the environment is inherited from the downstream recipe.
 1. Any variable defined in ``environment`` is set to the given value.
 2. Make a copy of the local environment that is subsequently passed to each
    dependency (named "forwarded environment" thereafter).
-3. For each dependency do the following:
+3. Any variable defined in :ref:`configuration-recipes-localenv` is set in the
+   local environment. These variables are not part of the forwarded
+   environment.
+4. For each dependency do the following:
 
-   a. Make a dedicated copy of the environment for the dependency.
+   a. Make a dedicated copy of the forwarded environment for the dependency.
    b. Set variables given in the ``environment`` attribute of the dependency
-      in this copy.
+      in this copy. Their values are substituted from the local environment
+      and may thus refer to ``localEnvironment`` variables.
    c. Descend to the dependency recipe with that environment.
    d. Merge all variables of the ``provideVars`` section of the dependency
       into the local environment if ``environment`` is listed in the ``use``
@@ -1666,7 +1670,8 @@ inheritance order, that is, the last inherited class has the highest
 precedence. Given the above example, the resulting ``CFLAGS`` would be
 ``${CFLAGS:-} -fsanitize=address -Werror -DFOO=1``
 
-See also :ref:`configuration-recipes-privateenv`.
+See also :ref:`configuration-recipes-localenv` and
+:ref:`configuration-recipes-privateenv`.
 
 .. _configuration-recipes-filter:
 
@@ -1876,6 +1881,70 @@ Not available on Windows.
    message: ``*** read jobs pipe: Resource temporarily unavailable.  Stop.``.
    Either update your make version or disable the ``jobServer`` feature.
 
+.. _configuration-recipes-localenv:
+
+localEnvironment
+~~~~~~~~~~~~~~~~
+
+Type::
+
+    {
+        str : str | {
+            "value" : str,
+            Optional("if") : str | IfExpression
+        }
+    }
+
+Defines environment variables that are local to the current recipe. Like
+:ref:`configuration-recipes-privateenv` variables they are not passed to
+upstream recipes. In contrast to ``privateEnvironment``, the local environment
+is evaluated *before* the :ref:`configuration-recipes-depends` of the recipe.
+This makes local variables usable in the conditions, names and environment
+overrides of dependencies. Any inherited variables of the downstream recipe
+with the same name are overwritten.
+
+Example::
+
+    localEnvironment:
+        WITH_FOO: "1"
+
+    depends:
+        - if: "${WITH_FOO}"
+          name: foo
+
+The local variables are only visible to the current recipe. If a dependency
+should see a local variable, it must be passed explicitly by the
+``environment`` setting of the dependency::
+
+    depends:
+        - name: foo
+          environment:
+              WITH_FOO: "${WITH_FOO}"
+
+The environment of a recipe is computed in the following order where later
+definitions take precedence over earlier ones:
+
+1. The inherited environment of the downstream recipe.
+2. :ref:`configuration-recipes-env` (passed to dependencies)
+3. ``localEnvironment``
+4. Environment variables provided by dependencies (``use: [environment]``)
+   or by the sandbox (``use: [sandbox]``), in the order of their declaration.
+5. Environment variables of the used tools.
+6. :ref:`configuration-recipes-privateenv`
+7. :ref:`configuration-recipes-metaenv`
+
+Hence variables defined by ``localEnvironment`` are overwritten by variables
+that are provided by dependencies, tools or ``privateEnvironment``.
+
+The ``localEnvironment`` of the recipe and inherited classes are merged
+together.  See :ref:`configuration-recipes-env` for the merge and string
+substitution behaviour.
+
+The definition of a variable can optionally be guarded by an ``if`` condition.
+Only if the ``if`` property evaluates to true, the variable is actually
+defined. Might be a string or an IfExpression. See
+:ref:`configuration-principle-booleans` for details about the evaluation.
+
 .. _configuration-recipes-metaenv:
 
 metaEnvironment
@@ -1975,6 +2044,11 @@ Defines environment variables just for the current recipe. Any inherited
 variables with the same name of the downstream recipe or others that were
 consumed from the dependencies are overwritten. All variables defined or
 replaced by this keyword are private to the current recipe.
+
+The private environment is evaluated *after* all dependencies of the recipe.
+Its variables can therefore not be used in the
+:ref:`configuration-recipes-depends` section. Use
+:ref:`configuration-recipes-localenv` for this purpose.
 
 Example::
 
