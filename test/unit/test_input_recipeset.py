@@ -986,6 +986,163 @@ class TestDependencyEnv(RecipesTmp, TestCase):
             p.getPackageStep().getEnv())
 
 
+class TestLocalEnvironment(RecipesTmp, TestCase):
+    """Tests related to "localEnvironment" of recipes"""
+
+    def testDependencyCondition(self):
+        """Local variables can be used in dependency conditions"""
+        self.writeRecipe("foo", """\
+            root: True
+            multiPackage:
+                "bar":
+                    packageScript: "true"
+                "":
+                    depends:
+                        - if: "$(eq,${ENV_VAR:-},test)"
+                          depends:
+                            - name: foo-bar
+                    packageScript: "true"
+                    multiPackage:
+                        "test":
+                            localEnvironment:
+                                ENV_VAR: "test"
+                        "other": {}
+            """)
+
+        packages = self.generate()
+        packages.walkPackagePath("foo-test/foo-bar")
+        self.assertRaises(BobError, packages.walkPackagePath, "foo-other/foo-bar")
+
+    def testConditionalDefinition(self):
+        """Local variables can be guarded by a condition"""
+        self.writeRecipe("root", """\
+            root: True
+            localEnvironment:
+                V1:
+                    value: "x"
+                    if: "${ENABLE_V1:-0}"
+                V2: y
+            buildVars: [V1, V2]
+            buildScript: "true"
+            """)
+
+        packages = self.generate()
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({"V2" : "y"}, ps.getEnv())
+
+        packages = self.generate(env={"ENABLE_V1" : "1"})
+        ps = packages.walkPackagePath("root").getPackageStep()
+        self.assertEqual({"V1" : "x", "V2" : "y"}, ps.getEnv())
+
+    def testNotInherited(self):
+        """Local variables are not passed to dependencies"""
+        self.writeRecipe("root", """\
+            root: True
+            environment:
+                FOO: "inherited"
+            localEnvironment:
+                FOO: "local"
+                BAR: "local"
+            depends:
+                - dep
+            packageVars: [FOO, BAR]
+            packageScript: "true"
+            """)
+        self.writeRecipe("dep", """\
+            packageVars: [FOO, BAR]
+            packageScript: "true"
+            """)
+
+        packages = self.generate()
+        self.assertEqual({"FOO": "local", "BAR": "local"},
+            packages.walkPackagePath("root").getPackageStep().getEnv())
+        self.assertEqual({"FOO": "inherited"},
+            packages.walkPackagePath("root/dep").getPackageStep().getEnv())
+
+    def testExplicitForward(self):
+        """Local variables can be passed explicitly to dependencies"""
+        self.writeRecipe("root", """\
+            root: True
+            localEnvironment:
+                FOO: "local"
+            depends:
+                - name: "dep-${FOO}"
+                  environment:
+                    BAR: "$FOO"
+            packageScript: "true"
+            """)
+        self.writeRecipe("dep-local", """\
+            packageVars: [FOO, BAR]
+            packageScript: "true"
+            """)
+
+        p = self.generate().walkPackagePath("root/dep-local")
+        self.assertEqual({"BAR": "local"}, p.getPackageStep().getEnv())
+
+    def testSubstitute(self):
+        """Local variables are substituted after the environment"""
+        self.writeRecipe("root", """\
+            root: True
+            environment:
+                FOO: "foo"
+            localEnvironment:
+                BAR: "${FOO}-${BAZ}"
+            packageVars: [BAR]
+            packageScript: "true"
+            """)
+
+        p = self.generate(env={"BAZ": "baz"}).walkPackagePath("root")
+        self.assertEqual({"BAR": "foo-baz"}, p.getPackageStep().getEnv())
+
+    def testPrecedence(self):
+        """Provided and private variables override local variables"""
+        self.writeRecipe("root", """\
+            root: True
+            localEnvironment:
+                A: "local"
+                B: "local"
+                C: "local"
+            depends:
+                - name: provider
+                  use: [environment]
+            privateEnvironment:
+                C: "private"
+            packageVars: [A, B, C]
+            packageScript: "true"
+            """)
+        self.writeRecipe("provider", """\
+            provideVars:
+                B: "provided"
+            packageScript: "true"
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertEqual({"A": "local", "B": "provided", "C": "private"},
+            p.getPackageStep().getEnv())
+
+    def testClassMerge(self):
+        """Local environment of classes is merged in inheritance order"""
+        self.writeRecipe("root", """\
+            root: True
+            inherit: [a, b]
+            localEnvironment:
+                FOO: "${FOO:-} root"
+            packageVars: [FOO]
+            packageScript: "true"
+            """)
+        self.writeClass("a", """\
+            localEnvironment:
+                FOO: "${FOO:-} a"
+            """)
+        self.writeClass("b", """\
+            localEnvironment:
+                FOO: "${FOO:-} b"
+            """)
+
+        p = self.generate().walkPackagePath("root")
+        self.assertEqual({"FOO": " a b root"}, p.getPackageStep().getEnv())
+
+
 class TestNetAccess(RecipesTmp, TestCase):
 
     def testDefaultPolicy(self):
