@@ -7,7 +7,7 @@ from unittest import TestCase
 import yaml
 
 from bob.errors import ParseError
-from bob.input import ScmOverride
+from bob.scm import ScmOverride
 from bob.stringparser import Env
 
 class TestScmOverride(TestCase):

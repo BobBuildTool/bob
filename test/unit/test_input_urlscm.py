@@ -20,7 +20,7 @@ import sys
 
 from mocks.http_server import HttpServerMock
 
-from bob.input import UrlScm
+from bob.scm import UrlScm
 from bob.scm.url import parseMode, dumpMode
 from bob.invoker import Invoker, InvocationError
 from bob.errors import ParseError, BuildError

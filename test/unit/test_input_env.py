@@ -6,7 +6,8 @@
 from unittest import TestCase
 import schema
 
-from bob.input import Env, VarDefineValidator
+from bob.input.validators import VarDefineValidator
+from bob.stringparser import Env
 from bob.errors import ParseError
 
 class TestEnv(TestCase):
