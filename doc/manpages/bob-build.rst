@@ -26,6 +26,7 @@ Synopsis
               [--install | --no-install]
               [--sandbox | --slim-sandbox | --dev-sandbox | --strict-sandbox | --no-sandbox]
               [--clean-checkout] [--attic | --no-attic]
+              [--check-deps | --no-check-deps]
               PACKAGE [PACKAGE ...]
 
 Description
@@ -51,5 +52,6 @@ overridden individually by their inverse switches:
 * ``--download=yes``
 * ``--clean``
 * ``--sandbox``
+* ``--check-deps``
 
 .. include:: bob-build-dev.rst

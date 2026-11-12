@@ -475,6 +475,17 @@ audit.meta.<var>
    ``meta.<var>`` to select artifacts built by this project. Variables that are
    defined by Bob itself (e.g. ``meta.jenkins-node``) cannot be redefined!
 
+jobs.check-deps
+    Boolean option (possible values: '0' or 'false' resp. '1' or 'true') that
+    verifies that steps do not modify the workspaces of their dependencies.
+    This option is enabled by default. All dependency workspaces of a step that
+    is executed outside of a sandbox are hashed before and after the step. The
+    job fails if any of them was modified. Steps that are executed in a sandbox
+    are not checked because they cannot modify their dependencies anyway.
+
+    You may disable this option to slightly improve build times. Usually the
+    impact is not noticeable, though. If in doubt, leave it enabled.
+
 jobs.clean.post-build
    Controls whether the workspace of the Jenkins jobs should be cleaned after a
    job was run. By default, the workspace is kept (``never``). Use the other

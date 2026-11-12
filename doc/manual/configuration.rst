@@ -3039,6 +3039,7 @@ attic           ``--[no]-attic``       Boolean
 audit           ``--[no]-audit``       Boolean
 build_mode      ``-b`` | ``-B`` |      String (``normal``, ``build-only`` or
                 ``--normal``           ``checkout-only``)
+check_deps      ``--[no-]check-deps``  Boolean
 clean           ``--clean`` |          Boolean
                 ``--incremental``
 clean_checkout  ``--clean-checkout``   Boolean
