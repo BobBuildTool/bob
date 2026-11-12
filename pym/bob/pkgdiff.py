@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+"""Compare package variant inputs and render their differences."""
+
 import difflib
 from typing import List, Optional, Tuple
+from .input.common import DigestHasher
 from .tty import colorize, ADDED, DELETED, DEFAULT, ADDED_HIGHLIGHT, DELETED_HIGHLIGHT
 from .utils import asHexStr, dumpFlat
+
 
 def dumpPackage(package):
     recipe = package.getRecipe()
@@ -169,3 +173,136 @@ def diffPackages(left, right, show_common):
 
     return "\n".join(ret)
 
+def dumpPackagePair(left, right):
+    """Dump packages, treating equal dependency variants as common values."""
+    docs = dumpPackage(left), dumpPackage(right)
+    for method, field in (("getCheckoutStep", "checkoutTools"),
+                          ("getBuildStep", "buildTools"),
+                          ("getPackageStep", "packageTools")):
+        a, b = getattr(left, method)(), getattr(right, method)()
+        ta, tb = a.getTools(), b.getTools()
+        for name in ta.keys() & tb.keys():
+            if ta[name].getStep().getVariantId()[:20] != tb[name].getStep().getVariantId()[:20]:
+                continue
+            for key in (field, field + "Weak"):
+                if name in docs[0].get(key, {}) and name in docs[1].get(key, {}):
+                    docs[1][key][name] = docs[0][key][name]
+    a, b = left.getBuildStep(), right.getBuildStep()
+    if a.isValid() and b.isValid():
+        for i, (x, y) in enumerate(zip(a.getArguments()[1:], b.getArguments()[1:])):
+            if x.getVariantId() == y.getVariantId():
+                docs[1]["depends"][i] = docs[0]["depends"][i]
+    a, b = left.getPackageStep().getSandbox(), right.getPackageStep().getSandbox()
+    if a and b and a.getStep().getVariantId() == b.getStep().getVariantId():
+        docs[1]["sandbox"] = docs[0]["sandbox"]
+    return docs
+
+
+def renderPackageDiffChain(chain, filt=lambda x: x, showCommon=False):
+    output = []
+    for index, (left, right, field) in enumerate(chain):
+        left, right = left.getPackage(), right.getPackage()
+        leftDoc, rightDoc = dumpPackagePair(left, right)
+        leftPath, rightPath = "/".join(left.getStack()), "/".join(right.getStack())
+        output.append("diff {} {}\n--- {}\n+++ {}\n{}".format(
+            leftPath, rightPath, leftPath, rightPath,
+            diffPackages(filt(leftDoc), filt(rightDoc), showCommon)))
+        if field:
+            nextLeft, nextRight, _ = chain[index + 1]
+            leftName = nextLeft.getPackage().getName()
+            rightName = nextRight.getPackage().getName()
+            names = "'{}'".format(leftName)
+            if leftName != rightName:
+                names += " and '{}'".format(rightName)
+            output.append("The above package diff was caused by '{}' from package {}:".format(
+                field, names))
+    return "\n\n".join(output)
+
+
+def calcPackageDiffRecursive(left, right) -> Optional[List[Tuple["Step", "Step", Optional[str]]]]:
+    """Find a chain of packages that explains a recursive variant difference.
+
+    Each entry contains the left and right steps at that point in the chain and
+    the field on the preceding package that led to them. The first entry's
+    field is ``None``. Return ``None`` if no concrete difference can be found.
+    """
+    if left.getVariantId() == right.getVariantId():
+        return None
+
+    visited = set()
+
+    # The fingerprint part of the Variant-Id of tools is ignored.
+    # Consequently, changes to the fingerprint part of tools that are compared
+    # must be ignored.
+    def compare(a, b, withFingerprint):
+        key = a.getVariantId(), b.getVariantId(), withFingerprint
+        if key in visited:
+            return None
+        visited.add(key)
+
+        pa, pb = a.getPackage(), b.getPackage()
+        pending = []
+        for sa, sb in zip((pa.getCheckoutStep(), pa.getBuildStep(), pa.getPackageStep()),
+                          (pb.getCheckoutStep(), pb.getBuildStep(), pb.getPackageStep())):
+            if sa.isValid() != sb.isValid():
+                return [(a, b, None)]
+            if not sa.isValid():
+                continue
+
+            if (sa._coreStep.digestEnv != sb._coreStep.digestEnv or
+                sa.getDigestScript()   != sb.getDigestScript()):
+                return [(a, b, None)]
+
+            ta, tb = sa.getTools(), sb.getTools()
+            # Strictly speaking, the tool name is ignored for the Variant-Id
+            # calculation.  But different tools will have different Variant-Ids
+            # in practice. This way it's easier to compare.
+            if set(ta) != set(tb):
+                return [(a, b, None)]
+            for name in sorted(ta):
+                if (ta[name].getPath() != tb[name].getPath() or
+                    ta[name].getLibs() != tb[name].getLibs()):
+                    return [(a, b, None)]
+                x, y = ta[name].getStep(), tb[name].getStep()
+                # The fingerprint part of tools is ignored! See CoreStep.getDigest().
+                xv = DigestHasher.sliceRecipes(x.getVariantId())
+                yv = DigestHasher.sliceRecipes(y.getVariantId())
+                if xv == yv:
+                    continue
+                pending.append((x, y, False,
+                    {"src": "checkoutTools",
+                     "build": "buildTools",
+                     "dist": "packageTools"}[sa.getLabel()] + "." + name))
+
+            # Skip the intra-package arguments in build- and package-steps
+            firstArg = 0 if sa.isCheckoutStep() else 1
+            aa = [x for x in sa.getArguments()[firstArg:] if x.isValid()]
+            ab = [x for x in sb.getArguments()[firstArg:] if x.isValid()]
+            if len(aa) != len(ab):
+                return [(a, b, None)]
+            for index, (x, y) in enumerate(zip(aa, ab)):
+                xid, yid = x.getVariantId(), y.getVariantId()
+                if not withFingerprint:
+                    xid, yid = DigestHasher.sliceRecipes(xid), DigestHasher.sliceRecipes(yid)
+                if xid == yid:
+                    continue
+                pending.append((x, y, withFingerprint, "depends[{}]".format(index)))
+
+            # The sandbox contributes only to the fingerprint part.
+            if withFingerprint:
+                x = sa.getSandbox() if sa._isFingerprinted() else None
+                y = sb.getSandbox() if sb._isFingerprinted() else None
+                if bool(x) != bool(y):
+                    return [(a, b, None)]
+                if x and y:
+                    x, y = x.getStep(), y.getStep()
+                    if x.getVariantId() != y.getVariantId():
+                        pending.append((x, y, True, "sandbox"))
+
+        for x, y, withFingerprint, field in pending:
+            result = compare(x, y, withFingerprint)
+            if result:
+                return [(a, b, field)] + result
+        return None
+
+    return compare(left, right, True)
