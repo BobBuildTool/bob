@@ -1,0 +1,3 @@
+packageScript: echo s1
+provideSandbox:
+  paths: [/bin]

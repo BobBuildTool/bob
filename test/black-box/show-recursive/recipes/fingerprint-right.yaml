@@ -1,0 +1,12 @@
+root: true
+depends:
+  - name: s2
+    use: [sandbox]
+    forward: true
+  - name: tool
+    use: [tools]
+packageTools: [tool]
+packageVars: [ROOT]
+environment:
+  ROOT: right
+packageScript: 'true'
