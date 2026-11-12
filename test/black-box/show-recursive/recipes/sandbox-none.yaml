@@ -1,0 +1,4 @@
+root: true
+fingerprintIf: true
+fingerprintScript: 'true'
+packageScript: 'true'
