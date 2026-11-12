@@ -5,7 +5,7 @@
 
 from ..errors import ParseError
 from ..input import RecipeSet
-from ..variant import dumpPackage, diffPackages
+from ..variant import diffPackages, dumpPackage, findVariantDifference, renderVariantDifferences
 from .helpers import processDefines, addStandardArgs, dumpYaml, dumpJson, dumpFlat
 import argparse
 import json
@@ -77,7 +77,10 @@ def doShow(argv, bobRoot):
         choices=sorted(ALL_FIELDS),
         help="Show particular field(s) instead of all")
 
+    group.add_argument('--recursive', action='store_true', help='Explain variant differences recursively')
     args = parser.parse_args(argv)
+    if args.recursive and args.format != 'diff':
+        parser.error('--recursive requires diff format')
     defines = processDefines(args.defines)
 
     recipes = RecipeSet()
@@ -94,10 +97,12 @@ def doShow(argv, bobRoot):
         filt = lambda x, filt=filt: filterFields(filt(x), args.field)
 
     docs = []
+    selected = []
     with packages:
         for p in args.packages:
             for package in packages.queryPackagePath(p):
                 docs.append(("/".join(package.getStack()), filt(dumpPackage(package))))
+                selected.append(package)
 
     if not docs:
         print("Your query matched no packets!", file=sys.stderr)
@@ -110,6 +115,12 @@ def doShow(argv, bobRoot):
         ret = showPackagesFlat(docs)
     elif len(docs) != 2:
         raise ParseError("Diff format requires exactly two packages")
+    elif args.recursive:
+        pair = findVariantDifference(selected[0].getPackageStep(), selected[1].getPackageStep())
+        if pair:
+            ret = renderVariantDifferences(pair, filt, args.show_common)
+        else:
+            ret = ""
     else:
         ret = diffPackages(docs[0][1], docs[1][1], args.show_common)
 
