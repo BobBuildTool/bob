@@ -1,0 +1,21 @@
+root: True
+depends:
+    - dep
+
+checkoutScript: |
+    echo src > src.txt
+
+buildVars: [MODIFY]
+buildScript: |
+    case "${MODIFY:-}" in
+        src) echo bad >> "$1/src.txt" ;;
+        dep) echo bad >> "$2/result.txt" ;;
+    esac
+    cp "$2/result.txt" dep.txt
+
+packageVars: [MODIFY_PKG]
+packageScript: |
+    if [[ ${MODIFY_PKG:-} == build ]] ; then
+        echo bad >> "$1/dep.txt"
+    fi
+    cp "$1/dep.txt" .

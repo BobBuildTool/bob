@@ -99,6 +99,16 @@ class TestJenkinsSetOptions(JenkinsTests, TestCase):
         self.executeBobJenkinsCmd("set-options test --strict-sandbox")
         self.assertEqual(BobState().getJenkinsConfig("test").sandbox.mode, "strict")
 
+    def testCheckDeps(self):
+        self.assertTrue(BobState().getJenkinsConfig("test").jobsCheckDeps)
+        self.executeBobJenkinsCmd("set-options test -o jobs.check-deps=0")
+        self.assertFalse(BobState().getJenkinsConfig("test").jobsCheckDeps)
+        self.executeBobJenkinsCmd("set-options test -o jobs.check-deps=true")
+        self.assertTrue(BobState().getJenkinsConfig("test").jobsCheckDeps)
+
+        with self.assertRaises(SystemExit):
+            self.executeBobJenkinsCmd("set-options test -o jobs.check-deps=foo")
+
     def testPostBuildClean(self):
         self.executeBobJenkinsCmd("set-options test -o jobs.clean.post-build=never")
         self.assertFalse(BobState().getJenkinsConfig("test").postBuildCleanSuccess)

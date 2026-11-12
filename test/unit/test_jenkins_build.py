@@ -194,6 +194,45 @@ class JenkinsCleanIncremental(JenkinsTests, TestCase):
                 self.assertEqual(f.read(), "2\n")
 
 
+class JenkinsCheckDeps(JenkinsTests, TestCase):
+    """Verify that modifications of dependency workspaces are detected"""
+
+    def setUp(self):
+        super().setUp()
+        try:
+            self.writeRecipe("lib", """\
+                packageScript: |
+                    echo lib > result.txt
+                """)
+            self.writeRecipe("root", """\
+                root: True
+                depends: [ "lib" ]
+                buildScript: |
+                    echo bad >> "$2/result.txt"
+                    cp "$2/result.txt" .
+                packageScript: |
+                    cp "$1/result.txt" .
+                """)
+        except:
+            super().tearDown()
+            raise
+
+    def testDefaultEnabled(self):
+        """Modifying a dependency fails the build by default"""
+        self.executeBobJenkinsCmd("push test")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.jenkinsMock.run()
+
+    def testDisabled(self):
+        """The check can be disabled by an extended option"""
+        self.executeBobJenkinsCmd("set-options test -o jobs.check-deps=0")
+        self.executeBobJenkinsCmd("push test")
+        self.jenkinsMock.run()
+        with self.getJobResult("root") as d:
+            with open(os.path.join(d, "result.txt")) as f:
+                self.assertEqual(f.read(), "lib\nbad\n")
+
+
 class JenkinsProvideInterpreters(JenkinsTests, TestCase):
     """Verify that provideInterpreters is honored by Jenkins builds"""
 
