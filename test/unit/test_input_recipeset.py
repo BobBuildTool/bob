@@ -577,7 +577,83 @@ class TestDependencies(RecipesTmp, TestCase):
         recipes = RecipeSet()
         recipes.parse()
         packages = recipes.generatePackages(lambda x,y: "unused")
-        self.assertRaises(ParseError, packages.getRootPackage)
+        with self.assertRaises(ParseError) as error:
+            packages.getRootPackage()
+        message = str(error.exception)
+        self.assertIn("Concrete differences:", message)
+        self.assertIn("diff /root/b/c /root/a/c\n--- /root/b/c\n+++ /root/a/c", message)
+        self.assertIn("buildVars.FOO=A", message)
+        self.assertIn("buildVars.FOO=B", message)
+
+    def testIncompatibleProvidedToolPaths(self):
+        self.writeRecipe("root", "root: True\ndepends: [a, b]\npackageScript: 'true'\n")
+        for name, value in (("a", "first"), ("b", "second")):
+            self.writeRecipe(name, """\
+                depends:
+                    - name: tool
+                      use: [tools]
+                      forward: True
+                      environment: { VARIANT: %s }
+                    - c
+                provideDeps: [c]
+                packageScript: 'true'
+                """ % value)
+        self.writeRecipe("tool", """\
+            packageVars: [VARIANT]
+            packageScript: 'true'
+            provideTools: { mytool: bin }
+            """)
+        self.writeRecipe("c", "packageTools: [mytool]\npackageScript: 'true'\n")
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda x, y: "unused")
+        with self.assertRaises(ParseError) as error:
+            packages.getRootPackage()
+        message = str(error.exception)
+        self.assertIn("caused by 'packageTools.mytool'", message)
+        self.assertIn("/root/a/tool", message)
+        self.assertIn("/root/b/tool", message)
+        self.assertIn("packageVars.VARIANT=first", message)
+        self.assertIn("packageVars.VARIANT=second", message)
+
+    def testIncompatibleInheritedToolPath(self):
+        self.writeRecipe("root", """\
+            root: True
+            depends:
+                - name: tool
+                  use: [tools]
+                  forward: True
+                  environment: { VARIANT: first }
+                - a
+                - b
+            packageScript: 'true'
+            """)
+        self.writeRecipe("a", "depends: [c]\nprovideDeps: [c]\npackageScript: 'true'\n")
+        self.writeRecipe("b", """\
+            depends:
+                - name: tool
+                  use: [tools]
+                  forward: True
+                  environment: { VARIANT: second }
+                - c
+            provideDeps: [c]
+            packageScript: 'true'
+            """)
+        self.writeRecipe("tool", """\
+            packageVars: [VARIANT]
+            packageScript: 'true'
+            provideTools: { mytool: bin }
+            """)
+        self.writeRecipe("c", "packageTools: [mytool]\npackageScript: 'true'\n")
+        recipes = RecipeSet()
+        recipes.parse()
+        packages = recipes.generatePackages(lambda x, y: "unused")
+        with self.assertRaises(ParseError) as error:
+            packages.getRootPackage()
+        message = str(error.exception)
+        self.assertIn("/root/tool", message)
+        self.assertIn("/root/b/tool", message)
+        self.assertIn("caused by 'packageTools.mytool'", message)
 
     def testProvideDisabled(self):
         """Providing disabled dependencies is not considered an error."""
