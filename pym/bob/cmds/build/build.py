@@ -232,6 +232,11 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
     parser.add_argument('--clean-checkout', action='store_true', default=None, dest='clean_checkout',
         help="Do a clean checkout if SCM state is dirty.")
     group = parser.add_mutually_exclusive_group()
+    group.add_argument('--check-deps', action='store_true', default=None, dest='check_deps',
+        help="Fail if a step outside a sandbox modifies the workspaces of its dependencies.")
+    group.add_argument('--no-check-deps', action='store_false', dest='check_deps',
+        help="Do not check if steps modify the workspaces of their dependencies.")
+    group = parser.add_mutually_exclusive_group()
     group.add_argument('--attic', action='store_true', default=None,
         help="Move scm to attic if inline switch is not possible (default).")
     group.add_argument('--no-attic', action='store_false', default=None, dest='attic',
@@ -270,6 +275,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
                 'download' : "deps" if develop else "yes",
                 'sandbox' : "no" if develop else "yes",
                 'clean_checkout' : False,
+                'check_deps' : not develop,
                 'no_logfiles' : False,
                 'link_deps' : True,
                 'keep_going' : False,
@@ -328,6 +334,7 @@ def commonBuildDevelop(parser, argv, bobRoot, develop):
             builder.setLocalDownloadMode(args.download)
             builder.setLocalDownloadLayerMode(args.download_layer)
             builder.setCleanCheckout(args.clean_checkout)
+            builder.setCheckDependencies(args.check_deps)
             builder.setAlwaysCheckout(args.always_checkout + cfg.get('always_checkout', []))
             builder.setLinkDependencies(args.link_deps)
             builder.setJobserverConfig(jobserverCfg)

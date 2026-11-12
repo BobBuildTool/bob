@@ -154,6 +154,9 @@ class JenkinsConfig:
             import re
             if not re.fullmatch(r"[0-9A-Za-z._-]+", key):
                 errorHandler("Invalid audit meta variable name: " + key)
+        elif key == "jobs.check-deps":
+            if value.lower() not in ("0", "false", "1", "true"):
+                errorHandler("jobs.check-deps must be any of: 0/false/1/true")
         elif key == "jobs.clean.post-build":
             if value not in ("never", "on-success", "on-failure", "always"):
                 errorHandler("jobs.clean.post-build must be any of: never/on-success/on-failure/always")
@@ -238,6 +241,10 @@ class JenkinsConfig:
     @property
     def artifactsCopy(self):
         return self.__options.get("artifacts.copy", "jenkins")
+
+    @property
+    def jobsCheckDeps(self):
+        return isTrue(self.__options.get("jobs.check-deps", "1"))
 
     @property
     def jobsIsolate(self):
