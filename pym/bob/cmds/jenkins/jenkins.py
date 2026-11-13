@@ -448,6 +448,10 @@ class JenkinsJob:
         ])
         if config.sharedQuota:
             execCmds.append("quota=" + config.sharedQuota)
+        # Only record the non-default case. Otherwise all existing jobs would
+        # be reconfigured and scheduled again.
+        if not config.jobsCheckDeps:
+            execCmds.append("check-deps=0")
         if recipesAudit:
             execCmds.extend(["[recipes-audit]", recipesAudit])
         auditMeta = config.getAuditMeta()

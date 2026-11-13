@@ -58,6 +58,66 @@ async def hashWorkspace(step):
     # Cache is also used by share module
     return await loop.run_in_executor(None, hashDirectory, step.getStoragePath(), cachePath)
 
+class DependencyChecker:
+    """Detect modifications of dependency workspaces by a step.
+
+    All workspaces that are visible to a step, except its own one, must not be
+    modified. This is enforced by a sandbox where these workspaces are mounted
+    read-only. If a step is executed without a sandbox, this class can be used
+    to detect inadvertent modifications by hashing the workspaces before and
+    after the step was executed.
+    """
+
+    def __init__(self, step):
+        # The checkout and build step of the same package are always visible
+        # to the package step. Stop at checkout steps because they might have
+        # dependencies due to the 'checkoutDep' flag. Mirrors the logic of
+        # the sandbox mounts in StepSpec.fromStep().
+        deps = [ d for d in step.getAllDepSteps() if d.isValid() ]
+        extra = step
+        while extra.isValid() and not extra.isCheckoutStep() and len(extra.getArguments()) > 0:
+            extra = extra.getArguments()[0]
+            if extra.isValid():
+                deps.append(extra)
+
+        self.__deps = {}
+        for d in deps:
+            self.__deps.setdefault(d.getWorkspacePath(), d)
+        self.__hashes = None
+
+    async def __hashAll(self):
+        hashes = await asyncio.gather(*(hashWorkspace(d) for d in self.__deps.values()))
+        return dict(zip(self.__deps.keys(), hashes))
+
+    async def prepare(self):
+        self.__hashes = await self.__hashAll()
+
+    async def verify(self):
+        """Verify that no dependency workspace was modified.
+
+        Changed workspaces of build and package steps are invalidated so that
+        they are executed again on the next invocation. The checkout steps
+        are always re-hashed and need no special treatment.
+        """
+        after = await self.__hashAll()
+        changed = sorted(path for path, h in after.items()
+                         if self.__hashes[path] != h)
+        if not changed:
+            return
+
+        for path in changed:
+            if self.__deps[path].isCheckoutStep(): continue
+            BobState().delInputHashes(path)
+            BobState().setResultHash(path, datetime.datetime.now())
+
+        raise BuildError("Step modified the following dependency workspace(s): " +
+                         ", ".join(changed),
+            help="Steps must not change the workspaces of their dependencies. "
+                 "Fix the recipe to work only in its own workspace. Changed build "
+                 "and package workspaces will be rebuilt on the next "
+                 "invocation. Use 'bob status' to inspect changed source "
+                 "workspaces. You may disable this check with '--no-check-deps'.")
+
 class HashOnce:
     def __init__(self, step):
         self.step = step
@@ -493,6 +553,7 @@ cd {ROOT}
         self.__executor = None
         self.__attic = True
         self.__slimSandbox = False
+        self.__checkDeps = False
 
     def setExecutor(self, executor):
         self.__executor = executor
@@ -590,6 +651,14 @@ cd {ROOT}
 
     def setSlimSandbox(self, enable):
         self.__slimSandbox = enable
+
+    def setCheckDependencies(self, enable):
+        """Verify that dependency workspaces are not modified by a step.
+
+        Only applies to steps that are not executed in a sandbox. Sandboxed
+        steps cannot modify their dependencies anyway.
+        """
+        self.__checkDeps = enable
 
     def setShareHandler(self, handler):
         self.__share = handler
@@ -879,6 +948,11 @@ cd {ROOT}
             executor=self.__executor)
         if step.jobServer() and self.__jobServer:
             invoker.setMakeJobserver(self.__jobServer.getSubMakeJobserverCfg(step.jobServer()))
+        if self.__checkDeps and not spec.hasSandbox:
+            depChecker = DependencyChecker(step)
+            await depChecker.prepare()
+        else:
+            depChecker = None
         ret = await invoker.executeStep(mode, workspaceCreated, cleanWorkspace)
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
         if ret == -int(signal.SIGINT):
@@ -891,6 +965,8 @@ cd {ROOT}
                                 .format(absRunFile, ret),
                              help="You may resume at this point with '--resume' after fixing the error.",
                              returncode=ret)
+        if depChecker is not None:
+            await depChecker.verify()
 
     def getStatistic(self):
         return self.__statistic

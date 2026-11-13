@@ -101,6 +101,29 @@ Options
 
     This is the default unless the user changed it in ``default.yaml``.
 
+``--check-deps``
+    Verify that steps do not modify the workspaces of their dependencies.
+
+    Steps must only ever change their own workspace. All other workspaces that
+    are visible to a step (e.g. the sources of the package, its dependencies
+    and tools) must be left untouched. Inside a sandbox this is enforced by
+    mounting these workspaces read-only. When a step is executed without a
+    sandbox, Bob cannot prevent such modifications. With this option, Bob will
+    hash all dependency workspaces before and after executing a step outside
+    of a sandbox and fail the build if any of them was modified.
+
+    Modified build and package workspaces are invalidated and will be rebuilt
+    on the next invocation. Steps that are executed in a sandbox are not
+    checked because they cannot modify their dependencies anyway.
+
+    This is the default for release mode builds (*bob build*). See
+    ``--no-check-deps`` for the inverse option.
+
+    .. note::
+       If more than one step is executed concurrently (``-j``), the error might
+       be attributed to the wrong step because they may share common
+       dependencies.
+
 ``--clean``
     Do clean builds by clearing the build directory before executing the build
     commands. It will *not* clean all build results (e.g. like ``make clean``)
@@ -191,6 +214,11 @@ Options
 
 ``--link-deps``
     Create symlinks to dependencies next to workspace.
+
+``--no-check-deps``
+    Do not verify that steps leave the workspaces of their dependencies
+    untouched. This is the default for development mode builds (*bob dev*).
+    See ``--check-deps`` for details.
 
 ``--no-install``
     Do not install shared packages if a shared location is configured.

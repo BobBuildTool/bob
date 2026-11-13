@@ -31,6 +31,7 @@ class Spec:
         self.__recipesAudit = []
         self.__execIR = []
         self.slimSandbox = False
+        self.checkDeps = True
 
         with open(specFile, "r") as f:
             f.readline() # skip shebang
@@ -68,6 +69,8 @@ class Spec:
             self.scmAlwaysCheckout = isTrue(v)
         elif k == "slimSandbox":
             self.slimSandbox = isTrue(v)
+        elif k == "check-deps":
+            self.checkDeps = isTrue(v)
         else:
             raise AssertionError(line)
 
@@ -241,6 +244,7 @@ def doJenkinsExecuteRun(argv, bobRoot):
         if spec.scmAlwaysCheckout:
             builder.setAlwaysCheckout([".*"])
         builder.setSlimSandbox(spec.slimSandbox)
+        builder.setCheckDependencies(spec.checkDeps)
         builder.cook(ir.getRoots(), False, loop)
 
     return 0
