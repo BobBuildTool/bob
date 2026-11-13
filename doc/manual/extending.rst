@@ -60,6 +60,9 @@ internal and might change without notice.
 .. autoclass:: bob.input.Tool()
    :members:
 
+.. autoclass:: bob.input.Interpreter()
+   :members:
+
 .. autoclass:: bob.pathspec.PackageSet()
    :members: getRootPackage, queryPackagePath, getAliases
 

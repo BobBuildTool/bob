@@ -428,6 +428,7 @@ class Step:
             [interpreter.getStep()] if interpreter else [])
 
     def getInterpreter(self):
+        """Return used interpreter of step, if any."""
         return self.__package._getInterpreter()
 
     def getEnv(self):
