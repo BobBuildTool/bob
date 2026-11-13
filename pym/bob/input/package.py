@@ -264,6 +264,20 @@ class Step:
     def __ge__(self, other):
         return self._coreStep.variantId >= other._coreStep.variantId
 
+    def getScmList(self):
+        """Return the list of SCMs of this step.
+
+        Only checkout steps can have SCMs. They are returned as
+        :class:`bob.scm.Scm` objects in the order of their declaration in the
+        ``checkoutSCM`` section of the recipe. SCMs whose ``if`` condition
+        evaluates to false are not included. Any :ref:`configuration-config-scmOverrides`
+        are already applied. Build and package steps, as well as checkout
+        steps without any ``checkoutSCM``, return an empty list.
+
+        :return: List of :class:`bob.scm.Scm` objects
+        """
+        return []
+
     def getPreRunCmds(self):
         return self._coreStep.getPreRunCmds()
 
