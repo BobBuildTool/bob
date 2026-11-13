@@ -186,6 +186,19 @@ def addTransitiveTools(depSetStrong, depSetWeak, toolsView):
         depSetStrong |= dependTools
         depSetWeak |= dependToolsWeak
 
+def _calcRootAmbientDeps():
+    """Calculate the ambient dependencies of root packages"""
+    return ({}, None, {})
+
+def _makeDepAmbientCalc(parentAmbientCalc, stack, diffTools, diffSandbox, diffInterpreters):
+    """Create a resolver for the ambient dependencies (tools, sandbox and
+    interpreters) of a dependency. """
+    def resolve():
+        tools, sandbox, interpreters = parentAmbientCalc()
+        return CoreRef(corePackageInternal, [], diffTools, diffSandbox,
+            diffInterpreters).refDeref(stack, tools, sandbox, interpreters, PathsConfig(None, False))
+    return resolve
+
 class Recipe(object):
     """Representation of a single recipe
 
@@ -638,15 +651,13 @@ class Recipe(object):
 
     def prepare(self, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
                 inputTools=Env(), inputInterpreters={}, inputStack=PackageStack(), packageName=None,
-                inputResolved=None):
+                ambientCalc=_calcRootAmbientDeps):
         # Cycle detection is based on the recipe package name. Any alias names
         # are ignored.
         if self.__packageName in inputStack:
             raise ParseError("Recipes are cyclic (1st package in cylce)")
         stack = inputStack.push(self.__packageName,
                                 self.__packageName if packageName is None else packageName)
-        if inputResolved is None:
-            inputResolved = ({}, None, {})
         # already calculated?
         for m in self.__corePackagesByMatch:
             if m.matches(inputEnv.detach(), inputTools.detach(), inputStates, inputSandbox, packageName,
@@ -696,7 +707,7 @@ class Recipe(object):
         directPackages = []
         injectedPackages = []
         def raiseIncompatible(name, path, left, right):
-            self.__raiseIncompatibleProvided(name, path, left, right, inputResolved)
+            self.__raiseIncompatibleProvided(name, path, left, right, ambientCalc)
 
         provideDeps = UniquePackageList(stack.getNameStack(), raiseIncompatible)
         maybeProvideDeps = []
@@ -775,12 +786,10 @@ class Recipe(object):
 
             r = self.__recipeSet.getRecipe(recipeName)
             try:
-                resolved = CoreRef(corePackageInternal, [], thisDepDiffTools,
-                    thisDepDiffSandbox, thisDepDiffInterpreters).refDeref(
-                        stack.getNameStack(), *inputResolved, PathsConfig(None, False))
                 p, s = r.prepare(thisDepEnv, sandboxEnabled, depStates,
                                  thisDepSandbox, thisDepTools, thisDepInterpreters, stack, aliasName,
-                                 resolved)
+                                 _makeDepAmbientCalc(ambientCalc, stack.getNameStack(),
+                                    thisDepDiffTools, thisDepDiffSandbox, thisDepDiffInterpreters))
                 subTreePackages.add(recipeName)
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
@@ -896,7 +905,7 @@ class Recipe(object):
                 injectedPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
                 self.__raiseIncompatibleProvided(name, stack.getNameStack(),
-                    depRef, depTrack.item, inputResolved)
+                    depRef, depTrack.item, ambientCalc)
 
             if depTrack.useResultOnce():
                 results.append(depRef)
@@ -1125,11 +1134,12 @@ class Recipe(object):
         else:
             return self.__packageNetAccess
 
-    def __raiseIncompatibleProvided(self, name, stack, ref1, ref2, inputResolved):
+    def __raiseIncompatibleProvided(self, name, stack, ref1, ref2, ambientCalc):
         from ..variant import findVariantDifference, renderVariantDifferences
         pathsConfig = PathsConfig(None, False)
-        left = ref1.refDeref(stack, *inputResolved, pathsConfig)
-        right = ref2.refDeref(stack, *inputResolved, pathsConfig)
+        tools, sandbox, interpreters = ambientCalc()
+        left = ref1.refDeref(stack, tools, sandbox, interpreters, pathsConfig)
+        right = ref2.refDeref(stack, tools, sandbox, interpreters, pathsConfig)
         pair = findVariantDifference(left, right)
         if pair:
             detail = "\nConcrete differences:\n" + renderVariantDifferences(pair)
@@ -1291,12 +1301,12 @@ class AliasPackage:
         self.__source = fileName
 
     def prepare(self, env, sandboxEnabled, states, sandbox, tools, interpreters, stack, packageName=None,
-                inputResolved=None):
+                ambientCalc=_calcRootAmbientDeps):
         target = env.substitute(self.__target, "alias package")
         if packageName is None:
             packageName = self.__packageName
         return self.__recipeSet.getRecipe(target).prepare(env, sandboxEnabled, states, sandbox,
-                                                          tools, interpreters, stack, packageName, inputResolved)
+                                                          tools, interpreters, stack, packageName, ambientCalc)
 
     def getPackageName(self):
         return self.__packageName
