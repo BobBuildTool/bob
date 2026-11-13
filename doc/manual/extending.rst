@@ -66,6 +66,9 @@ internal and might change without notice.
 .. autoclass:: bob.pathspec.PackageSet()
    :members: getRootPackage, queryPackagePath, getAliases
 
+.. autoclass:: bob.scm.Scm()
+   :members: getProperties, getDirectory, isDeterministic, isLocal
+
 .. autoclass:: bob.errors.BobError
    :members:
 
