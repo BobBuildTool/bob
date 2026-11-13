@@ -1,0 +1,7 @@
+root: true
+checkoutSCM:
+  scm: git
+  url: https://example.invalid/right.git
+  commit: abcdef0123456789abcdef0123456789abcdef01
+packageScript: 'true'
+buildScript: 'true'

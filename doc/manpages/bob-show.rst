@@ -25,6 +25,7 @@ Synopsis
                   fingerprintIf,jobServer,meta,metaEnvironment,packageNetAccess,
                   packageTools,packageToolsWeak,packageVars,packageVarsWeak,
                   relocatable,root,sandbox,scriptLanguage,shared}]
+            [--recursive]
              packages [packages ...]
 
 
@@ -85,6 +86,13 @@ Options
 
 ``--no-sandbox``
    Disable sandboxing.
+
+``--recursive``
+   With ``--format diff``, find the first package with a direct difference
+   by following differing dependencies from the same recipe. Display each
+   package diff along the path and identify the dependency that leads to the
+   next comparison. The selected fields and output options apply to every
+   diff. Exactly two packages must be selected.
 
 ``--sandbox``
    Enable partial sandboxing.

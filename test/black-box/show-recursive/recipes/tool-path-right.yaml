@@ -1,0 +1,6 @@
+root: true
+depends:
+  - name: path-provider-right
+    use: [tools]
+packageTools: [path-tool]
+packageScript: 'true'

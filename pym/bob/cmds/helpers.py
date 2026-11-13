@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from ..utils import dumpFlat
+
 def processDefines(defs):
     """Convert a list of 'KEY=VALUE' strings into a dict"""
     defines = {}
@@ -40,18 +42,3 @@ def dumpJson(doc, indent):
     import json
     return json.dumps(doc, indent=indent, sort_keys=True)
 
-def dumpFlat(doc, prefix=""):
-    ret = []
-    if isinstance(doc, dict):
-        for k,v in sorted(doc.items()):
-            ret.extend(dumpFlat(v, prefix+"."+k if prefix else k))
-    elif isinstance(doc, list):
-        i = 0
-        for v in doc:
-            ret.extend(dumpFlat(v, "{}[{}]".format(prefix, i)))
-            i += 1
-    else:
-        doc = str(doc).replace('\n', '\\n')
-        ret = [ "{}={}".format(prefix, doc) ]
-
-    return ret

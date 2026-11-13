@@ -430,7 +430,7 @@ __bob_show()
     else
         __bob_complete_path "-D -c --sandbox --no-sandbox --slim-sandbox
             --dev-sandbox --strict-sandbox --show-empty
-            --show-common --indent --no-indent --format -f"
+            --show-common --recursive --indent --no-indent --format -f"
     fi
 }
 

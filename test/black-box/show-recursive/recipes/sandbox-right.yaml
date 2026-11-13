@@ -1,0 +1,7 @@
+root: true
+depends:
+  - name: s2
+    use: [sandbox]
+fingerprintIf: true
+fingerprintScript: 'true'
+packageScript: 'true'

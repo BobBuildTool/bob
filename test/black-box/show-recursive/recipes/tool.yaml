@@ -1,0 +1,5 @@
+fingerprintIf: true
+fingerprintScript: 'true'
+packageScript: 'true'
+provideTools:
+  tool: bin

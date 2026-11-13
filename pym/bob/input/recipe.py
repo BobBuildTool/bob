@@ -11,8 +11,8 @@ from ..languages import getLanguage, ScriptLanguage, BashLanguage, \
     PwshLanguage, PythonLanguage
 from ..stringparser import Env, IfExpression
 from .common import fetchFingerprintScripts, fetchScripts, mergeScripts, uidGen
-from .core import AbstractTool, CoreInterpreter, CoreRef, CoreSandbox
-from .package import CorePackage
+from .core import AbstractTool, CoreInterpreter, CoreRef, CoreSandbox, PathsConfig
+from .package import CorePackage, corePackageInternal
 from itertools import chain
 from string import Template
 import fnmatch
@@ -84,7 +84,7 @@ class UniquePackageList:
             self.cache[name] = ref
             self.ret.append(ref)
         elif ref2.refGetDestination().variantId != step.variantId:
-            self.errorHandler(name, self.stack + ref.refGetStack(), self.stack + ref2.refGetStack())
+            self.errorHandler(name, self.stack, ref, ref2)
 
     def extend(self, gen):
         for i in gen: self.append(i)
@@ -185,6 +185,19 @@ def addTransitiveTools(depSetStrong, depSetWeak, toolsView):
 
         depSetStrong |= dependTools
         depSetWeak |= dependToolsWeak
+
+def _calcRootAmbientDeps():
+    """Calculate the ambient dependencies of root packages"""
+    return ({}, None, {})
+
+def _makeDepAmbientCalc(parentAmbientCalc, stack, diffTools, diffSandbox, diffInterpreters):
+    """Create a resolver for the ambient dependencies (tools, sandbox and
+    interpreters) of a dependency. """
+    def resolve():
+        tools, sandbox, interpreters = parentAmbientCalc()
+        return CoreRef(corePackageInternal, [], diffTools, diffSandbox,
+            diffInterpreters).refDeref(stack, tools, sandbox, interpreters, PathsConfig(None, False))
+    return resolve
 
 class Recipe(object):
     """Representation of a single recipe
@@ -637,7 +650,8 @@ class Recipe(object):
         return self.__properties
 
     def prepare(self, inputEnv, sandboxEnabled, inputStates, inputSandbox=None,
-                inputTools=Env(), inputInterpreters={}, inputStack=PackageStack(), packageName=None):
+                inputTools=Env(), inputInterpreters={}, inputStack=PackageStack(), packageName=None,
+                ambientCalc=_calcRootAmbientDeps):
         # Cycle detection is based on the recipe package name. Any alias names
         # are ignored.
         if self.__packageName in inputStack:
@@ -692,7 +706,10 @@ class Recipe(object):
         subTreePackages = set()
         directPackages = []
         injectedPackages = []
-        provideDeps = UniquePackageList(stack.getNameStack(), self.__raiseIncompatibleProvided)
+        def raiseIncompatible(name, path, left, right):
+            self.__raiseIncompatibleProvided(name, path, left, right, ambientCalc)
+
+        provideDeps = UniquePackageList(stack.getNameStack(), raiseIncompatible)
         maybeProvideDeps = []
         checkoutDeps = []
         results = []
@@ -770,7 +787,9 @@ class Recipe(object):
             r = self.__recipeSet.getRecipe(recipeName)
             try:
                 p, s = r.prepare(thisDepEnv, sandboxEnabled, depStates,
-                                 thisDepSandbox, thisDepTools, thisDepInterpreters, stack, aliasName)
+                                 thisDepSandbox, thisDepTools, thisDepInterpreters, stack, aliasName,
+                                 _makeDepAmbientCalc(ambientCalc, stack.getNameStack(),
+                                    thisDepDiffTools, thisDepDiffSandbox, thisDepDiffInterpreters))
                 subTreePackages.add(recipeName)
                 subTreePackages.update(s)
                 depCoreStep = p.getCorePackageStep()
@@ -885,9 +904,8 @@ class Recipe(object):
             if depTrack.prime():
                 injectedPackages.append(depRef)
             elif depCoreStep.variantId != depTrack.item.refGetDestination().variantId:
-                self.__raiseIncompatibleProvided(name,
-                    stack.getNameStack() + depRef.refGetStack(),
-                    stack.getNameStack() + depTrack.item.refGetStack())
+                self.__raiseIncompatibleProvided(name, stack.getNameStack(),
+                    depRef, depTrack.item, ambientCalc)
 
             if depTrack.useResultOnce():
                 results.append(depRef)
@@ -1116,13 +1134,23 @@ class Recipe(object):
         else:
             return self.__packageNetAccess
 
-    def __raiseIncompatibleProvided(self, name, stack1, stack2):
+    def __raiseIncompatibleProvided(self, name, stack, ref1, ref2, ambientCalc):
+        from ..variant import findVariantDifference, renderVariantDifferences
+        pathsConfig = PathsConfig(None, False)
+        tools, sandbox, interpreters = ambientCalc()
+        left = ref1.refDeref(stack, tools, sandbox, interpreters, pathsConfig)
+        right = ref2.refDeref(stack, tools, sandbox, interpreters, pathsConfig)
+        pair = findVariantDifference(left, right)
+        if pair:
+            detail = "\nConcrete differences:\n" + renderVariantDifferences(pair)
+        else:
+            detail = "\nNo concrete package difference could be identified."
         raise ParseError("Incompatible variants of package: {} vs. {}"
-            .format("/".join(stack1), "/".join(stack2)),
+            .format("/".join(stack + ref1.refGetStack()), "/".join(stack + ref2.refGetStack())),
             help=
 """This error is caused by '{PKG}' that is passed upwards via 'provideDeps' from multiple dependencies of '{CUR}'.
 These dependencies constitute different variants of '{PKG}' and can therefore not be used in '{CUR}'."""
-    .format(PKG=name, CUR=self.__packageName))
+    .format(PKG=name, CUR=self.__packageName) + detail)
 
     def __raiseIncompatibleLocal(self, r):
         raise ParseError("Multiple incompatible dependencies to package: {}"
@@ -1272,12 +1300,13 @@ class AliasPackage:
         self.__packageName = packageName
         self.__source = fileName
 
-    def prepare(self, env, sandboxEnabled, states, sandbox, tools, interpreters, stack, packageName=None):
+    def prepare(self, env, sandboxEnabled, states, sandbox, tools, interpreters, stack, packageName=None,
+                ambientCalc=_calcRootAmbientDeps):
         target = env.substitute(self.__target, "alias package")
         if packageName is None:
             packageName = self.__packageName
         return self.__recipeSet.getRecipe(target).prepare(env, sandboxEnabled, states, sandbox,
-                                                          tools, interpreters, stack, packageName)
+                                                          tools, interpreters, stack, packageName, ambientCalc)
 
     def getPackageName(self):
         return self.__packageName
