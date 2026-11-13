@@ -274,7 +274,8 @@ class Step:
         are already applied. Build and package steps, as well as checkout
         steps without any ``checkoutSCM``, return an empty list.
 
-        :return: List of :class:`bob.scm.Scm` objects
+        :return: SCMs of the step
+        :rtype: list[bob.scm.Scm]
         """
         return []
 
@@ -288,7 +289,13 @@ class Step:
         """Return a single big script of the whole step.
 
         Besides considerations of special backends (such as Jenkins) this
-        script is what should be executed to build this step."""
+        script is what should be executed to build this step. It is written
+        in the script language of the recipe.
+
+        :return: Setup and main script of the step. Empty if the step has no
+            script.
+        :rtype: str
+        """
         return joinScripts([self.getSetupScript(), self.getMainScript()],
             self.getPackage().getRecipe().scriptLanguage.glue) or ""
 
@@ -317,6 +324,9 @@ class Step:
         the step has changed. In case of the checkout step the involved SCMs will
         return a stable representation of *what* is checked out and not the real
         script of *how* this is done.
+
+        :return: Digest script of the step or None if the step is invalid.
+        :rtype: str | None
         """
         return self._coreStep.getDigestScript()
 
@@ -333,34 +343,60 @@ class Step:
         """Return whether the step is deterministic.
 
         Checkout steps that have a script are considered indeterministic unless
-        the recipe declares it otherwise (checkoutDeterministic). Then the SCMs
-        are checked if they all consider themselves deterministic. Build and
-        package steps are always deterministic.
+        the recipe declares it otherwise (``checkoutDeterministic``). Then the
+        SCMs are checked if they all consider themselves deterministic. Build
+        and package steps are always deterministic.
 
         The determinism is defined recursively for all arguments, tools and the
         sandbox of the step too. That is, the step is only deterministic if all
         its dependencies and this step itself is deterministic.
+
+        :return: True if the step is deterministic, otherwise False.
+        :rtype: bool
         """
         return self._coreStep.isDeterministic()
 
     def isValid(self):
-        """Returns True if this step is valid, False otherwise."""
+        """Return whether this step is valid.
+
+        A step is invalid if the recipe does not define a script for it.
+        Checkout steps are also valid if they have at least one SCM.
+
+        :return: True if this step is valid, False otherwise.
+        :rtype: bool
+        """
         return self._coreStep.isValid
 
     def isCheckoutStep(self):
-        """Return True if this is a checkout step."""
+        """Return whether this is a checkout step.
+
+        :return: True if this is a checkout step, otherwise False.
+        :rtype: bool
+        """
         return self._coreStep.isCheckoutStep()
 
     def isBuildStep(self):
-        """Return True if this is a build step."""
+        """Return whether this is a build step.
+
+        :return: True if this is a build step, otherwise False.
+        :rtype: bool
+        """
         return self._coreStep.isBuildStep()
 
     def isPackageStep(self):
-        """Return True if this is a package step."""
+        """Return whether this is a package step.
+
+        :return: True if this is a package step, otherwise False.
+        :rtype: bool
+        """
         return self._coreStep.isPackageStep()
 
     def getPackage(self):
-        """Get Package object that is the parent of this Step."""
+        """Get Package object that is the parent of this Step.
+
+        :return: Package of this step
+        :rtype: bob.input.Package
+        """
         return self.__package
 
     def getVariantId(self):
@@ -369,13 +405,18 @@ class Step:
         The Variant-Id is used to distinguish different packages or multiple
         variants of a package. Each Variant-Id need only be built once but
         subsequent builds might yield different results (e.g. when building
-        from branches)."""
+        from branches).
+
+        :return: Binary Variant-Id (SHA1 digest) of the step
+        :rtype: bytes
+        """
         return self._coreStep.variantId
 
     def getSandbox(self):
         """Return Sandbox used in this Step.
 
-        Returns a Sandbox object or None if this Step is built without one.
+        :return: Used sandbox or None if this Step is built without one.
+        :rtype: bob.input.Sandbox | None
         """
         sandbox = self.__package._getSandboxRaw()
         if sandbox and sandbox.isEnabled() and self._coreStep.isValid:
@@ -386,8 +427,9 @@ class Step:
     def getLabel(self):
         """Return path label for step.
 
-        This is currently defined as "src", "build" and "dist" for the
-        respective steps.
+        :return: ``"src"``, ``"build"`` or ``"dist"`` for checkout, build and
+            package steps respectively.
+        :rtype: str
         """
         return self._coreStep.getLabel()
 
@@ -395,8 +437,11 @@ class Step:
         """Return the workspace path of the step.
 
         The workspace path represents the location of the step in the user's
-        workspace. When building in a sandbox this path is not passed to the
-        script but the one from getExecPath() instead.
+        workspace. Depending on the sandbox and stable path configuration, the
+        step might be executed under a different path, though.
+
+        :return: Workspace path relative to the project build directory
+        :rtype: str
         """
         if self.isValid():
             return self.__pathsConfig.pathFormatter(self, self.__package.getPluginStates())
@@ -409,7 +454,10 @@ class Step:
     def getTools(self):
         """Get dictionary of tools.
 
-        The dict maps the tool name to a :class:`bob.input.Tool`.
+        Only the tools that are actually used by the step are returned.
+
+        :return: Mapping of tool names to tools
+        :rtype: dict[str, bob.input.Tool]
         """
         if self._coreStep.isValid:
             toolKeys = self._coreStep.toolDep
@@ -421,7 +469,11 @@ class Step:
     def getArguments(self):
         """Get list of all inputs for this Step.
 
-        The arguments are passed as absolute paths to the script starting from $1.
+        The arguments are passed as absolute paths to the script starting from
+        ``$1``.
+
+        :return: Input steps in the order they are passed to the script.
+        :rtype: list[bob.input.Step]
         """
         p = self.__package
         refCache = {}
@@ -434,6 +486,9 @@ class Step:
 
         This includes the arguments of the Step as well as the packages of the
         used tools, the sandbox and the interpreter.
+
+        :return: All steps that this step depends on.
+        :rtype: list[bob.input.Step]
         """
         sandbox = self.getSandbox()
         interpreter = self.getInterpreter()
@@ -442,15 +497,28 @@ class Step:
             [interpreter.getStep()] if interpreter else [])
 
     def getInterpreter(self):
-        """Return used interpreter of step, if any."""
+        """Return used interpreter of step, if any.
+
+        :return: Used interpreter or None if the step's script is executed by
+            the default interpreter of the script language.
+        :rtype: bob.input.Interpreter | None
+        """
         return self.__package._getInterpreter()
 
     def getEnv(self):
-        """Return dict of environment variables."""
+        """Return dict of environment variables.
+
+        :return: Environment variables that are set when executing the step.
+        :rtype: dict[str, str]
+        """
         return self._coreStep.env
 
     def doesProvideTools(self):
-        """Return True if this step provides at least one tool."""
+        """Return whether this step provides at least one tool.
+
+        :return: True if this step provides at least one tool, otherwise False.
+        :rtype: bool
+        """
         return bool(self._coreStep.providedTools)
 
     def isShared(self):
@@ -459,17 +527,33 @@ class Step:
         The exact behaviour of a shared step/package depends on the build
         backend. In general a shared package means that the result is put into
         some shared location where it is likely that the same result is needed
-        again.
+        again. Only package steps can be shared.
+
+        :return: True if the step should be shared, otherwise False.
+        :rtype: bool
         """
         return False
 
     def isRelocatable(self):
-        """Returns True if the step is relocatable."""
+        """Return whether the step is relocatable.
+
+        A relocatable step produces a result that does not depend on the path
+        where it was built. Only package steps can be relocatable.
+
+        :return: True if the step is relocatable, otherwise False.
+        :rtype: bool
+        """
         return False
 
     def jobServer(self):
-        """Returns True if the jobserver should be used to schedule
-        builds for this step."""
+        """Return whether the jobserver should be used to schedule builds for
+        this step.
+
+        :return: False if the jobserver is not used. Otherwise the jobserver
+            mode as configured by the ``jobServer`` recipe key: ``"pipe"``,
+            ``"fifo"`` or ``"fifo-or-pipe"``.
+        :rtype: bool | str
+        """
         return self._coreStep.jobServer()
 
     def _getProvidedDeps(self):
@@ -886,22 +970,43 @@ class Package(object):
         return self.__corePackage
 
     def getName(self):
-        """Name of the package"""
+        """Return the name of the package.
+
+        This is usually the package name of the recipe
+        (:meth:`bob.input.Recipe.getPackageName`) unless the package was
+        aliased. See :meth:`isAlias`.
+
+        :return: Name of the package
+        :rtype: str
+        """
         return self.__corePackage.name
 
     def getMetaEnv(self):
-        """meta variables of package"""
+        """Return the meta variables of the package.
+
+        These are the substituted ``metaEnvironment`` variables of the recipe.
+
+        :return: Meta variables of the package
+        :rtype: dict[str, str]
+        """
         return self.__corePackage.getMetaEnv()
 
     def getStack(self):
         """Returns the recipe processing stack leading to this package.
 
-        The method returns a list of package names. The first entry is a root
-        recipe and the last entry is this package."""
+        The first entry is a root recipe and the last entry is this package.
+
+        :return: Package names of the processing stack
+        :rtype: list[str]
+        """
         return self.__stack
 
     def getRecipe(self):
-        """Return Recipe object that was the template for this package."""
+        """Return Recipe object that was the template for this package.
+
+        :return: Recipe of the package
+        :rtype: bob.input.Recipe
+        """
         return self.__corePackage.recipe
 
     def getDirectDepSteps(self):
@@ -910,6 +1015,9 @@ class Package(object):
         Declared (or direct) dependencies are the ones that are named
         explicitly in the ``depends`` section of the recipe. The order of the
         items is preserved from the recipe.
+
+        :return: Package steps of the declared dependencies
+        :rtype: list[bob.input.Step]
         """
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
@@ -921,6 +1029,9 @@ class Package(object):
 
         Injected dependencies are dependencies that were provided by upstream
         recipes through ``provideDeps``. They are not named in the recipe.
+
+        :return: Package steps of the injected dependencies
+        :rtype: list[bob.input.Step]
         """
         refCache = {}
         return [ d.refDeref(self.__stack, self.__inputTools, self.__inputSandbox,
@@ -932,6 +1043,9 @@ class Package(object):
 
         .. deprecated:: 1.3
            Use :meth:`bob.input.Package.getInjectedDepSteps` instead.
+
+        :return: Package steps of the injected dependencies
+        :rtype: list[bob.input.Step]
         """
         import warnings
         warnings.warn("getIndirectDepSteps is deprecated. Use getInjectedDepSteps instead.",
@@ -943,7 +1057,10 @@ class Package(object):
 
         This list includes all declared and injected dependencies.
         Additionally ambient dependencies (the used sandbox, tools and
-        interpreter) are included too.
+        interpreter) are included too. Each step is included only once.
+
+        :return: Sorted list of the dependency steps
+        :rtype: list[bob.input.Step]
         """
         allDeps = set(self.getDirectDepSteps())
         allDeps |= set(self.getInjectedDepSteps())
@@ -959,7 +1076,11 @@ class Package(object):
         self.__checkoutStep = checkoutStep
 
     def getCheckoutStep(self):
-        """Return the checkout step of this package."""
+        """Return the checkout step of this package.
+
+        :return: Checkout step of the package
+        :rtype: bob.input.Step
+        """
         try:
             ret = self.__checkoutStep
         except AttributeError:
@@ -971,7 +1092,11 @@ class Package(object):
         self.__buildStep = buildStep
 
     def getBuildStep(self):
-        """Return the build step of this package."""
+        """Return the build step of this package.
+
+        :return: Build step of the package
+        :rtype: bob.input.Step
+        """
         try:
             ret = self.__buildStep
         except AttributeError:
@@ -983,7 +1108,11 @@ class Package(object):
         self.__packageStep = packageStep
 
     def getPackageStep(self):
-        """Return the package step of this package."""
+        """Return the package step of this package.
+
+        :return: Package step of the package
+        :rtype: bob.input.Step
+        """
         try:
             ret = self.__packageStep
         except AttributeError:
@@ -1000,7 +1129,11 @@ class Package(object):
         return self.__corePackage.states
 
     def isRelocatable(self):
-        """Returns True if the packages is relocatable."""
+        """Return whether the package is relocatable.
+
+        :return: True if the package is relocatable, otherwise False.
+        :rtype: bool
+        """
         return self.__corePackage.recipe.isRelocatable()
 
     def isAlias(self):
@@ -1011,6 +1144,9 @@ class Package(object):
         global or per-dependency alias names, any other name may be used,
         though. In this case, ``isAlias()`` returns true and ``getName()`` does
         not equal ``getRecipe().getPackageName()`` as it normally does.
+
+        :return: True if the package name is an alias, otherwise False.
+        :rtype: bool
         """
         return self.__corePackage.isAlias()
 

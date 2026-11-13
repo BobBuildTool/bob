@@ -18,8 +18,11 @@ class PluginProperty:
     default constructor just stores the *present* and *value* parameters as
     attributes in the object.
 
-    :param bool present: True if property is present in recipe
-    :param value: Unmodified value of property from recipe or None if not present.
+    :param present: True if property is present in recipe
+    :type present: bool
+    :param value: Unmodified value of property from recipe or None if not
+        present.
+    :type value: Any
     """
 
     def __init__(self, present, value):
@@ -33,30 +36,43 @@ class PluginProperty:
         property was not present. Otherwise the class value will be ignored.
 
         :param cls: The property instance of the class
-        :type cls: PluginProperty
+        :type cls: bob.input.PluginProperty
         """
         if not self.present:
             self.present = cls.present
             self.value = cls.value
 
     def isPresent(self):
-        """Return True if the property was present in the recipe."""
+        """Return whether the property was present in the recipe.
+
+        :return: True if the property was present in the recipe or in one of
+            its inherited classes, otherwise False.
+        :rtype: bool
+        """
         return self.present
 
     def getValue(self):
-        """Get (parsed) value of the property."""
+        """Get (parsed) value of the property.
+
+        :return: The value of the property or None if the property is not
+            present. The default implementation returns the unmodified value
+            from the recipe.
+        :rtype: Any
+        """
         return self.value
 
     @staticmethod
     def validate(data):
         """Validate type of property.
 
-        Ususally the plugin will reimplement this static method and return True
+        Usually the plugin will reimplement this static method and return True
         only if *data* has the expected type. The default implementation will
         always return True.
 
         :param data: Parsed property data from the recipe
+        :type data: Any
         :return: True if data has expected type, otherwise False.
+        :rtype: bool
         """
         return True
 
@@ -86,17 +102,20 @@ class PluginState:
 
         The default implementation uses copy.deepcopy() which should usually be
         enough. If the plugin uses a sophisticated state tracker, especially
-        when holding references to created packages, it might be usefull to
+        when holding references to created packages, it might be useful to
         provide a specialized implementation.
+
+        :return: Copy of this state tracker
+        :rtype: bob.input.PluginState
         """
         return copy.deepcopy(self)
 
     def onEnter(self, env, properties):
         """Begin creation of a package.
 
-        The state tracker is about to witness the creation of a package. The passed
-        environment, tools and (custom) properties are in their initial state that
-        was inherited from the parent recipe.
+        The state tracker is about to witness the creation of a package. The
+        passed environment and (custom) properties are in their initial state
+        that was inherited from the parent recipe.
 
         :param env: Complete environment
         :type env: Mapping[str, str]
@@ -115,7 +134,8 @@ class PluginState:
 
         The default implementation does nothing.
 
-        :param bob.input.PluginState downstream: State of downstream package
+        :param downstream: State of downstream package
+        :type downstream: bob.input.PluginState
         """
         pass
 
@@ -126,7 +146,8 @@ class PluginState:
         the ``use`` clause of the dependency. The default implementation does
         nothing.
 
-        :param bob.input.PluginState downstream: State of downstream package
+        :param downstream: State of downstream package
+        :type downstream: bob.input.PluginState
         """
         pass
 
@@ -146,8 +167,6 @@ class PluginState:
         pass
 
 class PluginSetting:
-    priority = 50
-
     """Base class for plugin settings.
 
     Plugins can be configured in the user configuration of a project. The
@@ -156,7 +175,10 @@ class PluginSetting:
     constructor will just store the passed value in the ``settings`` member.
 
     :param settings: The default settings
+    :type settings: Any
     """
+
+    priority = 50
 
     def __init__(self, settings):
         self.settings = settings
@@ -180,6 +202,7 @@ class PluginSetting:
         member variable.
 
         :param other: Other settings with higher precedence
+        :type other: Any
         """
         if isinstance(self.settings, dict) and isinstance(other, dict):
             self.settings = updateDicRecursive(self.settings, other)
@@ -189,19 +212,26 @@ class PluginSetting:
             self.settings = other
 
     def getSettings(self):
-        """Getter for settings data."""
+        """Getter for settings data.
+
+        :return: The current settings after all configuration files have been
+            merged.
+        :rtype: Any
+        """
         return self.settings
 
     @staticmethod
     def validate(data):
         """Validate type of settings.
 
-        Ususally the plugin will reimplement this method and return True only
-        if *data* has the expected type. The default implementation will always
-        return True.
+        Usually the plugin will reimplement this static method and return True
+        only if *data* has the expected type. The default implementation will
+        always return True.
 
         :param data: Parsed settings data from user configuration
+        :type data: Any
         :return: True if data has expected type, otherwise False.
+        :rtype: bool
         """
         return True
 

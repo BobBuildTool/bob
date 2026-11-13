@@ -189,7 +189,7 @@ def addTransitiveTools(depSetStrong, depSetWeak, toolsView):
 class Recipe(object):
     """Representation of a single recipe
 
-    Multiple instaces of this class will be created if the recipe used the
+    Multiple instances of this class will be created if the recipe used the
     ``multiPackage`` keyword.  In this case the getName() method will return
     the name of the original recipe but the getPackageName() method will return
     it with some addition suffix. Without a ``multiPackage`` keyword there will
@@ -437,10 +437,11 @@ class Recipe(object):
         ``layers/foo/layers/bar/recipes/baz.yaml`` -> ``['foo', 'bar']``.
 
         If the managedLayers policy is set to the new behaviour, nested layers
-        are flattened. This means that layers are always returnd as single-item
+        are flattened. This means that layers are always returned as single-item
         lists.
 
-        :rtype: List[str]
+        :return: Layer hierarchy of the recipe
+        :rtype: list[str]
         """
         if self.__layer:
             return self.__layer.split("/")
@@ -578,7 +579,11 @@ class Recipe(object):
             self.__root = rootEnv.evaluate(self.__root, "root")
 
     def getRecipeSet(self):
-        """Get the :class:`RecipeSet` to which the recipe belongs"""
+        """Get the :class:`bob.input.RecipeSet` to which the recipe belongs.
+
+        :return: The recipe set of the project
+        :rtype: bob.input.RecipeSet
+        """
         return self.__recipeSet
 
     def getPrimarySource(self):
@@ -588,10 +593,13 @@ class Recipe(object):
         return self.__sources
 
     def getPackageName(self):
-        """Get the name of the package that is drived from this recipe.
+        """Get the name of the package that is derived from this recipe.
 
         Usually the package name is the same as the recipe name. But in case of
         a ``multiPackage`` the package name has an additional suffix.
+
+        :return: Package name
+        :rtype: str
         """
         return self.__packageName
 
@@ -600,11 +608,18 @@ class Recipe(object):
 
         In case of a ``multiPackage`` multiple packages may be derived from the
         same recipe. This method returns the plain recipe name.
+
+        :return: Recipe name
+        :rtype: str
         """
         return self.__baseName
 
     def isRoot(self):
-        """Returns True if this is a root recipe."""
+        """Return whether this is a root recipe.
+
+        :return: True if this is a root recipe, otherwise False.
+        :rtype: bool
+        """
         return self.__root == True
 
     def isRelocatable(self):
