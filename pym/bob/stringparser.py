@@ -518,6 +518,20 @@ class IfExpressionParser:
         return cls.__instance
 
 class Env(MutableMapping):
+    """Environment variables of a recipe.
+
+    Plugins are passed objects of this class instead of plain dictionaries.
+    Variables can be read with ``env[name]``, ``name in env`` and
+    :meth:`get`. They can be set with ``env[name] = value`` and
+    :meth:`update` where modifications are allowed.
+
+    Bob records every variable that is read. This is used to reuse already
+    computed packages if all read variables have the same value. Hence it is
+    not possible to iterate over the environment. Calling ``iter()``,
+    ``keys()``, ``values()`` or ``items()`` raises a
+    :class:`NotImplementedError`.
+    """
+
     def __init__(self, other={}):
         self.data = dict(other)
         self.funs = []
@@ -580,6 +594,15 @@ class Env(MutableMapping):
         return self.__clone(self.data.copy())
 
     def get(self, key, default=None):
+        """Get the value of a variable.
+
+        :param key: Name of the variable
+        :type key: str
+        :param default: Value that is returned if the variable is not set
+        :type default: str | None
+        :return: Value of the variable or *default* if it is not set.
+        :rtype: str | None
+        """
         self.__touch(key)
         return self.data.get(key, default)
 
@@ -596,6 +619,11 @@ class Env(MutableMapping):
         raise NotImplementedError("popitem() not supported")
 
     def update(self, other):
+        """Set multiple variables at once.
+
+        :param other: Variables to set
+        :type other: Mapping[str, str]
+        """
         self.data.update(other)
 
     def values(self):
@@ -633,12 +661,44 @@ class Env(MutableMapping):
                 if checkGlobList(key, allowed) })
 
     def substitute(self, value, prop, nounset=True):
+        """Substitute variables and string functions in a string.
+
+        The string is expanded as described in
+        :ref:`configuration-principle-subst`.
+
+        :param value: String that should be substituted
+        :type value: str
+        :param prop: Name of the property that is substituted. Only used for
+            error messages.
+        :type prop: str
+        :param nounset: Raise an error when an unset variable is referenced.
+            Otherwise unset variables are substituted with an empty string.
+        :type nounset: bool
+        :return: The substituted string
+        :rtype: str
+        :raises bob.errors.ParseError: The string could not be substituted.
+        """
         try:
             return StringParser(self, self.funs, self.funArgs, nounset).parse(value)
         except ParseError as e:
             raise ParseError("Error substituting {}: {}".format(prop, str(e.slogan)))
 
     def evaluate(self, condition, prop):
+        """Evaluate a condition.
+
+        The condition is evaluated like an ``if`` property in a recipe. See
+        :ref:`configuration-principle-booleans`.
+
+        :param condition: Condition string or None.
+        :type condition: str | None
+        :param prop: Name of the property that is evaluated. Only used for
+            error messages.
+        :type prop: str
+        :return: Result of the condition. A *condition* of None is always
+            True.
+        :rtype: bool
+        :raises bob.errors.ParseError: The condition could not be evaluated.
+        """
         if condition is None:
             return True
 

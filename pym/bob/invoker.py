@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .errors import BuildError
-from .input import CheckoutAssert
+from .input.checkout import CheckoutAssert
 from .scm import getScm
 from .stringparser import Env
 from .tty import Unbuffered, WarnOnce

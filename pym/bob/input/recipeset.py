@@ -635,9 +635,10 @@ class RecipeSet:
         return self.__commands
 
     def envWhiteList(self):
-        """The set of all white listed environment variables
+        """The set of all white listed environment variables.
 
-        :rtype: Set[str]
+        :return: Names of the white listed environment variables
+        :rtype: set[str]
         """
         return set(self.__whiteList)
 
@@ -645,8 +646,9 @@ class RecipeSet:
         return self.__archive
 
     def defaultEnv(self):
-        """The default environment that each root recipe inherits
+        """The default environment that each root recipe inherits.
 
+        :return: Default environment variables
         :rtype: Mapping[str, str]
         """
         return self.__defaultEnv
@@ -1256,15 +1258,25 @@ class RecipeSet:
     def generatePackages(self, nameFormatter, sandboxEnabled=False, stablePaths=None):
         """Generate package set.
 
-        :param nameFormatter: Function returning path for a given step.
-        :type nameFormatter: Callable[[Step, Mapping[str, PluginState]], str]
+        The packages are calculated lazily when the package set is first
+        queried.
+
+        :param nameFormatter: Function returning the workspace path for a
+            given step.
+        :type nameFormatter: Callable[[bob.input.Step, Mapping[str, bob.input.PluginState]], str]
         :param sandboxEnabled: Enable sandbox image dependencies.
         :type sandboxEnabled: bool
-        :param stablePaths: Configure usage of stable execution paths (/bob/...).
+        :param stablePaths: Configure usage of stable execution paths
+            (``/bob/...``):
+
             * ``None``: Use stable path in sandbox image, otherwise workspace path.
             * ``False``: Always use workspace path.
-            * ``True``: Always use stable path (/bob/...).
-        :type stablePaths: None | bool
+            * ``True``: Always use stable path (``/bob/...``).
+        :type stablePaths: bool | None
+        :return: The package set of the project
+        :rtype: bob.pathspec.PackageSet
+
+        :meta private:
         """
         pathsConfig = PathsConfig(nameFormatter, stablePaths)
         # calculate cache key for persisted packages
@@ -1294,6 +1306,9 @@ class RecipeSet:
         The project root is where the recipes, classes and layers are located.
         In case of out-of-tree builds it will be distinct from the build
         directory.
+
+        :return: Path of the project root directory
+        :rtype: str
         """
         return self.__projectRoot
 

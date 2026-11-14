@@ -33,6 +33,10 @@ Plugins might only access the following classes with the members documented in
 this manual. All other parts of the bob Python package namespace are considered
 internal and might change without notice.
 
+Unless stated otherwise, all objects that are returned by these classes must be
+treated as read-only. This includes lists and dictionaries. They are not
+necessarily copies and modifying them may break Bob in subtle ways.
+
 .. autoclass:: bob.input.PluginProperty
    :members:
 
@@ -60,8 +64,17 @@ internal and might change without notice.
 .. autoclass:: bob.input.Tool()
    :members:
 
+.. autoclass:: bob.input.Interpreter()
+   :members:
+
 .. autoclass:: bob.pathspec.PackageSet()
    :members: getRootPackage, queryPackagePath, getAliases
+
+.. autoclass:: bob.scm.Scm()
+   :members: getProperties, getDirectory, isDeterministic, isLocal
+
+.. autoclass:: bob.stringparser.Env()
+   :members: get, update, substitute, evaluate
 
 .. autoclass:: bob.errors.BobError
    :members:
@@ -104,8 +117,8 @@ processed. The default implementation in Bob looks like this::
     manifest = {
         'apiVersion' : "0.1",
         'hooks' : {
-            'releaseNameFormatter' : releaseFormatter,
-            'developNameFormatter' : developFormatter,
+            'releaseNameFormatter' : releaseNameFormatter,
+            'developNameFormatter' : developNameFormatter,
             'jenkinsNameFormatter' : jenkinsNameFormatter
         }
     }
@@ -172,7 +185,8 @@ string and shall have no side effects. The function has to accept any number of
 additional keyword arguments. Currently the following additional kwargs are
 passed:
 
-* ``env``: dict of all available environment variables at the current context
+* ``env``: :class:`bob.stringparser.Env` of all available environment
+  variables at the current context
 * ``recipeSet``: the :class:`bob.input.RecipeSet` of the project
 * ``recipe``: the current :class:`bob.input.Recipe`
 * ``sandbox``: ``True`` if a sandbox *image* is used. ``False`` if no sandbox image was
@@ -194,7 +208,7 @@ could look like this::
         return " ".join(args)
 
     manifest = {
-        'apiVersion' : "0.2",
+        'apiVersion' : "0.15",
         'stringFunctions' : {
             "echo" : echo
         }
@@ -220,15 +234,18 @@ The function has to accept any number of additional keyword arguments.
 Currently the following additional kwargs are passed:
 
  * ``alias``: alias name used for jenkins
- * ``buildSteps``: list of all build steps (:class:`bob.input.Step`) used in
-   the job
- * ``checkoutSteps``: list of all checkout steps (:class:`bob.input.Step`) used
+ * ``authtoken``: Authentication token for triggering builds remotely or
+   ``None`` if not configured. Only passed by ``bob jenkins push``, not by
+   ``bob jenkins export``.
+ * ``buildSteps``: iterable of all build steps (:class:`bob.input.Step`) used
    in the job
+ * ``checkoutSteps``: iterable of all checkout steps (:class:`bob.input.Step`)
+   used in the job
  * ``hostPlatform``: Jenkins host platform type (``linux``, ``msys`` or ``win32``)
  * ``name``: name of Jenkins job
  * ``nodes``: The nodes where the job should run
- * ``packageSteps``: list of all package steps (:class:`bob.input.Step`) used
-   in the job
+ * ``packageSteps``: iterable of all package steps (:class:`bob.input.Step`)
+   used in the job
  * ``prefix``: Prefix of all job names
  * ``sandbox``: Boolean whether sandbox should be used. Plugins starting with
    API version ``0.25`` are passed the sandbox mode as string (``no``, ``yes``,
@@ -351,10 +368,10 @@ A simple command may look like this::
     def doHello(packages, argv, bobRoot):
         import argparse
         parser = argparse.ArgumentParser(prog="bob hello")
-        parser.add_argument('package', nargs='?', default="")
+        parser.add_argument('package', nargs='?', default="*")
         args = parser.parse_args(argv)
-        for (stack, node) in packages.queryTreePath(args.package):
-            print("/".join(stack) if stack else "/")
+        for package in packages.queryPackagePath(args.package):
+            print("/".join(package.getStack()))
 
     manifest = {
         'apiVersion' : "1.2.1.dev1",
@@ -460,6 +477,66 @@ packages. The state tracker thus has the responsibility to calculate the final
 values associated with the properties for every package. Like properties, there
 can be more than one state tracker. Any state tracker provided by a plugin must
 be derived from :class:`bob.input.PluginState`.
+
+State trackers are registered in the manifest under the ``state`` key, which
+requires at least ``apiVersion`` 0.15. Bob creates one instance of each state
+tracker by calling the class without arguments. This instance is
+copied (see :meth:`bob.input.PluginState.copy`) and updated while the
+dependency tree is traversed, so that every package gets its own state. The
+name under which the state tracker is registered is used in several places:
+
+* It is the key of the state tracker in the dictionary that is returned by
+  :meth:`bob.input.Package.getPluginStates` and that is passed to the path
+  formatters and string functions.
+* It can be added to the ``use`` clause of a dependency. In this case
+  :meth:`bob.input.PluginState.onUse` is called with the state of the
+  dependency. Otherwise :meth:`bob.input.PluginState.onSkip` is called.
+
+Because the calculated packages are cached between invocations of Bob, state
+trackers must be picklable.
+
+The following example passes the value of the ``Platform`` property down to
+all dependencies and makes it available to path formatters::
+
+    from bob.input import PluginProperty, PluginState
+
+    class StringProperty(PluginProperty):
+        @staticmethod
+        def validate(data):
+            return isinstance(data, str)
+
+    class PlatformState(PluginState):
+        def __init__(self):
+            self.platform = None
+
+        def onEnter(self, env, properties):
+            platform = properties['Platform']
+            if platform.isPresent():
+                self.platform = env.substitute(platform.getValue(), "Platform")
+
+        def getPlatform(self):
+            return self.platform
+
+    def releaseNameFormatter(step, states):
+        platform = states['Platform'].getPlatform() or "native"
+        return os.path.join("work", platform,
+                            step.getPackage().getName().replace('::', os.sep),
+                            step.getLabel())
+
+    manifest = {
+        'apiVersion' : "0.15",
+        'properties' : {
+            "Platform" : StringProperty
+        },
+        'state' : {
+            "Platform" : PlatformState
+        },
+        'hooks' : {
+            'releaseNameFormatter' : releaseNameFormatter
+        }
+    }
+
+See ``contrib/plugins/path-fmt.py`` for a complete example.
 
 It is not possible to re-define already existing recipe properties. This
 applies both to Bob built-in properties as well as properties defined by other

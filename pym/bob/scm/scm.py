@@ -227,6 +227,18 @@ class ScmStatus:
 
 
 class Scm(metaclass=ABCMeta):
+    """Represents a single SCM of a checkout step.
+
+    Each entry of the ``checkoutSCM`` section of a recipe is represented by
+    an object of a subclass of this class, depending on the ``scm`` type
+    (e.g. ``git`` or ``url``). The SCMs of a checkout step are retrieved
+    with :meth:`bob.input.Step.getScmList`. All SCM objects are
+    read-only.
+
+    Only the documented methods are part of the stable plugin API. All other
+    methods are internal and might change without notice.
+    """
+
     def __init__(self, spec, overrides):
         # Recipe foobar, checkoutSCM dir:., url:asdf
         self.__source = spec.get("__source", "<unknown>") + " in checkoutSCM: dir:" + \
@@ -252,7 +264,34 @@ class Scm(metaclass=ABCMeta):
     def getSource(self):
         return self.__source
 
-    def getProperties(self, isJenkins, pretty):
+    def getProperties(self, isJenkins, pretty=False):
+        """Return the properties of the SCM as dictionary.
+
+        The returned dictionary describes the SCM with its fully substituted
+        values. It holds the keys that are documented for the respective SCM
+        type in the :ref:`configuration-recipes-scm` section, e.g. ``scm``,
+        ``dir`` and ``url``, plus some type specific keys. Additionally the
+        following keys are always present:
+
+        * ``recipe``: Path of the recipe or class file that declared the SCM.
+        * ``overridden``: True if at least one
+          :ref:`configuration-config-scmOverrides` entry was applied to the
+          SCM, False otherwise.
+
+        Keys that start with a double underscore (``__``) are internal and
+        must not be relied upon.
+
+        :param isJenkins: Pass True if the properties are used for a Jenkins
+            build. Plugins should always pass False.
+        :type isJenkins: bool
+        :param pretty: If True, the properties are meant for human
+            consumption. Internal properties are omitted and some SCMs leave
+            out properties that are unset or have their default value. Some
+            values may be formatted differently too (e.g. file modes).
+        :type pretty: bool
+        :return: Dictionary of SCM properties
+        :rtype: dict[str, Any]
+        """
         # XXX: keep in sync with SYNTHETIC_SCM_PROPS
         ret = {
             "recipe" : self.__recipe,
@@ -318,19 +357,35 @@ class Scm(metaclass=ABCMeta):
 
     @abstractmethod
     def getDirectory(self):
-        """Return relative directory that this SCM owns in the workspace."""
+        """Return relative directory that this SCM owns in the workspace.
+
+        :return: Directory of the SCM, relative to the workspace of the
+            checkout step. This is the ``dir`` property of the SCM.
+        :rtype: str
+        """
         return ""
 
     @abstractmethod
     def isDeterministic(self):
-        """Return whether the SCM is deterministic."""
+        """Return whether the SCM is deterministic.
+
+        A SCM is deterministic if it always checks out the same content, e.g.
+        a git commit or tag but not a branch.
+
+        :return: True if the SCM is deterministic, otherwise False.
+        :rtype: bool
+        """
         return False
 
     def isLocal(self):
-        """Return true if the SCM does not use any remote repository.
+        """Return whether the SCM does not use any remote repository.
 
-        Such SCMs are treated special because there is no notion of
-        checkout/checkin."""
+        Such SCMs (e.g. ``import``) are treated specially because there is
+        no notion of checkout/checkin.
+
+        :return: True if the SCM is local, otherwise False.
+        :rtype: bool
+        """
         return False
 
     def status(self, workspacePath):

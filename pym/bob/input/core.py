@@ -243,49 +243,60 @@ class Tool:
         """Return package step that produces the result holding the tool
         binaries/scripts.
 
-        :return: :class:`bob.input.Step`
+        :return: Package step of the tool
+        :rtype: bob.input.Step
         """
         return self.step
 
     def getPath(self):
-        """Get relative path into the result."""
+        """Get relative path into the result.
+
+        :return: Directory that is added to ``$PATH`` when the tool is used,
+            relative to the workspace of the package step.
+        :rtype: str
+        """
         return self.path
 
     def getLibs(self):
         """Get list of relative library paths into the result.
 
-        :return: List[str]
+        :return: Directories that are added to ``$LD_LIBRARY_PATH`` when the
+            tool is used, relative to the workspace of the package step.
+        :rtype: list[str]
         """
         return self.libs
 
     def getNetAccess(self):
         """Does tool require network access?
 
-        This reflects the `netAccess` tool property.
+        This reflects the ``netAccess`` tool property.
 
-        :return: bool
+        :return: True if the tool requires network access, otherwise False.
+        :rtype: bool
         """
         return self.netAccess
 
     def getEnvironment(self):
         """Get environment variables.
 
-        Returns the dictionary of environment variables that are defined by the
-        tool.
+        :return: Environment variables that are defined by the tool.
+        :rtype: dict[str, str]
         """
         return self.environment
 
     def getDependTools(self):
         """Get tool dependencies of this tool.
 
-        :return: Set[str]
+        :return: Names of the tools that this tool depends on.
+        :rtype: set[str]
         """
         return self.dependTools
 
     def getDependToolsWeak(self):
         """Get weak tool dependencies of this tool.
 
-        :return: Set[str]
+        :return: Names of the tools that this tool weakly depends on.
+        :rtype: set[str]
         """
         return self.dependToolsWeak
 
@@ -355,39 +366,57 @@ class Sandbox:
         return isinstance(other, Sandbox) and (self.coreSandbox == other.coreSandbox)
 
     def getStep(self):
-        """Get the package step that yields the content of the sandbox image."""
+        """Get the package step that yields the content of the sandbox image.
+
+        :return: Package step of the sandbox image
+        :rtype: bob.input.Step
+        """
         return self.step
 
     def getPaths(self):
         """Return list of global search paths.
 
-        This is the base $PATH in the sandbox."""
+        This is the base ``$PATH`` in the sandbox.
+
+        :return: Absolute search paths inside the sandbox
+        :rtype: list[str]
+        """
         return self.coreSandbox.paths
 
     def getMounts(self):
         """Get custom mounts.
 
-        This returns a list of tuples where each tuple has the format
-        (hostPath, sandboxPath, options).
+        Each mount is a tuple of the form ``(hostPath, sandboxPath, options)``
+        where *options* is a list of mount options (``nolocal``,
+        ``nojenkins``, ``nofail``, ``rw``).
+
+        :return: Custom mounts of the sandbox
+        :rtype: list[tuple[str, str, list[str]]]
         """
         return self.coreSandbox.mounts
 
     def getEnvironment(self):
         """Get environment variables.
 
-        Returns the dictionary of environment variables that are defined by the
-        sandbox.
+        :return: Environment variables that are defined by the sandbox.
+        :rtype: dict[str, str]
         """
         return self.coreSandbox.environment
 
     def isEnabled(self):
-        """Return True if the sandbox is used in the current build configuration."""
+        """Return whether the sandbox is used in the current build configuration.
+
+        :return: True if the sandbox is enabled, otherwise False.
+        :rtype: bool
+        """
         return self.coreSandbox.enabled
 
     def getUser(self):
         """Get user identity in sandbox.
 
-        Returns one of 'nobody', 'root' or '$USER'.
+        :return: One of ``"nobody"``, ``"root"`` or ``"$USER"``. The latter
+            means that the identity of the current user is retained.
+        :rtype: str
         """
         return self.coreSandbox.user
 
@@ -421,9 +450,18 @@ class Interpreter:
         self.path = path
 
     def getStep(self):
-        """Return package step that produces the result holding the interpreter."""
+        """Return package step that produces the result holding the interpreter.
+
+        :return: Package step of the interpreter
+        :rtype: bob.input.Step
+        """
         return self.step
 
     def getPath(self):
-        """Get relative path into the result."""
+        """Get relative path into the result.
+
+        :return: Path of the interpreter executable, relative to the
+            workspace of the package step.
+        :rtype: str
+        """
         return self.path
