@@ -21,7 +21,7 @@ def override(args, env, recipe, **options):
         return args[1]
 
 manifest = {
-    'apiVersion' : "0.2",
+    'apiVersion' : "0.15",
     'stringFunctions' : {
         "override" : override
     }

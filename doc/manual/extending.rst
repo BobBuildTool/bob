@@ -200,7 +200,7 @@ could look like this::
         return " ".join(args)
 
     manifest = {
-        'apiVersion' : "0.2",
+        'apiVersion' : "0.15",
         'stringFunctions' : {
             "echo" : echo
         }
