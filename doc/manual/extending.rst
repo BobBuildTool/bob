@@ -113,8 +113,8 @@ processed. The default implementation in Bob looks like this::
     manifest = {
         'apiVersion' : "0.1",
         'hooks' : {
-            'releaseNameFormatter' : releaseFormatter,
-            'developNameFormatter' : developFormatter,
+            'releaseNameFormatter' : releaseNameFormatter,
+            'developNameFormatter' : developNameFormatter,
             'jenkinsNameFormatter' : jenkinsNameFormatter
         }
     }
