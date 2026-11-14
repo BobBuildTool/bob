@@ -118,7 +118,7 @@ class PluginState:
         that was inherited from the parent recipe.
 
         :param env: Complete environment
-        :type env: Mapping[str, str]
+        :type env: bob.stringparser.Env
         :param properties: All custom properties
         :type properties: Mapping[str, :class:`bob.input.PluginProperty`]
         """
@@ -160,7 +160,7 @@ class PluginState:
         *properties* to make final adjustments.
 
         :param env: Complete environment
-        :type env: Mapping[str, str]
+        :type env: bob.stringparser.Env
         :param properties: All custom properties
         :type properties: Mapping[str, :class:`bob.input.PluginProperty`]
         """

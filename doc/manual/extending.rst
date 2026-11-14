@@ -69,6 +69,9 @@ internal and might change without notice.
 .. autoclass:: bob.scm.Scm()
    :members: getProperties, getDirectory, isDeterministic, isLocal
 
+.. autoclass:: bob.stringparser.Env()
+   :members: get, update, substitute, evaluate
+
 .. autoclass:: bob.errors.BobError
    :members:
 
@@ -178,7 +181,8 @@ string and shall have no side effects. The function has to accept any number of
 additional keyword arguments. Currently the following additional kwargs are
 passed:
 
-* ``env``: dict of all available environment variables at the current context
+* ``env``: :class:`bob.stringparser.Env` of all available environment
+  variables at the current context
 * ``recipeSet``: the :class:`bob.input.RecipeSet` of the project
 * ``recipe``: the current :class:`bob.input.Recipe`
 * ``sandbox``: ``True`` if a sandbox *image* is used. ``False`` if no sandbox image was
