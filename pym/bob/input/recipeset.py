@@ -1275,6 +1275,8 @@ class RecipeSet:
         :type stablePaths: bool | None
         :return: The package set of the project
         :rtype: bob.pathspec.PackageSet
+
+        :meta private:
         """
         pathsConfig = PathsConfig(nameFormatter, stablePaths)
         # calculate cache key for persisted packages
