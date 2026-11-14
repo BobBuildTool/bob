@@ -233,15 +233,15 @@ Currently the following additional kwargs are passed:
  * ``authtoken``: Authentication token for triggering builds remotely or
    ``None`` if not configured. Only passed by ``bob jenkins push``, not by
    ``bob jenkins export``.
- * ``buildSteps``: list of all build steps (:class:`bob.input.Step`) used in
-   the job
- * ``checkoutSteps``: list of all checkout steps (:class:`bob.input.Step`) used
+ * ``buildSteps``: iterable of all build steps (:class:`bob.input.Step`) used
    in the job
+ * ``checkoutSteps``: iterable of all checkout steps (:class:`bob.input.Step`)
+   used in the job
  * ``hostPlatform``: Jenkins host platform type (``linux``, ``msys`` or ``win32``)
  * ``name``: name of Jenkins job
  * ``nodes``: The nodes where the job should run
- * ``packageSteps``: list of all package steps (:class:`bob.input.Step`) used
-   in the job
+ * ``packageSteps``: iterable of all package steps (:class:`bob.input.Step`)
+   used in the job
  * ``prefix``: Prefix of all job names
  * ``sandbox``: Boolean whether sandbox should be used. Plugins starting with
    API version ``0.25`` are passed the sandbox mode as string (``no``, ``yes``,
