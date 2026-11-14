@@ -33,6 +33,10 @@ Plugins might only access the following classes with the members documented in
 this manual. All other parts of the bob Python package namespace are considered
 internal and might change without notice.
 
+Unless stated otherwise, all objects that are returned by these classes must be
+treated as read-only. This includes lists and dictionaries. They are not
+necessarily copies and modifying them may break Bob in subtle ways.
+
 .. autoclass:: bob.input.PluginProperty
    :members:
 
