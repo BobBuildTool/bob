@@ -230,6 +230,9 @@ The function has to accept any number of additional keyword arguments.
 Currently the following additional kwargs are passed:
 
  * ``alias``: alias name used for jenkins
+ * ``authtoken``: Authentication token for triggering builds remotely or
+   ``None`` if not configured. Only passed by ``bob jenkins push``, not by
+   ``bob jenkins export``.
  * ``buildSteps``: list of all build steps (:class:`bob.input.Step`) used in
    the job
  * ``checkoutSteps``: list of all checkout steps (:class:`bob.input.Step`) used
