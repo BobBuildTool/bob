@@ -361,10 +361,10 @@ A simple command may look like this::
     def doHello(packages, argv, bobRoot):
         import argparse
         parser = argparse.ArgumentParser(prog="bob hello")
-        parser.add_argument('package', nargs='?', default="")
+        parser.add_argument('package', nargs='?', default="*")
         args = parser.parse_args(argv)
-        for (stack, node) in packages.queryTreePath(args.package):
-            print("/".join(stack) if stack else "/")
+        for package in packages.queryPackagePath(args.package):
+            print("/".join(package.getStack()))
 
     manifest = {
         'apiVersion' : "1.2.1.dev1",

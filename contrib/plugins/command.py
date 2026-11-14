@@ -7,12 +7,12 @@ import argparse
 def doHello(packages, argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob hello",
         description="Print the path of all matching packages.")
-    parser.add_argument('package', nargs='?', default="",
+    parser.add_argument('package', nargs='?', default="*",
         help="Package to query (defaults to all root packages)")
     args = parser.parse_args(argv)
 
-    for (stack, node) in packages.queryTreePath(args.package):
-        print("/".join(stack) if stack else "/")
+    for package in packages.queryPackagePath(args.package):
+        print("/".join(package.getStack()))
 
 manifest = {
     'apiVersion' : "1.2.1.dev1",
