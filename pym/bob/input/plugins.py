@@ -114,12 +114,18 @@ class PluginState:
         """Begin creation of a package.
 
         The state tracker is about to witness the creation of a package. The
-        passed environment and (custom) properties are in their initial state
-        that was inherited from the parent recipe.
+        passed *env* holds the environment that was inherited from the parent
+        recipe, already updated by the ``environment`` of the current recipe.
+        The plugin may modify *env*. Such changes are inherited by the
+        dependencies and are visible to the package itself.
+
+        The *properties* are the custom properties of the recipe. They are
+        shared by all packages of the recipe and must not be modified. Store
+        package specific values in the state tracker instead.
 
         :param env: Complete environment
         :type env: bob.stringparser.Env
-        :param properties: All custom properties
+        :param properties: All custom properties of the recipe
         :type properties: Mapping[str, :class:`bob.input.PluginProperty`]
         """
         pass
@@ -155,13 +161,17 @@ class PluginState:
         """Finish creation of a package.
 
         The package was computed and is about to be created. The passed *env*
-        and *properties* have their final state after all downstream
-        dependencies have been resolved. The plugin may modify the *env* and
-        *properties* to make final adjustments.
+        has its final state after all dependencies have been resolved. The
+        plugin may modify *env* to make final adjustments. Such changes only
+        affect the current package.
+
+        The *properties* are the custom properties of the recipe. They are
+        shared by all packages of the recipe and must not be modified. Store
+        package specific values in the state tracker instead.
 
         :param env: Complete environment
         :type env: bob.stringparser.Env
-        :param properties: All custom properties
+        :param properties: All custom properties of the recipe
         :type properties: Mapping[str, :class:`bob.input.PluginProperty`]
         """
         pass
