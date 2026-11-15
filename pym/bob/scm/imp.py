@@ -198,7 +198,7 @@ class ImportScm(Scm):
 
     async def predictLiveBuildId(self, step):
         with stepAction(step, "HASH", self.__url, (INFO, TRACE)) as a:
-            return hashDirectory(self.__url)
+            return hashDirectory(self._getSrcDir())
 
     def calcLiveBuildId(self, workspacePath):
         return hashDirectory(os.path.join(workspacePath, self.__dir))
