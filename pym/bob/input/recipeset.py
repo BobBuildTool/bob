@@ -1207,7 +1207,7 @@ class RecipeSet:
         return self.__inheritPrepend
 
     def getRecipes(self):
-        return self.__recipes.keys()
+        return { name for name, recipe in self.__recipes.items() if not recipe.isAlias() }
 
     def getRecipe(self, packageName):
         if packageName not in self.__recipes:

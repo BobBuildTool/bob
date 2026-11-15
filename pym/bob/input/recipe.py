@@ -592,6 +592,9 @@ class Recipe(object):
     def getSources(self):
         return self.__sources
 
+    def isAlias(self):
+        return False
+
     def getPackageName(self):
         """Get the name of the package that is derived from this recipe.
 
@@ -1308,6 +1311,9 @@ class AliasPackage:
 
     def getSources(self):
         return [self.__source]
+
+    def isAlias(self):
+        return True
 
 class PackageMatcher:
     __slots__ = ( 'corePackage', 'env', 'tools', 'states', 'sandbox',
