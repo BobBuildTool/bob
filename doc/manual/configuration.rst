@@ -1094,6 +1094,7 @@ intended to be matched in queries or to show additional information.
 
 .. _Git: http://git-scm.com/
 .. _Svn: http://subversion.apache.org/
+.. _rsync: https://rsync.samba.org/
 
 Most SCMs support the ``sslVerify`` attribute. This is a boolean that controls
 whether to verify the SSL certificate when fetching. If unset, it defaults to
@@ -1296,6 +1297,10 @@ import
    +----------------------------+-------------------------------------------------------------------------------+
    | ``recipeRelative``\*       | Whether ``url`` is relative to recipe or project root. (optional)             |
    +----------------------------+-------------------------------------------------------------------------------+
+   | ``filter``                 | Ordered list of rsync-like include/exclude rules. (optional)                  |
+   +----------------------------+-------------------------------------------------------------------------------+
+   | ``pruneEmptyDirs``\*       | Do not import empty directories. Default: ``False``. (optional)               |
+   +----------------------------+-------------------------------------------------------------------------------+
 
    The ``import`` SCM copies the directory specified in ``url`` to the
    workspace. By default, the destination is always overwritten and obsolete
@@ -1319,6 +1324,63 @@ import
    project root. Alternatively, ``url`` can be made relative to the recipe
    itself if ``recipeRelative`` is set to ``True``. This is recommended
    especially for recipes that are included as layers into other projects.
+
+   The ``filter`` attribute restricts which entries of the ``url`` directory
+   are imported. This is useful if a directory holds files for different
+   packages, e.g. ``defconfig`` files for different boards. Only the selected
+   files end up in the workspace. A package is thus not rebuilt if other files
+   in the directory are changed. Example::
+
+      checkoutSCM:
+         scm: import
+         url: configs
+         filter:
+            - "- *.orig"
+            - "+ /board-a_defconfig"
+            - "+ /patches/"
+            - "+ /patches/board-a/***"
+            - "- *"
+
+   The filter rules work like the include/exclude filter rules of `rsync`_.
+   Each rule is either an include rule (``+ PATTERN`` or ``include PATTERN``)
+   or an exclude rule (``- PATTERN`` or ``exclude PATTERN``). The rule name
+   and the pattern are separated by exactly one space. Like in rsync filter
+   files, a rule cannot contain line breaks. The rules are applied as
+   follows:
+
+   * Each file, directory and symlink is checked against the rules in the
+     given order. The first matching rule decides whether the entry is
+     imported or not. Entries that do not match any rule are imported.
+   * Excluded directories are not traversed. If something below a directory
+     shall be imported, the directory itself must be included too. In the
+     example above, the ``/patches/`` rule is required. Otherwise the
+     final ``- *`` rule would exclude the ``patches`` directory and the
+     ``board-a`` patches would never be considered. A common idiom to
+     include certain files at any depth is ``+ */``, ``+ *.patch``,
+     ``- *`` together with ``pruneEmptyDirs``.
+   * If the rules exclude everything, the checkout fails.
+
+   The patterns are matched against the path of each entry relative to
+   ``url``, using ``/`` as path separator:
+
+   * A pattern that starts with ``/`` is anchored at the ``url`` directory.
+     Otherwise it may match at any depth. A pattern without ``/`` (not
+     counting a trailing one) or ``**`` is matched against the final path
+     component only. Otherwise it is matched against the trailing path
+     components, e.g. ``a/b`` matches ``a/b`` and ``x/a/b``.
+   * A pattern that ends with ``/`` matches only directories.
+   * ``*`` matches anything except ``/``. ``**`` matches anything, including
+     ``/``. ``?`` matches any single character except ``/``. ``[...]``
+     matches one character in the set. A set that starts with ``!`` or ``^``
+     is negated. Use ``\`` to match a wildcard character literally.
+   * A trailing ``dir/***`` matches the directory itself and everything
+     inside it.
+
+   Directories that are empty after applying the filter rules are still
+   created in the workspace. Set ``pruneEmptyDirs`` to ``True`` to skip all
+   empty directories (like the ``--prune-empty-dirs`` option of rsync). This
+   applies to empty directories in the source too, even if no filter rules
+   are given.
 
 svn
    The `Svn`_ SCM, like git, requires the ``url`` attribute too. If you specify a
