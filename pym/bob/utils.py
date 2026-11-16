@@ -797,6 +797,27 @@ def infixBinaryOp(handler, *args, **kwargs):
 def dummy():
     pass
 
+def _ignoreSigInt():
+    """Process pool initializer to ignore SIGINT in idle workers.
+
+    Workers re-enable SIGINT while executing a job where needed.
+    """
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+# Exit codes of processes that were interrupted by Ctrl+C on Windows:
+# STATUS_CONTROL_C_EXIT (unsigned and signed) and 128+SIGINT for MSYS/Cygwin
+# shells.
+__WIN32_INTERRUPT_CODES = frozenset((0xC000013A, -0x3FFFFEC6, 130))
+
+def isInterruptedReturnCode(ret):
+    """Check if the process return code indicates a user interruption."""
+    import signal
+    if sys.platform == 'win32':
+        return ret in __WIN32_INTERRUPT_CODES
+    else:
+        return ret == -int(signal.SIGINT)
+
 __startMethodSet = False
 def __setStartMethod(method):
     global __startMethodSet
@@ -812,8 +833,13 @@ def getProcessPoolExecutor():
 
     try:
         if sys.platform == 'win32':
+            # On Windows, Ctrl+C is delivered to all processes attached to
+            # the console. Spawned workers do not inherit our signal
+            # dispositions. Ignore SIGINT explicitly so that idle workers do
+            # not die with a KeyboardInterrupt backtrace.
             __setStartMethod('spawn')
-            executor = concurrent.futures.ProcessPoolExecutor()
+            executor = concurrent.futures.ProcessPoolExecutor(
+                initializer=_ignoreSigInt)
         else:
             # The ProcessPoolExecutor is a barely usable for our interactive use
             # case. On SIGINT any busy executor should stop. The only way how this

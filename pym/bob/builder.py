@@ -18,7 +18,8 @@ from .tty import log, stepMessage, stepAction, stepExec, setProgress, ttyReinit,
     SKIPPED, EXECUTED, INFO, WARNING, DEFAULT, \
     ALWAYS, IMPORTANT, NORMAL, INFO, DEBUG, TRACE
 from .utils import asHexStr, hashDirectory, removePath, emptyDirectory, \
-    isWindows, INVALID_CHAR_TRANS, quoteCmdExe, getPlatformTag, canSymlink, isAbsPath
+    isWindows, INVALID_CHAR_TRANS, quoteCmdExe, getPlatformTag, canSymlink, isAbsPath, \
+    isInterruptedReturnCode
 from .share import NullShare
 from base64 import b64encode
 from shlex import quote
@@ -955,7 +956,7 @@ cd {ROOT}
             depChecker = None
         ret = await invoker.executeStep(mode, workspaceCreated, cleanWorkspace)
         if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
-        if ret == -int(signal.SIGINT):
+        if isInterruptedReturnCode(ret):
             raise BuildError("User aborted while running {}".format(absRunFile),
                              help = "Run again with '--resume' to skip already built packages.")
         elif ret != 0:
@@ -1139,8 +1140,14 @@ cd {ROOT}
                 j = self.__createGenericTask(loop, dispatcher)
                 try:
                     loop.add_signal_handler(signal.SIGINT, cancelJobs)
+                    restoreSigInt = lambda: loop.remove_signal_handler(signal.SIGINT)
                 except NotImplementedError:
-                    pass # not implemented on windows
+                    # Not implemented on Windows. Use a regular signal
+                    # handler instead and defer the cancellation into the
+                    # event loop. This also wakes up the loop.
+                    oldSigInt = signal.signal(signal.SIGINT,
+                        lambda signum, frame: loop.call_soon_threadsafe(cancelJobs))
+                    restoreSigInt = lambda: signal.signal(signal.SIGINT, oldSigInt)
                 try:
                     loop.run_until_complete(j)
                 except CancelBuildException:
@@ -1148,10 +1155,7 @@ cd {ROOT}
                 except asyncio.CancelledError:
                     pass
                 finally:
-                    try:
-                        loop.remove_signal_handler(signal.SIGINT)
-                    except NotImplementedError:
-                        pass # not implemented on windows
+                    restoreSigInt()
 
                 # Reap all remaining tasks to prevent Python warnings about ignored
                 # exceptions or that tasks are still pending. We don't care about
@@ -2181,7 +2185,7 @@ cd {ROOT}
                           executor=self.__executor)
         (ret, stdout, stderr) = await invoker.executeFingerprint()
 
-        if ret == -int(signal.SIGINT):
+        if isInterruptedReturnCode(ret):
             raise BuildError("Fingerprint script interrupted by user")
         elif ret != 0:
             if self.__bufferedStdIO:
@@ -2206,7 +2210,7 @@ cd {ROOT}
             with stepExec(step, "SWITCH", scmPath) as logger:
                 ret = await invoker.executeScmSwitch(scm, oldSpec)
                 if not self.__bufferedStdIO: ttyReinit() # work around MSYS2 messing up the console
-                if ret == -int(signal.SIGINT):
+                if isInterruptedReturnCode(ret):
                     raise BuildError("User aborted while inline switching SCM",
                                      help = "Run again with '--resume' to skip already built packages.")
                 elif ret != 0:
