@@ -683,6 +683,8 @@ class TestDependencies(RecipesTmp, TestCase):
         self.assertIn("Concrete differences:", message)
         self.assertIn("diff /root/b/c /root/a/c\n--- /root/b/c\n+++ /root/a/c", message)
         self.assertNotIn("The above package diff was caused by", message)
+        self.assertIn("- packageTools.mytool.path=usr/bin", message)
+        self.assertIn("+ packageTools.mytool.path=bin", message)
 
     def testProvideDisabled(self):
         """Providing disabled dependencies is not considered an error."""

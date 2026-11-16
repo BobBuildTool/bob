@@ -36,6 +36,13 @@ d = yaml.load(sys.stdin.read(), Loader=yaml.Loader)
 assert d["checkoutTools"] == {}
 '
 
+# Tools are shown with their package, path and libraries
+run_bob show root -f buildTools | $PYTHON -c '
+import sys, yaml
+d = yaml.load(sys.stdin.read(), Loader=yaml.Loader)
+assert d["buildTools"] == {"tool" : {"package" : "root/tool", "path" : "."}}
+'
+
 # Verify that filtering works as expected
 run_bob show root -f buildVars -f packageVars | $PYTHON -c '
 import sys, yaml

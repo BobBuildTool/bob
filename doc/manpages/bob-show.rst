@@ -53,6 +53,13 @@ the following synthetic properties are shown:
 
 * ``sandbox``: The sandbox package that is used for this package.
 
+The used tools (``checkoutTools``, ``buildTools``, ``packageTools`` and their
+``*Weak`` counterparts) are shown as map of the tool name to its properties:
+
+* ``package``: The package that provides the tool
+* ``path``: The path of the tool, relative to the package workspace
+* ``libs``: The library paths of the tool, relative to the package workspace
+
 By default the information is shown as YAML document. If multiple packages are
 selected then multiple YAML documents are generated too. The output format can
 be controlled with the ``--format`` option. The ``flat`` format is a custom

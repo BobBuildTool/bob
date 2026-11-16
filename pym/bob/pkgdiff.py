@@ -9,6 +9,18 @@ from .tty import colorize, ADDED, DELETED, DEFAULT, ADDED_HIGHLIGHT, DELETED_HIG
 from .utils import asHexStr, dumpFlat
 
 
+def dumpTools(step, weak):
+    toolDep = step.toolDepWeak if weak else (step.toolDep - step.toolDepWeak)
+    return {
+        name : {
+            "package" : "/".join(t.getStep().getPackage().getStack()),
+            "path" : t.getPath(),
+            "libs" : t.getLibs(),
+        }
+        for name, t in step.getTools().items()
+        if name in toolDep
+    }
+
 def dumpPackage(package):
     recipe = package.getRecipe()
 
@@ -39,16 +51,8 @@ def dumpPackage(package):
             { k:v for k,v in a.items() if not k.startswith("__") }
             for a in recipe.checkoutAsserts
         ]
-        doc["checkoutTools"] = {
-            name : "/".join(t.getStep().getPackage().getStack())
-            for name, t in checkoutStep.getTools().items()
-            if name in (checkoutStep.toolDep - checkoutStep.toolDepWeak)
-        }
-        doc["checkoutToolsWeak"] = {
-            name : "/".join(t.getStep().getPackage().getStack())
-            for name, t in checkoutStep.getTools().items()
-            if name in checkoutStep.toolDepWeak
-        }
+        doc["checkoutTools"] = dumpTools(checkoutStep, False)
+        doc["checkoutToolsWeak"] = dumpTools(checkoutStep, True)
         doc["checkoutVars"] = {
             k : v for k, v in checkoutStep.getEnv().items()
             if k in recipe.checkoutVars
@@ -66,16 +70,8 @@ def dumpPackage(package):
             "/".join(d.getPackage().getStack())
             for d in buildStep.getArguments()[1:]
         ]
-        doc["buildTools"] = {
-            name : "/".join(t.getStep().getPackage().getStack())
-            for name, t in buildStep.getTools().items()
-            if name in (buildStep.toolDep - buildStep.toolDepWeak)
-        }
-        doc["buildToolsWeak"] = {
-            name : "/".join(t.getStep().getPackage().getStack())
-            for name, t in buildStep.getTools().items()
-            if name in buildStep.toolDepWeak
-        }
+        doc["buildTools"] = dumpTools(buildStep, False)
+        doc["buildToolsWeak"] = dumpTools(buildStep, True)
         doc["buildVars"] = {
             k : v for k, v in buildStep.getEnv().items()
             if k in recipe.buildVars
@@ -87,16 +83,8 @@ def dumpPackage(package):
 
     packageStep = package.getPackageStep()
     doc["meta"]["packageVariantId"] = asHexStr(packageStep.getVariantId())
-    doc["packageTools"] = {
-        name : "/".join(t.getStep().getPackage().getStack())
-        for name, t in packageStep.getTools().items()
-        if name in (packageStep.toolDep - packageStep.toolDepWeak)
-    }
-    doc["packageToolsWeak"] = {
-        name : "/".join(t.getStep().getPackage().getStack())
-        for name, t in packageStep.getTools().items()
-        if name in packageStep.toolDepWeak
-    }
+    doc["packageTools"] = dumpTools(packageStep, False)
+    doc["packageToolsWeak"] = dumpTools(packageStep, True)
     doc["packageVars"] = {
         k : v for k, v in packageStep.getEnv().items()
         if k in recipe.packageVars
@@ -186,7 +174,7 @@ def dumpPackagePair(left, right):
                 continue
             for key in (field, field + "Weak"):
                 if name in docs[0].get(key, {}) and name in docs[1].get(key, {}):
-                    docs[1][key][name] = docs[0][key][name]
+                    docs[1][key][name]["package"] = docs[0][key][name]["package"]
     a, b = left.getBuildStep(), right.getBuildStep()
     if a.isValid() and b.isValid():
         for i, (x, y) in enumerate(zip(a.getArguments()[1:], b.getArguments()[1:])):
