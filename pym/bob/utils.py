@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .errors import BuildError, ParseError
+from .tty import WarnOnce
 from binascii import hexlify
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 import collections.abc
@@ -924,6 +925,8 @@ def _tarExtractFilter(member, path):
 
     return member
 
+_warnUnsafeTar = WarnOnce("Python lacks tar extraction filter support; archives will be extracted without Bob's safety filter.")
+
 def tarfileOpen(name=None, mode='r', *args, **kwargs):
     import tarfile
 
@@ -933,16 +936,13 @@ def tarfileOpen(name=None, mode='r', *args, **kwargs):
         # ELOOP) are silently ignored and the returned path might not match
         # what the kernel resolves (CVE-2025-4517). Python versions lacking
         # ALLOW_MISSING are affected by this CVE and cannot extract safely.
-        if not hasattr(os.path, "ALLOW_MISSING"):
+        if not hasattr(tarfile, 'data_filter'):
+            _warnUnsafeTar.warn()
+        elif not hasattr(os.path, "ALLOW_MISSING"):
             raise BuildError("Refusing to extract tar file: Python version is too old to do this safely.",
                              help="Update Python to a release with the CVE-2025-4517 fix (os.path.ALLOW_MISSING).")
 
-        # To safely extract tar file, we need an extraction_filter. Refuse to
-        # work on unpatched Python versions.
-        if not hasattr(tarfile, 'data_filter'):
-            raise BuildError("Refusing to extract tar file: Python version is too old to do this safely.",
-                             help="Update Python to a release where TarFile.extraction_filter has been implemented.")
-
     ret = tarfile.open(name, mode, *args, **kwargs)
-    ret.extraction_filter = _tarExtractFilter
+    if hasattr(tarfile, 'data_filter'):
+        ret.extraction_filter = _tarExtractFilter
     return ret
