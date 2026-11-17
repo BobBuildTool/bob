@@ -5,6 +5,7 @@
 
 from tempfile import TemporaryDirectory
 from unittest import TestCase, skipIf
+from unittest.mock import patch
 import io
 import os
 import stat
@@ -13,6 +14,8 @@ import tarfile
 
 from bob.errors import BuildError
 from bob.utils import tarfileOpen
+from bob import utils
+from bob.tty import WarnOnce
 
 def SYM(name, target):
     return (name, tarfile.SYMTYPE, target)
@@ -248,16 +251,25 @@ class TestTarExtractFilter(TestCase):
     # Unsafe Python version
 
     def testMissingExtractionFilter(self):
-        """Refuse extraction on Python versions without extraction_filter"""
-        orig = tarfile.data_filter
-        del tarfile.data_filter
-        try:
-            with self.assertRaises(BuildError) as cm:
-                self.extract([REG("f", b"data")])
-            self.assertIn("too old", cm.exception.slogan)
-        finally:
-            tarfile.data_filter = orig
-        self.assertFalse(os.path.lexists(os.path.join(self.ws, "f")))
+        """Warn once and leave extraction unfiltered without PEP 706."""
+        archive = self.makeTar([REG('f', b'data')])
+        stderr = io.StringIO()
+        with patch.object(utils, '_warnUnsafeTar', WarnOnce('unfiltered')), \
+             patch('sys.stderr', stderr), patch.object(tarfile, 'data_filter'):
+            del tarfile.data_filter
+            with tarfileOpen(fileobj=archive) as tar:
+                self.assertIsNone(tar.extraction_filter)
+            with tarfileOpen(fileobj=self.makeTar([])):
+                pass
+        self.assertEqual(stderr.getvalue().count('unfiltered'), 1)
+
+    def testWritingWithoutExtractionFilterDoesNotWarn(self):
+        with patch.object(utils, '_warnUnsafeTar') as warning, \
+             patch.object(tarfile, 'data_filter'):
+            del tarfile.data_filter
+            with tarfileOpen(fileobj=io.BytesIO(), mode='w'):
+                pass
+        warning.warn.assert_not_called()
 
     def testMissingAllowMissing(self):
         """Refuse extraction if os.path.ALLOW_MISSING is not available.
