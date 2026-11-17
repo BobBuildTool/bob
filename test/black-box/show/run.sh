@@ -36,6 +36,13 @@ d = yaml.load(sys.stdin.read(), Loader=yaml.Loader)
 assert d["checkoutTools"] == {}
 '
 
+# Tools are shown with their package, path and libraries
+run_bob show root -f buildTools | $PYTHON -c '
+import sys, yaml
+d = yaml.load(sys.stdin.read(), Loader=yaml.Loader)
+assert d["buildTools"] == {"tool" : {"package" : "root/tool", "path" : "."}}
+'
+
 # Verify that filtering works as expected
 run_bob show root -f buildVars -f packageVars | $PYTHON -c '
 import sys, yaml
@@ -44,3 +51,9 @@ assert set(d.keys()) == {"buildVars", "packageVars"}
 assert set(d["buildVars"].keys()) == {"FOO", "BAR"}
 assert set(d["packageVars"].keys()) == {"FOO", "BAR", "META"}
 '
+
+# Recursive comparisons accept the normal diff options.
+expect_fail --code=2 run_bob show --recursive root/dep root/sandbox
+run_bob show --format diff --recursive --show-common root/dep root/sandbox
+run_bob show --format diff --recursive -f meta root/dep root/sandbox
+expect_fail run_bob show --format diff --recursive root

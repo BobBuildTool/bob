@@ -25,6 +25,7 @@ Synopsis
                   fingerprintIf,jobServer,meta,metaEnvironment,packageNetAccess,
                   packageTools,packageToolsWeak,packageVars,packageVarsWeak,
                   relocatable,root,sandbox,scriptLanguage,shared}]
+            [--recursive]
              packages [packages ...]
 
 
@@ -51,6 +52,13 @@ the following synthetic properties are shown:
      more details.
 
 * ``sandbox``: The sandbox package that is used for this package.
+
+The used tools (``checkoutTools``, ``buildTools``, ``packageTools`` and their
+``*Weak`` counterparts) are shown as map of the tool name to its properties:
+
+* ``package``: The package that provides the tool
+* ``path``: The path of the tool, relative to the package workspace
+* ``libs``: The library paths of the tool, relative to the package workspace
 
 By default the information is shown as YAML document. If multiple packages are
 selected then multiple YAML documents are generated too. The output format can
@@ -85,6 +93,13 @@ Options
 
 ``--no-sandbox``
    Disable sandboxing.
+
+``--recursive``
+   With ``--format diff``, find the first package with a direct difference
+   by following differing dependencies from the same recipe. Display each
+   package diff along the path and identify the dependency that leads to the
+   next comparison. The selected fields and output options apply to every
+   diff. Exactly two packages must be selected.
 
 ``--sandbox``
    Enable partial sandboxing.

@@ -1,0 +1,5 @@
+packageScript: 'true'
+provideTools:
+  path-tool:
+    path: bin/left
+    libs: [lib/left]

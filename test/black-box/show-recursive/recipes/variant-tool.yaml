@@ -1,0 +1,4 @@
+packageVars: [VARIANT]
+packageScript: 'true'
+provideTools:
+  variant-tool: bin

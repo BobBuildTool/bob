@@ -1045,3 +1045,20 @@ def tarfileOpen(name=None, mode='r', *args, **kwargs):
     ret = tarfile.open(name, mode, *args, **kwargs)
     ret.extraction_filter = _tarExtractFilter
     return ret
+
+
+def dumpFlat(doc, prefix=""):
+    ret = []
+    if isinstance(doc, dict):
+        for k,v in sorted(doc.items()):
+            ret.extend(dumpFlat(v, prefix+"."+k if prefix else k))
+    elif isinstance(doc, list):
+        i = 0
+        for v in doc:
+            ret.extend(dumpFlat(v, "{}[{}]".format(prefix, i)))
+            i += 1
+    else:
+        doc = str(doc).replace('\n', '\\n')
+        ret = [ "{}={}".format(prefix, doc) ]
+
+    return ret
