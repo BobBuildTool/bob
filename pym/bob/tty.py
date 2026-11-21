@@ -58,12 +58,12 @@ class Show:
 
     def show(self, location=None):
         if not self.__triggered:
-            print(colorize(self.__slogan + ":", self.__color+";1"),
+            msg = (colorize(self.__slogan + ":", self.__color+";1") + " " +
                 colorize(((location + ": ") if location else "") + self.__message,
-                    self.__color),
-                file=sys.stderr)
+                    self.__color))
             if self.__help:
-                print(self.__help, file=sys.stderr)
+                msg += "\n" + self.__help
+            message(msg)
             self.__triggered = self.__onlyOnce
 
 class Info(Show):
@@ -140,6 +140,10 @@ class BaseTUI:
 
     def setJobServer(self, fd, tokens):
         pass
+
+    def message(self, msg):
+        """Print a message on stderr that is not related to any step."""
+        print(msg, file=sys.stderr)
 
     def _isVisible(self, severity):
         if isinstance(severity, int):
@@ -475,6 +479,11 @@ class ParallelTtyUI(BaseTUI):
         else:
             self.__putFooter()
 
+    def message(self, msg):
+        # Must not be written to stderr directly. The cursor is at the top of
+        # the footer which would otherwise be partially overwritten.
+        self.__putLine(msg)
+
     def log(self, message, kind, severity):
         if not self._isVisible(severity): return
         self.__putLine(colorize("{} {}".format(COLORS2MARK[kind & 7], message), kind))
@@ -625,6 +634,14 @@ class ParallelDumbUI(BaseTUI):
         msg = "{:10}{} - {}{}".format(action, name, message, details)
         return ParallelDumbUIAction(self, job, path, msg, ellipsis, showDetails,
                                     self.__loop.time)
+
+def message(msg):
+    """Print a message that is not related to any step.
+
+    The message is printed on stderr unless the parallel TTY UI is active. In
+    this case it is printed above the footer.
+    """
+    __tui.message(msg)
 
 def log(message, kind, severity=ALWAYS):
     __tui.log(message, kind, severity)
