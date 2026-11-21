@@ -1,0 +1,23 @@
+root: True
+multiPackage:
+    a:
+        checkoutSCM:
+            scm: import
+            url: src
+            filter:
+                - "+ /a_*"
+                - "- *"
+    b:
+        checkoutSCM:
+            scm: import
+            url: src
+            pruneEmptyDirs: True
+            filter:
+                - "exclude *.orig"
+                - "include /b_*"
+                - "include /patches/***"
+                - "exclude *"
+buildScript: |
+    cp -a "$1/"* .
+    date +%s%N > stamp
+packageScript: cp -a "$1/"* .
