@@ -87,8 +87,13 @@ run_test()
 		integration)
 			pushd integration/$test_name > /dev/null
 			[[ "${VERBOSE+true}" ]] || echo -n "  [integration] $test_name ... "
-			if $RUN_PYTHON3 run.py 2>&1 | tee -a "$LOGFILE" | print_verbose ; then
+			$RUN_PYTHON3 run.py 2>&1 | tee -a "$LOGFILE" | print_verbose
+
+			ret=$?
+			if [[ $ret -eq 0 ]] ; then
 				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok ($((SECONDS-start))s)" || echo "ok ($((SECONDS-start))s)"
+			elif [[ $ret -eq 240 ]] ; then
+				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: skipped ($((SECONDS-start))s)" || echo "skipped ($((SECONDS-start))s)"
 				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
 				echo "$test_name: finished: FAIL ($((SECONDS-start))s)"

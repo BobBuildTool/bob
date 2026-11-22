@@ -27,10 +27,12 @@ jobs:
                 distribution: 'temurin'
                 java-version: '21'
 
-            - name: Cache Jenkins integration test
+            - name: Cache integration test
               uses: actions/cache@v6
               with:
-                path: test/integration/jenkins/cache
+                path: |
+                    test/integration/jenkins/cache
+                    test/integration/gitea/cache
                 key: ${{ runner.os }}
 
             - name: Install dependencies

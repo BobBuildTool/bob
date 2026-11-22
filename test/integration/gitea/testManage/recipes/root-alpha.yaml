@@ -1,0 +1,10 @@
+root: true
+
+metaEnvironment:
+    TYPE: "alpha"
+
+packageScriptBash: |
+    echo -n "alpha" > result.txt
+
+packageScriptPwsh: |
+    echo alpha | Out-File -FilePath result.txt -Encoding ASCII -NoNewline
