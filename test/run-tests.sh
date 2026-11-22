@@ -73,7 +73,6 @@ run_test()
 				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok ($((SECONDS-start))s)" || echo "ok ($((SECONDS-start))s)"
 			elif [[ $ret -eq 240 ]] ; then
 				[[ "${VERBOSE+true}" ]] && echo "$test_name: finished: skipped ($((SECONDS-start))s)" || echo "skipped ($((SECONDS-start))s)"
-				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
 				echo "$test_name: finished: FAIL (exit $ret, $((SECONDS-start))s)"
 				ret=1
@@ -94,7 +93,6 @@ run_test()
 				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: ok ($((SECONDS-start))s)" || echo "ok ($((SECONDS-start))s)"
 			elif [[ $ret -eq 240 ]] ; then
 				[[ ${VERBOSE+true} ]] && echo "$test_name: finished: skipped ($((SECONDS-start))s)" || echo "skipped ($((SECONDS-start))s)"
-				ret=0
 			elif [[ ${VERBOSE+true} ]] ; then
 				echo "$test_name: finished: FAIL ($((SECONDS-start))s)"
 				ret=1
@@ -112,6 +110,43 @@ run_test()
 
 	cat "$LOGFILE" >> log.txt
 	rm "$LOGFILE"
+	return $ret # 240 if the test was skipped
+}
+
+# Run test and treat "skipped" as success
+run_test_plain()
+{
+	local ret
+	run_test "$1"
+	ret=$?
+	[[ $ret -ne 240 ]] || ret=0
+	return $ret
+}
+
+# On GitHub Actions, collect the output of each test and emit it atomically as
+# a collapsible group. The lock keeps parallel tests from interleaving.
+run_test_grouped()
+{
+	local ret out=$(mktemp) start=$SECONDS
+	run_test "$1" > "$out" 2>&1
+	ret=$?
+	local duration=$((SECONDS-start))
+	# Portable lock (flock is unreliable on MSYS): mkdir is atomic.
+	until mkdir "$GROUP_LOCK/lock" 2>/dev/null ; do sleep 0.1 ; done
+	{
+		if [[ $ret -eq 240 ]] ; then
+			echo "::group::⏭️ $1 (${duration}s)"
+		elif [[ $ret -ne 0 ]] ; then
+			echo "::group::❌ $1 (${duration}s)"
+		else
+			echo "::group::✅ $1 (${duration}s)"
+		fi
+		cat "$out"
+		echo "::endgroup::"
+	}
+	rmdir "$GROUP_LOCK/lock"
+	rm -f "$out"
+	[[ $ret -ne 240 ]] || ret=0
 	return $ret
 }
 
@@ -278,11 +313,20 @@ if [[ -n "$RUN_BLACKBOX_PAT" ]] ; then
 	popd > /dev/null
 fi
 
+# Group output per test on GitHub Actions (only useful in verbose mode)
+RUN_TEST=run_test_plain
+if [[ ${GITHUB_ACTIONS:-} == true && ${VERBOSE+true} ]] ; then
+	RUN_TEST=run_test_grouped
+	export GROUP_LOCK="$(mktemp -d)"
+	trap 'rm -rf "$GROUP_LOCK" 2>/dev/null' EXIT
+fi
+
 # execute all tests, possibly in parallel
 if [[ ${#RUN_TEST_NAMES[@]} -eq 0 ]] ; then
 	: # No tests matched
 elif [[ ${RUN_JOBS:-} != 1 ]] ; then
-	export -f run_test print_verbose
+	export -f run_test run_test_plain run_test_grouped print_verbose
+	export RUN_TEST
 	export RUN_PYTHON3
 	export RUN_PYTHON3_COV
 	export TEST_ENVIRONMENT
@@ -291,11 +335,11 @@ elif [[ ${RUN_JOBS:-} != 1 ]] ; then
 	# buffering.  This prevents the output from being interleaced.
 	echo "${RUN_TEST_NAMES[@]}" \
 		| xargs -P ${RUN_JOBS:-$(nproc)} -n 1 \
-			bash -o pipefail -c 'run_test "$@" | stdbuf -oL sed -e ""' bash \
+			bash -o pipefail -c '$RUN_TEST "$@" | stdbuf -oL sed -e ""' bash \
 		|| : $((FAILED+=$?))
 else
 	for i in "${RUN_TEST_NAMES[@]}" ; do
-		if ! run_test "$i" ; then
+		if ! $RUN_TEST "$i" ; then
 			: $((FAILED++))
 		fi
 	done
