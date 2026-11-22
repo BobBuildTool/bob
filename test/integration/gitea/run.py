@@ -224,6 +224,7 @@ with tempfile.TemporaryDirectory() as workDir:
             ROOT_URL = http://{GITEA_HOST}:{GITEA_PORT}/
             DISABLE_SSH = true
             OFFLINE_MODE = true
+            SSH_CREATE_AUTHORIZED_KEYS_FILE = false
 
             [database]
             DB_TYPE = sqlite3
