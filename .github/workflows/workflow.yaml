@@ -13,22 +13,22 @@ jobs:
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v4
+              uses: actions/checkout@v7
 
             - name: Set up Python ${{ matrix.python-version }}
-              uses: actions/setup-python@v5
+              uses: actions/setup-python@v7
               with:
                 python-version: ${{ matrix.python-version }}
                 cache: pip
 
             - name: Setup Java
-              uses: actions/setup-java@v4
+              uses: actions/setup-java@v6
               with:
                 distribution: 'temurin'
                 java-version: '21'
 
             - name: Cache Jenkins integration test
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                 path: test/integration/jenkins/cache
                 key: ${{ runner.os }}
@@ -55,12 +55,12 @@ jobs:
                 test -f pym/bob/version.py
 
             - name: Upload coverage to Codecov
-              uses: codecov/codecov-action@v4
+              uses: codecov/codecov-action@v7
               with:
                 token: ${{ secrets.CODECOV_TOKEN }}
 
             - name: Store the binary wheel
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                 name: python-dist-linux-${{ matrix.python-version }}
                 path: dist
@@ -70,16 +70,16 @@ jobs:
         timeout-minutes: 20
         steps:
             - name: Checkout
-              uses: actions/checkout@v4
+              uses: actions/checkout@v7
 
             - name: Set up Python 3.15
-              uses: actions/setup-python@v5
+              uses: actions/setup-python@v7
               with:
                 python-version: "3.15"
                 cache: pip
 
             - name: Setup Java
-              uses: actions/setup-java@v4
+              uses: actions/setup-java@v6
               with:
                 distribution: 'temurin'
                 java-version: '21'
@@ -89,7 +89,7 @@ jobs:
                 choco install sliksvn --no-progress
 
             - name: Cache Jenkins integration test
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                 path: test/integration/jenkins/cache
                 key: ${{ runner.os }}
@@ -108,7 +108,7 @@ jobs:
                 bash ./test/run-tests.sh -c xml -v
 
             - name: Upload coverage to Codecov
-              uses: codecov/codecov-action@v4
+              uses: codecov/codecov-action@v7
               with:
                 token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -120,7 +120,7 @@ jobs:
                 }
 
             - name: Store the binary wheel
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                 name: python-dist-windows
                 path: dist
@@ -130,10 +130,10 @@ jobs:
         timeout-minutes: 5
         steps:
             - name: Checkout
-              uses: actions/checkout@v4
+              uses: actions/checkout@v7
 
             - name: Set up Python 3.15
-              uses: actions/setup-python@v5
+              uses: actions/setup-python@v7
               with:
                 python-version: "3.15"
                 cache: pip
@@ -151,7 +151,7 @@ jobs:
                 test -f pym/bob/version.py
 
             - name: Store the source distribution
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                 name: python-dist-sdist
                 path: dist
@@ -165,7 +165,7 @@ jobs:
             - build-sdist
         steps:
             - name: Download all the dists
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v8
               with:
                 pattern: python-dist-*
                 merge-multiple: true
