@@ -6,7 +6,15 @@ import tempfile
 import subprocess
 import sys
 
+from bob.invoker import getSandboxHelperPath
 from bob.utils import removePath
+
+def _sandboxWorks():
+    # Nested containers are not available e.g. inside the nono sandbox.
+    if sys.platform != "linux":
+        return False
+    return subprocess.run([getSandboxHelperPath(), "-C"], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
 
 class JenkinsBuilds(JenkinsTests):
     OPTIONS = ""
@@ -556,7 +564,7 @@ class JenkinsSandboxBuilds(JenkinsTests):
 class JenkinsSandboxBuildDisabled(JenkinsSandboxBuilds, TestCase):
     pass
 
-@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+@skipUnless(_sandboxWorks(), "Sandbox requires working containers")
 class JenkinsSandboxBuildPartial(JenkinsSandboxBuilds, TestCase):
     OPTIONS = "--sandbox"
     OUTSIDE_ISOLATED=0
@@ -565,7 +573,7 @@ class JenkinsSandboxBuildPartial(JenkinsSandboxBuilds, TestCase):
     INSIDE_STABLE_PATH=1
     INSIDE_IMAGE_USED=1
 
-@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+@skipUnless(_sandboxWorks(), "Sandbox requires working containers")
 class JenkinsSandboxBuildSlim(JenkinsSandboxBuilds, TestCase):
     OPTIONS = "--slim-sandbox"
     OUTSIDE_ISOLATED=1
@@ -574,7 +582,7 @@ class JenkinsSandboxBuildSlim(JenkinsSandboxBuilds, TestCase):
     INSIDE_STABLE_PATH=0
     INSIDE_IMAGE_USED=0
 
-@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+@skipUnless(_sandboxWorks(), "Sandbox requires working containers")
 class JenkinsSandboxBuildDev(JenkinsSandboxBuilds, TestCase):
     OPTIONS = "--dev-sandbox"
     OUTSIDE_ISOLATED=1
@@ -583,7 +591,7 @@ class JenkinsSandboxBuildDev(JenkinsSandboxBuilds, TestCase):
     INSIDE_STABLE_PATH=0
     INSIDE_IMAGE_USED=1
 
-@skipUnless(sys.platform == "linux", "Sandbox requires Linux")
+@skipUnless(_sandboxWorks(), "Sandbox requires working containers")
 class JenkinsSandboxBuildStrict(JenkinsSandboxBuilds, TestCase):
     OPTIONS = "--strict-sandbox"
     OUTSIDE_ISOLATED=1
