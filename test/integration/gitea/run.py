@@ -104,13 +104,13 @@ def testUploadDownload(archiveUrl, env):
     d = "testUploadDownload"
     prepare(d, archiveUrl)
 
-    res = runBob(["build", "--download=no", "--upload", "root"], d, env)
+    res = runBob(["build", "--no-sandbox", "--download=no", "--upload", "root"], d, env)
     assertEqual(res.returncode, 0)
     assertEqual(readResult(d, "root"), "ok")
 
     shutil.rmtree(os.path.join(d, "work"))
 
-    res = runBob(["build", "--download=forced", "root"], d, env)
+    res = runBob(["build", "--no-sandbox", "--download=forced", "root"], d, env)
     assertEqual(res.returncode, 0)
     assertEqual(readResult(d, "root"), "ok")
 
@@ -125,7 +125,7 @@ def testManage(archiveUrl, env):
     d = "testManage"
     prepare(d, archiveUrl)
 
-    res = runBob(["build", "--download=no", "--upload", "root-alpha", "root-bravo"], d, env)
+    res = runBob(["build", "--no-sandbox", "--download=no", "--upload", "root-alpha", "root-bravo"], d, env)
     assertEqual(res.returncode, 0)
 
     shutil.rmtree(os.path.join(d, "work"))
@@ -143,12 +143,12 @@ def testManage(archiveUrl, env):
     assertEqual(res.returncode, 0)
 
     # The retained artifact must still be downloadable...
-    res = runBob(["build", "--download=forced", "root-alpha"], d, env)
+    res = runBob(["build", "--no-sandbox", "--download=forced", "root-alpha"], d, env)
     assertEqual(res.returncode, 0)
     assertEqual(readResult(d, "root-alpha"), "alpha")
 
     # ...but the pruned one must be gone from the archive.
-    res = runBob(["build", "--download=forced", "root-bravo"], d, env)
+    res = runBob(["build", "--no-sandbox", "--download=forced", "root-bravo"], d, env)
     if res.returncode == 0:
         print("[TEST]:", "Error: pruned artifact could still be downloaded!")
         sys.exit(3)
@@ -276,8 +276,7 @@ with tempfile.TemporaryDirectory() as workDir:
 
     try:
         giteaLog = open(os.path.join(workDir, "gitea.log"), "wb")
-        giteaProc = subprocess.Popen([gitea, "--config", appIni, "--work-path", workDir, "web"],
-                                      stdout=giteaLog, stderr=subprocess.STDOUT)
+        giteaProc = subprocess.Popen([gitea, "--config", appIni, "--work-path", workDir, "web"])
         print("[TEST]:", "Gitea running as pid", giteaProc.pid, "in", workDir)
 
         print("[TEST]:", "Waiting for Gitea to get ready...")

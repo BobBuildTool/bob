@@ -95,6 +95,12 @@ file_url()
 	fi
 }
 
+# Running inside the nono sandbox?
+is_nono()
+{
+	[[ -n "${NONO_CAP_FILE:-}" ]]
+}
+
 cleanup()
 {
 	rm -rf work dev .bob-* "$@"
@@ -104,16 +110,34 @@ cleanup()
 # and "no global defaults" debug switches.
 run_bob()
 {
+	local args=("$@")
+
+	# The nono sandbox does not support nested unprivileged containers. The
+	# "build" command uses the sandbox by default. Disable it unless the test
+	# explicitly asks for a sandbox mode.
+	if is_nono ; then
+		local a has_mode=0 is_build=0
+		for a in "$@" ; do
+			[[ "$a" == *-sandbox ]] && has_mode=1
+		done
+		# Find the command. Skip global "-C DIR" option.
+		local pos=0
+		[[ "$1" == -C ]] && pos=2
+		[[ "${args[$pos]:-}" == build || "${args[$pos]:-}" == project ]] && is_build=1
+		# Options must precede generator arguments of "project"
+		[[ $is_build -eq 1 && $has_mode -eq 0 ]] && args=("${args[@]:0:pos+1}" --no-sandbox "${args[@]:pos+1}")
+	fi
+
 	if is_win32 ; then
-		python "$BOB_ROOT/bob" --debug=pkgck,ngd,audit "$@"
+		python "$BOB_ROOT/bob" --debug=pkgck,ngd,audit "${args[@]}"
 	else
-		"$BOB_ROOT/bob" --debug=pkgck,ngd,audit "$@"
+		"$BOB_ROOT/bob" --debug=pkgck,ngd,audit "${args[@]}"
 	fi
 }
 
 export_run_bob()
 {
-	export -f run_bob is_win32
+	export -f run_bob is_win32 is_nono
 	export BOB_ROOT TEST_ENVIRONMENT PYTHONPATH
 }
 
