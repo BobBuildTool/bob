@@ -6,6 +6,9 @@ if [[ $(uname -o) == Msys ]] ; then
 	skip
 fi
 
+# Needs working sandbox
+"${BOB_ROOT}/bin/bob-namespace-sandbox" -C || skip
+
 # Test the various direct properties of fingerprint scripts
 # =========================================================
 #

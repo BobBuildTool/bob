@@ -460,6 +460,7 @@ class Invoker:
             ret = subprocess.run([getSandboxHelperPath(), "-C"], stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL).returncode
             if ret != 0:
+                msg = None
                 knobs = [("/proc/sys/kernel/unprivileged_userns_clone", "1"),
                          ("/proc/sys/kernel/apparmor_restrict_unprivileged_userns", "0")]
                 for knob, expected_val in knobs:
@@ -473,8 +474,13 @@ class Invoker:
                     except OSError:
                         msg = f"Make sure {knob} is {expected_val}."
                         break
-                else:
+
+                if not msg and any(k.startswith("NONO_") for k, v in os.environ.items()):
+                    msg = f"The nono sandbox does not support nested unprivileged containers. See https://github.com/nolabs-ai/nono/issues/1980."
+
+                if not msg:
                     msg = f"Not sure why that is exactly. Please consider opening a bug report at https://github.com/BobBuildTool/bob."
+
                 raise BuildError("Your system does not support unprivileged containers! You need to build without sandbox (--no-sandbox).",
                                  help=f"{msg} In case you use Docker, consider using the 'unconfined' seccomp profile."
                                       " See https://bob-build-tool.readthedocs.io/en/latest/installation.html#sandbox-capabilities for more details.",

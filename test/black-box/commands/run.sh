@@ -34,6 +34,10 @@ test_command()
 
 for CMD in "${COMMANDS[@]}"; do
 	for SBX in "${SANDBOX_MODES[@]}" ; do
+		# Nested containers are not available in the nono sandbox
+		if is_nono && [[ ( $CMD == build || $CMD == dev || $CMD == project ) && -n "$SBX" && $SBX != --no-sandbox ]] ; then
+			continue
+		fi
 		test_command "$CMD" $SBX
 	done
 done
