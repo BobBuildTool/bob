@@ -27,6 +27,8 @@ class FakeSpec:
             workspaceExecPath="/workspace",
             allPaths=[],
             depPaths=[],
+            depAudits=[],
+            allAudits=[],
             toolPaths=[],
             hasSandbox=False,
             fatSandbox=False,
