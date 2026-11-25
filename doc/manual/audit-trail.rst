@@ -27,8 +27,17 @@ Storage format
 Audit trails are stored as gzip compressed JSON documents. For local builds the
 audit trail is stored as ``audit.json.gz`` file next to the workspace. Jenkins
 builds only rely on binary artifacts where the same file is stored in the
-compressed tar file in a ``meta/`` directory. The general structure of an audit
-trail looks like the following:
+compressed tar file in a ``meta/`` directory.
+
+The audit trails of the dependencies are accessible from within the step
+scripts via the ``BOB_DEP_AUDITS`` and ``BOB_ALL_AUDITS`` variables (see
+:ref:`configuration-recipes-scripts`). They hold the path to the
+``audit.json.gz`` file of each dependency. Inside a sandbox the files are
+mounted read-only next to the dependency workspaces. The variables only list
+dependencies that actually have an audit trail, e.g. not if the audit trail
+generation was disabled with ``--no-audit``.
+
+The general structure of an audit trail looks like the following:
 
 .. code-block:: yaml
 

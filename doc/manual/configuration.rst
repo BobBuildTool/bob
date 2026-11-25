@@ -686,6 +686,18 @@ automatically:
   :ref:`configuration-principle-dependencies`). This array comes in handy if
   you want to refer to a dependency by name (e.g.
   ``${BOB_DEP_PATHS[libfoo-dev]}``) instead of the position (e.g. ``$2``).
+* ``BOB_DEP_AUDITS``: An associative array that holds the paths to the
+  :ref:`audit trails <audit-trail>` (``audit.json.gz`` files) of all
+  :term:`declared <Declared dependency>` and :term:`injected dependencies
+  <Injected dependency>` indexed by the package name. The audit trail of a
+  dependency is only listed if it exists, e.g. not if the audit trail
+  generation was disabled with ``--no-audit``. Inside a sandbox the audit
+  trails are mounted read-only next to the dependency workspaces.
+* ``BOB_ALL_AUDITS``: Like ``BOB_DEP_AUDITS`` but for all
+  :term:`declared <Declared dependency>`, :term:`injected <Injected
+  dependency>` and :term:`ambient dependencies <Ambient dependency>`. This
+  also includes the packages of the consumed tools, the sandbox and the
+  interpreter.
 * ``BOB_TOOL_PATHS``: An associative array that holds the execution paths to
   consumed tools indexed by the package name. All these paths are in ``$PATH``
   resp. ``%PATH%``.
