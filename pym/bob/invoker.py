@@ -532,6 +532,11 @@ class Invoker:
                 cmdArgs.extend(["-M", os.path.abspath(argWorkspacePath),
                                 "-m", os.path.abspath(argExecPath)])
 
+            # Mount the audit trails of all dependencies read-only
+            for _, auditStoragePath, auditExecPath in self.__spec.allAudits:
+                cmdArgs.extend(["-M", os.path.abspath(auditStoragePath),
+                                "-m", os.path.abspath(auditExecPath)])
+
             # Mount jobserver FIFO into sandbox
             if self.__makeJobServer.isFifo():
                 fifo = os.path.abspath(self.__makeJobServer.fifoPath())
