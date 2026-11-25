@@ -1,0 +1,16 @@
+root: True
+depends:
+  - dep
+
+buildScript: |
+  # The audit trail of the dependency must be available by name
+  test -n "${BOB_DEP_AUDITS[dep]}"
+  test -n "${BOB_ALL_AUDITS[dep]}"
+  # It must be a gzip compressed JSON document containing the package name
+  # of the dependency.
+  zcat "${BOB_DEP_AUDITS[dep]}" | grep -q '"package": "root/dep"'
+  echo ok > audit-check.txt
+
+packageScript: |
+  cp $1/audit-check.txt .
+  test "$(cat audit-check.txt)" = ok
