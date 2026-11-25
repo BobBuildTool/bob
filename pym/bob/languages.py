@@ -291,6 +291,12 @@ class BashLanguage:
             "declare -A BOB_DEP_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(name), quote(BashLanguage.__munge(os.path.abspath(path))))
                     for name,path in spec.depPaths ] ))),
+            "declare -A BOB_DEP_AUDITS=( {} )".format(" ".join(sorted(
+                [ "[{}]={}".format(quote(name), quote(BashLanguage.__munge(os.path.abspath(path))))
+                    for name,_,path in spec.depAudits ] ))),
+            "declare -A BOB_ALL_AUDITS=( {} )".format(" ".join(sorted(
+                [ "[{}]={}".format(quote(name), quote(BashLanguage.__munge(os.path.abspath(path))))
+                    for name,_,path in spec.allAudits ] ))),
             "declare -A BOB_TOOL_PATHS=( {} )".format(" ".join(sorted(
                 [ "[{}]={}".format(quote(name), quote(BashLanguage.__munge(os.path.abspath(path))))
                     for name,path in spec.toolPaths ] ))),
@@ -505,6 +511,12 @@ class PwshLanguage:
             "$BOB_DEP_PATHS=@{{ {} }}".format("; ".join(sorted(
                 [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(PwshLanguage.__munge(os.path.abspath(path))))
                     for name,path in spec.depPaths ] ))),
+            "$BOB_DEP_AUDITS=@{{ {} }}".format("; ".join(sorted(
+                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(PwshLanguage.__munge(os.path.abspath(path))))
+                    for name,_,path in spec.depAudits ] ))),
+            "$BOB_ALL_AUDITS=@{{ {} }}".format("; ".join(sorted(
+                [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(PwshLanguage.__munge(os.path.abspath(path))))
+                    for name,_,path in spec.allAudits ] ))),
             "$BOB_TOOL_PATHS=@{{ {} }}".format("; ".join(sorted(
                 [ '{} = "{}"'.format(quotePwsh(name), escapePwsh(PwshLanguage.__munge(os.path.abspath(path))))
                     for name,path in spec.toolPaths ] ))),
@@ -694,6 +706,12 @@ class PythonLanguage:
             "BOB_DEP_PATHS = dict({})".format(repr(sorted(
                 [ (name, os.path.abspath(path)) for name,path in spec.depPaths ]
             ))),
+            "BOB_DEP_AUDITS = dict({})".format(repr(sorted(
+                [ (name, os.path.abspath(path)) for name,_,path in spec.depAudits ]
+            ))),
+            "BOB_ALL_AUDITS = dict({})".format(repr(sorted(
+                [ (name, os.path.abspath(path)) for name,_,path in spec.allAudits ]
+            ))),
             "BOB_TOOL_PATHS = dict({})".format(repr(sorted(
                 [ (name, os.path.abspath(path)) for name,path in spec.toolPaths ]
             ))),
@@ -826,6 +844,17 @@ class StepSpec:
         self = cls()
         recipe = step.getPackage().getRecipe()
         scriptLanguage = recipe.scriptLanguage
+
+        def auditOf(dep):
+            """Return (name, storagePath, execPath) of the dependency's audit
+            trail or None if it does not exist (e.g. audit disabled)."""
+            storagePath = os.path.join(os.path.dirname(dep.getWorkspacePath()),
+                                       "audit.json.gz")
+            if not os.path.exists(storagePath): return None
+            return (dep.getPackage().getName(), storagePath,
+                    os.path.join(os.path.dirname(dep.getExecPath(step)),
+                                 "audit.json.gz"))
+
         self.__data = d = {
             'envFile' : envFile,
             'envWhiteList' : sorted(envWhiteList),
@@ -849,6 +878,10 @@ class StepSpec:
                 (a.getPackage().getName(), a.getExecPath(step))
                 for a in step.getArguments() if a.isValid()
             ]),
+            'depAudits' : sorted([ a for a in (auditOf(x) for x in step.getArguments()
+                                               if x.isValid()) if a ]),
+            'allAudits' : sorted([ a for a in (auditOf(x) for x in step.getAllDepSteps()
+                                               if x.isValid()) if a ]),
             'toolPaths' : sorted([
                 (n, os.path.join(t.getStep().getExecPath(step), t.getPath()))
                 for (n,t) in step.getTools().items()
@@ -962,6 +995,14 @@ class StepSpec:
     @property
     def depMounts(self):
         return self.__data['depMounts']
+
+    @property
+    def depAudits(self):
+        return self.__data['depAudits']
+
+    @property
+    def allAudits(self):
+        return self.__data['allAudits']
 
     @property
     def netAccess(self):
