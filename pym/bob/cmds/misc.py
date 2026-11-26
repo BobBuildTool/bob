@@ -12,6 +12,7 @@ import argparse
 import codecs
 import sys
 import os, os.path
+import json
 
 try:
     # test if stdout can handle box drawing characters
@@ -173,6 +174,7 @@ are used:
     parser.add_argument('-f', default=[], action='append', dest="formats",
         help="Output format for scm (syntax: scm=format). Can be specified multiple times.")
     parser.add_argument('--default', default="", help='Default for missing attributes (default: "")')
+    parser.add_argument('--json', default=False, action='store_true', help='Output as JSON')
     parser.add_argument('-r', '--recursive', default=False, action='store_true',
                         help="Recursively display dependencies")
     addStandardArgs(parser)
@@ -199,6 +201,8 @@ are used:
         if len(f) != 2: parser.error("Malformed format: "+fmt)
         formats[f[0]] = f[1]
 
+    jsondata = []
+
     def showPackage(package, recurse, done, donePackages):
         if package._getId() in donePackages:
             return
@@ -211,7 +215,10 @@ are used:
                 p = { k:v for (k,v) in scm.getProperties(False).items() if v is not None }
                 p['package'] = "/".join(package.getStack())
                 fmt = formats.get(p['scm'], "{scm} {dir}")
-                print(fmt.format_map(Default(args.default, p)))
+                if args.json:
+                    jsondata.append(p)
+                else:
+                    print(fmt.format_map(Default(args.default, p)))
             done.add(key)
 
         # recurse package tree if requested
@@ -225,6 +232,9 @@ are used:
         for p in args.packages:
             for package in packages.queryPackagePath(p):
                 showPackage(package, args.recursive, done, donePackages)
+
+    if args.json:
+        print(json.dumps(jsondata))
 
 def doQueryRecipe(argv, bobRoot):
     parser = argparse.ArgumentParser(prog="bob query-recipe",
